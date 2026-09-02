@@ -68,6 +68,12 @@ switch (cmd)
         var selections = ParseSelections(opts.GetValueOrDefault("mods"), catalog, out var selErrors);
         foreach (var e in selErrors) Console.Error.WriteLine("[ModularCoop] " + e);
         if (selErrors.Count > 0) return 2;
+        if (opts.ContainsKey("settings-sync"))
+        {
+            var sync = LaunchSession.LocateSyncModule();
+            if (sync is null) Console.Error.WriteLine("[ModularCoop] --settings-sync: module not found under compat\\ next to the CLI");
+            else selections.Add(new ModSelection(sync, ServerRole.AsShipped));
+        }
         if (opts.ContainsKey("compat"))
         {
             var compat = LaunchSession.LocateCompatModule();

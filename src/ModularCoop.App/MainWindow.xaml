@@ -141,7 +141,7 @@
             <TabItem Header="Server">
                 <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
                     <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="#666" Margin="0,0,0,10" />
-                    <UniformGrid Columns="2" Rows="13">
+                    <UniformGrid Columns="2" Rows="14">
                         <TextBlock Text="Join port (UDP, forward this)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.JoinPort}" />
                         <TextBlock Text="Password (empty = open)" VerticalAlignment="Center" />
@@ -154,6 +154,8 @@
                         <TextBox Text="{Binding Profile.Server.AutosaveMinutes}" />
                         <TextBlock Text="Server guards (Compat module)" VerticalAlignment="Center" ToolTip="Loads the launcher's DedicatedServer.ModularCoopCompat module on the server: answers inquiries and swallows screen pushes so single-player mods do not crash the headless host. Server-only; players need nothing." />
                         <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" />
+                        <TextBlock Text="Settings sync (ModularCoop.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModularCoop.Compat module to the server AND to the player mod list: every player must install it (copy compatModularCoop.Compat from the launcher folder into their game Modules folder) and enable it." />
+                        <CheckBox IsChecked="{Binding Profile.SettingsSync}" HorizontalAlignment="Left" />
                         <TextBlock Text="Server log file" VerticalAlignment="Center" />
                         <CheckBox IsChecked="{Binding Profile.Server.LogFile}" HorizontalAlignment="Left" />
                         <TextBlock Text="Engine port / region" VerticalAlignment="Center" />

@@ -60,23 +60,38 @@ public sealed class LaunchSession
     }
 
     public const string CompatModuleId = "DedicatedServer.ModularCoopCompat";
+    public const string SyncModuleId = "ModularCoop.Compat";
 
     /// <summary>The launcher's own guard module, shipped under compat\ next to the executable.</summary>
-    public static DiscoveredModule? LocateCompatModule()
+    public static DiscoveredModule? LocateCompatModule() => LocateBundled(CompatModuleId);
+
+    /// <summary>The shared client+server sync module, shipped under compat\ next to the executable (players install a copy).</summary>
+    public static DiscoveredModule? LocateSyncModule() => LocateBundled(SyncModuleId);
+
+    private static DiscoveredModule? LocateBundled(string id)
     {
-        var dir = Path.Combine(AppContext.BaseDirectory, "compat", CompatModuleId);
+        var dir = Path.Combine(AppContext.BaseDirectory, "compat", id);
         if (!File.Exists(Path.Combine(dir, "SubModule.xml"))) return null;
         return ModuleCatalog.TryParse(dir, ModuleSourceKind.Custom, out _);
     }
 
-    /// <summary>Adds the Compat module to the selections when the profile asks for it and it is installed.</summary>
+    /// <summary>Adds the bundled compat modules to the selections when the profile asks for them and they are installed.</summary>
     public static IReadOnlyList<ModSelection> WithCompat(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
     {
-        if (!profile.CompatGuards) return selections;
-        var compat = LocateCompatModule();
-        if (compat is null) { messages.Add("server guards requested but the compat module is missing next to the launcher; continuing without it"); return selections; }
-        if (selections.Any(s => s.Module.Id.Equals(CompatModuleId, StringComparison.OrdinalIgnoreCase))) return selections;
-        return selections.Concat([new ModSelection(compat, ServerRole.AsShipped)]).ToList();
+        var list = selections.ToList();
+        if (profile.CompatGuards && !list.Any(s => s.Module.Id.Equals(CompatModuleId, StringComparison.OrdinalIgnoreCase)))
+        {
+            var compat = LocateCompatModule();
+            if (compat is null) messages.Add("server guards requested but the compat module is missing next to the launcher; continuing without it");
+            else list.Add(new ModSelection(compat, ServerRole.AsShipped));
+        }
+        if (profile.SettingsSync && !list.Any(s => s.Module.Id.Equals(SyncModuleId, StringComparison.OrdinalIgnoreCase)))
+        {
+            var sync = LocateSyncModule();
+            if (sync is null) messages.Add("settings sync requested but the ModularCoop.Compat module is missing next to the launcher; continuing without it");
+            else list.Add(new ModSelection(sync, ServerRole.AsShipped));
+        }
+        return list;
     }
 
     /// <summary>Everything except starting the process. Applies the overlay and writes server-config.json.</summary>

@@ -9,17 +9,20 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ModularCoop.Core\ModularCoop.Core.csproj" />
-    <!-- Built, not referenced: the hook (net6.0) is loaded into the engine, the Compat module (net472) by the engine's module loader. -->
+    <!-- Built, not referenced: the hook (net6.0) is loaded into the engine; the two Compat modules (net472) by the engine's module loader. -->
     <ProjectReference Include="..\ModularCoop.Hook\ModularCoop.Hook.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\ModularCoop.Compat\ModularCoop.Compat.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\ModularCoop.CompatSync\ModularCoop.CompatSync.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <Target Name="CopyHelpers" AfterTargets="Build">
     <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModularCoop.Hook\bin\$(Configuration)\net6.0\ModularCoop.Hook.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
     <ItemGroup>
       <CompatModuleFiles Include="$(MSBuildThisFileDirectory)..\ModularCoop.Compat\_Module\**\*" />
+      <CompatSyncFiles Include="$(MSBuildThisFileDirectory)..\ModularCoop.CompatSync\_Module\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(CompatModuleFiles)" DestinationFiles="@(CompatModuleFiles->'$(OutDir)compat\DedicatedServer.ModularCoopCompat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CompatSyncFiles)" DestinationFiles="@(CompatSyncFiles->'$(OutDir)compat\ModularCoop.Compat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

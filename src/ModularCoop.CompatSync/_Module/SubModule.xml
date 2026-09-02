@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Modular Coop Compat" />
+  <!-- Community module: must be enabled on the server AND on every client (Coop's validator matches it like any mod). -->
+  <Id value="ModularCoop.Compat" />
+  <Version value="v0.1.0" />
+  <SingleplayerModule value="true" />
+  <MultiplayerModule value="false" />
+  <ModuleCategory value="Singleplayer" />
+  <ModuleType value="Community" />
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+    <DependedModule Id="Sandbox" />
+    <DependedModule Id="Bannerlord.MBOptionScreen" Optional="true" />
+  </DependedModules>
+  <ModulesToLoadAfterThis>
+  </ModulesToLoadAfterThis>
+  <SubModules>
+    <SubModule>
+      <Name value="ModularCoop.Compat" />
+      <DLLName value="ModularCoop.CompatSync.dll" />
+      <SubModuleClassType value="ModularCoop.CompatSync.SyncSubModule" />
+      <Tags />
+    </SubModule>
+  </SubModules>
+  <Xmls />
+</Module>

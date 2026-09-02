@@ -14,6 +14,7 @@
     <ProjectReference Include="..\ModularCoop.Core\ModularCoop.Core.csproj" />
     <ProjectReference Include="..\ModularCoop.Hook\ModularCoop.Hook.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\ModularCoop.Compat\ModularCoop.Compat.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\ModularCoop.CompatSync\ModularCoop.CompatSync.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,8 +25,10 @@
     <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModularCoop.Hook\bin\$(Configuration)\net6.0\ModularCoop.Hook.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
     <ItemGroup>
       <CompatModuleFiles Include="$(MSBuildThisFileDirectory)..\ModularCoop.Compat\_Module\**\*" />
+      <CompatSyncFiles Include="$(MSBuildThisFileDirectory)..\ModularCoop.CompatSync\_Module\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(CompatModuleFiles)" DestinationFiles="@(CompatModuleFiles->'$(OutDir)compat\DedicatedServer.ModularCoopCompat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CompatSyncFiles)" DestinationFiles="@(CompatSyncFiles->'$(OutDir)compat\ModularCoop.Compat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

@@ -148,3 +148,24 @@ dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
 - Launcher: `Profile.CompatGuards` (default on) appends the compat module as an AsShipped direct junction; CLI flag `--compat`.
 - Note: the resolver hook already serves the StoryMode/CustomBattle client assemblies from the game install when a mod
   references them, so the "reference-only shim" from the plan was not needed for the tested mods.
+
+## Compat Layer 2a (2026-09-02): MCM settings sync
+
+- `src/ModularCoop.CompatSync`: community module `ModularCoop.Compat` (in the handshake, so both sides run it). One
+  assembly, copied to both bin folders. Compiled against Coop's client assemblies from the local workshop subscription
+  (`CoopRefDir`), `Private=false`: nothing of Coop's is redistributed.
+- Coop discovers `IHandler` implementations by namespace prefix (`Coop.Core.Server.*` / `Coop.Core.Client.*`) and
+  constructs them from its Autofac container when a session starts; the two handlers live in those namespaces (the
+  same convention ModularSmithing2's adapter uses). Messages are `[ProtoContract]` types; Coop's type mapper picks up
+  every ProtoContract in the AppDomain, wire id = hash of the full type name (never rename them).
+- `McmBridge`: reflection over `MCM.Abstractions.BaseSettingsProvider.Instance.SettingsDefinitions` ->
+  `SettingPropertyGroups` (recursive) -> `SettingProperties[].PropertyReference.Value`; snapshot = `id\tvalue` lines for
+  bool/number/string/enum. Client applies through the same references so MCM's change notifications fire.
+- Flow: client sends `NetworkRequestSettingsSnapshots` on `CampaignReady`; server answers per settings object; the
+  submodule's 3-second tick re-captures on the server and broadcasts changed objects.
+- `CoopProbe` checks every seam by name before any Coop type is JIT-compiled. Lesson learned the hard way:
+  `Type.GetMethod(name)` on an overloaded method throws `AmbiguousMatchException`, and an exception escaping
+  `OnSubModuleLoad` kills the engine with 0xE0434352 and no message. The hook now prints unhandled and (with
+  `MODULARCOOP_HOOK_FIRSTCHANCE=1`) first-chance exceptions to stdout; the engine's stderr is not captured.
+- Verified server side: module loads, handler armed, snapshots for `MCM_v5` and `HealOnKillSettings_v2` broadcast.
+  Client side needs a player with the module installed.

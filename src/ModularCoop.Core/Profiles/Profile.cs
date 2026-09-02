@@ -44,6 +44,8 @@ public sealed class Profile
     public string SaveName { get; set; } = "";
     /// <summary>Load the launcher's own DedicatedServer.ModularCoopCompat module (headless guards) on the server.</summary>
     public bool CompatGuards { get; set; } = true;
+    /// <summary>Also load the shared ModularCoop.Compat module (settings sync). Players must install it too; it is part of the handshake.</summary>
+    public bool SettingsSync { get; set; } = false;
     public ServerSettings Server { get; set; } = new();
 
     [JsonIgnore] public IEnumerable<ProfileMod> EnabledMods => Mods.Where(m => m.Enabled);
