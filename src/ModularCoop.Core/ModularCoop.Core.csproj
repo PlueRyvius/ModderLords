@@ -10,4 +10,9 @@
     <PackageReference Include="Bannerlord.ModuleManager" Version="6.0.249" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Curated compatibility database; ships next to the exe of every consumer (app, CLI, tests). -->
+    <Content Include="compat-db.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
