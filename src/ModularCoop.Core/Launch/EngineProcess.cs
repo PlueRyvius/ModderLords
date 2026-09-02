@@ -37,6 +37,7 @@ public sealed class EngineProcess : IDisposable
         ep.StartedAt = DateTimeOffset.Now;
         p.Start();
         ep._started = true;
+        if (OperatingSystem.IsWindows()) KillOnCloseJob.TryAssign(p);   // engine dies with the launcher, never orphaned
         p.BeginOutputReadLine();
         p.BeginErrorReadLine();
         return ep;

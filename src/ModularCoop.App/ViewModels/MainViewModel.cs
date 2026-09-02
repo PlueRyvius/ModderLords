@@ -373,12 +373,10 @@ public partial class MainViewModel : ObservableObject
     private void FlushConsole()
     {
         if (_pending.IsEmpty) return;
+        // No DeferRefresh here: a ListCollectionView throws if its source changes while a refresh is deferred.
         var n = 0;
-        using (ConsoleView.DeferRefresh())
-        {
-            while (n < 2000 && _pending.TryDequeue(out var l)) { Console.Add(l); n++; }
-            while (Console.Count > 15000) Console.RemoveAt(0);
-        }
+        while (n < 1500 && _pending.TryDequeue(out var l)) { Console.Add(l); n++; }
+        while (Console.Count > 15000) Console.RemoveAt(0);
         ConsoleFlushed?.Invoke();
     }
 
