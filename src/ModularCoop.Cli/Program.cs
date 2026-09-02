@@ -68,6 +68,17 @@ switch (cmd)
         var selections = ParseSelections(opts.GetValueOrDefault("mods"), catalog, out var selErrors);
         foreach (var e in selErrors) Console.Error.WriteLine("[ModularCoop] " + e);
         if (selErrors.Count > 0) return 2;
+        if (opts.ContainsKey("compat"))
+        {
+            var compat = LaunchSession.LocateCompatModule();
+            if (compat is null) Console.Error.WriteLine("[ModularCoop] --compat: module not found under compat\\ next to the CLI");
+            else selections.Add(new ModSelection(compat, ServerRole.AsShipped));
+        }
+        foreach (var s in selections)
+        {
+            var scan = ModularCoop.Core.Compat.AssemblyScan.Scan(s.Module);
+            Console.WriteLine($"[ModularCoop] scan {s.Module.Id,-28} {scan.Summary}" + (scan.Notes.Count > 0 ? "  (" + string.Join("; ", scan.Notes) + ")" : ""));
+        }
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList());

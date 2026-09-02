@@ -17,6 +17,14 @@ dotnet publish (Join-Path $root 'src\ModularCoop.App\ModularCoop.App.csproj') -c
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 
 Copy-Item (Join-Path $root 'src\ModularCoop.Hook\bin\Release\net6.0\ModularCoop.Hook.dll') $out -Force
+
+# The Compat module (net472, loaded by the engine) ships under compat\ next to the exe.
+dotnet build (Join-Path $root 'src\ModularCoop.Compat\ModularCoop.Compat.csproj') -c Release
+if ($LASTEXITCODE -ne 0) { throw "compat build failed" }
+$compatOut = Join-Path $out 'compat\DedicatedServer.ModularCoopCompat'
+New-Item -ItemType Directory -Path $compatOut -Force | Out-Null
+Copy-Item (Join-Path $root 'src\ModularCoop.Compat\_Module\*') $compatOut -Recurse -Force
+Get-ChildItem $compatOut -Recurse -Filter *.pdb | Remove-Item -Force
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.md') -Force
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.txt') -Force
 Copy-Item (Join-Path $root 'docs\ROADMAP.md') $out -Force

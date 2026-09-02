@@ -32,6 +32,11 @@ public partial class ModRow : ObservableObject
         Module.HasServerBin ? null : "no server bin",
     }.Where(s => s is not null));
     public static ServerRole[] Roles { get; } = [ServerRole.Run, ServerRole.DependencyOnly, ServerRole.AsShipped];
+
+    private ModularCoop.Core.Compat.ScanResult? _scan;
+    /// <summary>IL-metadata verdict: server-safe / guarded / needs review. Computed lazily, never executes mod code.</summary>
+    public string ServerVerdict => (_scan ??= ModularCoop.Core.Compat.AssemblyScan.Scan(Module)).Summary;
+    public string ServerVerdictDetail => _scan is null ? "" : string.Join("\n", _scan.UiAssemblies.Concat(_scan.StoryModeAssemblies).Concat(_scan.GuardedCalls).Concat(_scan.Notes));
 }
 
 public sealed record ConsoleLine(string Time, LogCategory Category, string Text);

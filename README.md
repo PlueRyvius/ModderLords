@@ -32,6 +32,10 @@ Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
   needs a restart.
 - **Safety**: the server is tied to the launcher, so it can never linger headless if the launcher closes; errors are
   logged instead of crashing the app.
+- **Server guards** (the bundled `DedicatedServer.ModularCoopCompat` module): single-player mods that open inquiries or
+  screens on the headless server get their pop-ups answered and their screen pushes swallowed instead of crashing.
+  Server-only; players need nothing extra. The Mods tab shows a **Server verdict** per mod (server-safe / guarded /
+  needs review) from a scan of what the mod's DLLs reference; nothing is executed to compute it.
 
 ---
 
@@ -89,6 +93,7 @@ One row per community mod found on this PC. Stock modules and Coop itself are al
 | On | Include this mod on the server (single click). |
 | Role | See below. |
 | Bins | Which builds the mod ships: `server` (made for dedicated servers), `client`, or both. |
+| Server verdict | `server-safe`: no UI or client-only references. `guarded`: uses inquiries or screens that the server guards handle. `needs review`: constructs UI objects or references StoryMode; may still work (hover for details), test it. |
 | Notes | `client-only tags`: its manifest asks servers to skip it (handled by the Run role). `data only`: XML content, no code. |
 | Folder | Where the mod lives. A number as the folder name means a Steam Workshop item. |
 

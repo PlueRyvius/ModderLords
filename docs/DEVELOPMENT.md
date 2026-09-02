@@ -116,3 +116,35 @@ dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
 - Launch logs rotate (newest 20 kept). Window title shows the version.
 - Integration tests create real junctions and shadow folders in a temp tree (Windows only).
 - Release packaging: `scripts\package-release.ps1 -Version x.y.z` -> `artifacts\ModularBannerlordsCoop-x.y.z.zip`.
+
+## Compat Layer 0 (2026-09-02): server guards + assembly scan
+
+- `src/ModularCoop.Compat`: a net472 Bannerlord module (id `DedicatedServer.ModularCoopCompat`, exempt from Coop's
+  client match because of the `DedicatedServer.` prefix). On a dedicated server it Harmony-patches
+  `MBInformationManager.ShowMultiSelectionInquiry`, `InformationManager.ShowTextInquiry/ShowInquiry/ShowTooltip`
+  and `ScreenManager.Push/CleanAndPush/ReplaceTop/Pop/CleanScreens`: inquiries are answered (first option / default
+  text / affirmative), screens are swallowed, first hit per calling mod is logged. Every target is resolved by name and
+  skipped when missing. Off outside a dedicated server. Verified: ImprovedGarrisons + HealOnKill + MS2 reach SERVING
+  without CoopModPatch, 9 guards active, 0 errors.
+- `ModularCoop.Core.Compat.AssemblyScan`: IL-metadata scan (System.Reflection.Metadata) of each submodule DLL for UI /
+  StoryMode assembly references, guarded member calls, and hard UI type refs (GauntletLayer, ScreenBase, MapScreen...).
+  Verdict shown in the Mods tab and by `ModularCoop.Cli launch` output. Nothing is loaded or executed.
+- Launcher: `Profile.CompatGuards` (default on) appends the compat module as an AsShipped direct junction; CLI flag `--compat`.
+- Note: the resolver hook already serves the StoryMode/CustomBattle client assemblies from the game install when a mod
+  references them, so the "reference-only shim" from the plan was not needed for the tested mods.
+
+## Compat Layer 0 (2026-09-02): server guards + assembly scan
+
+- `src/ModularCoop.Compat`: a net472 Bannerlord module (id `DedicatedServer.ModularCoopCompat`, exempt from Coop's
+  client match because of the `DedicatedServer.` prefix). On a dedicated server it Harmony-patches
+  `MBInformationManager.ShowMultiSelectionInquiry`, `InformationManager.ShowTextInquiry/ShowInquiry/ShowTooltip`
+  and `ScreenManager.Push/CleanAndPush/ReplaceTop/Pop/CleanScreens`: inquiries are answered (first option / default
+  text / affirmative), screens are swallowed, first hit per calling mod is logged. Every target is resolved by name and
+  skipped when missing. Off outside a dedicated server. Verified: ImprovedGarrisons + HealOnKill + MS2 reach SERVING
+  without CoopModPatch, 9 guards active, 0 errors.
+- `ModularCoop.Core.Compat.AssemblyScan`: IL-metadata scan (System.Reflection.Metadata) of each submodule DLL for UI /
+  StoryMode assembly references, guarded member calls, and hard UI type refs (GauntletLayer, ScreenBase, MapScreen...).
+  Verdict shown in the Mods tab and by `ModularCoop.Cli launch` output. Nothing is loaded or executed.
+- Launcher: `Profile.CompatGuards` (default on) appends the compat module as an AsShipped direct junction; CLI flag `--compat`.
+- Note: the resolver hook already serves the StoryMode/CustomBattle client assemblies from the game install when a mod
+  references them, so the "reference-only shim" from the plan was not needed for the tested mods.

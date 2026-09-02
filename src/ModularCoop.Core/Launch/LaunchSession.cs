@@ -59,6 +59,26 @@ public sealed class LaunchSession
         return list;
     }
 
+    public const string CompatModuleId = "DedicatedServer.ModularCoopCompat";
+
+    /// <summary>The launcher's own guard module, shipped under compat\ next to the executable.</summary>
+    public static DiscoveredModule? LocateCompatModule()
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "compat", CompatModuleId);
+        if (!File.Exists(Path.Combine(dir, "SubModule.xml"))) return null;
+        return ModuleCatalog.TryParse(dir, ModuleSourceKind.Custom, out _);
+    }
+
+    /// <summary>Adds the Compat module to the selections when the profile asks for it and it is installed.</summary>
+    public static IReadOnlyList<ModSelection> WithCompat(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
+    {
+        if (!profile.CompatGuards) return selections;
+        var compat = LocateCompatModule();
+        if (compat is null) { messages.Add("server guards requested but the compat module is missing next to the launcher; continuing without it"); return selections; }
+        if (selections.Any(s => s.Module.Id.Equals(CompatModuleId, StringComparison.OrdinalIgnoreCase))) return selections;
+        return selections.Concat([new ModSelection(compat, ServerRole.AsShipped)]).ToList();
+    }
+
     /// <summary>Everything except starting the process. Applies the overlay and writes server-config.json.</summary>
     public static Prepared Prepare(Profile profile, bool applySideEffects = true)
     {
@@ -69,7 +89,7 @@ public sealed class LaunchSession
 
         var catalog = Scan(profile, paths, out var gameRoot);
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));
-        var selections = Select(profile, catalog, messages);
+        var selections = WithCompat(profile, Select(profile, catalog, messages), messages);
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList());
@@ -142,7 +162,7 @@ public sealed class LaunchSession
     {
         var paths = ResolvePaths(profile);
         var catalog = Scan(profile, paths, out _);
-        var selections = Select(profile, catalog, new List<string>());
+        var selections = WithCompat(profile, Select(profile, catalog, new List<string>()), new List<string>());
         var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections);
         return new OverlayApplier { KeepForDependencyOnly = KeepForDependencyOnly }.Apply(plan);
     }

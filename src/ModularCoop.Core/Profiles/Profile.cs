@@ -42,6 +42,8 @@ public sealed class Profile
     public List<string> CustomModRoots { get; set; } = new();
     public List<ProfileMod> Mods { get; set; } = new();
     public string SaveName { get; set; } = "";
+    /// <summary>Load the launcher's own DedicatedServer.ModularCoopCompat module (headless guards) on the server.</summary>
+    public bool CompatGuards { get; set; } = true;
     public ServerSettings Server { get; set; } = new();
 
     [JsonIgnore] public IEnumerable<ProfileMod> EnabledMods => Mods.Where(m => m.Enabled);
