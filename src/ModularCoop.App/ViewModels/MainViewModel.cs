@@ -79,6 +79,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showCoop = true;
     [ObservableProperty] private bool _showWarnings = true;
     [ObservableProperty] private bool _errorsOnly;
+    [ObservableProperty] private bool _autoScroll = true;
+    [ObservableProperty] private bool _showProbes;
     [ObservableProperty] private SaveRow? _selectedSave;
     [ObservableProperty] private string _saveDiff = "";
     [ObservableProperty] private string _clientManifestText = "";
@@ -391,6 +393,7 @@ public partial class MainViewModel : ObservableObject
             LogCategory.Server => ShowServer,
             LogCategory.Coop => ShowCoop,
             LogCategory.Warning => ShowWarnings,
+            LogCategory.Probe => ShowProbes,
             _ => true,
         };
         if (!visible) return false;
@@ -402,6 +405,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnShowServerChanged(bool value) => ConsoleView.Refresh();
     partial void OnShowCoopChanged(bool value) => ConsoleView.Refresh();
     partial void OnShowWarningsChanged(bool value) => ConsoleView.Refresh();
+    partial void OnShowProbesChanged(bool value) => ConsoleView.Refresh();
     partial void OnErrorsOnlyChanged(bool value) => ConsoleView.Refresh();
     partial void OnConsoleFilterChanged(string value) => ConsoleView.Refresh();
 

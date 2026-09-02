@@ -122,7 +122,7 @@ public class LoadOrderTests
 public class LogClassifierTests
 {
     [Theory]
-    [InlineData("[00:58:26.728] Messagebox [ERROR] message: Cannot load: Coop.Steam.dll", LogCategory.Warning)]
+    [InlineData("[00:58:26.728] Messagebox [ERROR] message: Cannot load: Coop.Steam.dll", LogCategory.Probe)]
     [InlineData("[DedicatedServer] SERVING — coop server up, waiting for clients", LogCategory.Milestone)]
     [InlineData("[00:54:15.234] Loader Exceptions: Could not load file or assembly 'SandBox.View'", LogCategory.Error)]
     [InlineData("[DedicatedServer] FATAL during A: System.TypeInitializationException", LogCategory.Error)]

@@ -160,7 +160,9 @@
                         <CheckBox Content="Server" IsChecked="{Binding ShowServer}" />
                         <CheckBox Content="Coop" IsChecked="{Binding ShowCoop}" />
                         <CheckBox Content="Warnings" IsChecked="{Binding ShowWarnings}" />
+                        <CheckBox Content="DLL probes" IsChecked="{Binding ShowProbes}" ToolTip="The engine tries every referenced DLL by bare name first and logs a miss before resolving it properly. Harmless." />
                         <CheckBox Content="Errors + milestones only" IsChecked="{Binding ErrorsOnly}" />
+                        <CheckBox Content="Auto-scroll" IsChecked="{Binding AutoScroll}" />
                         <TextBlock Text="Find:" VerticalAlignment="Center" Margin="12,0,4,0" />
                         <TextBox Width="220" Text="{Binding ConsoleFilter, UpdateSourceTrigger=PropertyChanged}" />
                         <Button Content="Logs folder" Command="{Binding OpenLogsFolderCommand}" />
@@ -186,6 +188,7 @@
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Warning}"><Setter Property="Foreground" Value="#A60" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Milestone}"><Setter Property="Foreground" Value="#080" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Tool}"><Setter Property="Foreground" Value="#06A" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Probe}"><Setter Property="Foreground" Value="#AAA" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Engine}"><Setter Property="Foreground" Value="#888" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.ModuleLoad}"><Setter Property="Foreground" Value="#067" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Coop}"><Setter Property="Foreground" Value="#63A" /></DataTrigger>

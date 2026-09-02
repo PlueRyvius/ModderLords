@@ -12,10 +12,25 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // Follow the tail only while the user is already at the bottom; scrolling up pins the view until they return.
         ViewModel.ConsoleFlushed += () =>
         {
-            if (ConsoleList.Items.Count > 0) ConsoleList.ScrollIntoView(ConsoleList.Items[^1]);
+            var sv = FindScrollViewer(ConsoleList);
+            if (sv is null) return;
+            var atBottom = sv.ScrollableHeight - sv.VerticalOffset < 3;
+            if (ViewModel.AutoScroll && atBottom) sv.ScrollToEnd();
         };
+    }
+
+    private static System.Windows.Controls.ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is System.Windows.Controls.ScrollViewer sv) return sv;
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var found = FindScrollViewer(System.Windows.Media.VisualTreeHelper.GetChild(root, i));
+            if (found is not null) return found;
+        }
+        return null;
     }
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;
