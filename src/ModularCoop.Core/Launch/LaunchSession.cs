@@ -59,6 +59,41 @@ public sealed class LaunchSession
         return list;
     }
 
+    public const string CompatModuleId = "DedicatedServer.ModularCoopCompat";
+    public const string SyncModuleId = "ModularCoop.Compat";
+
+    /// <summary>The launcher's own guard module, shipped under compat\ next to the executable.</summary>
+    public static DiscoveredModule? LocateCompatModule() => LocateBundled(CompatModuleId);
+
+    /// <summary>The shared client+server sync module, shipped under compat\ next to the executable (players install a copy).</summary>
+    public static DiscoveredModule? LocateSyncModule() => LocateBundled(SyncModuleId);
+
+    private static DiscoveredModule? LocateBundled(string id)
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "compat", id);
+        if (!File.Exists(Path.Combine(dir, "SubModule.xml"))) return null;
+        return ModuleCatalog.TryParse(dir, ModuleSourceKind.Custom, out _);
+    }
+
+    /// <summary>Adds the bundled compat modules to the selections when the profile asks for them and they are installed.</summary>
+    public static IReadOnlyList<ModSelection> WithCompat(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
+    {
+        var list = selections.ToList();
+        if (profile.CompatGuards && !list.Any(s => s.Module.Id.Equals(CompatModuleId, StringComparison.OrdinalIgnoreCase)))
+        {
+            var compat = LocateCompatModule();
+            if (compat is null) messages.Add("server guards requested but the compat module is missing next to the launcher; continuing without it");
+            else list.Add(new ModSelection(compat, ServerRole.AsShipped));
+        }
+        if (profile.SettingsSync && !list.Any(s => s.Module.Id.Equals(SyncModuleId, StringComparison.OrdinalIgnoreCase)))
+        {
+            var sync = LocateSyncModule();
+            if (sync is null) messages.Add("settings sync requested but the ModularCoop.Compat module is missing next to the launcher; continuing without it");
+            else list.Add(new ModSelection(sync, ServerRole.AsShipped));
+        }
+        return list;
+    }
+
     /// <summary>Everything except starting the process. Applies the overlay and writes server-config.json.</summary>
     public static Prepared Prepare(Profile profile, bool applySideEffects = true)
     {
@@ -69,7 +104,7 @@ public sealed class LaunchSession
 
         var catalog = Scan(profile, paths, out var gameRoot);
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));
-        var selections = Select(profile, catalog, messages);
+        var selections = WithCompat(profile, Select(profile, catalog, messages), messages);
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList());
@@ -142,7 +177,7 @@ public sealed class LaunchSession
     {
         var paths = ResolvePaths(profile);
         var catalog = Scan(profile, paths, out _);
-        var selections = Select(profile, catalog, new List<string>());
+        var selections = WithCompat(profile, Select(profile, catalog, new List<string>()), new List<string>());
         var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections);
         return new OverlayApplier { KeepForDependencyOnly = KeepForDependencyOnly }.Apply(plan);
     }

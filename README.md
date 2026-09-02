@@ -32,6 +32,10 @@ Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
   needs a restart.
 - **Safety**: the server is tied to the launcher, so it can never linger headless if the launcher closes; errors are
   logged instead of crashing the app.
+- **Server guards** (the bundled `DedicatedServer.ModularCoopCompat` module): single-player mods that open inquiries or
+  screens on the headless server get their pop-ups answered and their screen pushes swallowed instead of crashing.
+  Server-only; players need nothing extra. The Mods tab shows a **Server verdict** per mod (server-safe / guarded /
+  needs review) from a scan of what the mod's DLLs reference; nothing is executed to compute it.
 
 ---
 
@@ -89,6 +93,7 @@ One row per community mod found on this PC. Stock modules and Coop itself are al
 | On | Include this mod on the server (single click). |
 | Role | See below. |
 | Bins | Which builds the mod ships: `server` (made for dedicated servers), `client`, or both. |
+| Server verdict | `server-safe`: no UI or client-only references. `guarded`: uses inquiries or screens that the server guards handle. `needs review`: constructs UI objects or references StoryMode; may still work (hover for details), test it. |
 | Notes | `client-only tags`: its manifest asks servers to skip it (handled by the Run role). `data only`: XML content, no code. |
 | Folder | Where the mod lives. A number as the folder name means a Steam Workshop item. |
 
@@ -203,3 +208,19 @@ the official `BannerlordCoopServer.exe`, or an older launcher) is still up. Stop
 - Mods loaded with the **Run** role on a server were mostly written for single player. Many work, some need fixes like
   those CoopModPatch provides. See `ROADMAP.md` for where this is heading.
 - Report problems with the launcher log from `%LOCALAPPDATA%\ModularCoop\logs` attached.
+
+## Settings sync (optional, players install one extra mod)
+
+With **Settings sync** ticked on the Server tab, the launcher also loads the shared `ModularCoop.Compat` module on the
+server. It is a normal community mod, so it appears in the Players tab list and **every player must install and
+enable it**: copy the folder `compat\ModularCoop.Compat` from the launcher folder into the game's `Modules` folder
+(`...\Mount & Blade II Bannerlord\Modules\ModularCoop.Compat`) and enable it in the Bannerlord launcher, anywhere after
+the frameworks.
+
+What it does: when a player joins, the server sends the values of every MCM settings page it has (toggles, numbers,
+text, enum choices) and the client applies them in memory for the session, so mod settings match the host instead of
+each player's local file. When the host changes a setting during the session, the new values are broadcast. Nothing is
+written to the players' own settings files. Mods without MCM settings are unaffected. The console shows
+`[ModularCoop.Compat] settings sync: '<settings id>' from server: N changed` on the client.
+
+Both bundled modules only ever load code from the launcher folder; nothing of Coop's is included.

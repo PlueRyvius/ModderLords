@@ -17,6 +17,24 @@ dotnet publish (Join-Path $root 'src\ModularCoop.App\ModularCoop.App.csproj') -c
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 
 Copy-Item (Join-Path $root 'src\ModularCoop.Hook\bin\Release\net6.0\ModularCoop.Hook.dll') $out -Force
+
+# The Compat module (net472, loaded by the engine) ships under compat\ next to the exe.
+dotnet build (Join-Path $root 'src\ModularCoop.Compat\ModularCoop.Compat.csproj') -c Release
+if ($LASTEXITCODE -ne 0) { throw "compat build failed" }
+$compatOut = Join-Path $out 'compat\DedicatedServer.ModularCoopCompat'
+New-Item -ItemType Directory -Path $compatOut -Force | Out-Null
+Copy-Item (Join-Path $root 'src\ModularCoop.Compat\_Module\*') $compatOut -Recurse -Force
+Get-ChildItem $compatOut -Recurse -Filter *.pdb | Remove-Item -Force
+
+# The shared client+server sync module (players copy this one into their game's Modules folder).
+dotnet build (Join-Path $root 'src\ModularCoop.CompatSync\ModularCoop.CompatSync.csproj') -c Release
+if ($LASTEXITCODE -ne 0) { throw "compat sync build failed" }
+dotnet build (Join-Path $root 'src\ModularCoop.CompatSync.Coop\ModularCoop.CompatSync.Coop.csproj') -c Release
+if ($LASTEXITCODE -ne 0) { throw "compat sync adapter build failed" }
+$syncOut = Join-Path $out 'compat\ModularCoop.Compat'
+New-Item -ItemType Directory -Path $syncOut -Force | Out-Null
+Copy-Item (Join-Path $root 'src\ModularCoop.CompatSync\_Module\*') $syncOut -Recurse -Force
+Get-ChildItem $syncOut -Recurse -Filter *.pdb | Remove-Item -Force
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.md') -Force
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.txt') -Force
 Copy-Item (Join-Path $root 'docs\ROADMAP.md') $out -Force

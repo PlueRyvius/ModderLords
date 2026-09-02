@@ -30,6 +30,32 @@ internal static class StartupHook
         // AssemblyResolve only: the load context's Resolving event fires before every AppDomain handler, which would
         // let us pre-empt the engine's and Coop's own resolvers. Here we are a fallback, not a replacement.
         AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolve;
+        // The engine's own crash path can exit before the runtime prints the exception; make sure the launcher log has it.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            try
+            {
+                Console.Out.WriteLine(Prefix + "UNHANDLED EXCEPTION (engine is about to exit):");
+                Console.Out.WriteLine(e.ExceptionObject?.ToString() ?? "(no exception object)");
+                Console.Out.Flush();
+            }
+            catch { }
+        };
+        if (Environment.GetEnvironmentVariable("MODULARCOOP_HOOK_FIRSTCHANCE") == "1")
+        {
+            // Diagnostic firehose: every thrown exception, even handled ones. Only for hunting a silent engine death.
+            AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
+            {
+                try
+                {
+                    var ex = e.Exception;
+                    var frames = (ex.StackTrace ?? "").Split('\n');
+                    Console.Out.WriteLine(Prefix + "first-chance " + ex.GetType().Name + ": " + ex.Message.Replace('\n', ' '));
+                    for (int i = 0; i < Math.Min(4, frames.Length); i++) Console.Out.WriteLine(Prefix + "    " + frames[i].Trim());
+                }
+                catch { }
+            };
+        }
         Console.WriteLine(Prefix + $"assembly resolver active over {_dirs.Length} search dir(s)");
         if (_verbose) foreach (var d in _dirs) Console.WriteLine(Prefix + "  " + d);
     }

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Modular Coop Compat (server guards)" />
+  <!-- The "DedicatedServer." prefix is exempt from Coop's module validation, so this module can exist on the server
+       only without every client having to install it. Layer 0 is server-side only. -->
+  <Id value="DedicatedServer.ModularCoopCompat" />
+  <Version value="v0.1.0" />
+  <SingleplayerModule value="true" />
+  <MultiplayerModule value="false" />
+  <ModuleCategory value="Singleplayer" />
+  <ModuleType value="Community" />
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+    <DependedModule Id="Sandbox" />
+  </DependedModules>
+  <SubModules>
+    <SubModule>
+      <Name value="ModularCoopCompat" />
+      <DLLName value="DedicatedServer.ModularCoopCompat.dll" />
+      <SubModuleClassType value="ModularCoop.Compat.CompatSubModule" />
+      <Tags />
+    </SubModule>
+  </SubModules>
+  <Xmls />
+</Module>
