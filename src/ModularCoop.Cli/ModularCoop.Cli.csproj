@@ -1,8 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-  <ItemGroup>
-    <ProjectReference Include="..\ModularCoop.Core\ModularCoop.Core.csproj" />
-  </ItemGroup>
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -10,5 +6,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ModularCoop.Core\ModularCoop.Core.csproj" />
+    <!-- The hook targets net6.0 (the engine's bundled runtime); build it, don't reference it, and ship it next to us. -->
+    <ProjectReference Include="..\ModularCoop.Hook\ModularCoop.Hook.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <Target Name="CopyHook" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModularCoop.Hook\bin\$(Configuration)\net6.0\ModularCoop.Hook.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>
