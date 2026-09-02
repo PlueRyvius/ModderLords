@@ -60,7 +60,7 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<string> ProfileNames { get; } = new();
     public ObservableCollection<ModRow> Mods { get; } = new();
     public ObservableCollection<SaveRow> Saves { get; } = new();
-    public ObservableCollection<ConsoleLine> Console { get; } = new();
+    public BulkObservableCollection<ConsoleLine> Console { get; } = new();
     public ObservableCollection<string> Messages { get; } = new();
     public ObservableCollection<string> LoadOrderPreview { get; } = new();
     public ICollectionView ConsoleView { get; }
@@ -378,7 +378,7 @@ public partial class MainViewModel : ObservableObject
         // No DeferRefresh here: a ListCollectionView throws if its source changes while a refresh is deferred.
         var n = 0;
         while (n < 1500 && _pending.TryDequeue(out var l)) { Console.Add(l); n++; }
-        while (Console.Count > 15000) Console.RemoveAt(0);
+        if (Console.Count > 17000) Console.RemoveFirst(Console.Count - 15000);   // one Reset, not thousands of removals
         ConsoleFlushed?.Invoke();
     }
 

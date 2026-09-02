@@ -58,17 +58,20 @@ public static class LoadOrder
             else issues.Add("preferred order ignored: it would load a module before one it depends on");
         }
 
-        // Official host order (verified from its own log): Native, SandBoxCore, Sandbox, <Coop id>, DedicatedServer.Windows.
-        // Community modules go between Sandbox and Coop; Harmony ahead of everything. Stock modules are matched by FOLDER
-        // name because the workshop build's Coop folder carries the id "CoopNightly"; the engine token needs the id.
-        var frameworksFirst = new[] { "Bannerlord.Harmony" };
-        var ordered = new List<string>();
+        // Whole-set topological order from BUTR (this is what lets frameworks that declare "load Native after me",
+        // e.g. Harmony/ButterLib/UIExtenderEx/MCM, land before Native, exactly like the game launcher does), with the
+        // community block re-arranged to the user's preference where dependencies allow. Then the two things the
+        // official host pins: <Coop id> after everything else, DedicatedServer.Windows last. Stock modules are matched by
+        // FOLDER name because the workshop build's Coop folder carries the id "CoopNightly"; the token needs the id.
         string? StockId(string folder) => stock.FirstOrDefault(m => m.FolderName.Equals(folder, StringComparison.OrdinalIgnoreCase))?.Id;
         var coopId = StockId("Coop");
         var dsId = StockId("DedicatedServer.Windows");
-        ordered.AddRange(communitySorted.Where(id => frameworksFirst.Contains(id, StringComparer.OrdinalIgnoreCase)));
-        foreach (var f in new[] { "Native", "SandBoxCore", "SandBox" }) if (StockId(f) is { } id) ordered.Add(id);
-        ordered.AddRange(communitySorted.Where(id => !frameworksFirst.Contains(id, StringComparer.OrdinalIgnoreCase)));
+        var fullSorted = sorted.Select(m => m.Id).Where(id => !phantomIds.Contains(id)).ToList();
+        foreach (var c in community) if (!fullSorted.Contains(c.Id, StringComparer.OrdinalIgnoreCase)) fullSorted.Add(c.Id);
+        // Re-thread the community ids in the order decided above (sorter + preference) into the slots they occupy.
+        var slots = fullSorted.Select((id, i) => (id, i)).Where(t => communityIds.Contains(t.id)).Select(t => t.i).ToList();
+        for (int k = 0; k < slots.Count && k < communitySorted.Count; k++) fullSorted[slots[k]] = communitySorted[k];
+        var ordered = fullSorted.Where(id => id != coopId && id != dsId).ToList();
         if (coopId is not null) ordered.Add(coopId);
         if (dsId is not null) ordered.Add(dsId);
 

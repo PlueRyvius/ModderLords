@@ -108,8 +108,9 @@ public class LoadOrderTests
             Mod("Bannerlord.MBOptionScreen", ModuleSourceKind.GameModules, @"G\MCM", ("Bannerlord.Harmony", false)),
         };
         var r = LoadOrder.Compute(stock, community);
-        Assert.Equal("Bannerlord.Harmony", r.ModuleIds[0]);
-        Assert.Equal(["Native", "SandBoxCore", "Sandbox"], r.ModuleIds.Skip(1).Take(3));
+        var ids0 = r.ModuleIds.ToList();
+        Assert.True(ids0.IndexOf("Bannerlord.Harmony") < ids0.IndexOf("Native"));   // frameworks that say "load Native after me" come first
+        Assert.True(ids0.IndexOf("Native") < ids0.IndexOf("SandBoxCore") && ids0.IndexOf("SandBoxCore") < ids0.IndexOf("Sandbox"));
         Assert.Equal("CoopNightly", r.ModuleIds[^2]);
         Assert.Equal("DedicatedServer.Windows", r.ModuleIds[^1]);
         var ids = r.ModuleIds.ToList();

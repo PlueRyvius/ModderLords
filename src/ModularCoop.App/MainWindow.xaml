@@ -173,8 +173,8 @@
                                  IsEnabled="{Binding IsRunning}" FontFamily="Consolas" />
                     </DockPanel>
                     <ListBox x:Name="ConsoleList" ItemsSource="{Binding ConsoleView}" FontFamily="Consolas" FontSize="12"
-                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
-                             ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                             ScrollViewer.HorizontalScrollBarVisibility="Visible" ScrollViewer.VerticalScrollBarVisibility="Visible">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
