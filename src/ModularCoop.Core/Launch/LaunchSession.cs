@@ -22,7 +22,8 @@ public sealed class LaunchSession
         LaunchPlan Plan,
         IReadOnlyList<string> Messages);
 
-    public static readonly string[] KeepForDependencyOnly = ["MCM.MCMSubModule", "MCM.Internal.MCMImplementationSubModule"];
+    /// <summary>Submodule class types that survive DependencyOnly, from the compat database (MCM's settings core when no DB ships).</summary>
+    public static IReadOnlyCollection<string> KeepForDependencyOnly => Compat.CompatDb.Current.KeepForDependencyOnly();
 
     public static ServerPaths ResolvePaths(Profile profile)
     {

@@ -57,16 +57,8 @@ public sealed class Profile
 
     [JsonIgnore] public IEnumerable<ProfileMod> EnabledMods => Mods.Where(m => m.Enabled);
 
-    /// <summary>The roles that worked for Andy's mod set; anything unknown defaults to Run.</summary>
-    public static readonly Dictionary<string, ServerRole> DefaultRoles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Bannerlord.Harmony"] = ServerRole.DependencyOnly,
-        ["Bannerlord.ButterLib"] = ServerRole.DependencyOnly,
-        ["Bannerlord.UIExtenderEx"] = ServerRole.DependencyOnly,
-        ["Bannerlord.MBOptionScreen"] = ServerRole.DependencyOnly,
-    };
-
-    public static ServerRole DefaultRoleFor(string id) => DefaultRoles.TryGetValue(id, out var r) ? r : ServerRole.Run;
+    /// <summary>Role for a mod not yet in a profile: from the compat database, falling back to the pre-DB table (frameworks = DependencyOnly).</summary>
+    public static ServerRole DefaultRoleFor(string id) => Compat.CompatDb.Current.DefaultRoleFor(id);
 }
 
 public static class ProfileStore
