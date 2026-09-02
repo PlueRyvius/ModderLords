@@ -31,11 +31,7 @@ var catalog = ModuleCatalog.Scan(paths.ModulesRoot, gameRoot, libraries, customR
 foreach (var p in catalog.Problems) Console.Error.WriteLine("[ModularCoop] catalog: " + p);
 
 var overlayRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ModularCoop", "overlay", "default");
-var applier = new OverlayApplier
-{
-    // MCM's settings core runs headless; its UI submodules do not.
-    KeepForDependencyOnly = ["MCM.MCMSubModule", "MCM.Internal.MCMImplementationSubModule"],
-};
+var applier = new OverlayApplier { KeepForDependencyOnly = LaunchSession.KeepForDependencyOnly };
 
 switch (cmd)
 {

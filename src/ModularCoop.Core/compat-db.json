@@ -1,0 +1,58 @@
+{
+  "SchemaVersion": 1,
+  "Records": [
+    {
+      "Id": "Bannerlord.Harmony",
+      "Verdict": "Works",
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "DependencyOnly",
+      "Notes": "Client-side framework. Kept in the load order for the Coop handshake; no code is loaded on the server.",
+      "UpdatedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "Id": "Bannerlord.ButterLib",
+      "Verdict": "Works",
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "DependencyOnly",
+      "Notes": "Client-side framework; nothing to run on the headless server.",
+      "UpdatedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "Id": "Bannerlord.UIExtenderEx",
+      "Verdict": "Works",
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "DependencyOnly",
+      "Notes": "UI framework; nothing to run without a screen.",
+      "UpdatedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "Id": "Bannerlord.MBOptionScreen",
+      "Verdict": "Works",
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "DependencyOnly",
+      "KeepSubModules": [ "MCM.MCMSubModule", "MCM.Internal.MCMImplementationSubModule" ],
+      "Notes": "MCM. Its settings core stays loaded so mods can read their settings on the server (and Settings sync can capture them); the UI submodules are dropped.",
+      "UpdatedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "Id": "ModularSmithing2",
+      "Verdict": "Works",
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "Run",
+      "Notes": "Ships its own Coop adapter; runs on the server as-is.",
+      "Url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3790263286",
+      "UpdatedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "Id": "ImprovedGarrisons",
+      "Verdict": "NeedsRecipe",
+      "TestedVersions": [ "v4.2.0.7" ],
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "Run",
+      "ServerAuthoritative": true,
+      "ClientSideBehaviors": [ "ImprovedGarrisons.SaveSystem.UiBehavior" ],
+      "Notes": "Reaches SERVING with the bundled guards. Garrison logic must be server-only (Settings sync + Server-only logic on) so only the host's copy manages garrisons; the save/UI behaviour stays client-side.",
+      "UpdatedAt": "2026-09-02T00:00:00Z"
+    }
+  ]
+}

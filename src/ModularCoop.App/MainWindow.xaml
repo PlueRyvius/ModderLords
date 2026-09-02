@@ -78,6 +78,9 @@
                             <Button Content="Move down" Command="{Binding MoveDownCommand}" />
                             <Button Content="Refresh order" Command="{Binding RefreshPreviewCommand}" />
                             <Button Content="Behaviours…" Command="{Binding EditBehaviorsCommand}" ToolTip="Choose which of the selected mod's behaviours run on the server only" />
+                            <Button Content="Record…" Command="{Binding RecordCompatCommand}" Margin="12,0,0,0" ToolTip="Record how the selected mod behaves under Coop (verdict, notes, defaults). Saved to your local compat database." />
+                            <Button Content="Export…" Command="{Binding ExportCompatCommand}" ToolTip="Write the selected mod's record (or all your local records) to a file you can share" />
+                            <Button Content="Import…" Command="{Binding ImportCompatCommand}" ToolTip="Merge a shared record file into your local compat database (newer records win)" />
                             <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="#666"
                                        Text="Run = load its code on the server. DependencyOnly = listed for the handshake, no code (UI frameworks). AsShipped = let the engine decide." />
                         </StackPanel>
@@ -105,6 +108,13 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="Behaviours" Binding="{Binding Behaviors}" IsReadOnly="True" Width="120" />
                                 <DataGridTextColumn Header="Bins" Binding="{Binding Bins}" IsReadOnly="True" Width="100" />
+                                <DataGridTemplateColumn Header="Compat" Width="150" SortMemberPath="CompatText">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding CompatText}" Foreground="{Binding CompatColor}" ToolTip="{Binding CompatTip}" VerticalAlignment="Center" Margin="2,0" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="Server verdict" Binding="{Binding ServerVerdict}" IsReadOnly="True" Width="190">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding ServerVerdictDetail}" /></Style>

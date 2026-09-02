@@ -93,6 +93,7 @@ One row per community mod found on this PC. Stock modules and Coop itself are al
 | On | Include this mod on the server (single click). |
 | Role | See below. |
 | Bins | Which builds the mod ships: `server` (made for dedicated servers), `client`, or both. |
+| Compat | The curated verdict from the compatibility database (see below): green **Works**, amber **Needs recipe** (works with Server-only logic and the recorded behaviours), red **Broken**, grey **Unknown**. `· untested version` means your copy is not one of the versions the record was checked with. Hover for notes, tested versions and where the record came from. Empty = no record yet. |
 | Server verdict | `server-safe`: no UI or client-only references. `guarded`: uses inquiries or screens that the server guards handle. `needs review`: constructs UI objects or references StoryMode; may still work (hover for details), test it. |
 | Notes | `client-only tags`: its manifest asks servers to skip it (handled by the Run role). `data only`: XML content, no code. |
 | Folder | Where the mod lives. A number as the folder name means a Steam Workshop item. |
@@ -161,6 +162,7 @@ differs, extra mod enabled, DLC enabled).
 | What | Where |
 |---|---|
 | Profiles | `%LOCALAPPDATA%\ModularCoop\profiles\<name>.json` |
+| Compatibility database | `compat-db.json` next to the launcher (bundled); your records in `%LOCALAPPDATA%\ModularCoop\compat-db.local.json` |
 | Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModularCoop\overlay\<profile>\` |
 | Launcher logs | `%LOCALAPPDATA%\ModularCoop\logs\launch-*.log`, `app-errors.log` |
 | Server data (saves, server-config.json, server logs, config backups) | `Documents\Mount and Blade II Bannerlord\CoopData\DedicatedServer\` |
@@ -268,3 +270,24 @@ What is not editable here: dropdowns, colours, buttons and other custom MCM type
 (the sync module only carries booleans, numbers, text and enums). A setting the mod marks *restart required* is applied
 and saved, but the mod may not act on it until the next start; the result line says so. The files behind the tab live
 in `%LOCALAPPDATA%\ModularCoop\live\<profile>\` and are recreated at each launch.
+
+## Compatibility database
+
+The **Compat** column on the Mods tab comes from a small curated database, not from the code scan. It records which mods
+are known to run under Coop, which need the Server-only logic recipe, and which are broken, together with the settings
+the launcher should default to for that mod: its role, whether Server-only logic is on, and which behaviours stay on
+players' clients. When a mod first appears in a profile it takes those defaults; mods already in the profile are never
+changed.
+
+- **Bundled**: `compat-db.json` next to the launcher, updated with each release. Starts with the frameworks (Harmony,
+  ButterLib, UIExtenderEx, MCM), ModularSmithing2 and ImprovedGarrisons.
+- **Yours**: `%LOCALAPPDATA%\ModularCoop\compat-db.local.json`. Select a mod and press **Record…** after testing it:
+  pick the verdict, tick *Tested with this version* (records the mod and Coop versions), add notes, and press *Use
+  current row as defaults* to store the Role / Server-only logic / behaviours you settled on. A local record replaces the
+  bundled one for that mod; *Remove local record* brings the bundled one back.
+- **Sharing**: **Export…** writes the selected mod's record (or, with nothing selected, all your local records) to a
+  `.json` file. **Import…** merges such a file into your local database; when both sides have a record for the same mod
+  the newer one wins and the kept ones are listed under Messages.
+
+The badge is a claim about what someone tested, so `· untested version` appears whenever your copy's version is not in
+the record; the mod may still work.

@@ -94,9 +94,14 @@ small adapters, but written against the Compat API instead of raw Coop internals
 
 ### Layer 3: compatibility database
 
-`compat/<ModId>.json`: verdict (works / guarded / recipe / broken), recipe (guards, server-only handlers, registered
-types, synced fields, settings classes), tested Coop and mod versions, notes. Shipped with the launcher, overridable
-locally, badge in the Mods tab, and a "submit this recipe" export so players can share them.
+Shipped (v0.6): one file, `compat-db.json` next to the launcher, `{ SchemaVersion, Records[] }`. Each record: `Id`,
+`Verdict` (Works / NeedsRecipe / Broken / Unknown), `TestedVersions`, `TestedCoopVersion`, the launcher defaults for a
+mod new to a profile (`DefaultRole`, `ServerAuthoritative`, `ClientSideBehaviors`), `KeepSubModules` (submodule classes
+that survive DependencyOnly; MCM's settings core), `Notes`, `Url`, `UpdatedAt`. The user's own records live in
+`%LOCALAPPDATA%\ModularCoop\compat-db.local.json` with the same shape; a local record replaces the bundled one whole, by
+id. `Record…` on the Mods tab writes a local record; `Export…` / `Import…` share them (import keeps whichever record has
+the newer `UpdatedAt`). `ModularCoop.Core.Compat.CompatDb` replaced the hardcoded role and keep-submodule tables. The
+recipe itself (guards, synced fields, settings classes from Layer 2) is not in the record yet; the behaviours list is.
 
 ## Order of work
 

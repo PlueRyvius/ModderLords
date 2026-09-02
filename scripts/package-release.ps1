@@ -17,6 +17,8 @@ dotnet publish (Join-Path $root 'src\ModularCoop.App\ModularCoop.App.csproj') -c
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 
 Copy-Item (Join-Path $root 'src\ModularCoop.Hook\bin\Release\net6.0\ModularCoop.Hook.dll') $out -Force
+# The curated compat database is a Content item of Core; publish carries it next to the exe. Copy as a belt-and-braces.
+Copy-Item (Join-Path $root 'src\ModularCoop.Core\compat-db.json') $out -Force
 
 # The Compat module (net472, loaded by the engine) ships under compat\ next to the exe.
 dotnet build (Join-Path $root 'src\ModularCoop.Compat\ModularCoop.Compat.csproj') -c Release
