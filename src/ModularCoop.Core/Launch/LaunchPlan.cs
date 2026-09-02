@@ -13,7 +13,8 @@ public enum ServerVisibility { Public, FriendsOnly, None }
 /// </summary>
 public sealed class LaunchPlan
 {
-    public static readonly string[] StockModuleOrder = ["Native", "DedicatedServer.Windows", "SandBoxCore", "SandBox", "Coop"];
+    /// <summary>Fallback only; the real ids come from LoadOrder.Compute (the Coop folder may carry id "CoopNightly").</summary>
+    public static readonly string[] StockModuleOrder = ["Native", "SandBoxCore", "SandBox", "CoopNightly", "DedicatedServer.Windows"];
 
     public required ServerPaths Paths { get; init; }
     public required IReadOnlyList<string> ModuleIds { get; init; }

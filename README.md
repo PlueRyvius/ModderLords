@@ -4,7 +4,7 @@ A launcher for the **Bannerlord Coop dedicated server** that lets you run it wit
 using the pristine official server package and the mods where they already live on disk.
 It replaces the need for third-party wrappers that patch files inside the Steam workshop folder.
 
-Status: Phase 0 complete (direct engine launch verified). See `docs/` for the design.
+Status: Phase 1 complete (community mods load on the pristine server through junctions + a resolver hook).
 
 ## What it does
 
@@ -44,13 +44,47 @@ Status: Phase 0 complete (direct engine launch verified). See `docs/` for the de
 - Submodule DLLs are looked up in `<module>\bin\Win64_Shipping_Server\`, then `engine\bin\Win64_Shipping_Server\`.
 - Submodule tags `DedicatedServerType=none` / `IsNoRenderModeElement=false` make the engine skip that submodule on the server.
 
-## CLI (Phase 0)
-
-```
-dotnet run --project src/ModularCoop.Cli -- launch [--root <DedicatedServer>] [--modules A,B,C] [--save NAME] [--port 7210] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
-```
-
 ## Licensing note
 
 Bannerlord Coop is source-available, not open source. This project launches its binaries and relies only on their public
 contracts (command line, config files, module manifests). No Coop or third-party launcher code is included.
+
+## Phase 1 result (2026-09-02): community mods load on the pristine server
+
+Verified with ModularSmithing2, ImprovedGarrisons, HealOnKill, CoopModPatch (run on server) plus Bannerlord.Harmony,
+ButterLib, UIExtenderEx and MCM (dependency-only): the engine reaches `SERVING`, MS2's coop adapter reports
+`coop compat OK: 15/15`, CoopModPatch arms its ImprovedGarrisons patches, and a save written without those mods
+loads with the engine's "module mismatch ... Forcing load anyway" warning. The only change inside the Steam folder is
+one junction per mod under `engine\Modules`.
+
+How it works:
+
+- **Overlay** (`ModularCoop.Core.Overlay`): a mod that already ships `bin\Win64_Shipping_Server` and no client-only tags gets a
+  direct junction. Everything else gets a shadow folder in `%LOCALAPPDATA%\ModularCoop\overlay\<profile>\<Id>` holding a
+  rewritten `SubModule.xml` (id and version untouched), `bin\Win64_Shipping_Server` junctioned to the mod's client bin,
+  and every other folder junctioned as-is. Roles: `Run` strips the `DedicatedServerType`/`IsNoRenderModeElement` tags,
+  `DependencyOnly` removes the submodules (MCM's headless settings core is allow-listed), `AsShipped` changes nothing.
+- **Hook** (`ModularCoop.Hook`, loaded via `DOTNET_STARTUP_HOOKS`): the engine only probes its own bin for referenced
+  assemblies, so a last-resort `AssemblyResolve` handler searches `MODULARCOOP_SEARCH_DIRS` (Coop's server bin first,
+  then each mod's bins, then the game client bin). No game code is patched.
+- **Load order** (`LoadOrder`): official host sequence `Native, SandBoxCore, Sandbox, <community>, <Coop id>, DedicatedServer.Windows`,
+  community block sorted by BUTR's `ModuleSorter`, Harmony first, StoryMode/CustomBattle/BirthAndDeath treated as
+  satisfied (they never exist on a server).
+
+Gotchas found on the way:
+
+- The workshop build's server Coop folder carries the id **`CoopNightly`** (empty submodule list; the server core loads
+  Coop itself). The token must use the id from `SubModule.xml`, not the folder name.
+- The engine's `AssemblyLoader` eagerly tries every referenced assembly by bare file name and logs
+  `Messagebox [ERROR] ... Cannot load:` for each miss before resolving it properly. The console classifies those as warnings.
+- A `Resolving` handler on the default load context runs before every other resolver and would hand Coop an older Serilog
+  bundled by ButterLib. The hook uses `AppDomain.AssemblyResolve` only, with the requester's folder and Coop's bin first.
+
+CLI:
+
+```
+dotnet run --project src/ModularCoop.Cli -- catalog
+dotnet run --project src/ModularCoop.Cli -- sync   --mods Bannerlord.Harmony:DependencyOnly,ModularSmithing2,HealOnKill
+dotnet run --project src/ModularCoop.Cli -- launch --mods Bannerlord.Harmony:DependencyOnly,ModularSmithing2,HealOnKill --save "29 August 26"
+dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
+```
