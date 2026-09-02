@@ -78,11 +78,39 @@ public sealed class SyncSubModule : MBSubModuleBase
     }
 }
 
+/// <summary>Console (the server launcher captures it) plus a file under Documents\Mount and Blade II Bannerlord\Configs\ModLogs (the only place a client can look).</summary>
 public static class Log
 {
     private const string Prefix = "[ModularCoop.Compat] ";
-    public static void Info(string msg) => Console.WriteLine(Prefix + msg);
-    public static void Warn(string msg) => Console.WriteLine(Prefix + "WARNING " + msg);
+    private static readonly object Gate = new object();
+    private static string? _file;
+    private static bool _fileTried;
+
+    public static void Info(string msg) => Write(Prefix + msg);
+    public static void Warn(string msg) => Write(Prefix + "WARNING " + msg);
+
+    private static void Write(string line)
+    {
+        Console.WriteLine(line);
+        try
+        {
+            lock (Gate)
+            {
+                if (!_fileTried)
+                {
+                    _fileTried = true;
+                    var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    var dir = Path.Combine(docs, "Mount and Blade II Bannerlord", "Configs", "ModLogs");
+                    Directory.CreateDirectory(dir);
+                    var side = Directory.GetCurrentDirectory().EndsWith("Win64_Shipping_Server", StringComparison.OrdinalIgnoreCase) ? "server" : "client";
+                    _file = Path.Combine(dir, "ModularCoop.Compat-" + side + ".log");
+                    File.WriteAllText(_file, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} log started (pid {System.Diagnostics.Process.GetCurrentProcess().Id}){Environment.NewLine}");
+                }
+                if (_file != null) File.AppendAllText(_file, $"{DateTime.Now:HH:mm:ss.fff} {line}{Environment.NewLine}");
+            }
+        }
+        catch { }
+    }
 }
 
 /// <summary>
