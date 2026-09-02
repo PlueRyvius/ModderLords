@@ -186,3 +186,13 @@ dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
 - Verified server side with profile `layer1` (IG: 6 campaign behaviours, HealOnKill: 1 mission behaviour). Client side
   needs a player: expect `[ModularCoop.Compat] server recipes: 6 campaign behaviour(s) gated ...` in
   `Configs\ModLogs\ModularCoop.Compat-client.log`, then `RegisterEvents skipped on client: ...` lines.
+
+## Compat verification logging (2026-09-02)
+
+- `BehaviorGate` installs counting postfixes on each gated campaign behaviour's common event handlers
+  (OnDailyTick / OnHourlyTick / OnWeeklyTick / settlement / raid / loaded) and counts invocations per (type, method).
+- The submodule tick calls `Bridge.VerificationSummary()` every 30 s and logs it. A dedicated server counts up once a
+  player joins and time runs; a client should stay at 0 for gated behaviours (proof the gate held). Empty server = 0
+  because campaign time is paused with no players.
+- Look in `Configs\ModLogs\ModularCoop.Compat-server.log` and `-client.log` for
+  `verification (server): GarrisonDailyBehavior.OnDailyTick=N ...` vs `verification (client): ... ran 0 times`.

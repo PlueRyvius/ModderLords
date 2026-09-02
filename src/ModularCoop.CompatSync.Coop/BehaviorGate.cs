@@ -63,6 +63,7 @@ public static class BehaviorGate
                 Harmony.Patch(method, prefix: new HarmonyMethod(typeof(BehaviorGate), nameof(SkipOnClientPrefix)));
                 PatchedCampaign.Add(typeName);
                 patched++;
+                InstallCounters(type!);
             }
             catch (Exception ex) { missing++; Log.Warn("recipe: could not gate " + typeName + ": " + ex.GetBaseException().Message); }
         }
@@ -106,5 +107,47 @@ public static class BehaviorGate
     {
         lock (Announced) { if (!Announced.Add(msg)) return; }
         Log.Info(msg);
+    }
+
+    // ---- verification counters --------------------------------------------------------------------------
+
+    // Common campaign-event handler names; whichever a gated behaviour actually declares gets a counting postfix.
+    private static readonly string[] CountedMethods =
+    {
+        "OnDailyTick", "OnHourlyTick", "OnWeeklyTick", "OnDailyTickSettlement", "OnDailyTickHero",
+        "OnDailyTickClan", "OnDailyTickParty", "OnSettlementEntered", "OnRaidCompleted", "OnGameLoaded",
+    };
+    private static readonly Dictionary<string, long> Counts = new Dictionary<string, long>(StringComparer.Ordinal);
+    private static readonly HashSet<string> CounterInstalled = new HashSet<string>(StringComparer.Ordinal);
+
+    private static void InstallCounters(Type type)
+    {
+        foreach (var name in CountedMethods)
+        {
+            var m = AccessTools.Method(type, name);
+            if (m == null || CounterInstalled.Contains(type.FullName + "." + name)) continue;
+            try
+            {
+                Harmony.Patch(m, postfix: new HarmonyMethod(typeof(BehaviorGate), nameof(CountPostfix)));
+                CounterInstalled.Add(type.FullName + "." + name);
+            }
+            catch { /* an overloaded/abstract target we cannot patch; skip it */ }
+        }
+    }
+
+    public static void CountPostfix(MethodBase __originalMethod)
+    {
+        var key = (__originalMethod.DeclaringType?.Name ?? "?") + "." + __originalMethod.Name;
+        lock (Counts) { Counts[key] = (Counts.TryGetValue(key, out var v) ? v : 0) + 1; }
+    }
+
+    /// <summary>One line summarising how often gated behaviours actually ran on this side. Server should count; a client should stay at 0.</summary>
+    public static string VerificationSummary()
+    {
+        List<KeyValuePair<string, long>> snapshot;
+        lock (Counts) { snapshot = Counts.Where(kv => kv.Value > 0).OrderBy(kv => kv.Key).ToList(); }
+        var side = IsClient() ? "client" : "server";
+        if (snapshot.Count == 0) return $"verification ({side}): gated behaviours ran 0 times so far" + (side == "client" ? " (expected on a client)" : "");
+        return $"verification ({side}): " + string.Join(", ", snapshot.Select(kv => kv.Key + "=" + kv.Value));
     }
 }
