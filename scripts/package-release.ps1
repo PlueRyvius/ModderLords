@@ -35,6 +35,14 @@ $syncOut = Join-Path $out 'compat\ModularCoop.Compat'
 New-Item -ItemType Directory -Path $syncOut -Force | Out-Null
 Copy-Item (Join-Path $root 'src\ModularCoop.CompatSync\_Module\*') $syncOut -Recurse -Force
 Get-ChildItem $syncOut -Recurse -Filter *.pdb | Remove-Item -Force
+
+# The _Module output dirs are source-tree build outputs that accumulate leftovers (e.g. a win-x64 RID subfolder
+# from a self-contained build). A Bannerlord module only wants the flat Win64_Shipping_* bins, so strip the rest.
+foreach ($m in @($compatOut, $syncOut)) {
+    Get-ChildItem $m -Recurse -Directory | Where-Object { $_.Name -eq 'win-x64' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Get-ChildItem $m -Recurse -Filter *.json | Where-Object { $_.Name -match 'deps|runtimeconfig' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    Get-ChildItem $m -Recurse -Filter recipes.json | Remove-Item -Force -ErrorAction SilentlyContinue
+}
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.md') -Force
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.txt') -Force
 Copy-Item (Join-Path $root 'docs\ROADMAP.md') $out -Force
