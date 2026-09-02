@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Source folders that happen to be called Logs (the rule above is for runtime log output).
+!src/**/Logs/
