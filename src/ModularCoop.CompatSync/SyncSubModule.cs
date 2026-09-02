@@ -27,8 +27,10 @@ public sealed class SyncSubModule : MBSubModuleBase
     {
         base.OnSubModuleLoad();
         // Nothing thrown from here may escape: the engine has no catch around submodule load and dies with 0xE0434352.
-        try { Log.Info($"v{Version} loaded; MCM {(McmBridge.Present ? "present" : "absent")}; waiting for Coop"); }
+        try { Log.Info($"v{Version} loaded; settings sources: {SettingsSources.Summary()}; waiting for Coop"); }
         catch (Exception ex) { Log.Warn("load-time probe failed: " + ex); }
+        try { SettingsHints.Load(); }
+        catch (Exception ex) { Log.Warn("settings hints failed: " + ex.GetBaseException().Message); }
         try { LiveSettings.Init(); }
         catch (Exception ex) { Log.Warn("live settings init failed: " + ex.GetBaseException().Message); }
     }
@@ -48,7 +50,10 @@ public sealed class SyncSubModule : MBSubModuleBase
         if (_sinceTick >= 3f)
         {
             _sinceTick = 0f;
-            // Host-side live edits first, so a value applied this tick is broadcast by the adapter tick right after.
+            // Discover lazily created settings objects (both sides), then host-side live edits, then the adapter tick
+            // broadcasts anything that changed and re-applies snapshots that arrived before their object existed.
+            try { SettingsSources.Refresh(); }
+            catch (Exception ex) { Log.Warn("settings discovery failed: " + ex.GetBaseException().Message); }
             LiveSettings.Poll();
             if (_adapterTick is null) { TryLoadAdapter(); }
             else try { _adapterTick.Invoke(null, null); }

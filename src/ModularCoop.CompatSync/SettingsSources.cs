@@ -8,8 +8,9 @@ namespace ModularCoop.CompatSync;
 public static class SettingsSources
 {
     public static readonly McmSettingsSource Mcm = new McmSettingsSource();
+    public static readonly StaticSettingsSource Static = new StaticSettingsSource();
 
-    public static ISettingsSource[] All { get; private set; } = { Mcm };
+    public static ISettingsSource[] All { get; private set; } = { Mcm, Static };
 
     /// <summary>Adds a source (the static-settings source registers itself once it exists).</summary>
     public static void Register(ISettingsSource source)

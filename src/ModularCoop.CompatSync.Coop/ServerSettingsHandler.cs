@@ -20,13 +20,13 @@ public sealed class ServerSettingsHandler : IHandler
     private readonly INetwork network;
     private readonly bool active;
     private readonly Dictionary<string, string> lastSent = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> broadcastCount = new Dictionary<string, int>(StringComparer.Ordinal);
 
     public ServerSettingsHandler(IMessageBroker broker, INetwork network)
     {
         this.broker = broker;
         this.network = network;
         if (!CoopProbe.Present) { Log.Warn("settings sync (server) disabled: " + CoopProbe.Report); return; }
-        if (!McmBridge.Present) { Log.Info("settings sync (server): MCM not installed, nothing to sync"); return; }
         active = true;
         Wire();
     }
@@ -51,7 +51,8 @@ public sealed class ServerSettingsHandler : IHandler
     private void HandleRequest(MessagePayload<NetworkRequestSettingsSnapshots> payload)
     {
         if (payload.Who is not NetPeer peer) return;
-        var snapshots = McmBridge.Capture();
+        SettingsSources.Refresh();
+        var snapshots = SettingsSources.Capture();
         foreach (var s in snapshots)
         {
             lastSent[s.SettingsId] = s.Payload;
@@ -64,12 +65,15 @@ public sealed class ServerSettingsHandler : IHandler
     public void BroadcastChanges()
     {
         if (!active) return;
-        foreach (var s in McmBridge.Capture())
+        foreach (var s in SettingsSources.Capture())
         {
             if (lastSent.TryGetValue(s.SettingsId, out var prev) && prev == s.Payload) continue;
             lastSent[s.SettingsId] = s.Payload;
             network.SendAll(new NetworkSettingsSnapshot { SettingsId = s.SettingsId, Payload = s.Payload, ProtocolVersion = ProtocolVersion });
-            Log.Info("settings sync: broadcast changed settings '" + s.SettingsId + "'");
+            // A mod that rewrites its own settings every tick would flood the log; cap per id.
+            broadcastCount.TryGetValue(s.SettingsId, out var n);
+            broadcastCount[s.SettingsId] = n + 1;
+            if (n < 5) Log.Info("settings sync: broadcast changed settings '" + s.SettingsId + "'" + (n == 4 ? " (further broadcasts of this id not logged)" : ""));
         }
     }
 
