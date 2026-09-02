@@ -25,6 +25,8 @@
   <ItemGroup>
     <!-- The engine-side JSON used for the live-settings files, compiled in so the tests prove both ends read the same bytes. -->
     <Compile Include="..\..\src\ModularCoop.CompatSync\MiniJson.cs" Link="Module\MiniJson.cs" />
+    <Compile Include="..\..\src\ModularCoop.CompatSync\ValueConverter.cs" Link="Module\ValueConverter.cs" />
+    <Compile Include="..\..\src\ModularCoop.CompatSync\PropertyRef.cs" Link="Module\PropertyRef.cs" />
   </ItemGroup>
 
 </Project>
