@@ -1,13 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Loaded into the engine process (bundled .NET 6 runtime) via DOTNET_STARTUP_HOOKS; keep it dependency-free. -->
     <TargetFramework>net6.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ModularCoop.Hook</AssemblyName>
+    <RootNamespace>ModularCoop.Hook</RootNamespace>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableDynamicLoading>false</EnableDynamicLoading>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Lib.Harmony" Version="2.4.2" />
-  </ItemGroup>
 
 </Project>
