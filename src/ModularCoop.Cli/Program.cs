@@ -2,6 +2,7 @@ using ModularCoop.Core.Launch;
 using ModularCoop.Core.Logs;
 using ModularCoop.Core.Modules;
 using ModularCoop.Core.Overlay;
+using ModularCoop.Core.Profiles;
 using ModularCoop.Core.Saves;
 
 // Command-line driver (Phase 0/1). Commands:
@@ -61,6 +62,21 @@ switch (cmd)
         if (selErrors.Count > 0) return 2;
         var result = ApplyOverlay(selections);
         return result is null ? 2 : 0;
+    }
+
+    case "launch" when opts.ContainsKey("profile"):
+    {
+        // Same path the app uses: profile -> overlay -> config -> recipes -> engine.
+        var profile = ProfileStore.Load(opts["profile"]);
+        if (profile is null) { Console.Error.WriteLine("[ModularCoop] profile not found: " + opts["profile"]); return 2; }
+        if (opts.TryGetValue("save", out var ps)) profile.SaveName = ps;
+        var prepared = LaunchSession.Prepare(profile, applySideEffects: !opts.ContainsKey("dry-run"));
+        foreach (var m in prepared.Messages) Console.WriteLine("[ModularCoop] " + m);
+        Console.WriteLine("[ModularCoop] launch plan");
+        Console.Write(prepared.Plan.Describe());
+        if (opts.ContainsKey("dry-run")) return 0;
+        ProfileStore.Save(profile);
+        return await RunEngine(prepared.Plan, opts);
     }
 
     case "launch":

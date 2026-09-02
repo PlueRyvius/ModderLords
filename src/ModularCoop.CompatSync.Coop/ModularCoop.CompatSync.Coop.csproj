@@ -24,6 +24,9 @@
     <Reference Include="protobuf-net" HintPath="$(CoopRefDir)\protobuf-net.dll" Private="false" />
     <Reference Include="protobuf-net.Core" HintPath="$(CoopRefDir)\protobuf-net.Core.dll" Private="false" />
     <Reference Include="Autofac" HintPath="$(CoopRefDir)\Autofac.dll" Private="false" />
+    <!-- Harmony and Newtonsoft ship with the game / the Harmony framework mod; compile-time only. -->
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" ExcludeAssets="runtime" />
+    <Reference Include="Newtonsoft.Json" HintPath="$(CoopRefDir)\Newtonsoft.Json.dll" Private="false" />
   </ItemGroup>
 
   <Target Name="CopyServerBin" AfterTargets="Build">

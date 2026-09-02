@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Network;
 using LiteNetLib;
 using ModularCoop.CompatSync;
+using ModularCoop.CompatSync.Coop;
 using ModularCoop.CompatSync.Messages;
 
 // Coop discovers server-side handlers by namespace prefix (Coop.Core.Server.*) and constructs them from its
@@ -33,8 +34,18 @@ public sealed class ServerSettingsHandler : IHandler
     private void Wire()
     {
         broker.Subscribe<NetworkRequestSettingsSnapshots>(HandleRequest);
+        broker.Subscribe<NetworkRequestCompatRecipes>(HandleRecipeRequest);
         Current = this;
-        Log.Info("settings sync (server) armed");
+        var recipes = BehaviorGate.ReadLocalRecipes();
+        Log.Info("settings sync (server) armed" + (recipes is null ? "; no recipes.json (no server-only behaviours)" : "; recipes.json loaded"));
+    }
+
+    private void HandleRecipeRequest(MessagePayload<NetworkRequestCompatRecipes> payload)
+    {
+        if (payload.Who is not NetPeer peer) return;
+        var json = BehaviorGate.ReadLocalRecipes() ?? "{\"SchemaVersion\":1,\"Mods\":[]}";
+        network.Send(peer, new NetworkCompatRecipes { Json = json, ProtocolVersion = ProtocolVersion });
+        Log.Info("recipes sent to a joining client");
     }
 
     private void HandleRequest(MessagePayload<NetworkRequestSettingsSnapshots> payload)
@@ -66,6 +77,7 @@ public sealed class ServerSettingsHandler : IHandler
     {
         if (!active) return;
         broker.Unsubscribe<NetworkRequestSettingsSnapshots>(HandleRequest);
+        broker.Unsubscribe<NetworkRequestCompatRecipes>(HandleRecipeRequest);
         if (ReferenceEquals(Current, this)) Current = null;
     }
 

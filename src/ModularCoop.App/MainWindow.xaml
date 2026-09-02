@@ -94,6 +94,15 @@
                                 <DataGridTextColumn Header="Version" Binding="{Binding Version}" IsReadOnly="True" Width="90" />
                                 <DataGridComboBoxColumn Header="Role" SelectedItemBinding="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
                                                         ItemsSource="{x:Static vm:ModRow.Roles}" Width="130" />
+                                <DataGridTemplateColumn Header="Server-only logic" Width="110">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding ServerAuthoritative, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0"
+                                                      ToolTip="Run this mod's campaign/mission behaviours on the server only; players' copies skip them and receive the results through Coop. Needs Settings sync (the shared module) on." />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Behaviours" Binding="{Binding Behaviors}" IsReadOnly="True" Width="120" />
                                 <DataGridTextColumn Header="Bins" Binding="{Binding Bins}" IsReadOnly="True" Width="100" />
                                 <DataGridTextColumn Header="Server verdict" Binding="{Binding ServerVerdict}" IsReadOnly="True" Width="190">
                                     <DataGridTextColumn.ElementStyle>

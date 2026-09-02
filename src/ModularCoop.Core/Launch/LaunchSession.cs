@@ -135,6 +135,7 @@ public sealed class LaunchSession
             }
 
             ServerConfig.Write(paths, profile.SaveName, profile.Server);
+            WriteRecipes(profile, selections, messages);
             if (!string.IsNullOrWhiteSpace(profile.SaveName))
             {
                 var prep = SavePreparer.EnsureExists(paths, profile.SaveName);
@@ -180,6 +181,23 @@ public sealed class LaunchSession
         var selections = WithCompat(profile, Select(profile, catalog, new List<string>()), new List<string>());
         var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections);
         return new OverlayApplier { KeepForDependencyOnly = KeepForDependencyOnly }.Apply(plan);
+    }
+
+    /// <summary>Layer 1: recipes.json inside the bundled sync module, built from the scan of every mod flagged server-authoritative.</summary>
+    public static void WriteRecipes(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
+    {
+        var sync = LocateSyncModule();
+        var flagged = profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (sync is null)
+        {
+            if (flagged.Count > 0) messages.Add("server-only logic requested but the ModularCoop.Compat module is missing; recipes not written");
+            return;
+        }
+        var entries = selections.Where(s => flagged.Contains(s.Module.Id)).Select(s => (s.Module.Id, Compat.AssemblyScan.Scan(s.Module))).ToList();
+        var set = Compat.RecipeSet.Build(entries, "Modular Bannerlords Coop");
+        set.WriteInto(sync.FolderPath);
+        if (flagged.Count > 0 && !profile.SettingsSync) messages.Add("server-only logic is flagged for " + string.Join(", ", flagged) + " but Settings sync (the shared module) is off, so clients will not receive the recipe");
+        foreach (var r in set.Mods) messages.Add($"recipe {r.Id}: {r.CampaignBehaviors.Count} campaign behaviour(s), {r.MissionBehaviors.Count} mission behaviour(s) server-only");
     }
 
     /// <summary>Planned community modules with the versions the server will advertise (for save diffs and client export).</summary>
