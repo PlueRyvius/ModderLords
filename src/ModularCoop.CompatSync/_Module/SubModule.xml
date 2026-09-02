@@ -8,14 +8,19 @@
   <MultiplayerModule value="false" />
   <ModuleCategory value="Singleplayer" />
   <ModuleType value="Community" />
+  <!-- Hard dependencies only here: the game launcher treats every DependedModule as required (it ignores Optional). -->
   <DependedModules>
     <DependedModule Id="Native" />
     <DependedModule Id="SandBoxCore" />
     <DependedModule Id="Sandbox" />
-    <DependedModule Id="Bannerlord.MBOptionScreen" Optional="true" />
   </DependedModules>
-  <ModulesToLoadAfterThis>
-  </ModulesToLoadAfterThis>
+  <!-- Community metadata (BUTR launcher / Vortex): MCM is optional and, when present, must load before us. -->
+  <DependedModuleMetadatas>
+    <DependedModuleMetadata id="Native" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="SandBoxCore" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="Sandbox" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="Bannerlord.MBOptionScreen" order="LoadBeforeThis" optional="true" />
+  </DependedModuleMetadatas>
   <SubModules>
     <SubModule>
       <Name value="ModularCoop.Compat" />
