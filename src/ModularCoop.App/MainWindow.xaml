@@ -68,7 +68,13 @@
                         <DataGrid ItemsSource="{Binding Mods}" SelectedItem="{Binding SelectedMod}" AutoGenerateColumns="False" CanUserAddRows="False"
                                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeaderWidth="0">
                             <DataGrid.Columns>
-                                <DataGridCheckBoxColumn Header="On" Binding="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" Width="40" />
+                                <DataGridTemplateColumn Header="On" Width="40">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="Module" Binding="{Binding Id}" IsReadOnly="True" Width="200" />
                                 <DataGridTextColumn Header="Version" Binding="{Binding Version}" IsReadOnly="True" Width="90" />
                                 <DataGridComboBoxColumn Header="Role" SelectedItemBinding="{Binding Role, UpdateSourceTrigger=PropertyChanged}"

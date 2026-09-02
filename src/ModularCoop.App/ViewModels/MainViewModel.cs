@@ -50,6 +50,10 @@ public sealed class SaveRow
 public partial class MainViewModel : ObservableObject
 {
     private EngineProcess? _engine;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<ConsoleLine> _pending = new();
+    private readonly System.Windows.Threading.DispatcherTimer _flushTimer;
+    /// <summary>Raised on the UI thread after a batch of console lines was added (the view scrolls once per batch).</summary>
+    public event Action? ConsoleFlushed;
     private LaunchSession.Prepared? _prepared;
     private StreamWriter? _launchLog;
 
@@ -88,6 +92,9 @@ public partial class MainViewModel : ObservableObject
     {
         ConsoleView = CollectionViewSource.GetDefaultView(Console);
         ConsoleView.Filter = FilterLine;
+        _flushTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
+        _flushTimer.Tick += (_, _) => FlushConsole();
+        _flushTimer.Start();
         LoadProfileList();
         LoadProfile(ProfileNames.FirstOrDefault() ?? "default");
     }
@@ -309,11 +316,10 @@ public partial class MainViewModel : ObservableObject
             {
                 var c = LogClassifier.Classify(line.Text);
                 _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
-                Application.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    AddLine(c.Category, line.Text);
-                    if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING")) Status = "SERVING, waiting for clients";
-                });
+                // Never touch the UI per line: the engine prints thousands during load. Queue and flush on a timer.
+                _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
+                if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
+                    Application.Current.Dispatcher.BeginInvoke(() => Status = "SERVING, waiting for clients");
             };
             var code = await _engine.Exited;
             IsRunning = false;
@@ -361,7 +367,19 @@ public partial class MainViewModel : ObservableObject
     private void AddLine(LogCategory c, string text)
     {
         Console.Add(new ConsoleLine(DateTime.Now.ToString("HH:mm:ss"), c, text));
-        if (Console.Count > 20000) Console.RemoveAt(0);
+        ConsoleFlushed?.Invoke();
+    }
+
+    private void FlushConsole()
+    {
+        if (_pending.IsEmpty) return;
+        var n = 0;
+        using (ConsoleView.DeferRefresh())
+        {
+            while (n < 2000 && _pending.TryDequeue(out var l)) { Console.Add(l); n++; }
+            while (Console.Count > 15000) Console.RemoveAt(0);
+        }
+        ConsoleFlushed?.Invoke();
     }
 
     private bool FilterLine(object o)

@@ -12,7 +12,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        ViewModel.Console.CollectionChanged += (_, _) =>
+        ViewModel.ConsoleFlushed += () =>
         {
             if (ConsoleList.Items.Count > 0) ConsoleList.ScrollIntoView(ConsoleList.Items[^1]);
         };
