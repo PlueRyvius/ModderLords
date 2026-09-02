@@ -184,6 +184,9 @@ tab shows it; a save from a different Bannerlord version may not load.
 types, the mod runs UI code at startup; set its role to **DependencyOnly** if players only need it locally, or leave it
 off. Mods shipping a `Win64_Shipping_Server` build are the safest.
 
+**"Not launched: UDP port 4200 is already in use" or "an engine ... is already running".** Another server (this tool,
+the official `BannerlordCoopServer.exe`, or an older launcher) is still up. Stop it, or change the join port, then launch again.
+
 **Steam re-downloaded the server and my mods vanished.** Click **Re-sync junctions**.
 
 **A mod updated.** The yellow banner tells you. Restart the server and have players update.

@@ -12,6 +12,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        var v = typeof(MainWindow).Assembly.GetName().Version;
+        if (v is not null) Title += $"  v{v.Major}.{v.Minor}.{v.Build}";
         // Follow the tail only while the user is already at the bottom; scrolling up pins the view until they return.
         ViewModel.ConsoleFlushed += () =>
         {
