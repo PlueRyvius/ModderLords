@@ -33,7 +33,7 @@ public sealed class ClientSettingsHandler : IHandler
 
     private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
     {
-        network.SendAll(new NetworkRequestSettingsSnapshots { ProtocolVersion = ServerSettingsHandlerVersion.Value });
+        network.SendAll(new NetworkRequestSettingsSnapshots { ProtocolVersion = ModularCoop.CompatSync.Coop.Bridge.ProtocolVersion });
         Log.Info("settings sync: requested the server's settings");
     }
 
@@ -52,7 +52,3 @@ public sealed class ClientSettingsHandler : IHandler
     }
 }
 
-internal static class ServerSettingsHandlerVersion
-{
-    public const int Value = 1;
-}

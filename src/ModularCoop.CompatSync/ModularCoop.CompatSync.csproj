@@ -9,25 +9,13 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <!-- Coop assemblies are compile-time references only, taken from the local Steam workshop subscription; nothing of
-         Coop's is copied into the build output or the release. Override CoopRefDir if your Steam library is elsewhere. -->
-    <CoopRefDir Condition="'$(CoopRefDir)' == ''">D:\Program Files (x86)\Steam\steamapps\workshop\content\261550\3770450698\bin\Win64_Shipping_Client</CoopRefDir>
-  </PropertyGroup>
-
-  <!-- One DLL, two output folders: the client build and the server build are the same code. -->
-  <PropertyGroup>
+    <!-- The submodule DLL. It must reference NOTHING of Coop's: the engine eagerly checks a submodule's references on
+         the client (no resolver hook there) and reports "dependency conflict" when one is missing. -->
     <OutputPath>_Module\bin\Win64_Shipping_Client\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Bannerlord.ReferenceAssemblies.Core" Version="1.4.8.119303" ExcludeAssets="runtime" />
-    <PackageReference Include="Lib.Harmony" Version="2.4.2" ExcludeAssets="runtime" />
-    <Reference Include="Common" HintPath="$(CoopRefDir)\Common.dll" Private="false" />
-    <Reference Include="GameInterface" HintPath="$(CoopRefDir)\GameInterface.dll" Private="false" />
-    <Reference Include="LiteNetLib" HintPath="$(CoopRefDir)\LiteNetLib.dll" Private="false" />
-    <Reference Include="protobuf-net" HintPath="$(CoopRefDir)\protobuf-net.dll" Private="false" />
-    <Reference Include="protobuf-net.Core" HintPath="$(CoopRefDir)\protobuf-net.Core.dll" Private="false" />
-    <Reference Include="Autofac" HintPath="$(CoopRefDir)\Autofac.dll" Private="false" />
   </ItemGroup>
 
   <Target Name="CopyServerBin" AfterTargets="Build">

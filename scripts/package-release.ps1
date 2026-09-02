@@ -29,6 +29,8 @@ Get-ChildItem $compatOut -Recurse -Filter *.pdb | Remove-Item -Force
 # The shared client+server sync module (players copy this one into their game's Modules folder).
 dotnet build (Join-Path $root 'src\ModularCoop.CompatSync\ModularCoop.CompatSync.csproj') -c Release
 if ($LASTEXITCODE -ne 0) { throw "compat sync build failed" }
+dotnet build (Join-Path $root 'src\ModularCoop.CompatSync.Coop\ModularCoop.CompatSync.Coop.csproj') -c Release
+if ($LASTEXITCODE -ne 0) { throw "compat sync adapter build failed" }
 $syncOut = Join-Path $out 'compat\ModularCoop.Compat'
 New-Item -ItemType Directory -Path $syncOut -Force | Out-Null
 Copy-Item (Join-Path $root 'src\ModularCoop.CompatSync\_Module\*') $syncOut -Recurse -Force

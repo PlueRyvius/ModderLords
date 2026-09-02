@@ -13,6 +13,7 @@
     <ProjectReference Include="..\ModularCoop.Hook\ModularCoop.Hook.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\ModularCoop.Compat\ModularCoop.Compat.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\ModularCoop.CompatSync\ModularCoop.CompatSync.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\ModularCoop.CompatSync.Coop\ModularCoop.CompatSync.Coop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <Target Name="CopyHelpers" AfterTargets="Build">

@@ -13,7 +13,7 @@ namespace ModularCoop.CompatSync;
 /// properties; applying a snapshot sets those properties through MCM's own property references so its change
 /// notifications fire.
 /// </summary>
-internal static class McmBridge
+public static class McmBridge
 {
     private static bool _probed;
     private static Type? _providerType;
