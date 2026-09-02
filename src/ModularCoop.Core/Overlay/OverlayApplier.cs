@@ -36,28 +36,37 @@ public sealed class OverlayApplier
         {
             var mod = e.Selection.Module;
             var manifestChanges = new List<string>();
-            string target;
+            // One mod failing (locked file, odd manifest) must not abort the others or leave the state file stale.
+            try
+            {
+                string target;
+                if (e.Kind == OverlayKind.DirectJunction)
+                {
+                    target = mod.FolderPath;
+                }
+                else
+                {
+                    target = e.ShadowPath!;
+                    manifestChanges.AddRange(BuildShadow(e, warnings));
+                }
 
-            if (e.Kind == OverlayKind.DirectJunction)
-            {
-                target = mod.FolderPath;
+                // engine\Modules\<Id> must be a junction we own, or absent.
+                if (Directory.Exists(e.EngineModulePath) && !Junction.IsJunction(e.EngineModulePath))
+                {
+                    warnings.Add($"{mod.Id}: engine\\Modules\\{mod.Id} is a real folder (not a junction); leaving it alone and NOT overlaying this mod");
+                    continue;
+                }
+                Junction.Create(e.EngineModulePath, target);
+                wanted.Add(e.EngineModulePath);
+                if (!state.EngineJunctions.Contains(e.EngineModulePath, StringComparer.OrdinalIgnoreCase)) state.EngineJunctions.Add(e.EngineModulePath);
+                applied.Add(new AppliedEntry(mod.Id, e.EngineModulePath, target, e.Kind, manifestChanges));
             }
-            else
+            catch (Exception ex)
             {
-                target = e.ShadowPath!;
-                manifestChanges.AddRange(BuildShadow(e, warnings));
+                warnings.Add($"{mod.Id}: overlay failed and the mod was skipped: {ex.Message}");
+                // A half-built engine link would make the engine see a broken module; drop it.
+                try { if (Junction.IsJunction(e.EngineModulePath)) Junction.Remove(e.EngineModulePath); } catch { }
             }
-
-            // engine\Modules\<Id> must be a junction we own, or absent.
-            if (Directory.Exists(e.EngineModulePath) && !Junction.IsJunction(e.EngineModulePath))
-            {
-                warnings.Add($"{mod.Id}: engine\\Modules\\{mod.Id} is a real folder (not a junction); leaving it alone and NOT overlaying this mod");
-                continue;
-            }
-            Junction.Create(e.EngineModulePath, target);
-            wanted.Add(e.EngineModulePath);
-            if (!state.EngineJunctions.Contains(e.EngineModulePath, StringComparer.OrdinalIgnoreCase)) state.EngineJunctions.Add(e.EngineModulePath);
-            applied.Add(new AppliedEntry(mod.Id, e.EngineModulePath, target, e.Kind, manifestChanges));
         }
 
         // Remove junctions we created earlier that are no longer wanted.

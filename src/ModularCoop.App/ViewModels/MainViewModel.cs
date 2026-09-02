@@ -366,9 +366,23 @@ public partial class MainViewModel : ObservableObject
         CollectProfileFromRows();
         ProfileStore.Save(Profile);
         Console.Clear();
-        Status = "Preparing…";
+        Status = "Checking…";
         try
         {
+            var pre = await Task.Run(() =>
+            {
+                var paths = LaunchSession.ResolvePaths(Profile);
+                return Preflight.Run(paths, Profile.Server.JoinPort, Profile.Server.EnginePort, Profile.EnabledMods.Any());
+            });
+            foreach (var p in pre) AddLine(p.Blocking ? LogCategory.Error : LogCategory.Warning, "[ModularCoop] " + p.Message);
+            if (pre.Any(p => p.Blocking))
+            {
+                Status = "Not launched: " + pre.First(p => p.Blocking).Message;
+                IsRunning = false;
+                return;
+            }
+
+            Status = "Preparing…";
             var prepared = await Task.Run(() => LaunchSession.Prepare(Profile));
             _prepared = prepared;
             ProfileStore.Save(Profile); // LastVersion updated by Prepare
@@ -378,6 +392,7 @@ public partial class MainViewModel : ObservableObject
 
             var logDir = Path.Combine(ProfileStore.RootDir, "logs");
             Directory.CreateDirectory(logDir);
+            Preflight.RotateLogs(logDir, "launch-*.log", keep: 20);
             _launchLog = new StreamWriter(Path.Combine(logDir, $"launch-{DateTime.Now:yyyyMMdd-HHmmss}.log")) { AutoFlush = true };
 
             _engine = EngineProcess.Start(prepared.Plan);

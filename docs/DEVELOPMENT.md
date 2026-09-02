@@ -106,3 +106,13 @@ dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
 - "Re-sync junctions" recreates the links under `engine\Modules` after a workshop update or a Steam re-download of the server.
 - Gameplay tab edits `CoopData\mod-config.json` value by value, keeping the Coop mod's comments (backup under `config-backups`).
 - `docs/ROADMAP.md` records the future direction, including generalized mod-compatibility assistance.
+
+## Phase 4 (2026-09-02): hardening
+
+- `Preflight`: refuses to launch when the join or engine UDP port is in use, an engine from this package is already
+  running, or the hook DLL is missing; warns on low disk. Shown in the console before "Preparing".
+- Overlay apply is per-mod crash-safe: a failing mod is skipped with a warning and its half-built link removed; the
+  state file is always written.
+- Launch logs rotate (newest 20 kept). Window title shows the version.
+- Integration tests create real junctions and shadow folders in a temp tree (Windows only).
+- Release packaging: `scripts\package-release.ps1 -Version x.y.z` -> `artifacts\ModularBannerlordsCoop-x.y.z.zip`.
