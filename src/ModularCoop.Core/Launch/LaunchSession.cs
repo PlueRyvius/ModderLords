@@ -193,7 +193,11 @@ public sealed class LaunchSession
             if (flagged.Count > 0) messages.Add("server-only logic requested but the ModularCoop.Compat module is missing; recipes not written");
             return;
         }
-        var entries = selections.Where(s => flagged.Contains(s.Module.Id)).Select(s => (s.Module.Id, Compat.AssemblyScan.Scan(s.Module))).ToList();
+        var entries = selections.Where(s => flagged.Contains(s.Module.Id)).Select(s =>
+        {
+            var pm = profile.Mods.First(m => m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase));
+            return (s.Module.Id, Compat.AssemblyScan.Scan(s.Module), (IReadOnlyCollection<string>)pm.ClientSideBehaviors);
+        }).ToList();
         var set = Compat.RecipeSet.Build(entries, "Modular Bannerlords Coop");
         set.WriteInto(sync.FolderPath);
         if (flagged.Count > 0 && !profile.SettingsSync) messages.Add("server-only logic is flagged for " + string.Join(", ", flagged) + " but Settings sync (the shared module) is off, so clients will not receive the recipe");

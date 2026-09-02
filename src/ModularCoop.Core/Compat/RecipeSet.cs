@@ -33,13 +33,16 @@ public sealed class RecipeSet
     public static RecipeSet FromJson(string json) => JsonSerializer.Deserialize<RecipeSet>(json, Json) ?? new RecipeSet();
 
     /// <summary>Builds the recipe for every mod flagged server-authoritative from its assembly scan.</summary>
-    public static RecipeSet Build(IEnumerable<(string id, ScanResult scan)> serverAuthoritative, string generatedBy)
+    public static RecipeSet Build(IEnumerable<(string id, ScanResult scan, IReadOnlyCollection<string> keepClientSide)> serverAuthoritative, string generatedBy)
     {
         var set = new RecipeSet { GeneratedBy = generatedBy };
-        foreach (var (id, scan) in serverAuthoritative)
+        foreach (var (id, scan, keep) in serverAuthoritative)
         {
-            if (scan.CampaignBehaviors.Count == 0 && scan.MissionBehaviors.Count == 0) continue;
-            set.Mods.Add(new ModRecipe { Id = id, CampaignBehaviors = scan.CampaignBehaviors.ToList(), MissionBehaviors = scan.MissionBehaviors.ToList() });
+            var campaign = scan.CampaignBehaviors.Where(b => !keep.Contains(b)).ToList();
+            var mission = scan.MissionBehaviors.Where(b => !keep.Contains(b)).ToList();
+            if (campaign.Count == 0 && mission.Count == 0) continue;
+            set.Mods.Add(new ModRecipe { Id = id, CampaignBehaviors = campaign, MissionBehaviors = mission,
+                Notes = keep.Count > 0 ? "kept client-side: " + string.Join(", ", keep) : null });
         }
         return set;
     }

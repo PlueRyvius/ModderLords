@@ -16,6 +16,11 @@ public sealed class ProfileMod
     public string? LastVersion { get; set; }
     /// <summary>Layer 1: run this mod's behaviours on the server only; clients skip them (needs ModularCoop.Compat on both sides).</summary>
     public bool ServerAuthoritative { get; set; }
+    /// <summary>
+    /// Behaviour type names (from the scan) that stay client-side even when ServerAuthoritative is on; e.g. a mod's
+    /// UI behaviour. Everything the scan finds and is not listed here is gated on clients.
+    /// </summary>
+    public List<string> ClientSideBehaviors { get; set; } = new();
 }
 
 public sealed class ServerSettings
