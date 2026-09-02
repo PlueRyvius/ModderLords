@@ -47,6 +47,8 @@ public static class LiveSettings
     public static void Poll()
     {
         if (!Enabled) return;
+        try { Overrides.Load(_dir!); Overrides.Poll(); }
+        catch (Exception ex) { Log.Warn("live settings: overrides failed: " + ex.GetBaseException().Message); }
         try { ProcessRequests(); }
         catch (Exception ex) { Log.Warn("live settings: request pass failed: " + ex.GetBaseException().Message); }
         try { WriteDescriptionIfChanged(); }

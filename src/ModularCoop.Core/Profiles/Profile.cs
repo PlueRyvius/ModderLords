@@ -102,6 +102,7 @@ public static class ProfileStore
     {
         var p = PathFor(name);
         if (File.Exists(p)) File.Delete(p);
+        Live.SettingsOverridesStore.Delete(name);
     }
 
     public static string Safe(string name)
