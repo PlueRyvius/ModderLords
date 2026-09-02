@@ -103,7 +103,11 @@ public class LoadOrderTests
         var community = new[]
         {
             Mod("ModularSmithing2", ModuleSourceKind.GameModules, @"G\ModularSmithing2", ("Sandbox", false), ("StoryMode", false)),
-            Mod("Bannerlord.Harmony", ModuleSourceKind.GameModules, @"G\Harmony"),
+            new DiscoveredModule("Bannerlord.Harmony", "v1.0.0", @"G\Harmony", ModuleSourceKind.GameModules, new ModuleInfoExtended
+            {
+                Id = "Bannerlord.Harmony", Name = "Harmony", Version = ApplicationVersion.TryParse("v1.0.0", out var hv) ? hv : ApplicationVersion.Empty,
+                ModulesToLoadAfterThis = [new DependentModule { Id = "Native" }],   // as the real manifest declares
+            }),
             Mod("HealOnKill", ModuleSourceKind.GameModules, @"G\HealOnKill", ("Bannerlord.MBOptionScreen", false)),
             Mod("Bannerlord.MBOptionScreen", ModuleSourceKind.GameModules, @"G\MCM", ("Bannerlord.Harmony", false)),
         };

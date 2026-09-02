@@ -66,12 +66,19 @@ public static class LoadOrder
         string? StockId(string folder) => stock.FirstOrDefault(m => m.FolderName.Equals(folder, StringComparison.OrdinalIgnoreCase))?.Id;
         var coopId = StockId("Coop");
         var dsId = StockId("DedicatedServer.Windows");
-        var fullSorted = sorted.Select(m => m.Id).Where(id => !phantomIds.Contains(id)).ToList();
-        foreach (var c in community) if (!fullSorted.Contains(c.Id, StringComparer.OrdinalIgnoreCase)) fullSorted.Add(c.Id);
-        // Re-thread the community ids in the order decided above (sorter + preference) into the slots they occupy.
-        var slots = fullSorted.Select((id, i) => (id, i)).Where(t => communityIds.Contains(t.id)).Select(t => t.i).ToList();
-        for (int k = 0; k < slots.Count && k < communitySorted.Count; k++) fullSorted[slots[k]] = communitySorted[k];
-        var ordered = fullSorted.Where(id => id != coopId && id != dsId).ToList();
+        // A community module that declares "load Native after me" (ModulesToLoadAfterThis / LoadAfterThis metadata) belongs
+        // in front of Native, as the game launcher places Harmony, ButterLib, UIExtenderEx and MCM. Everything else follows Sandbox.
+        bool WantsToPrecedeNative(string id)
+        {
+            var m = community.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (m is null) return false;
+            return m.Info.ModulesToLoadAfterThis.Any(d => d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase))
+                || m.Info.DependentModuleMetadatas.Any(d => d.LoadType == LoadType.LoadAfterThis && d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase));
+        }
+        var ordered = new List<string>();
+        ordered.AddRange(communitySorted.Where(WantsToPrecedeNative));
+        foreach (var f in new[] { "Native", "SandBoxCore", "SandBox" }) if (StockId(f) is { } id) ordered.Add(id);
+        ordered.AddRange(communitySorted.Where(id => !WantsToPrecedeNative(id)));
         if (coopId is not null) ordered.Add(coopId);
         if (dsId is not null) ordered.Add(dsId);
 
