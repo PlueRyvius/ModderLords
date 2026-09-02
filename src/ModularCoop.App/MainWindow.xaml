@@ -9,6 +9,8 @@
         <vm:MainViewModel />
     </Window.DataContext>
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <vm:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
         <Style TargetType="Button">
             <Setter Property="Padding" Value="10,4" />
             <Setter Property="Margin" Value="4,0" />
@@ -33,12 +35,25 @@
                 <Button Content="Save" Command="{Binding SaveProfileCommand}" />
                 <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />
                 <Button Content="Rescan mods" Command="{Binding RescanCommand}" />
+                <Button Content="Re-sync junctions" Command="{Binding ResyncCommand}" ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
                     <Button Content="Launch server" Command="{Binding LaunchCommand}" FontWeight="Bold" Background="#DFF0D8" />
                     <Button Content="Stop" Command="{Binding StopCommand}" Background="#F2DEDE" />
                 </StackPanel>
                 <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" FontStyle="Italic" />
             </DockPanel>
+        </Border>
+
+        <!-- drift banner -->
+        <Border DockPanel.Dock="Top" Padding="8,6" Background="#FFF4CE" BorderBrush="#E0C060" BorderThickness="0,0,0,1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding DriftText}" Value=""><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding DriftText}" TextWrapping="Wrap" />
         </Border>
 
         <!-- status bar -->
@@ -149,6 +164,35 @@
                     <TextBlock Margin="0,12,0,0" Foreground="#666" TextWrapping="Wrap"
                                Text="Gameplay settings (difficulty, fast forward, cheats) live in CoopData\mod-config.json and are owned by the Coop mod; edit that file directly for now." />
                 </StackPanel>
+            </TabItem>
+
+            <!-- GAMEPLAY (mod-config.json) -->
+            <TabItem Header="Gameplay">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <Button Content="Reload" Command="{Binding LoadGameplayCommand}" />
+                        <Button Content="Save to mod-config.json" Command="{Binding SaveGameplayCommand}" />
+                        <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="#666" TextWrapping="Wrap"
+                                   Text="CoopData\mod-config.json, owned by the Coop mod. Values are replaced in place so its comments stay; a backup goes to config-backups. Applies on the next server start." />
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding Gameplay}" AutoGenerateColumns="False" CanUserAddRows="False" RowHeaderWidth="0" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Section" Binding="{Binding Section}" IsReadOnly="True" Width="100" />
+                            <DataGridTextColumn Header="Setting" Binding="{Binding Key}" IsReadOnly="True" Width="300" />
+                            <DataGridTemplateColumn Header="Value" Width="220">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding HasChoices, Converter={StaticResource BoolToVis}}" />
+                                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding HasChoices, Converter={StaticResource InverseBoolToVis}}" BorderThickness="0" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Was" Binding="{Binding Original}" IsReadOnly="True" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </TabItem>
 
             <!-- CONSOLE -->

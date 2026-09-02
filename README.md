@@ -98,3 +98,11 @@ dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
 - Profiles live in `%LOCALAPPDATA%\ModularCoop\profiles\<name>.json`; each profile has its own overlay folder.
 - `LaunchSession` is the single path from profile to running engine, shared by the app and the CLI.
 - Launch logs: `%LOCALAPPDATA%\ModularCoop\logs\launch-<timestamp>.log`.
+
+## Phase 3 (2026-09-02): drift, re-sync, gameplay settings
+
+- Drift banner: when a mod's installed version differs from what the profile last launched with, a banner names the mods
+  and reminds that players must update and a running server needs a restart.
+- "Re-sync junctions" recreates the links under `engine\Modules` after a workshop update or a Steam re-download of the server.
+- Gameplay tab edits `CoopData\mod-config.json` value by value, keeping the Coop mod's comments (backup under `config-backups`).
+- `docs/ROADMAP.md` records the future direction, including generalized mod-compatibility assistance.

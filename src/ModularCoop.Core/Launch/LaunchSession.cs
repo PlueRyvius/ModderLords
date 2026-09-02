@@ -121,6 +121,32 @@ public sealed class LaunchSession
         return new Prepared(paths, catalog, selections, order, overlayPlan, plan, messages);
     }
 
+    public sealed record Drift(string ModuleId, string LastVersion, string CurrentVersion);
+
+    /// <summary>Mods whose installed version differs from what the profile last launched with. Players must update too; a running server needs a restart.</summary>
+    public static IReadOnlyList<Drift> DetectDrift(Profile profile, ModuleCatalog catalog)
+    {
+        var list = new List<Drift>();
+        var scratch = new List<string>();
+        foreach (var sel in Select(profile, catalog, scratch))
+        {
+            var pm = profile.Mods.FirstOrDefault(m => m.Id.Equals(sel.Module.Id, StringComparison.OrdinalIgnoreCase));
+            if (pm?.LastVersion is { } last && !SaveHeaderReader.VersionsEqual(last, sel.Module.Version))
+                list.Add(new Drift(sel.Module.Id, last, sel.Module.Version));
+        }
+        return list;
+    }
+
+    /// <summary>Re-creates the junctions/shadow folders for the profile without touching configs or saves (after a workshop update or Steam re-download).</summary>
+    public static OverlayApplier.ApplyResult Resync(Profile profile)
+    {
+        var paths = ResolvePaths(profile);
+        var catalog = Scan(profile, paths, out _);
+        var selections = Select(profile, catalog, new List<string>());
+        var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections);
+        return new OverlayApplier { KeepForDependencyOnly = KeepForDependencyOnly }.Apply(plan);
+    }
+
     /// <summary>Planned community modules with the versions the server will advertise (for save diffs and client export).</summary>
     public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(Prepared p) =>
         p.Selections.ToDictionary(s => s.Module.Id, s => s.Module.Version, StringComparer.OrdinalIgnoreCase);

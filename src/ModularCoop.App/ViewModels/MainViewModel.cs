@@ -206,6 +206,8 @@ public partial class MainViewModel : ObservableObject
 
             RefreshSaves(paths);
             RefreshPreview();
+            RefreshDrift();
+            LoadGameplay();
             Status = $"{Mods.Count(r => r.Enabled)} of {Mods.Count} mods enabled";
         }
         catch (Exception ex)
@@ -275,6 +277,72 @@ public partial class MainViewModel : ObservableObject
             : "The engine will load this save anyway, with a warning:\n" + string.Join("\n", diffs.Select(d => $"  {d.ModuleId}: {d.Kind} (save {d.SaveVersion ?? "-"}, now {d.CurrentVersion ?? "-"})"));
     }
 
+    // ---- drift / resync / gameplay --------------------------------------------------------------------
+
+    [ObservableProperty] private string _driftText = "";
+    public ObservableCollection<GameplayRow> Gameplay { get; } = new();
+
+    public void RefreshDrift()
+    {
+        try
+        {
+            var paths = LaunchSession.ResolvePaths(Profile);
+            var catalog = LaunchSession.Scan(Profile, paths, out _);
+            var drift = LaunchSession.DetectDrift(Profile, catalog);
+            DriftText = drift.Count == 0 ? "" :
+                "Mod versions changed since the last launch: " + string.Join(", ", drift.Select(d => $"{d.ModuleId} {d.LastVersion} → {d.CurrentVersion}"))
+                + ". Players must update to match" + (IsRunning ? "; restart the server to pick them up." : ".");
+        }
+        catch { DriftText = ""; }
+    }
+
+    [RelayCommand]
+    private void Resync()
+    {
+        try
+        {
+            CollectProfileFromRows();
+            var r = LaunchSession.Resync(Profile);
+            Status = $"Re-synced {r.Applied.Count} junction(s), removed {r.Removed.Count}" + (r.Warnings.Count > 0 ? $", {r.Warnings.Count} warning(s)" : "");
+            foreach (var w in r.Warnings) Messages.Add("WARNING " + w);
+            if (IsRunning) Status += " (running server keeps the old files until restart)";
+        }
+        catch (Exception ex) { Status = "Re-sync failed: " + ex.Message; }
+    }
+
+    [RelayCommand]
+    public void LoadGameplay()
+    {
+        try
+        {
+            var paths = LaunchSession.ResolvePaths(Profile);
+            Gameplay.Clear();
+            foreach (var s in Core.Config.ModConfig.Read(paths))
+                Gameplay.Add(new GameplayRow { Path = s.Path, Kind = s.Kind, Original = s.RawValue, Value = s.Display,
+                    Choices = Core.Config.ModConfig.Choices.TryGetValue(s.Path, out var c) ? c : (s.Kind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False ? ["true", "false"] : null) });
+        }
+        catch (Exception ex) { Status = "mod-config.json: " + ex.Message; }
+    }
+
+    [RelayCommand]
+    private void SaveGameplay()
+    {
+        try
+        {
+            var paths = LaunchSession.ResolvePaths(Profile);
+            var changes = new List<(string, string)>();
+            foreach (var row in Gameplay)
+            {
+                var raw = Core.Config.ModConfig.Encode(row.Kind, row.Value);
+                if (raw != row.Original) changes.Add((row.Path, raw));
+            }
+            var n = Core.Config.ModConfig.Apply(paths, changes);
+            Status = n == 0 ? "Gameplay settings unchanged" : $"Saved {n} gameplay setting(s) to mod-config.json" + (IsRunning ? " (applies on next server start)" : "");
+            LoadGameplay();
+        }
+        catch (Exception ex) { Status = "mod-config.json: " + ex.Message; }
+    }
+
     // ---- export ------------------------------------------------------------------------------------
 
     [RelayCommand]
@@ -304,6 +372,7 @@ public partial class MainViewModel : ObservableObject
             var prepared = await Task.Run(() => LaunchSession.Prepare(Profile));
             _prepared = prepared;
             ProfileStore.Save(Profile); // LastVersion updated by Prepare
+            DriftText = "";
             foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModularCoop] " + m);
             foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModularCoop] " + l.TrimEnd());
 
@@ -422,4 +491,22 @@ public partial class MainViewModel : ObservableObject
     {
         if (_engine is { IsRunning: true }) await _engine.StopAsync(TimeSpan.FromSeconds(20));
     }
+}
+
+public partial class GameplayRow : ObservableObject
+{
+    public required string Path { get; init; }
+    public required System.Text.Json.JsonValueKind Kind { get; init; }
+    public required string Original { get; init; }
+    public string[]? Choices { get; init; }
+    public bool HasChoices => Choices is not null;
+    [ObservableProperty] private string _value = "";
+    public string Section => Path.Contains('.') ? Path[..Path.IndexOf('.')] : "";
+    public string Key => Path.Contains('.') ? Path[(Path.IndexOf('.') + 1)..] : Path;
+}
+
+public sealed class InverseBoolToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => value is true ? Visibility.Collapsed : Visibility.Visible;
+    public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
 }
