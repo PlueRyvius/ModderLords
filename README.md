@@ -236,3 +236,14 @@ mod has to gate. Players need `ModularCoop.Compat` installed for this (see the s
 
 When a mod also has a client-side screen (ImprovedGarrisons' management UI, for example), that screen is one of the
 gated behaviours and will not appear on players' clients; that is the trade-off until per-behaviour recipes are editable.
+
+## Checking that server-only logic worked
+
+After a session, open the two logs in `Documents\Mount and Blade II Bannerlord\Configs\ModLogs`:
+
+- `ModularCoop.Compat-server.log` should show `verification (server): ...=N` with counts above zero for the gated
+  behaviours once players have been on and time has advanced.
+- `ModularCoop.Compat-client.log` should show `verification (client): gated behaviours ran 0 times` plus
+  `RegisterEvents skipped on client: ...` lines. Zero on the client is the proof: those behaviours ran only on the host.
+
+(An empty server shows 0 because the campaign clock is paused until a player joins.)

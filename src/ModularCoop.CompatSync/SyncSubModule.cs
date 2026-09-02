@@ -18,8 +18,10 @@ public sealed class SyncSubModule : MBSubModuleBase
     private const string AdapterFileName = "ModularCoop.CompatSync.Coop.dll";
 
     private float _sinceTick;
+    private float _sinceVerify;
     private bool _adapterTried;
     private MethodInfo? _adapterTick;
+    private MethodInfo? _adapterVerify;
 
     protected override void OnSubModuleLoad()
     {
@@ -40,11 +42,21 @@ public sealed class SyncSubModule : MBSubModuleBase
     {
         base.OnApplicationTick(dt);
         _sinceTick += dt;
-        if (_sinceTick < 3f) return;
-        _sinceTick = 0f;
-        if (_adapterTick is null) { TryLoadAdapter(); return; }
-        try { _adapterTick.Invoke(null, null); }
-        catch (Exception ex) { Log.Warn("settings broadcast tick failed: " + ex.GetBaseException().Message); }
+        _sinceVerify += dt;
+        if (_sinceTick >= 3f)
+        {
+            _sinceTick = 0f;
+            if (_adapterTick is null) { TryLoadAdapter(); }
+            else try { _adapterTick.Invoke(null, null); }
+                 catch (Exception ex) { Log.Warn("settings broadcast tick failed: " + ex.GetBaseException().Message); }
+        }
+        // Every 30 s, print the verification counter so a solo join shows server counts vs a client's zeros.
+        if (_sinceVerify >= 30f && _adapterVerify is not null)
+        {
+            _sinceVerify = 0f;
+            try { if (_adapterVerify.Invoke(null, null) is string s) Log.Info(s); }
+            catch (Exception ex) { Log.Warn("verification summary failed: " + ex.GetBaseException().Message); }
+        }
     }
 
     private void TryLoadAdapter()
@@ -67,6 +79,7 @@ public sealed class SyncSubModule : MBSubModuleBase
             var asm = Assembly.LoadFrom(path);
             var bridge = asm.GetType("ModularCoop.CompatSync.Coop.Bridge", throwOnError: false);
             _adapterTick = bridge?.GetMethod("Tick", BindingFlags.Public | BindingFlags.Static);
+            _adapterVerify = bridge?.GetMethod("VerificationSummary", BindingFlags.Public | BindingFlags.Static);
             var typeCount = asm.GetTypes().Length;   // forces the type load now, inside our try, not in some other mod's scan
             Log.Info($"coop adapter loaded ({typeCount} types); handlers will arm when a session starts");
         }
