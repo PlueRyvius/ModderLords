@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 
@@ -71,22 +72,24 @@ public static class McmBridge
     /// <summary>Applies a snapshot; returns the number of properties changed. Unknown properties are skipped.</summary>
     public static int Apply(string settingsId, string payload, out string report)
     {
-        var provider = Provider();
-        report = "";
-        if (provider == null) return 0;
-        var defs = provider.GetType().GetProperty("SettingsDefinitions")?.GetValue(provider) as IEnumerable;
-        if (defs == null) return 0;
-        object? target = null;
-        foreach (var def in defs)
-            if ((def.GetType().GetProperty("SettingsId")?.GetValue(def) as string) == settingsId) { target = def; break; }
-        if (target == null) { report = "settings '" + settingsId + "' not installed on this side"; return 0; }
-
         var wanted = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var line in payload.Split('\n'))
         {
             var tab = line.IndexOf('\t');
             if (tab > 0) wanted[line.Substring(0, tab)] = line.Substring(tab + 1);
         }
+        return Apply(settingsId, wanted, out report);
+    }
+
+    /// <summary>Applies property values by id; returns the number changed. Unknown ids are ignored, unsupported kinds reported.</summary>
+    public static int Apply(string settingsId, IDictionary<string, string> wanted, out string report)
+    {
+        var provider = Provider();
+        report = "";
+        if (provider == null) { report = "MCM not present"; return 0; }
+        var target = FindDefinition(provider, settingsId);
+        if (target == null) { report = "settings '" + settingsId + "' not installed on this side"; return 0; }
+
         var changed = 0;
         var skipped = new List<string>();
         foreach (var prop in Properties(target))
@@ -98,6 +101,154 @@ public static class McmBridge
         }
         report = changed + " changed" + (skipped.Count > 0 ? ", unsupported: " + string.Join(", ", skipped) : "");
         return changed;
+    }
+
+    private static object? FindDefinition(object provider, string settingsId)
+    {
+        var defs = provider.GetType().GetProperty("SettingsDefinitions")?.GetValue(provider) as IEnumerable;
+        if (defs == null) return null;
+        foreach (var def in defs)
+            if ((def.GetType().GetProperty("SettingsId")?.GetValue(def) as string) == settingsId) return def;
+        return null;
+    }
+
+    /// <summary>
+    /// Persists a settings object through MCM's own provider (GetSettings + SaveSettings, found by name) so the value
+    /// survives a restart. Returns a one-line result; never throws.
+    /// </summary>
+    public static string Save(string settingsId)
+    {
+        try
+        {
+            var provider = Provider();
+            if (provider == null) return "not persisted: MCM not present";
+            var type = provider.GetType();
+            var get = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "GetSettings" && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(string));
+            var save = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "SaveSettings" && m.GetParameters().Length == 1);
+            if (get == null || save == null) return "not persisted: provider has no GetSettings/SaveSettings";
+            var settings = get.Invoke(provider, new object[] { settingsId });
+            if (settings == null) return "not persisted: GetSettings returned null";
+            save.Invoke(provider, new[] { settings });
+            return "persisted";
+        }
+        catch (Exception ex) { return "not persisted: " + ex.GetBaseException().Message; }
+    }
+
+    // ---- description for the host-side editor --------------------------------------------------------------
+
+    /// <summary>
+    /// Every settings object with display names, groups, kinds, ranges and choices, as plain dictionaries for
+    /// MiniJson. Unsupported kinds (dropdowns, colours, buttons) are listed with Editable=false. All best-effort:
+    /// a member MCM renames simply reads as null.
+    /// </summary>
+    public static List<object?> Describe()
+    {
+        var result = new List<object?>();
+        var provider = Provider();
+        if (provider == null) return result;
+        var defs = provider.GetType().GetProperty("SettingsDefinitions")?.GetValue(provider) as IEnumerable;
+        if (defs == null) return result;
+        foreach (var def in defs)
+        {
+            var id = Str(def, "SettingsId");
+            if (string.IsNullOrEmpty(id)) continue;
+            var obj = new Dictionary<string, object?>
+            {
+                ["SettingsId"] = id,
+                ["DisplayName"] = Str(def, "DisplayName") ?? id,
+                ["Folder"] = Str(def, "FolderName"),
+            };
+            var groups = new List<object?>();
+            var groupDefs = def.GetType().GetProperty("SettingPropertyGroups")?.GetValue(def) as IEnumerable;
+            if (groupDefs != null) foreach (var g in groupDefs) DescribeGroup(g, "", groups);
+            obj["Groups"] = groups;
+            result.Add(obj);
+        }
+        return result;
+    }
+
+    private static void DescribeGroup(object group, string prefix, List<object?> into)
+    {
+        var name = Str(group, "GroupName") ?? Str(group, "DisplayGroupName") ?? "General";
+        var full = prefix.Length == 0 ? name : prefix + " / " + name;
+        var props = new List<object?>();
+        var propDefs = group.GetType().GetProperty("SettingProperties")?.GetValue(group) as IEnumerable;
+        if (propDefs != null)
+            foreach (var p in propDefs)
+            {
+                var d = DescribeProperty(p);
+                if (d != null) props.Add(d);
+            }
+        if (props.Count > 0) into.Add(new Dictionary<string, object?> { ["Name"] = full, ["Properties"] = props });
+        var subs = group.GetType().GetProperty("SubGroups")?.GetValue(group) as IEnumerable;
+        if (subs != null) foreach (var s in subs) DescribeGroup(s, full, into);
+    }
+
+    private static Dictionary<string, object?>? DescribeProperty(object p)
+    {
+        var id = Str(p, "Id");
+        var reference = p.GetType().GetProperty("PropertyReference")?.GetValue(p);
+        if (string.IsNullOrEmpty(id) || reference == null) return null;
+        var type = reference.GetType().GetProperty("Type")?.GetValue(reference) as Type
+                   ?? reference.GetType().GetProperty("Value")?.PropertyType;
+        var kind = "unsupported";
+        var editable = false;
+        List<string>? choices = null;
+        if (type == typeof(bool)) { kind = "bool"; editable = true; }
+        else if (type == typeof(string)) { kind = "string"; editable = true; }
+        else if (type != null && type.IsEnum) { kind = "enum"; editable = true; choices = new List<string>(Enum.GetNames(type)); }
+        else if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte) || type == typeof(uint)) { kind = "int"; editable = true; }
+        else if (type == typeof(float) || type == typeof(double) || type == typeof(decimal)) { kind = "float"; editable = true; }
+        else if (type != null) kind = type.Name;
+
+        var value = ReadValue(reference);
+        if (value == null)
+        {
+            try { value = reference.GetType().GetProperty("Value")?.GetValue(reference)?.ToString(); } catch { }
+        }
+        var d = new Dictionary<string, object?>
+        {
+            ["Id"] = id,
+            ["DisplayName"] = Str(p, "DisplayName") ?? id,
+            ["Hint"] = Str(p, "HintText"),
+            ["Kind"] = kind,
+            ["Value"] = value,
+            ["Editable"] = editable,
+        };
+        if (kind == "int" || kind == "float")
+        {
+            var min = Num(p, "MinValue");
+            var max = Num(p, "MaxValue");
+            if (min != null && max != null && (min != 0 || max != 0)) { d["Min"] = min; d["Max"] = max; }
+        }
+        if (choices != null) d["Choices"] = choices;
+        var restart = p.GetType().GetProperty("RequireRestart")?.GetValue(p);
+        if (restart is bool rb && rb) d["RequireRestart"] = true;
+        return d;
+    }
+
+    private static string? Str(object o, string prop)
+    {
+        try
+        {
+            var v = o.GetType().GetProperty(prop)?.GetValue(o);
+            if (v == null) return null;
+            var s = v as string ?? v.ToString();
+            return string.IsNullOrWhiteSpace(s) ? null : s;
+        }
+        catch { return null; }
+    }
+
+    private static double? Num(object o, string prop)
+    {
+        try
+        {
+            var v = o.GetType().GetProperty(prop)?.GetValue(o);
+            return v == null ? (double?)null : Convert.ToDouble(v, CultureInfo.InvariantCulture);
+        }
+        catch { return null; }
     }
 
     // ---- reflection over MCM's definition tree -------------------------------------------------------------

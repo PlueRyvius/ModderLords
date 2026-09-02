@@ -120,6 +120,14 @@ public sealed class LaunchSession
             if (hook is null) messages.Add("ModularCoop.Hook.dll is missing next to the launcher; mods with helper DLLs will fail to load");
             else foreach (var kv in HookSetup.Environment(hook, HookSetup.SearchDirs(paths, overlayPlan.Entries, gameRoot))) extraEnv[kv.Key] = kv.Value;
         }
+        // Host-side live MCM edits: the sync module polls this directory (see Live/LiveSettingsClient). Only meaningful
+        // when the module is loaded, so it is tied to SettingsSync; a fresh dir per launch so nothing stale is shown.
+        if (profile.SettingsSync)
+        {
+            var liveDir = Live.LiveProtocol.LiveDirFor(profile.Name);
+            extraEnv[Live.LiveProtocol.EnvVar] = liveDir;
+            if (applySideEffects) Live.LiveProtocol.Reset(liveDir);
+        }
 
         if (applySideEffects)
         {

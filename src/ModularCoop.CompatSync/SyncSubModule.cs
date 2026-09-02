@@ -29,6 +29,8 @@ public sealed class SyncSubModule : MBSubModuleBase
         // Nothing thrown from here may escape: the engine has no catch around submodule load and dies with 0xE0434352.
         try { Log.Info($"v{Version} loaded; MCM {(McmBridge.Present ? "present" : "absent")}; waiting for Coop"); }
         catch (Exception ex) { Log.Warn("load-time probe failed: " + ex); }
+        try { LiveSettings.Init(); }
+        catch (Exception ex) { Log.Warn("live settings init failed: " + ex.GetBaseException().Message); }
     }
 
     /// <summary>Every module is loaded by now, so Coop's assemblies are present when Coop is enabled.</summary>
@@ -46,6 +48,8 @@ public sealed class SyncSubModule : MBSubModuleBase
         if (_sinceTick >= 3f)
         {
             _sinceTick = 0f;
+            // Host-side live edits first, so a value applied this tick is broadcast by the adapter tick right after.
+            LiveSettings.Poll();
             if (_adapterTick is null) { TryLoadAdapter(); }
             else try { _adapterTick.Invoke(null, null); }
                  catch (Exception ex) { Log.Warn("settings broadcast tick failed: " + ex.GetBaseException().Message); }
