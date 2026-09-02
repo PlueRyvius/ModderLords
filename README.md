@@ -1,100 +1,202 @@
 # Modular Bannerlords Coop
 
-A launcher for the **Bannerlord Coop dedicated server** that lets you run it with community mods,
-using the pristine official server package and the mods where they already live on disk.
-It replaces the need for third-party wrappers that patch files inside the Steam workshop folder.
+Run the **Bannerlord Coop dedicated server with your mods**, using the untouched official server from the Steam
+Workshop and the mods exactly where they already live for single player. No copying mods around, no patched server
+files, no third-party launcher inside your Steam folder.
 
-Status: Phase 1 complete (community mods load on the pristine server through junctions + a resolver hook).
+Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
+
+---
 
 ## What it does
 
-- Launches the official Coop dedicated server engine directly with your own module list and load order.
-- Never copies mods into the server. Mods are exposed to the engine through NTFS junctions and a small
-  rewritten copy of each `SubModule.xml` kept in `%LOCALAPPDATA%\ModularCoop`.
-- Owns `server-config.json` rendering instead of regex-editing it.
-- Warns about save/mod version drift but never blocks a launch and never rewrites save bytes.
-- Streams the engine console with classification (module load, server, Coop, warnings, errors, milestones).
-- Exports the exact client mod list players need (Coop requires an exact id+version match for community mods).
+- **Launches the official server engine directly** with the module list and load order you choose.
+- **Uses mods where they are.** Your game `Modules` folder and Steam Workshop items are linked into the server with
+  NTFS junctions (no admin rights). Removing a mod removes only the link. Workshop updates flow through automatically.
+- **Loads client-only mods on the server.** Mods that only ship a client build, or whose manifest says "client only", get
+  a small shadow copy of their `SubModule.xml` so the headless server accepts them; the mod folder itself is never edited.
+- **Resolves mod DLLs the engine cannot find.** A tiny helper is loaded into the engine that finds each mod's own
+  libraries and the client-only UI assemblies mods reference. It patches nothing.
+- **Profiles**: named mod sets with order, roles, save, and server settings. Switch between them freely.
+- **Saves**: reads every save's header (character, level, day, mods it was written with) and shows how it differs from
+  your profile. Never blocks a launch and never rewrites a save; the engine loads mismatched saves with a warning.
+- **Server settings** rendered into `server-config.json` (port, password, Steam discoverability, autosave, log file),
+  with a backup of the previous file each time.
+- **Gameplay settings** (`mod-config.json`: difficulty, fast forward, auto pause, cheats, looter multiplier, and so on)
+  edited in place, keeping the Coop mod's own comments.
+- **Readable console**: every engine line is classified (engine chatter, module loading, server, Coop, warnings,
+  errors, milestones). Filter by category, search, show errors only, send console commands, and stop cleanly.
+- **Player mod list**: a copyable list of exactly what players must enable (Coop requires an exact match of community
+  mods and versions), plus a "check my client" button that compares this PC's Bannerlord launcher selection to the server.
+- **Version drift banner**: if a mod updated since your last launch, you are told players must update and the server
+  needs a restart.
+- **Safety**: the server is tied to the launcher, so it can never linger headless if the launcher closes; errors are
+  logged instead of crashing the app.
 
-## Layout
+---
 
-| Project | Purpose |
+## Requirements
+
+- Windows 10/11, 64-bit.
+- Mount & Blade II: Bannerlord v1.4.8 installed through Steam (the launcher finds it in any Steam library).
+- **Bannerlord Coop** subscribed on the Steam Workshop (item 3770450698). Its dedicated server lives inside that
+  workshop item; the launcher finds it automatically.
+- Your mods installed the normal way: under the game's `Modules` folder or subscribed on the Workshop.
+- Everyone who joins needs the same community mods and versions enabled in their own Bannerlord launcher, and the War
+  Sails DLC disabled. Use the Players tab to hand them the list.
+
+The release zip is self-contained; no separate .NET install is needed.
+
+---
+
+## Install
+
+1. Unzip the release anywhere (for example `C:\Games\ModularBannerlordsCoop`). Keep all files together; the launcher
+   needs `ModularCoop.Hook.dll` next to it.
+2. Run `ModularBannerlordsCoop.exe`.
+3. If Windows SmartScreen warns about an unknown publisher, choose "More info" then "Run anyway". The tool makes no
+   network connections and changes nothing outside the folders listed under "Where things live".
+
+To uninstall: delete the folder. To remove the links it created inside the server, first click **Delete** on each
+profile (that removes its junctions), or delete `%LOCALAPPDATA%\ModularCoop` and the junctions under
+`...\steamapps\workshop\content\261550\3770450698\DedicatedServer\engine\Modules` (they are the entries that are links,
+not the five stock folders `Native`, `SandBoxCore`, `SandBox`, `Coop`, `DedicatedServer.Windows`).
+
+---
+
+## Quick start
+
+1. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see below). Click **Save**.
+2. **Saves tab**: pick the save to host, or type a new name to start a fresh world.
+3. **Server tab**: set a password if you want one, leave the join port at 4200 (forward UDP 4200 on your router for
+   direct connections; Steam joins need no forwarding).
+4. Click **Launch server**. The Console tab shows progress; the status line reads *SERVING, waiting for clients* when
+   the server is ready. First load takes about a minute.
+5. **Players tab**: click **Copy** and send the list to your players. They enable exactly those mods and join through
+   the Coop mod's server browser (Steam) or by direct IP.
+6. When you are done, click **Stop**. The server shuts down cleanly and autosaves.
+
+---
+
+## The tabs
+
+### Mods
+
+One row per community mod found on this PC. Stock modules and Coop itself are always included and never listed.
+
+| Column | Meaning |
 |---|---|
-| `src/ModularCoop.Core` | Pure logic: paths, launch plan, engine process, save prep, log classifier |
-| `src/ModularCoop.Cli` | Command-line driver (used for spikes and headless operation) |
-| `src/ModularCoop.App` | WPF desktop app (Phase 2) |
-| `src/ModularCoop.Hook` | Optional `DOTNET_STARTUP_HOOKS` assembly, only if Phase 1 shows the engine cannot resolve mod dependencies on its own |
-| `tests/ModularCoop.Core.Tests` | xUnit tests |
+| On | Include this mod on the server (single click). |
+| Role | See below. |
+| Bins | Which builds the mod ships: `server` (made for dedicated servers), `client`, or both. |
+| Notes | `client-only tags`: its manifest asks servers to skip it (handled by the Run role). `data only`: XML content, no code. |
+| Folder | Where the mod lives. A number as the folder name means a Steam Workshop item. |
 
-## Verified facts about the official server (2026-09-02, Coop v0.1.4, Bannerlord 1.4.8)
+**Roles**
 
-- Package location: `steamapps\workshop\content\261550\3770450698\DedicatedServer`. Contents: `BannerlordCoopServer.exe`
-  (console host), `engine\` (headless engine with bundled .NET), `release-info.txt`, `server-data\`.
-- The host starts the engine as: working directory `engine\bin\Win64_Shipping_Server`, command
-  `engine\dotnet\dotnet.exe TaleWorlds.Starter.DotNetCore.dll _MODULES_*Native*DedicatedServer.Windows*SandBoxCore*SandBox*Coop*_MODULES_ /dedicatedcustomserver 7210 EU 0`
-  with environment `DOTNET_ROOT`, `DOTNET_MULTILEVEL_LOOKUP=0`, `BANNERLORD_USER_DIR=<data dir>`, `COOP_DATA_DIR=<CoopData>`.
-- The engine core accepts `/coopsave <name>`, `/cooppassword <pw>`, `/coopvisibility public|friends_only|none` on that command line.
-- The engine reads console commands from stdin (`stop` shuts down cleanly with exit code 0).
-- A save named on the command line must already exist in `<data dir>\Game Saves\`; bootstrapping a new world from
-  `default_new_game.sav` is the console host's job, so this launcher does it too (`SavePreparer`).
-- Exit codes: 0 clean stop, 2 load failure/timeout, 3 fatal while serving, 4 Coop module verification failed.
-- `server-config.json` keys the pristine core understands: `saveName, port, password, autosaveMinutes, logFile, steam, traceTick, tracePublish, traceBandits`.
-  Keys `autoRestart, autoRestartHours, allowClientTimeControls, battleSize` are ignored by the pristine core (they come from third-party launcher extensions).
-- Engine module discovery only scans `engine\Modules\*`; a module must appear there (a junction works).
-- Submodule DLLs are looked up in `<module>\bin\Win64_Shipping_Server\`, then `engine\bin\Win64_Shipping_Server\`.
-- Submodule tags `DedicatedServerType=none` / `IsNoRenderModeElement=false` make the engine skip that submodule on the server.
+- **Run**: load the mod's code on the server. The default for gameplay mods.
+- **DependencyOnly**: keep the mod in the list so the Coop handshake matches players, but load none of its code. The
+  default for client-side frameworks: Harmony, ButterLib, UIExtenderEx, MCM (MCM's settings core is still loaded so
+  mods that read settings work).
+- **AsShipped**: hand the manifest to the engine unchanged and let it decide. Only for mods built for dedicated servers.
 
-## Licensing note
+**Order**: Move up / Move down changes the order among community mods. The right-hand panel shows the full engine
+order. Mods that declare "load before Native" (the frameworks above) are placed in front automatically, exactly as the
+game launcher does. Messages about missing dependencies appear under the order list.
 
-Bannerlord Coop is source-available, not open source. This project launches its binaries and relies only on their public
-contracts (command line, config files, module manifests). No Coop or third-party launcher code is included.
+**Rescan mods** re-reads the disk. **Re-sync junctions** recreates the links inside the server after a Workshop update
+or after Steam re-downloaded the server.
 
-## Phase 1 result (2026-09-02): community mods load on the pristine server
+### Saves
 
-Verified with ModularSmithing2, ImprovedGarrisons, HealOnKill, CoopModPatch (run on server) plus Bannerlord.Harmony,
-ButterLib, UIExtenderEx and MCM (dependency-only): the engine reaches `SERVING`, MS2's coop adapter reports
-`coop compat OK: 15/15`, CoopModPatch arms its ImprovedGarrisons patches, and a save written without those mods
-loads with the engine's "module mismatch ... Forcing load anyway" warning. The only change inside the Steam folder is
-one junction per mod under `engine\Modules`.
+Every `.sav` in the server's save folder with the character, level, day and the community mods it was written with.
+Selecting one sets it as the save to host. The box below lists differences between that save and your current mod set.
+The engine loads such a save anyway and logs *module mismatch ... Forcing load anyway*; the tool never rewrites a save.
 
-How it works:
+Typing a name that does not exist starts a **new world** from the official `default_new_game.sav`.
 
-- **Overlay** (`ModularCoop.Core.Overlay`): a mod that already ships `bin\Win64_Shipping_Server` and no client-only tags gets a
-  direct junction. Everything else gets a shadow folder in `%LOCALAPPDATA%\ModularCoop\overlay\<profile>\<Id>` holding a
-  rewritten `SubModule.xml` (id and version untouched), `bin\Win64_Shipping_Server` junctioned to the mod's client bin,
-  and every other folder junctioned as-is. Roles: `Run` strips the `DedicatedServerType`/`IsNoRenderModeElement` tags,
-  `DependencyOnly` removes the submodules (MCM's headless settings core is allow-listed), `AsShipped` changes nothing.
-- **Hook** (`ModularCoop.Hook`, loaded via `DOTNET_STARTUP_HOOKS`): the engine only probes its own bin for referenced
-  assemblies, so a last-resort `AssemblyResolve` handler searches `MODULARCOOP_SEARCH_DIRS` (Coop's server bin first,
-  then each mod's bins, then the game client bin). No game code is patched.
-- **Load order** (`LoadOrder`): official host sequence `Native, SandBoxCore, Sandbox, <community>, <Coop id>, DedicatedServer.Windows`,
-  community block sorted by BUTR's `ModuleSorter`, Harmony first, StoryMode/CustomBattle/BirthAndDeath treated as
-  satisfied (they never exist on a server).
+### Server
 
-Gotchas found on the way:
+| Setting | Effect |
+|---|---|
+| Join port | UDP port players connect to (default 4200). Forward it for direct joins. |
+| Password | Players are prompted; empty means open. |
+| Steam discoverability | Advertise on Steam when a logged-in Steam client runs on this machine; Steam joins need no port forwarding. |
+| Steam visibility | Public, friends only, or none. |
+| Autosave minutes | 0 disables. |
+| Server log file | Also write the server's own `logs\coop-server-*.log`. |
+| Engine port / region | Internal engine values; leave at 7210 / EU unless you know why. |
+| Trace | Diagnostics for bug reports only. |
 
-- The workshop build's server Coop folder carries the id **`CoopNightly`** (empty submodule list; the server core loads
-  Coop itself). The token must use the id from `SubModule.xml`, not the folder name.
-- The engine's `AssemblyLoader` eagerly tries every referenced assembly by bare file name and logs
-  `Messagebox [ERROR] ... Cannot load:` for each miss before resolving it properly. The console classifies those as warnings.
-- A `Resolving` handler on the default load context runs before every other resolver and would hand Coop an older Serilog
-  bundled by ButterLib. The hook uses `AppDomain.AssemblyResolve` only, with the requester's folder and Coop's bin first.
+Written to `server-config.json` at launch; the previous file is backed up under `config-backups`.
 
-CLI:
+### Gameplay
 
-```
-dotnet run --project src/ModularCoop.Cli -- catalog
-dotnet run --project src/ModularCoop.Cli -- sync   --mods Bannerlord.Harmony:DependencyOnly,ModularSmithing2,HealOnKill
-dotnet run --project src/ModularCoop.Cli -- launch --mods Bannerlord.Harmony:DependencyOnly,ModularSmithing2,HealOnKill --save "29 August 26"
-dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
-```
+The Coop mod's `mod-config.json`: campaign difficulty (VeryEasy / Easy / Realistic per category), births and deaths,
+fast forward, auto pause, client cheats, gold and food rules, wanderer limit, kingdom clan tier, smithing stamina,
+looter multipliers, executions, nameplates. Edit, then **Save to mod-config.json**. Applies on the next server start.
 
-## Phase 2 (2026-09-02): profiles, config rendering, desktop app
+### Console
 
-- `ModularCoop.App` (`ModularBannerlordsCoop.exe`): Mods tab (enable, role, order, load-order preview, messages), Saves tab
-  (save headers read from the `.sav` files, diff against the profile, never blocks), Server tab (rendered into
-  `server-config.json` with a backup under `config-backups`), Console tab (classified, filterable, searchable, command
-  entry, clean Stop over stdin), Players tab (mod list for players + "check my client" against `LauncherData.xml`).
-- Profiles live in `%LOCALAPPDATA%\ModularCoop\profiles\<name>.json`; each profile has its own overlay folder.
-- `LaunchSession` is the single path from profile to running engine, shared by the app and the CLI.
-- Launch logs: `%LOCALAPPDATA%\ModularCoop\logs\launch-<timestamp>.log`.
+Filters: **Engine** (the engine's own chatter, off by default), **Module load**, **Server**, **Coop**, **Warnings**,
+**DLL probes** (see Troubleshooting), **Errors + milestones only**, **Auto-scroll** (follow the end; scrolling up
+pins the view). **Find** filters by text. Type a server command in the box and press Enter (`help` lists them; `stop`
+shuts down). **Logs folder** opens the launcher's own per-launch logs.
+
+### Players
+
+Left: the exact mod list players must enable, with Workshop links where known. Right: **Check my client** reads this
+PC's Bannerlord launcher selection and reports what the Coop validator would say (missing, not enabled, version
+differs, extra mod enabled, DLC enabled).
+
+---
+
+## Where things live
+
+| What | Where |
+|---|---|
+| Profiles | `%LOCALAPPDATA%\ModularCoop\profiles\<name>.json` |
+| Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModularCoop\overlay\<profile>\` |
+| Launcher logs | `%LOCALAPPDATA%\ModularCoop\logs\launch-*.log`, `app-errors.log` |
+| Server data (saves, server-config.json, server logs, config backups) | `Documents\Mount and Blade II Bannerlord\CoopData\DedicatedServer\` |
+| Gameplay config | `Documents\Mount and Blade II Bannerlord\CoopData\mod-config.json` |
+| The server itself (untouched except for links under `engine\Modules`) | `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\` |
+
+---
+
+## Troubleshooting
+
+**The console shows grey "Cannot load: X.dll" lines during startup.** Normal. The engine tries every referenced DLL by
+bare name first, logs a miss, then the helper resolves it. They are hidden unless **DLL probes** is ticked. A real
+failure shows in red right after.
+
+**A player is rejected with "module X is required" or "wrong version".** Community mods must match exactly, both ways.
+Send the Players tab list again and have them run **Check my client** on their PC with this tool, or compare versions by hand.
+
+**"DLC is not supported".** Coop does not work with War Sails; players must disable it.
+
+**The server exits with code 4.** The Coop module inside the server was modified. Verify the workshop item's files in Steam.
+
+**The server exits with code 2 or hangs at "loading... state=<none>".** The save could not be loaded. Check the Saves
+tab shows it; a save from a different Bannerlord version may not load.
+
+**A mod crashes the server on start (red lines, then exit).** Look at the last red lines. If they mention UI or view
+types, the mod runs UI code at startup; set its role to **DependencyOnly** if players only need it locally, or leave it
+off. Mods shipping a `Win64_Shipping_Server` build are the safest.
+
+**Steam re-downloaded the server and my mods vanished.** Click **Re-sync junctions**.
+
+**A mod updated.** The yellow banner tells you. Restart the server and have players update.
+
+**Nothing in the Mods tab.** The game install was not found. Set `GameRoot` in the profile JSON, or add mod folders to
+`CustomModRoots`, then Rescan.
+
+---
+
+## Notes
+
+- Bannerlord Coop is source-available software by the Bannerlord Coop Team. This tool launches the official binaries
+  and relies only on their public interfaces; it contains none of their code.
+- Mods loaded with the **Run** role on a server were mostly written for single player. Many work, some need fixes like
+  those CoopModPatch provides. See `ROADMAP.md` for where this is heading.
+- Report problems with the launcher log from `%LOCALAPPDATA%\ModularCoop\logs` attached.
