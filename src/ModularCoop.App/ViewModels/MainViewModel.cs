@@ -378,7 +378,8 @@ public partial class MainViewModel : ObservableObject
         // No DeferRefresh here: a ListCollectionView throws if its source changes while a refresh is deferred.
         var n = 0;
         while (n < 1500 && _pending.TryDequeue(out var l)) { Console.Add(l); n++; }
-        if (Console.Count > 17000) Console.RemoveFirst(Console.Count - 15000);   // one Reset, not thousands of removals
+        // Engine chatter is the bulk of the output; drop it first so module-load, probe, server and error lines survive a whole campaign load.
+        if (Console.Count > 60000) Console.TrimTo(50000, l => l.Category is LogCategory.Engine);
         ConsoleFlushed?.Invoke();
     }
 
