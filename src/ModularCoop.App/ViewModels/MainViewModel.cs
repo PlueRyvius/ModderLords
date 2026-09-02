@@ -48,6 +48,11 @@ public partial class ModRow : ObservableObject
     /// <summary>IL-metadata verdict: server-safe / guarded / needs review. Computed lazily, never executes mod code.</summary>
     public string ServerVerdict => (_scan ??= ModularCoop.Core.Compat.AssemblyScan.Scan(Module)).Summary;
     public string ServerVerdictDetail => _scan is null ? "" : string.Join("\n", _scan.UiAssemblies.Concat(_scan.StoryModeAssemblies).Concat(_scan.GuardedCalls).Concat(_scan.Notes));
+    /// <summary>What the Mod settings tab will find for this mod (metadata scan): MCM, its own settings classes, or nothing.</summary>
+    public string Settings => Scan.SettingsSummary;
+    public string SettingsTip => Scan.SettingsClasses.Count == 0
+        ? (Scan.UsesMcm ? "Uses MCM; its settings appear in the Mod settings tab." : "No settings class found by the scan. If the mod does have one, add its type name to the compat record as a settings hint (SettingsTypes in compat-db.local.json).")
+        : "Settings classes found (shown in the Mod settings tab once the server has created them):\n" + string.Join("\n", Scan.SettingsClasses) + (Scan.UsesMcm ? "\nPlus MCM settings." : "");
 
     /// <summary>Curated verdict from the compat database (bundled + local override); refreshed by Rescan and after Record….</summary>
     [ObservableProperty]

@@ -216,10 +216,17 @@ public sealed class LaunchSession
             var pm = profile.Mods.First(m => m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase));
             return (s.Module.Id, Compat.AssemblyScan.Scan(s.Module), (IReadOnlyCollection<string>)pm.ClientSideBehaviors);
         }).ToList();
-        var set = Compat.RecipeSet.Build(entries, "Modular Bannerlords Coop");
+        var db = Compat.CompatDb.Current;
+        var hints = selections.Select(s => db.Find(s.Module.Id)).Where(r => r is not null)
+            .Select(r => (r!.Id, (IReadOnlyList<string>)r.SettingsTypes, (IReadOnlyList<string>)r.IgnoreSettingsTypes)).ToList();
+        var set = Compat.RecipeSet.Build(entries, "Modular Bannerlords Coop", hints);
         set.WriteInto(sync.FolderPath);
         if (flagged.Count > 0 && !profile.SettingsSync) messages.Add("server-only logic is flagged for " + string.Join(", ", flagged) + " but Settings sync (the shared module) is off, so clients will not receive the recipe");
-        foreach (var r in set.Mods) messages.Add($"recipe {r.Id}: {r.CampaignBehaviors.Count} campaign behaviour(s), {r.MissionBehaviors.Count} mission behaviour(s) server-only");
+        foreach (var r in set.Mods)
+        {
+            if (r.CampaignBehaviors.Count + r.MissionBehaviors.Count > 0) messages.Add($"recipe {r.Id}: {r.CampaignBehaviors.Count} campaign behaviour(s), {r.MissionBehaviors.Count} mission behaviour(s) server-only");
+            if (r.Settings is { } h) messages.Add($"recipe {r.Id}: settings hints {h.Include.Count} include, {h.Exclude.Count} exclude");
+        }
     }
 
     /// <summary>Planned community modules with the versions the server will advertise (for save diffs and client export).</summary>

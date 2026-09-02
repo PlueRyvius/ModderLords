@@ -27,6 +27,10 @@ public sealed class CompatRecord
     public List<string> ClientSideBehaviors { get; set; } = new();
     /// <summary>Submodule class types that stay loaded when the mod runs DependencyOnly (a headless settings core, for example).</summary>
     public List<string> KeepSubModules { get; set; } = new();
+    /// <summary>Hints for the live Mod settings discovery: force these plain settings classes in (full type names or trailing-* globs).</summary>
+    public List<string> SettingsTypes { get; set; } = new();
+    /// <summary>Hints: never treat these classes as settings.</summary>
+    public List<string> IgnoreSettingsTypes { get; set; } = new();
     public string? Notes { get; set; }
     public string? Url { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -37,7 +41,8 @@ public sealed class CompatRecord
     {
         Id = Id, Verdict = Verdict, TestedVersions = TestedVersions.ToList(), TestedCoopVersion = TestedCoopVersion,
         DefaultRole = DefaultRole, ServerAuthoritative = ServerAuthoritative, ClientSideBehaviors = ClientSideBehaviors.ToList(),
-        KeepSubModules = KeepSubModules.ToList(), Notes = Notes, Url = Url, UpdatedAt = UpdatedAt,
+        KeepSubModules = KeepSubModules.ToList(), SettingsTypes = SettingsTypes.ToList(), IgnoreSettingsTypes = IgnoreSettingsTypes.ToList(),
+        Notes = Notes, Url = Url, UpdatedAt = UpdatedAt,
     };
 }
 

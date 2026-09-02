@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using ModularCoop.Core.Modules;
@@ -26,7 +28,9 @@ public sealed record ScanResult(
     IReadOnlyList<string> GuardedCalls,
     IReadOnlyList<string> Notes,
     IReadOnlyList<string> CampaignBehaviors,
-    IReadOnlyList<string> MissionBehaviors)
+    IReadOnlyList<string> MissionBehaviors,
+    IReadOnlyList<string> SettingsClasses,
+    bool UsesMcm)
 {
     public string Summary => Verdict switch
     {
@@ -36,6 +40,24 @@ public sealed record ScanResult(
         ServerVerdict.DataOnly => "data only",
         _ => "not scanned",
     };
+
+    /// <summary>What the Mod settings tab can expect from this mod: "MCM", "own settings (N values)", "MCM + own …", or "none found".</summary>
+    public string SettingsSummary
+    {
+        get
+        {
+            var values = SettingsValueCount;
+            var own = SettingsClasses.Count > 0 ? $"own settings ({values} value{(values == 1 ? "" : "s")})" : null;
+            return UsesMcm && own is not null ? "MCM + " + own : UsesMcm ? "MCM" : own ?? (Verdict == ServerVerdict.DataOnly ? "" : "none found");
+        }
+    }
+
+    /// <summary>Sum of the "(N values)" suffixes in SettingsClasses.</summary>
+    public int SettingsValueCount => SettingsClasses.Sum(s =>
+    {
+        var i = s.LastIndexOf('(');
+        return i > 0 && int.TryParse(s.Substring(i + 1).Split(' ')[0], out var n) ? n : 0;
+    });
 }
 
 public static class AssemblyScan
@@ -56,6 +78,13 @@ public static class AssemblyScan
     /// <summary>References that no guard can fix: constructing UI objects the server never has.</summary>
     private static readonly string[] HardUiTypes = ["GauntletLayer", "GauntletMovie", "ScreenBase", "MapScreen", "MissionView", "SandBoxViewSubModule"];
 
+    // Mirror of the runtime heuristic in ModularCoop.CompatSync.StaticSettingsSource (kept in step by hand).
+    private static readonly string[] SettingsNameSuffixes = ["Settings", "Setting", "Config", "Configs", "Configuration", "Options"];
+    private static readonly string[] SingletonNames = ["Instance", "Current", "Settings", "Config", "Default"];
+    private static readonly string[] SettingsExcludedBases = ["ViewModel", "CampaignBehaviorBase", "MissionBehavior", "MissionLogic", "MBSubModuleBase", "ScreenBase", "GameModel", "MissionView"];
+    private static readonly string[] SettingsExcludedNameParts = ["Template", "Snapshot", "Dto", "ViewModel", "VM"];
+    private static readonly string[] SettingsExcludedNamespaceTails = ["SaveData", "Saveable", "Data", "Serialization"];
+
     public static ScanResult Scan(DiscoveredModule mod)
     {
         var dlls = new List<string>();
@@ -67,14 +96,21 @@ public static class AssemblyScan
                     if (File.Exists(p) && !dlls.Contains(p, StringComparer.OrdinalIgnoreCase)) dlls.Add(p);
                 }
         if (dlls.Count == 0)
-            return new ScanResult(mod.Id, mod.HasCode ? ServerVerdict.Unknown : ServerVerdict.DataOnly, [], [], [], mod.HasCode ? ["submodule DLL not found"] : [], [], []);
+            return new ScanResult(mod.Id, mod.HasCode ? ServerVerdict.Unknown : ServerVerdict.DataOnly, [], [], [], mod.HasCode ? ["submodule DLL not found"] : [], [], [], [], false);
+        return ScanDlls(mod.Id, dlls, mod.Info.DependentModules.Any(d => d.Id == "StoryMode" && d.IsOptional));
+    }
 
+    /// <summary>Scans concrete DLL paths (the module form above resolves them from the manifest; tests pass their own).</summary>
+    public static ScanResult ScanDlls(string moduleId, IReadOnlyList<string> dlls, bool storyModeOptional = false)
+    {
         var ui = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var story = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var guarded = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var hard = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var campaignBehaviors = new SortedSet<string>(StringComparer.Ordinal);
         var missionBehaviors = new SortedSet<string>(StringComparer.Ordinal);
+        var settingsClasses = new SortedSet<string>(StringComparer.Ordinal);
+        var usesMcm = false;
         var notes = new List<string>();
 
         foreach (var dll in dlls)
@@ -90,6 +126,7 @@ public static class AssemblyScan
                     var name = md.GetString(md.GetAssemblyReference(h).Name);
                     if (UiAssemblyPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) ui.Add(name);
                     if (StoryModePrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) story.Add(name);
+                    if (name.StartsWith("MCM", StringComparison.OrdinalIgnoreCase)) usesMcm = true;
                 }
                 foreach (var h in md.TypeReferences)
                 {
@@ -100,21 +137,32 @@ public static class AssemblyScan
                 // Behaviour classes: direct subclasses of the engine's campaign/mission behaviour bases (deeper chains
                 // inside the mod are followed one level through the mod's own type definitions).
                 var defBase = new Dictionary<string, string>(StringComparer.Ordinal);
+                var baseFromMcm = new HashSet<string>(StringComparer.Ordinal);
+                var defs = new List<(string full, TypeDefinition td)>();
                 foreach (var h in md.TypeDefinitions)
                 {
                     try
                     {
                         var td = md.GetTypeDefinition(h);
                         var full = (md.GetString(td.Namespace) + "." + md.GetString(td.Name)).TrimStart('.');
+                        defs.Add((full, td));
                         if (td.BaseType.IsNil) continue;
                         string? baseName = null;
                         switch (td.BaseType.Kind)
                         {
-                            case HandleKind.TypeReference: baseName = md.GetString(md.GetTypeReference((TypeReferenceHandle)td.BaseType).Name); break;
+                            case HandleKind.TypeReference:
+                            {
+                                var btr = md.GetTypeReference((TypeReferenceHandle)td.BaseType);
+                                baseName = md.GetString(btr.Name);
+                                if (btr.ResolutionScope.Kind == HandleKind.AssemblyReference
+                                    && md.GetString(md.GetAssemblyReference((AssemblyReferenceHandle)btr.ResolutionScope).Name).StartsWith("MCM", StringComparison.OrdinalIgnoreCase))
+                                    baseFromMcm.Add(full);
+                                break;
+                            }
                             case HandleKind.TypeDefinition: { var bd = md.GetTypeDefinition((TypeDefinitionHandle)td.BaseType); baseName = (md.GetString(bd.Namespace) + "." + md.GetString(bd.Name)).TrimStart('.'); break; }
                             default: continue;   // TypeSpecification (generic base): not a behaviour base we gate
                         }
-                        if (!td.Attributes.HasFlag(System.Reflection.TypeAttributes.Abstract)) defBase[full] = baseName;
+                        if (!td.Attributes.HasFlag(TypeAttributes.Abstract) || td.Attributes.HasFlag(TypeAttributes.Sealed)) defBase[full] = baseName;
                     }
                     catch (Exception ex) { notes.Add("type scan: " + ex.Message); }
                 }
@@ -124,6 +172,15 @@ public static class AssemblyScan
                     if (defBase.TryGetValue(b, out var grand)) b = grand;   // one level of mod-internal inheritance
                     if (b == "CampaignBehaviorBase") campaignBehaviors.Add(kv.Key);
                     else if (b is "MissionLogic" or "MissionBehavior" or "MissionNetwork") missionBehaviors.Add(kv.Key);
+                }
+                foreach (var (full, td) in defs)
+                {
+                    try
+                    {
+                        var n = SettingsValueCount(md, full, td, defBase, baseFromMcm, defs);
+                        if (n > 0) settingsClasses.Add($"{full} ({n} value{(n == 1 ? "" : "s")})");
+                    }
+                    catch (Exception ex) { notes.Add("settings scan: " + ex.Message); }
                 }
                 foreach (var h in md.MemberReferences)
                 {
@@ -142,8 +199,138 @@ public static class AssemblyScan
             : ui.Count > 0 || guarded.Count > 0 ? ServerVerdict.Guarded
             : ServerVerdict.ServerSafe;
         if (hard.Count > 0) notes.Add("constructs UI objects: " + string.Join(", ", hard));
-        if (story.Count > 0 && mod.Info.DependentModules.Any(d => d.Id == "StoryMode" && d.IsOptional))
+        if (story.Count > 0 && storyModeOptional)
             notes.Add("StoryMode dependency is declared optional; probably fine when the reference is only in StoryMode-specific code paths");
-        return new ScanResult(mod.Id, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList());
+        return new ScanResult(moduleId, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList(), settingsClasses.ToList(), usesMcm);
+    }
+
+    // ---- settings-shaped classes (metadata only) ----------------------------------------------------------------
+
+    /// <summary>Number of public settable primitive/string/enum members on a type that passes the runtime heuristic's name and exclusion rules; 0 = not a settings class.</summary>
+    private static int SettingsValueCount(MetadataReader md, string full, TypeDefinition td, Dictionary<string, string> defBase, HashSet<string> baseFromMcm, List<(string full, TypeDefinition td)> defs)
+    {
+        var attrs = td.Attributes;
+        if ((attrs & TypeAttributes.ClassSemanticsMask) == TypeAttributes.Interface) return 0;
+        if (!td.GetDeclaringType().IsNil) return 0;                                            // nested
+        if (attrs.HasFlag(TypeAttributes.Abstract) && !attrs.HasFlag(TypeAttributes.Sealed)) return 0;
+        if (md.GetString(td.Name).Contains('`')) return 0;                                      // generic
+        var name = md.GetString(td.Name);
+        if (name.StartsWith('<')) return 0;                                                      // compiler-generated
+        if (SettingsExcludedNameParts.Any(p => name.Contains(p, StringComparison.Ordinal))) return 0;
+        var ns = md.GetString(td.Namespace);
+        var tail = ns.Contains('.') ? ns[(ns.LastIndexOf('.') + 1)..] : ns;
+        if (SettingsExcludedNamespaceTails.Contains(tail, StringComparer.OrdinalIgnoreCase)) return 0;
+        if (baseFromMcm.Contains(full)) return 0;
+        // Base chain (one level inside the mod, then the external base name).
+        if (defBase.TryGetValue(full, out var b))
+        {
+            if (SettingsExcludedBases.Contains(b) || SettingsExcludedBases.Contains(b[(b.LastIndexOf('.') + 1)..])) return 0;
+            if (defBase.TryGetValue(b, out var grand) && (SettingsExcludedBases.Contains(grand) || SettingsExcludedBases.Contains(grand[(grand.LastIndexOf('.') + 1)..]))) return 0;
+            if (baseFromMcm.Contains(b)) return 0;
+            if (IsEnumBase(md, td)) return 0;
+        }
+        foreach (var ah in td.GetCustomAttributes())
+        {
+            var an = AttributeName(md, md.GetCustomAttribute(ah));
+            if (an is "SaveableClassAttribute" or "SaveableRootClassAttribute") return 0;
+        }
+
+        var nameMatch = SettingsNameSuffixes.Any(s => name.EndsWith(s, StringComparison.OrdinalIgnoreCase));
+        var hasSingleton = false;
+        var count = 0;
+        var provider = new PrimitiveSignatureProvider(md, defs);
+        foreach (var ph in td.GetProperties())
+        {
+            var pd = md.GetPropertyDefinition(ph);
+            var acc = pd.GetAccessors();
+            var pn = md.GetString(pd.Name);
+            MethodSignature<string> sig;
+            try { sig = pd.DecodeSignature(provider, null); } catch { continue; }
+            if (!acc.Getter.IsNil && SingletonNames.Contains(pn) && md.GetMethodDefinition(acc.Getter).Attributes.HasFlag(MethodAttributes.Static) && sig.ReturnType == "def:" + full) hasSingleton = true;
+            if (acc.Getter.IsNil || acc.Setter.IsNil) continue;
+            var g = md.GetMethodDefinition(acc.Getter);
+            var s = md.GetMethodDefinition(acc.Setter);
+            if ((g.Attributes & MethodAttributes.MemberAccessMask) != MethodAttributes.Public || (s.Attributes & MethodAttributes.MemberAccessMask) != MethodAttributes.Public) continue;
+            if (sig.ParameterTypes.Length > 0) continue;                                        // indexer
+            if (provider.IsSupported(sig.ReturnType)) count++;
+        }
+        foreach (var fh in td.GetFields())
+        {
+            var fd = md.GetFieldDefinition(fh);
+            var fa = fd.Attributes;
+            if ((fa & FieldAttributes.FieldAccessMask) != FieldAttributes.Public || fa.HasFlag(FieldAttributes.InitOnly) || fa.HasFlag(FieldAttributes.Literal)) continue;
+            string ft;
+            try { ft = fd.DecodeSignature(provider, null); } catch { continue; }
+            var fn = md.GetString(fd.Name);
+            if (fa.HasFlag(FieldAttributes.Static) && SingletonNames.Contains(fn) && ft == "def:" + full) hasSingleton = true;
+            if (provider.IsSupported(ft)) count++;
+        }
+        return (nameMatch || hasSingleton) ? count : 0;
+    }
+
+    private static bool IsEnumBase(MetadataReader md, TypeDefinition td)
+    {
+        if (td.BaseType.Kind != HandleKind.TypeReference) return false;
+        return md.GetString(md.GetTypeReference((TypeReferenceHandle)td.BaseType).Name) == "Enum";
+    }
+
+    private static string AttributeName(MetadataReader md, CustomAttribute ca)
+    {
+        try
+        {
+            switch (ca.Constructor.Kind)
+            {
+                case HandleKind.MemberReference:
+                {
+                    var parent = md.GetMemberReference((MemberReferenceHandle)ca.Constructor).Parent;
+                    return parent.Kind == HandleKind.TypeReference ? md.GetString(md.GetTypeReference((TypeReferenceHandle)parent).Name) : "";
+                }
+                case HandleKind.MethodDefinition:
+                    return md.GetString(md.GetTypeDefinition(md.GetMethodDefinition((MethodDefinitionHandle)ca.Constructor).GetDeclaringType()).Name);
+            }
+        }
+        catch { }
+        return "";
+    }
+
+    /// <summary>Decodes signatures to a few tokens: bool / int / float / string / enum, "def:&lt;full&gt;" for a type defined in the same DLL, or "other".</summary>
+    private sealed class PrimitiveSignatureProvider : ISignatureTypeProvider<string, object?>
+    {
+        private readonly HashSet<string> _enumDefs;
+
+        public PrimitiveSignatureProvider(MetadataReader md, List<(string full, TypeDefinition td)> defs)
+        {
+            _enumDefs = new HashSet<string>(defs.Where(d => IsEnumBase(md, d.td)).Select(d => d.full), StringComparer.Ordinal);
+        }
+
+        public bool IsSupported(string t) => t is "bool" or "int" or "float" or "string" or "enum";
+
+        public string GetPrimitiveType(PrimitiveTypeCode typeCode) => typeCode switch
+        {
+            PrimitiveTypeCode.Boolean => "bool",
+            PrimitiveTypeCode.String => "string",
+            PrimitiveTypeCode.Int32 or PrimitiveTypeCode.Int64 or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Byte or PrimitiveTypeCode.UInt32 or PrimitiveTypeCode.UInt64 or PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.SByte => "int",
+            PrimitiveTypeCode.Single or PrimitiveTypeCode.Double => "float",
+            _ => "other",
+        };
+        public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
+        {
+            var td = reader.GetTypeDefinition(handle);
+            var full = (reader.GetString(td.Namespace) + "." + reader.GetString(td.Name)).TrimStart('.');
+            if (_enumDefs.Contains(full)) return "enum";
+            return "def:" + full;
+        }
+        public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) => rawTypeKind == 0x11 ? "valuetype" : "other";
+        public string GetTypeFromSpecification(MetadataReader reader, object? genericContext, TypeSpecificationHandle handle, byte rawTypeKind) => "other";
+        public string GetSZArrayType(string elementType) => "other";
+        public string GetArrayType(string elementType, ArrayShape shape) => "other";
+        public string GetByReferenceType(string elementType) => "other";
+        public string GetPointerType(string elementType) => "other";
+        public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments) => "other";
+        public string GetGenericMethodParameter(object? genericContext, int index) => "other";
+        public string GetGenericTypeParameter(object? genericContext, int index) => "other";
+        public string GetFunctionPointerType(MethodSignature<string> signature) => "other";
+        public string GetModifiedType(string modifier, string unmodifiedType, bool isRequired) => unmodifiedType;
+        public string GetPinnedType(string elementType) => elementType;
     }
 }
