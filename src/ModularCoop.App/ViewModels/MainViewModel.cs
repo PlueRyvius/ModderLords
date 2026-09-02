@@ -5,6 +5,8 @@ using System.ComponentModel;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
+using ModularCoop.Core.Compat;
 using ModularCoop.Core.Export;
 using ModularCoop.Core.Launch;
 using ModularCoop.Core.Logs;
@@ -45,6 +47,46 @@ public partial class ModRow : ObservableObject
     /// <summary>IL-metadata verdict: server-safe / guarded / needs review. Computed lazily, never executes mod code.</summary>
     public string ServerVerdict => (_scan ??= ModularCoop.Core.Compat.AssemblyScan.Scan(Module)).Summary;
     public string ServerVerdictDetail => _scan is null ? "" : string.Join("\n", _scan.UiAssemblies.Concat(_scan.StoryModeAssemblies).Concat(_scan.GuardedCalls).Concat(_scan.Notes));
+
+    /// <summary>Curated verdict from the compat database (bundled + local override); refreshed by Rescan and after Record….</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CompatText), nameof(CompatColor), nameof(CompatTip))]
+    private CompatBadge _compat = CompatBadge.None;
+
+    public string CompatText => Compat.Verdict switch
+    {
+        CompatVerdict.Works => "Works",
+        CompatVerdict.NeedsRecipe => "Needs recipe",
+        CompatVerdict.Broken => "Broken",
+        _ => Compat.Source == CompatSource.None ? "" : "Unknown",
+    } + (Compat.VersionUntested ? " · untested version" : "");
+
+    public string CompatColor => Compat.Verdict switch
+    {
+        CompatVerdict.Works => "#2E7D32",
+        CompatVerdict.NeedsRecipe => "#B26A00",
+        CompatVerdict.Broken => "#C62828",
+        _ => "#777777",
+    };
+
+    public string CompatTip
+    {
+        get
+        {
+            var r = Compat.Record;
+            if (r is null) return "No record in the compatibility database. Use Record… after testing this mod.";
+            var lines = new List<string>();
+            if (!string.IsNullOrWhiteSpace(r.Notes)) lines.Add(r.Notes);
+            lines.Add(r.TestedVersions.Count == 0 ? "Tested versions: (none recorded)" : "Tested versions: " + string.Join(", ", r.TestedVersions) + (Compat.VersionUntested ? $" (this copy is {Version})" : ""));
+            if (r.TestedCoopVersion is not null) lines.Add("Coop: " + r.TestedCoopVersion);
+            if (r.DefaultRole is not null || r.ServerAuthoritative is not null)
+                lines.Add($"Defaults: role {r.DefaultRole?.ToString() ?? "-"}, server-only logic {(r.ServerAuthoritative is true ? "on" : r.ServerAuthoritative is false ? "off" : "-")}" +
+                          (r.ClientSideBehaviors.Count > 0 ? $", client-side: {string.Join(", ", r.ClientSideBehaviors)}" : ""));
+            if (!string.IsNullOrWhiteSpace(r.Url)) lines.Add(r.Url);
+            lines.Add("Source: " + (Compat.Source == CompatSource.Local ? "your local record (compat-db.local.json)" : "bundled with the launcher"));
+            return string.Join("\n", lines);
+        }
+    }
 }
 
 public sealed record ConsoleLine(string Time, LogCategory Category, string Text);
@@ -205,6 +247,9 @@ public partial class MainViewModel : ObservableObject
             GameRoot = gameRoot ?? "(game install not found)";
             Messages.Clear();
             foreach (var p in catalog.Problems) Messages.Add("catalog: " + p);
+            var db = CompatDb.Reload();
+            foreach (var p in db.Problems) Messages.Add("compat db: " + p);
+            CoopVersion = catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop")?.Version;
 
             // One row per module id (best copy), profile order first, then the rest alphabetically.
             // Coop itself (any build id) and the stock modules are never user-selectable.
@@ -224,8 +269,18 @@ public partial class MainViewModel : ObservableObject
             foreach (var pm in Profile.Mods)
                 if (best.TryGetValue(pm.Id, out var m)) { Mods.Add(new ModRow { Module = m, Enabled = pm.Enabled, Role = pm.Role, ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList() }); best.Remove(pm.Id); }
                 else Messages.Add($"{pm.Id}: in the profile but not installed anywhere");
+            // Mods new to this profile take their defaults from the compat database; existing entries are never rewritten.
             foreach (var m in best.Values.OrderBy(m => m.Id))
-                Mods.Add(new ModRow { Module = m, Enabled = false, Role = Profile.DefaultRoleFor(m.Id) });
+            {
+                var rec = db.Find(m.Id);
+                Mods.Add(new ModRow
+                {
+                    Module = m, Enabled = false, Role = db.DefaultRoleFor(m.Id),
+                    ServerAuthoritative = rec?.ServerAuthoritative ?? false,
+                    ClientSideBehaviors = rec?.ClientSideBehaviors.ToList() ?? new List<string>(),
+                });
+            }
+            foreach (var row in Mods) row.Compat = db.For(row.Id, row.Version);
 
             RefreshSaves(paths);
             RefreshPreview();
@@ -253,6 +308,81 @@ public partial class MainViewModel : ObservableObject
             if (!SelectedMod.ServerAuthoritative && win.ClientSide.Count < scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count) SelectedMod.ServerAuthoritative = true;
             Status = $"{SelectedMod.Id}: {scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count - win.ClientSide.Count} behaviour(s) server-only, {win.ClientSide.Count} kept client-side";
         }
+    }
+
+    // ---- compat database ---------------------------------------------------------------------------
+
+    /// <summary>Coop's version from the last scan (recorded as TestedCoopVersion); null when the server was not found.</summary>
+    [ObservableProperty] private string? _coopVersion;
+
+    private void RefreshCompatBadges()
+    {
+        var db = CompatDb.Reload();
+        foreach (var p in db.Problems) Messages.Add("compat db: " + p);
+        foreach (var row in Mods) row.Compat = db.For(row.Id, row.Version);
+    }
+
+    [RelayCommand]
+    private void RecordCompat()
+    {
+        if (SelectedMod is null) { Status = "Select a mod first"; return; }
+        var win = new CompatRecordWindow(SelectedMod, CoopVersion) { Owner = Application.Current.MainWindow };
+        if (win.ShowDialog() != true) return;
+        try
+        {
+            if (win.RemoveLocal)
+            {
+                CompatDb.RemoveLocal(CompatDb.LocalPath, SelectedMod.Id);
+                RefreshCompatBadges();
+                Status = $"{SelectedMod.Id}: local record removed" + (SelectedMod.Compat.Source == CompatSource.Bundled ? ", showing the bundled one" : "");
+            }
+            else
+            {
+                CompatDb.SaveLocal(CompatDb.LocalPath, win.Result);
+                RefreshCompatBadges();
+                Status = $"{SelectedMod.Id}: recorded as {SelectedMod.CompatText} in {CompatDb.LocalPath}";
+            }
+        }
+        catch (Exception ex) { Status = ex.Message; Messages.Add("compat db: " + ex.Message); }
+    }
+
+    [RelayCommand]
+    private void ExportCompat()
+    {
+        var db = CompatDb.Current;
+        var selected = SelectedMod is not null ? db.Find(SelectedMod.Id) : null;
+        var records = selected is not null ? new[] { selected } : db.LocalRecords.ToArray();
+        if (records.Length == 0) { Status = "Nothing to export: select a mod with a record, or record one first"; return; }
+        var dlg = new SaveFileDialog
+        {
+            Title = selected is not null ? $"Export the {selected.Id} record" : "Export all local records",
+            Filter = "Compat records (*.json)|*.json",
+            FileName = selected is not null ? $"compat-{ProfileStore.Safe(selected.Id)}.json" : "compat-db.local.json",
+        };
+        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            CompatDb.WriteFile(dlg.FileName, records);
+            Status = $"Exported {records.Length} record(s) to {dlg.FileName}";
+        }
+        catch (Exception ex) { Status = ex.Message; }
+    }
+
+    [RelayCommand]
+    private void ImportCompat()
+    {
+        var dlg = new OpenFileDialog { Title = "Import compat records", Filter = "Compat records (*.json)|*.json|All files (*.*)|*.*" };
+        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            var r = CompatDb.ImportLocal(CompatDb.LocalPath, File.ReadAllText(dlg.FileName));
+            RefreshCompatBadges();
+            if (r.Added.Count > 0) Messages.Add("compat import: added " + string.Join(", ", r.Added));
+            if (r.Updated.Count > 0) Messages.Add("compat import: updated " + string.Join(", ", r.Updated));
+            foreach (var id in r.Kept) Messages.Add($"compat import: kept your local {id} record (the file's copy is not newer)");
+            Status = $"Import: {r.Added.Count} added, {r.Updated.Count} updated, {r.Kept.Count} kept";
+        }
+        catch (Exception ex) { Status = ex.Message; Messages.Add("compat import: " + ex.Message); }
     }
 
     [RelayCommand]
