@@ -186,6 +186,9 @@ public partial class MainViewModel : ObservableObject
         Profile = ProfileStore.Load(name) ?? new Profile { Name = name };
         SelectedProfileName = Profile.Name;
         Rescan();
+        LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModularCoop] " + s));
+        try { LiveSettings.OnProfileSelected(Profile.Name); }
+        catch (Exception ex) { Messages.Add("mod settings: " + ex.Message); }
     }
 
     [RelayCommand]
@@ -570,7 +573,7 @@ public partial class MainViewModel : ObservableObject
             IsRunning = true;
             Status = $"Engine pid {_engine.ProcessId}, loading…";
             LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModularCoop] " + s));
-            LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, Profile.SettingsSync);
+            LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, Profile.SettingsSync, Profile.Name);
             _engine.LineReceived += line =>
             {
                 var c = LogClassifier.Classify(line.Text);
