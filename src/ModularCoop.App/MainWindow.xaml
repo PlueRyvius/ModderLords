@@ -214,6 +214,80 @@
                 </DockPanel>
             </TabItem>
 
+            <!-- MOD SETTINGS (live MCM edits on the running server) -->
+            <TabItem Header="Mod settings" IsEnabled="{Binding LiveSettings.IsEnabled}" ToolTip="{Binding LiveSettings.GateHint}" ToolTipService.ShowOnDisabled="True">
+                <DockPanel DataContext="{Binding LiveSettings}">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <Button Content="Apply" Command="{Binding ApplyCommand}" FontWeight="Bold" ToolTip="Send the changed values to the running server; players get them on the next sync tick" />
+                        <Button Content="Revert" Command="{Binding RevertCommand}" ToolTip="Discard unsent edits in this settings object" />
+                        <Button Content="Reload" Command="{Binding ReloadCommand}" ToolTip="Re-read what the server last reported" />
+                        <TextBlock VerticalAlignment="Center" Margin="12,0" Text="{Binding StatusText}" Foreground="#666" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding ApplyReport}" Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#2E7D32" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ListBox Grid.Column="0" ItemsSource="{Binding Objects}" SelectedItem="{Binding SelectedObject}" HorizontalContentAlignment="Stretch">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="2">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" />
+                                        <TextBlock Text="{Binding Subtitle}" Foreground="#666" FontSize="11" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <ScrollViewer Grid.Column="1" Margin="8,0,0,0" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding SelectedObject.Groups}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,10">
+                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" Margin="0,4,0,4" />
+                                            <ItemsControl ItemsSource="{Binding Properties}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,1" ToolTip="{Binding ToolTip}">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="300" />
+                                                                <ColumnDefinition Width="240" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsDirty}" Value="True"><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
+                                                                            <DataTrigger Binding="{Binding IsReadOnly}" Value="True"><Setter Property="Foreground" Value="#999" /></DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                            <Grid Grid.Column="1">
+                                                                <CheckBox IsChecked="{Binding BoolValue, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding IsBool, Converter={StaticResource BoolToVis}}" HorizontalAlignment="Left" />
+                                                                <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding IsEnum, Converter={StaticResource BoolToVis}}" />
+                                                                <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding IsText, Converter={StaticResource BoolToVis}}" />
+                                                                <TextBlock Text="{Binding Value}" Foreground="#999" VerticalAlignment="Center" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}" TextTrimming="CharacterEllipsis" />
+                                                            </Grid>
+                                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding RangeText}" Foreground="#888" FontSize="11" />
+                                                                <TextBlock Text="{Binding KindText}" Foreground="#AAA" FontSize="11" Margin="8,0,0,0" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}" />
+                                                                <TextBlock Text="{Binding Error}" Foreground="#C62828" FontSize="11" Margin="8,0,0,0" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
             <!-- CONSOLE -->
             <TabItem Header="Console">
                 <DockPanel>

@@ -247,3 +247,24 @@ After a session, open the two logs in `Documents\Mount and Blade II Bannerlord\C
   `RegisterEvents skipped on client: ...` lines. Zero on the client is the proof: those behaviours ran only on the host.
 
 (An empty server shows 0 because the campaign clock is paused until a player joins.)
+
+## Mod settings (host-side, live)
+
+With **Settings sync** on, the **Mod settings** tab shows the MCM settings of every mod on the *running* server and lets
+you change them without a restart:
+
+1. Launch the server. The tab enables itself and reads "Waiting for the server's settings…" until the shared module has
+   loaded (about a minute), then "Live, N settings object(s), updated hh:mm:ss".
+2. Pick a mod on the left, change values on the right (bold = changed, red text = out of range), press **Apply**.
+3. The server applies the values on its next tick (up to 3 s), saves them through MCM so they survive a restart, and
+   the existing settings sync pushes them to connected players on the following tick. The result line under the editor
+   and a `[ModularCoop.Compat] live apply …` line in the Console tell you what changed; the same appears in
+   `Documents\Mount and Blade II Bannerlord\Configs\ModLogs\ModularCoop.Compat-server.log`.
+
+**Revert** drops unsent edits; **Reload** re-reads what the server last reported. A fresh description arrives whenever
+a value changes on the server, so an edit made elsewhere shows up here too (your own unsent edits are kept).
+
+What is not editable here: dropdowns, colours, buttons and other custom MCM types are listed greyed with their type name
+(the sync module only carries booleans, numbers, text and enums). A setting the mod marks *restart required* is applied
+and saved, but the mod may not act on it until the next start; the result line says so. The files behind the tab live
+in `%LOCALAPPDATA%\ModularCoop\live\<profile>\` and are recreated at each launch.

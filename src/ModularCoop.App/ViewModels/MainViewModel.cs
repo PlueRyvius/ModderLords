@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModularCoop.Core.Export;
 using ModularCoop.Core.Launch;
+using ModularCoop.Core.Live;
 using ModularCoop.Core.Logs;
 using ModularCoop.Core.Modules;
 using ModularCoop.Core.Overlay;
@@ -77,6 +78,8 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<string> Messages { get; } = new();
     public ObservableCollection<string> LoadOrderPreview { get; } = new();
     public ICollectionView ConsoleView { get; }
+    /// <summary>Mod settings tab: the running server's MCM settings, edited live through the sync module.</summary>
+    public LiveSettingsViewModel LiveSettings { get; } = new();
 
     [ObservableProperty] private Profile _profile = new();
     [ObservableProperty] private string _selectedProfileName = "default";
@@ -436,6 +439,8 @@ public partial class MainViewModel : ObservableObject
             _engine = EngineProcess.Start(prepared.Plan);
             IsRunning = true;
             Status = $"Engine pid {_engine.ProcessId}, loading…";
+            LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModularCoop] " + s));
+            LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, Profile.SettingsSync);
             _engine.LineReceived += line =>
             {
                 var c = LogClassifier.Classify(line.Text);
@@ -482,6 +487,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnIsRunningChanged(bool value)
     {
+        if (!value) LiveSettings.OnStopped();
         LaunchCommand.NotifyCanExecuteChanged();
         StopCommand.NotifyCanExecuteChanged();
     }
