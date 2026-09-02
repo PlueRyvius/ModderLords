@@ -169,3 +169,20 @@ dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
   `MODULARCOOP_HOOK_FIRSTCHANCE=1`) first-chance exceptions to stdout; the engine's stderr is not captured.
 - Verified server side: module loads, handler armed, snapshots for `MCM_v5` and `HealOnKillSettings_v2` broadcast.
   Client side needs a player with the module installed.
+
+## Compat Layer 1 (2026-09-02): server-only behaviours via recipes
+
+- `AssemblyScan` now lists `CampaignBehaviorBase` and `MissionLogic/MissionBehavior/MissionNetwork` subclasses per mod
+  (type definitions with base-type names, one level of mod-internal inheritance). Gotcha: `<Module>` and interfaces
+  have a nil `BaseType`; reading it throws "Read out of bounds", so check `IsNil` first.
+- `ProfileMod.ServerAuthoritative` + Mods tab column "Server-only logic" + "Behaviours" count column.
+- `RecipeSet` (Core): `recipes.json` written into the bundled `ModularCoop.Compat` folder by `LaunchSession.Prepare`
+  (the server's copy through the junction). Schema: `Mods[] { Id, CampaignBehaviors[], MissionBehaviors[] }`.
+- Adapter: client requests `NetworkRequestCompatRecipes` as soon as its handler is constructed (before the campaign
+  loads); server replies with the JSON; `BehaviorGate` (Harmony, in the adapter DLL) prefixes each campaign behaviour's
+  `RegisterEvents` with "skip when `ModInformation.IsClient`" and prefixes `Mission.AddMissionBehavior` to drop gated
+  mission behaviour types on clients. A recipes.json shipped inside the client's module copy is applied first if present.
+- CLI: `launch --profile <name>` runs the exact app path (overlay, config, recipes, engine).
+- Verified server side with profile `layer1` (IG: 6 campaign behaviours, HealOnKill: 1 mission behaviour). Client side
+  needs a player: expect `[ModularCoop.Compat] server recipes: 6 campaign behaviour(s) gated ...` in
+  `Configs\ModLogs\ModularCoop.Compat-client.log`, then `RegisterEvents skipped on client: ...` lines.

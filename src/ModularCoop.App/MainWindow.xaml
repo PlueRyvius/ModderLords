@@ -30,7 +30,7 @@
         <Border DockPanel.Dock="Top" Padding="8" Background="#F3F3F3">
             <DockPanel>
                 <TextBlock Text="Profile" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" />
+                <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" DropDownOpened="Profiles_DropDownOpened" />
                 <Button Content="New" Command="{Binding NewProfileCommand}" />
                 <Button Content="Save" Command="{Binding SaveProfileCommand}" />
                 <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />
@@ -77,6 +77,7 @@
                             <Button Content="Move up" Command="{Binding MoveUpCommand}" />
                             <Button Content="Move down" Command="{Binding MoveDownCommand}" />
                             <Button Content="Refresh order" Command="{Binding RefreshPreviewCommand}" />
+                            <Button Content="Behaviours…" Command="{Binding EditBehaviorsCommand}" ToolTip="Choose which of the selected mod's behaviours run on the server only" />
                             <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="#666"
                                        Text="Run = load its code on the server. DependencyOnly = listed for the handshake, no code (UI frameworks). AsShipped = let the engine decide." />
                         </StackPanel>
@@ -94,6 +95,15 @@
                                 <DataGridTextColumn Header="Version" Binding="{Binding Version}" IsReadOnly="True" Width="90" />
                                 <DataGridComboBoxColumn Header="Role" SelectedItemBinding="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
                                                         ItemsSource="{x:Static vm:ModRow.Roles}" Width="130" />
+                                <DataGridTemplateColumn Header="Server-only logic" Width="110">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding ServerAuthoritative, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0"
+                                                      ToolTip="Run this mod's campaign/mission behaviours on the server only; players' copies skip them and receive the results through Coop. Needs Settings sync (the shared module) on." />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Behaviours" Binding="{Binding Behaviors}" IsReadOnly="True" Width="120" />
                                 <DataGridTextColumn Header="Bins" Binding="{Binding Bins}" IsReadOnly="True" Width="100" />
                                 <DataGridTextColumn Header="Server verdict" Binding="{Binding ServerVerdict}" IsReadOnly="True" Width="190">
                                     <DataGridTextColumn.ElementStyle>

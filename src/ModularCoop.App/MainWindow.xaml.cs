@@ -1,3 +1,4 @@
+using System.Linq;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
@@ -36,6 +37,8 @@ public partial class MainWindow : Window
     }
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;
+
+    private void Profiles_DropDownOpened(object sender, System.EventArgs e) => ViewModel.RefreshProfileList();
 
     private void Command_KeyDown(object sender, KeyEventArgs e)
     {

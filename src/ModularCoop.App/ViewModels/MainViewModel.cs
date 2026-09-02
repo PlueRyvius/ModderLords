@@ -20,6 +20,14 @@ public partial class ModRow : ObservableObject
     public required DiscoveredModule Module { get; init; }
     [ObservableProperty] private bool _enabled;
     [ObservableProperty] private ServerRole _role;
+    /// <summary>Layer 1: behaviours run on the server only; clients skip them (needs the shared module on both sides).</summary>
+    [ObservableProperty] private bool _serverAuthoritative;
+    /// <summary>Behaviours excluded from gating (kept on clients), edited in the Behaviours window.</summary>
+    public List<string> ClientSideBehaviors { get; set; } = new();
+    public ModularCoop.Core.Compat.ScanResult Scan => _scan ??= ModularCoop.Core.Compat.AssemblyScan.Scan(Module);
+    public string Behaviors => (_scan ??= ModularCoop.Core.Compat.AssemblyScan.Scan(Module)) is { } s
+        ? (s.CampaignBehaviors.Count + s.MissionBehaviors.Count == 0 ? "" : $"{s.CampaignBehaviors.Count} campaign, {s.MissionBehaviors.Count} mission")
+        : "";
     public string Id => Module.Id;
     public string Version => Module.Version;
     public string Source => Module.Source.ToString();
@@ -108,6 +116,14 @@ public partial class MainViewModel : ObservableObject
 
     // ---- profiles ---------------------------------------------------------------------------------
 
+    /// <summary>Re-reads the profiles folder without disturbing the current selection (called when the dropdown opens).</summary>
+    public void RefreshProfileList()
+    {
+        var current = SelectedProfileName;
+        LoadProfileList();
+        if (current is not null && ProfileNames.Contains(current)) SelectedProfileName = current;
+    }
+
     private void LoadProfileList()
     {
         ProfileNames.Clear();
@@ -168,6 +184,8 @@ public partial class MainViewModel : ObservableObject
             if (!byId.TryGetValue(row.Id, out var pm)) pm = new ProfileMod { Id = row.Id };
             pm.Enabled = row.Enabled;
             pm.Role = row.Role;
+            pm.ServerAuthoritative = row.ServerAuthoritative;
+            pm.ClientSideBehaviors = row.ClientSideBehaviors.ToList();
             pm.SourcePath = row.Folder;
             ordered.Add(pm);
         }
@@ -204,7 +222,7 @@ public partial class MainViewModel : ObservableObject
 
             Mods.Clear();
             foreach (var pm in Profile.Mods)
-                if (best.TryGetValue(pm.Id, out var m)) { Mods.Add(new ModRow { Module = m, Enabled = pm.Enabled, Role = pm.Role }); best.Remove(pm.Id); }
+                if (best.TryGetValue(pm.Id, out var m)) { Mods.Add(new ModRow { Module = m, Enabled = pm.Enabled, Role = pm.Role, ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList() }); best.Remove(pm.Id); }
                 else Messages.Add($"{pm.Id}: in the profile but not installed anywhere");
             foreach (var m in best.Values.OrderBy(m => m.Id))
                 Mods.Add(new ModRow { Module = m, Enabled = false, Role = Profile.DefaultRoleFor(m.Id) });
@@ -219,6 +237,21 @@ public partial class MainViewModel : ObservableObject
         {
             Status = ex.Message;
             Messages.Add(ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private void EditBehaviors()
+    {
+        if (SelectedMod is null) { Status = "Select a mod first"; return; }
+        var scan = SelectedMod.Scan;
+        if (scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count == 0) { Status = $"{SelectedMod.Id} has no campaign or mission behaviours to gate"; return; }
+        var win = new BehaviorsWindow(SelectedMod.Id, scan, SelectedMod.ClientSideBehaviors) { Owner = Application.Current.MainWindow };
+        if (win.ShowDialog() == true)
+        {
+            SelectedMod.ClientSideBehaviors = win.ClientSide;
+            if (!SelectedMod.ServerAuthoritative && win.ClientSide.Count < scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count) SelectedMod.ServerAuthoritative = true;
+            Status = $"{SelectedMod.Id}: {scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count - win.ClientSide.Count} behaviour(s) server-only, {win.ClientSide.Count} kept client-side";
         }
     }
 

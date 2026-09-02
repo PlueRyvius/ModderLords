@@ -224,3 +224,15 @@ written to the players' own settings files. Mods without MCM settings are unaffe
 `[ModularCoop.Compat] settings sync: '<settings id>' from server: N changed` on the client.
 
 Both bundled modules only ever load code from the launcher folder; nothing of Coop's is included.
+
+## Server-only logic (Layer 1, needs Settings sync on)
+
+On the Mods tab, tick **Server-only logic** for a mod whose gameplay should be decided by the host: garrison managers,
+economy tweaks, battle effects. The launcher scans the mod's DLL for its campaign behaviours and mission behaviours and
+writes a recipe into the shared `ModularCoop.Compat` module. On the server everything runs as before. Joining players
+receive the recipe before their campaign loads and their copy of the mod stops registering those behaviours, so only
+the host's copy acts and the results reach players through Coop's normal sync. The **Behaviours** column shows what a
+mod has to gate. Players need `ModularCoop.Compat` installed for this (see the section above).
+
+When a mod also has a client-side screen (ImprovedGarrisons' management UI, for example), that screen is one of the
+gated behaviours and will not appear on players' clients; that is the trade-off until per-behaviour recipes are editable.

@@ -24,7 +24,9 @@ public sealed record ScanResult(
     IReadOnlyList<string> UiAssemblies,
     IReadOnlyList<string> StoryModeAssemblies,
     IReadOnlyList<string> GuardedCalls,
-    IReadOnlyList<string> Notes)
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string> CampaignBehaviors,
+    IReadOnlyList<string> MissionBehaviors)
 {
     public string Summary => Verdict switch
     {
@@ -65,12 +67,14 @@ public static class AssemblyScan
                     if (File.Exists(p) && !dlls.Contains(p, StringComparer.OrdinalIgnoreCase)) dlls.Add(p);
                 }
         if (dlls.Count == 0)
-            return new ScanResult(mod.Id, mod.HasCode ? ServerVerdict.Unknown : ServerVerdict.DataOnly, [], [], [], mod.HasCode ? ["submodule DLL not found"] : []);
+            return new ScanResult(mod.Id, mod.HasCode ? ServerVerdict.Unknown : ServerVerdict.DataOnly, [], [], [], mod.HasCode ? ["submodule DLL not found"] : [], [], []);
 
         var ui = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var story = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var guarded = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var hard = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var campaignBehaviors = new SortedSet<string>(StringComparer.Ordinal);
+        var missionBehaviors = new SortedSet<string>(StringComparer.Ordinal);
         var notes = new List<string>();
 
         foreach (var dll in dlls)
@@ -93,6 +97,34 @@ public static class AssemblyScan
                     var tn = md.GetString(tr.Name);
                     if (HardUiTypes.Contains(tn)) hard.Add(tn);
                 }
+                // Behaviour classes: direct subclasses of the engine's campaign/mission behaviour bases (deeper chains
+                // inside the mod are followed one level through the mod's own type definitions).
+                var defBase = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var h in md.TypeDefinitions)
+                {
+                    try
+                    {
+                        var td = md.GetTypeDefinition(h);
+                        var full = (md.GetString(td.Namespace) + "." + md.GetString(td.Name)).TrimStart('.');
+                        if (td.BaseType.IsNil) continue;
+                        string? baseName = null;
+                        switch (td.BaseType.Kind)
+                        {
+                            case HandleKind.TypeReference: baseName = md.GetString(md.GetTypeReference((TypeReferenceHandle)td.BaseType).Name); break;
+                            case HandleKind.TypeDefinition: { var bd = md.GetTypeDefinition((TypeDefinitionHandle)td.BaseType); baseName = (md.GetString(bd.Namespace) + "." + md.GetString(bd.Name)).TrimStart('.'); break; }
+                            default: continue;   // TypeSpecification (generic base): not a behaviour base we gate
+                        }
+                        if (!td.Attributes.HasFlag(System.Reflection.TypeAttributes.Abstract)) defBase[full] = baseName;
+                    }
+                    catch (Exception ex) { notes.Add("type scan: " + ex.Message); }
+                }
+                foreach (var kv in defBase)
+                {
+                    var b = kv.Value;
+                    if (defBase.TryGetValue(b, out var grand)) b = grand;   // one level of mod-internal inheritance
+                    if (b == "CampaignBehaviorBase") campaignBehaviors.Add(kv.Key);
+                    else if (b is "MissionLogic" or "MissionBehavior" or "MissionNetwork") missionBehaviors.Add(kv.Key);
+                }
                 foreach (var h in md.MemberReferences)
                 {
                     var mr = md.GetMemberReference(h);
@@ -112,6 +144,6 @@ public static class AssemblyScan
         if (hard.Count > 0) notes.Add("constructs UI objects: " + string.Join(", ", hard));
         if (story.Count > 0 && mod.Info.DependentModules.Any(d => d.Id == "StoryMode" && d.IsOptional))
             notes.Add("StoryMode dependency is declared optional; probably fine when the reference is only in StoryMode-specific code paths");
-        return new ScanResult(mod.Id, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes);
+        return new ScanResult(mod.Id, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList());
     }
 }
