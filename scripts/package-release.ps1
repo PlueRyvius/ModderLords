@@ -14,8 +14,8 @@ if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 
 # The hook is loaded into the engine (net6.0); publish copies it via the CopyHook target, but make sure.
 $hook = Join-Path $root 'src\ModularCoop.Hook\bin\Release\net6.0\ModularCoop.Hook.dll'
-if (-not (Test-Path $hook)) { dotnet build (Join-Path $root 'src\ModularCoop.Hook\ModularCoop.Hook.csproj') -c Release | Out-Null }
-Copy-Item $hook $out -Force
+if (-not (Test-Path $hook)) { dotnet build (Join-Path $root 'src\ModularCoop.Hook\ModularCoop.Hook.csproj') -c Release |Copy-Item (Join-Path $root 'srcModularCoop.HookinRelease
+et6.0ModularCoop.Hook.dll') $out -Force
 
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.md') -Force
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.txt') -Force
