@@ -58,17 +58,27 @@ public static class LoadOrder
             else issues.Add("preferred order ignored: it would load a module before one it depends on");
         }
 
-        // Official host order (verified from its own log): Native, SandBoxCore, Sandbox, <Coop id>, DedicatedServer.Windows.
-        // Community modules go between Sandbox and Coop; Harmony ahead of everything. Stock modules are matched by FOLDER
-        // name because the workshop build's Coop folder carries the id "CoopNightly"; the engine token needs the id.
-        var frameworksFirst = new[] { "Bannerlord.Harmony" };
-        var ordered = new List<string>();
+        // Whole-set topological order from BUTR (this is what lets frameworks that declare "load Native after me",
+        // e.g. Harmony/ButterLib/UIExtenderEx/MCM, land before Native, exactly like the game launcher does), with the
+        // community block re-arranged to the user's preference where dependencies allow. Then the two things the
+        // official host pins: <Coop id> after everything else, DedicatedServer.Windows last. Stock modules are matched by
+        // FOLDER name because the workshop build's Coop folder carries the id "CoopNightly"; the token needs the id.
         string? StockId(string folder) => stock.FirstOrDefault(m => m.FolderName.Equals(folder, StringComparison.OrdinalIgnoreCase))?.Id;
         var coopId = StockId("Coop");
         var dsId = StockId("DedicatedServer.Windows");
-        ordered.AddRange(communitySorted.Where(id => frameworksFirst.Contains(id, StringComparer.OrdinalIgnoreCase)));
+        // A community module that declares "load Native after me" (ModulesToLoadAfterThis / LoadAfterThis metadata) belongs
+        // in front of Native, as the game launcher places Harmony, ButterLib, UIExtenderEx and MCM. Everything else follows Sandbox.
+        bool WantsToPrecedeNative(string id)
+        {
+            var m = community.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (m is null) return false;
+            return m.Info.ModulesToLoadAfterThis.Any(d => d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase))
+                || m.Info.DependentModuleMetadatas.Any(d => d.LoadType == LoadType.LoadAfterThis && d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase));
+        }
+        var ordered = new List<string>();
+        ordered.AddRange(communitySorted.Where(WantsToPrecedeNative));
         foreach (var f in new[] { "Native", "SandBoxCore", "SandBox" }) if (StockId(f) is { } id) ordered.Add(id);
-        ordered.AddRange(communitySorted.Where(id => !frameworksFirst.Contains(id, StringComparer.OrdinalIgnoreCase)));
+        ordered.AddRange(communitySorted.Where(id => !WantsToPrecedeNative(id)));
         if (coopId is not null) ordered.Add(coopId);
         if (dsId is not null) ordered.Add(dsId);
 

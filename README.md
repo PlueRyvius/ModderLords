@@ -88,3 +88,13 @@ dotnet run --project src/ModularCoop.Cli -- sync   --mods Bannerlord.Harmony:Dep
 dotnet run --project src/ModularCoop.Cli -- launch --mods Bannerlord.Harmony:DependencyOnly,ModularSmithing2,HealOnKill --save "29 August 26"
 dotnet run --project src/ModularCoop.Cli -- sync   --remove-all
 ```
+
+## Phase 2 (2026-09-02): profiles, config rendering, desktop app
+
+- `ModularCoop.App` (`ModularBannerlordsCoop.exe`): Mods tab (enable, role, order, load-order preview, messages), Saves tab
+  (save headers read from the `.sav` files, diff against the profile, never blocks), Server tab (rendered into
+  `server-config.json` with a backup under `config-backups`), Console tab (classified, filterable, searchable, command
+  entry, clean Stop over stdin), Players tab (mod list for players + "check my client" against `LauncherData.xml`).
+- Profiles live in `%LOCALAPPDATA%\ModularCoop\profiles\<name>.json`; each profile has its own overlay folder.
+- `LaunchSession` is the single path from profile to running engine, shared by the app and the CLI.
+- Launch logs: `%LOCALAPPDATA%\ModularCoop\logs\launch-<timestamp>.log`.

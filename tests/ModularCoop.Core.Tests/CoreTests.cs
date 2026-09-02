@@ -103,13 +103,18 @@ public class LoadOrderTests
         var community = new[]
         {
             Mod("ModularSmithing2", ModuleSourceKind.GameModules, @"G\ModularSmithing2", ("Sandbox", false), ("StoryMode", false)),
-            Mod("Bannerlord.Harmony", ModuleSourceKind.GameModules, @"G\Harmony"),
+            new DiscoveredModule("Bannerlord.Harmony", "v1.0.0", @"G\Harmony", ModuleSourceKind.GameModules, new ModuleInfoExtended
+            {
+                Id = "Bannerlord.Harmony", Name = "Harmony", Version = ApplicationVersion.TryParse("v1.0.0", out var hv) ? hv : ApplicationVersion.Empty,
+                ModulesToLoadAfterThis = [new DependentModule { Id = "Native" }],   // as the real manifest declares
+            }),
             Mod("HealOnKill", ModuleSourceKind.GameModules, @"G\HealOnKill", ("Bannerlord.MBOptionScreen", false)),
             Mod("Bannerlord.MBOptionScreen", ModuleSourceKind.GameModules, @"G\MCM", ("Bannerlord.Harmony", false)),
         };
         var r = LoadOrder.Compute(stock, community);
-        Assert.Equal("Bannerlord.Harmony", r.ModuleIds[0]);
-        Assert.Equal(["Native", "SandBoxCore", "Sandbox"], r.ModuleIds.Skip(1).Take(3));
+        var ids0 = r.ModuleIds.ToList();
+        Assert.True(ids0.IndexOf("Bannerlord.Harmony") < ids0.IndexOf("Native"));   // frameworks that say "load Native after me" come first
+        Assert.True(ids0.IndexOf("Native") < ids0.IndexOf("SandBoxCore") && ids0.IndexOf("SandBoxCore") < ids0.IndexOf("Sandbox"));
         Assert.Equal("CoopNightly", r.ModuleIds[^2]);
         Assert.Equal("DedicatedServer.Windows", r.ModuleIds[^1]);
         var ids = r.ModuleIds.ToList();
@@ -122,7 +127,7 @@ public class LoadOrderTests
 public class LogClassifierTests
 {
     [Theory]
-    [InlineData("[00:58:26.728] Messagebox [ERROR] message: Cannot load: Coop.Steam.dll", LogCategory.Warning)]
+    [InlineData("[00:58:26.728] Messagebox [ERROR] message: Cannot load: Coop.Steam.dll", LogCategory.Probe)]
     [InlineData("[DedicatedServer] SERVING — coop server up, waiting for clients", LogCategory.Milestone)]
     [InlineData("[00:54:15.234] Loader Exceptions: Could not load file or assembly 'SandBox.View'", LogCategory.Error)]
     [InlineData("[DedicatedServer] FATAL during A: System.TypeInitializationException", LogCategory.Error)]

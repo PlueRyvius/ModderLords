@@ -1,23 +1,52 @@
-﻿using System.Text;
+using System.ComponentModel;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using ModularCoop.App.ViewModels;
 
 namespace ModularCoop.App;
 
-/// <summary>
-/// Interaction logic for MainWindow.xaml
-/// </summary>
 public partial class MainWindow : Window
 {
+    private bool _closeConfirmed;
+
     public MainWindow()
     {
         InitializeComponent();
+        // Follow the tail only while the user is already at the bottom; scrolling up pins the view until they return.
+        ViewModel.ConsoleFlushed += () =>
+        {
+            var sv = FindScrollViewer(ConsoleList);
+            if (sv is null) return;
+            var atBottom = sv.ScrollableHeight - sv.VerticalOffset < 3;
+            if (ViewModel.AutoScroll && atBottom) sv.ScrollToEnd();
+        };
+    }
+
+    private static System.Windows.Controls.ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is System.Windows.Controls.ScrollViewer sv) return sv;
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var found = FindScrollViewer(System.Windows.Media.VisualTreeHelper.GetChild(root, i));
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    private MainViewModel ViewModel => (MainViewModel)DataContext;
+
+    private void Command_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && ViewModel.SendCommandCommand.CanExecute(null)) ViewModel.SendCommandCommand.Execute(null);
+    }
+
+    private async void Window_Closing(object sender, CancelEventArgs e)
+    {
+        if (_closeConfirmed || !ViewModel.IsRunning) return;
+        e.Cancel = true;
+        if (MessageBox.Show("The server is running. Stop it and close?", "Modular Bannerlords Coop", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        await ViewModel.OnClosingAsync();
+        _closeConfirmed = true;
+        Close();
     }
 }

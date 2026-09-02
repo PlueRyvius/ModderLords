@@ -1,12 +1,233 @@
-﻿<Window x:Class="ModularCoop.App.MainWindow"
+<Window x:Class="ModularCoop.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:ModularCoop.App"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        xmlns:vm="clr-namespace:ModularCoop.App.ViewModels"
+        xmlns:logs="clr-namespace:ModularCoop.Core.Logs;assembly=ModularCoop.Core"
+        Title="Modular Bannerlords Coop" Height="820" Width="1280" MinWidth="960" MinHeight="600"
+        Closing="Window_Closing">
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="MinWidth" Value="70" />
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Margin" Value="6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="3" />
+        </Style>
+    </Window.Resources>
 
-    </Grid>
+    <DockPanel>
+        <!-- top bar: profile + launch -->
+        <Border DockPanel.Dock="Top" Padding="8" Background="#F3F3F3">
+            <DockPanel>
+                <TextBlock Text="Profile" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" />
+                <Button Content="New" Command="{Binding NewProfileCommand}" />
+                <Button Content="Save" Command="{Binding SaveProfileCommand}" />
+                <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />
+                <Button Content="Rescan mods" Command="{Binding RescanCommand}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <Button Content="Launch server" Command="{Binding LaunchCommand}" FontWeight="Bold" Background="#DFF0D8" />
+                    <Button Content="Stop" Command="{Binding StopCommand}" Background="#F2DEDE" />
+                </StackPanel>
+                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" FontStyle="Italic" />
+            </DockPanel>
+        </Border>
+
+        <!-- status bar -->
+        <Border DockPanel.Dock="Bottom" Padding="8,4" Background="#F3F3F3">
+            <StackPanel>
+                <TextBlock><Run Text="Server: " FontWeight="Bold" /><Run Text="{Binding ServerRoot}" /></TextBlock>
+                <TextBlock><Run Text="Game:   " FontWeight="Bold" /><Run Text="{Binding GameRoot}" /></TextBlock>
+            </StackPanel>
+        </Border>
+
+        <TabControl Margin="8">
+            <!-- MODS -->
+            <TabItem Header="Mods">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="300" />
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0">
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                            <Button Content="Move up" Command="{Binding MoveUpCommand}" />
+                            <Button Content="Move down" Command="{Binding MoveDownCommand}" />
+                            <Button Content="Refresh order" Command="{Binding RefreshPreviewCommand}" />
+                            <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="#666"
+                                       Text="Run = load its code on the server. DependencyOnly = listed for the handshake, no code (UI frameworks). AsShipped = let the engine decide." />
+                        </StackPanel>
+                        <DataGrid ItemsSource="{Binding Mods}" SelectedItem="{Binding SelectedMod}" AutoGenerateColumns="False" CanUserAddRows="False"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeaderWidth="0">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="On" Width="40">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Module" Binding="{Binding Id}" IsReadOnly="True" Width="200" />
+                                <DataGridTextColumn Header="Version" Binding="{Binding Version}" IsReadOnly="True" Width="90" />
+                                <DataGridComboBoxColumn Header="Role" SelectedItemBinding="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
+                                                        ItemsSource="{x:Static vm:ModRow.Roles}" Width="130" />
+                                <DataGridTextColumn Header="Bins" Binding="{Binding Bins}" IsReadOnly="True" Width="100" />
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" IsReadOnly="True" Width="150" />
+                                <DataGridTextColumn Header="Source" Binding="{Binding Source}" IsReadOnly="True" Width="90" />
+                                <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" IsReadOnly="True" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                    <DockPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock DockPanel.Dock="Top" Text="Engine load order" FontWeight="Bold" Margin="0,0,0,4" />
+                        <ListBox DockPanel.Dock="Top" ItemsSource="{Binding LoadOrderPreview}" Height="260" />
+                        <TextBlock DockPanel.Dock="Top" Text="Messages" FontWeight="Bold" Margin="0,8,0,4" />
+                        <ListBox ItemsSource="{Binding Messages}" />
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- SAVES -->
+            <TabItem Header="Saves">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="Save to host:" VerticalAlignment="Center" />
+                        <TextBox Width="260" Margin="6,0" Text="{Binding Profile.SaveName, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock VerticalAlignment="Center" Foreground="#666" Text="Pick one below or type a new name; a new name starts a fresh world from default_new_game.sav." />
+                    </StackPanel>
+                    <TextBox DockPanel.Dock="Bottom" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" Height="110" FontFamily="Consolas" Margin="0,6,0,0" />
+                    <DataGrid ItemsSource="{Binding Saves}" SelectedItem="{Binding SelectedSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Save" Binding="{Binding Name}" Width="200" />
+                            <DataGridTextColumn Header="Character" Binding="{Binding Character}" Width="120" />
+                            <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="50" />
+                            <DataGridTextColumn Header="Day" Binding="{Binding Day}" Width="60" />
+                            <DataGridTextColumn Header="Written" Binding="{Binding Written}" Width="130" />
+                            <DataGridTextColumn Header="Community modules in save" Binding="{Binding Mods}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- SERVER -->
+            <TabItem Header="Server">
+                <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
+                    <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="#666" Margin="0,0,0,10" />
+                    <UniformGrid Columns="2" Rows="12">
+                        <TextBlock Text="Join port (UDP, forward this)" VerticalAlignment="Center" />
+                        <TextBox Text="{Binding Profile.Server.JoinPort}" />
+                        <TextBlock Text="Password (empty = open)" VerticalAlignment="Center" />
+                        <TextBox Text="{Binding Profile.Server.Password}" />
+                        <TextBlock Text="Steam discoverability" VerticalAlignment="Center" />
+                        <CheckBox IsChecked="{Binding Profile.Server.Steam}" HorizontalAlignment="Left" />
+                        <TextBlock Text="Steam visibility" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding Visibilities}" SelectedItem="{Binding Profile.Server.Visibility}" />
+                        <TextBlock Text="Autosave minutes (0 = off)" VerticalAlignment="Center" />
+                        <TextBox Text="{Binding Profile.Server.AutosaveMinutes}" />
+                        <TextBlock Text="Server log file" VerticalAlignment="Center" />
+                        <CheckBox IsChecked="{Binding Profile.Server.LogFile}" HorizontalAlignment="Left" />
+                        <TextBlock Text="Engine port / region" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Width="70" Text="{Binding Profile.Server.EnginePort}" />
+                            <ComboBox Width="70" Margin="6,0" ItemsSource="{Binding Regions}" SelectedItem="{Binding Profile.Server.Region}" />
+                        </StackPanel>
+                        <TextBlock Text="Trace tick / publish / bandits" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox IsChecked="{Binding Profile.Server.TraceTick}" />
+                            <CheckBox IsChecked="{Binding Profile.Server.TracePublish}" />
+                            <CheckBox IsChecked="{Binding Profile.Server.TraceBandits}" />
+                        </StackPanel>
+                    </UniformGrid>
+                    <TextBlock Margin="0,12,0,0" Foreground="#666" TextWrapping="Wrap"
+                               Text="Gameplay settings (difficulty, fast forward, cheats) live in CoopData\mod-config.json and are owned by the Coop mod; edit that file directly for now." />
+                </StackPanel>
+            </TabItem>
+
+            <!-- CONSOLE -->
+            <TabItem Header="Console">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <CheckBox Content="Engine" IsChecked="{Binding ShowEngine}" />
+                        <CheckBox Content="Module load" IsChecked="{Binding ShowModuleLoad}" />
+                        <CheckBox Content="Server" IsChecked="{Binding ShowServer}" />
+                        <CheckBox Content="Coop" IsChecked="{Binding ShowCoop}" />
+                        <CheckBox Content="Warnings" IsChecked="{Binding ShowWarnings}" />
+                        <CheckBox Content="DLL probes" IsChecked="{Binding ShowProbes}" ToolTip="The engine tries every referenced DLL by bare name first and logs a miss before resolving it properly. Harmless." />
+                        <CheckBox Content="Errors + milestones only" IsChecked="{Binding ErrorsOnly}" />
+                        <CheckBox Content="Auto-scroll" IsChecked="{Binding AutoScroll}" />
+                        <TextBlock Text="Find:" VerticalAlignment="Center" Margin="12,0,4,0" />
+                        <TextBox Width="220" Text="{Binding ConsoleFilter, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Content="Logs folder" Command="{Binding OpenLogsFolderCommand}" />
+                    </StackPanel>
+                    <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                        <Button DockPanel.Dock="Right" Content="Send" Command="{Binding SendCommandCommand}" />
+                        <TextBox Text="{Binding CommandText, UpdateSourceTrigger=PropertyChanged}" KeyDown="Command_KeyDown"
+                                 IsEnabled="{Binding IsRunning}" FontFamily="Consolas" />
+                    </DockPanel>
+                    <ListBox x:Name="ConsoleList" ItemsSource="{Binding ConsoleView}" FontFamily="Consolas" FontSize="12"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                             ScrollViewer.HorizontalScrollBarVisibility="Visible" ScrollViewer.VerticalScrollBarVisibility="Visible">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Time}" Foreground="#999" Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding Category}" Width="80" Foreground="#666" />
+                                    <TextBlock Text="{Binding Text}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Error}"><Setter Property="Foreground" Value="#C00" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Warning}"><Setter Property="Foreground" Value="#A60" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Milestone}"><Setter Property="Foreground" Value="#080" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Tool}"><Setter Property="Foreground" Value="#06A" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Probe}"><Setter Property="Foreground" Value="#AAA" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Engine}"><Setter Property="Foreground" Value="#888" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.ModuleLoad}"><Setter Property="Foreground" Value="#067" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Coop}"><Setter Property="Foreground" Value="#63A" /></DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+
+            <!-- PLAYERS / EXPORT -->
+            <TabItem Header="Players">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0" Margin="0,0,6,0">
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Mod list for players" FontWeight="Bold" VerticalAlignment="Center" />
+                            <Button Content="Copy" Command="{Binding CopyManifestCommand}" />
+                        </StackPanel>
+                        <TextBox Text="{Binding ClientManifestText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                    </DockPanel>
+                    <DockPanel Grid.Column="1" Margin="6,0,0,0">
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="This PC's Bannerlord launcher vs the server" FontWeight="Bold" VerticalAlignment="Center" />
+                            <Button Content="Check my client" Command="{Binding CheckMyClientCommand}" />
+                        </StackPanel>
+                        <TextBox Text="{Binding ClientCheckText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
 </Window>
