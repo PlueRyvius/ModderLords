@@ -39,6 +39,11 @@ var applier = new OverlayApplier
 
 switch (cmd)
 {
+    case "profiles":
+        Console.WriteLine("profiles dir: " + ProfileStore.ProfilesDir);
+        foreach (var n in ProfileStore.List()) Console.WriteLine("  " + n + (ProfileStore.Load(n) is null ? "  (FAILS TO LOAD)" : ""));
+        return 0;
+
     case "catalog":
         Console.WriteLine($"game root : {gameRoot ?? "(not found)"}");
         Console.WriteLine($"server    : {paths.DedicatedServerRoot}");

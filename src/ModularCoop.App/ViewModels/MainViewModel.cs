@@ -116,6 +116,14 @@ public partial class MainViewModel : ObservableObject
 
     // ---- profiles ---------------------------------------------------------------------------------
 
+    /// <summary>Re-reads the profiles folder without disturbing the current selection (called when the dropdown opens).</summary>
+    public void RefreshProfileList()
+    {
+        var current = SelectedProfileName;
+        LoadProfileList();
+        if (current is not null && ProfileNames.Contains(current)) SelectedProfileName = current;
+    }
+
     private void LoadProfileList()
     {
         ProfileNames.Clear();

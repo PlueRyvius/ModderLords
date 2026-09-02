@@ -30,7 +30,7 @@
         <Border DockPanel.Dock="Top" Padding="8" Background="#F3F3F3">
             <DockPanel>
                 <TextBlock Text="Profile" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" />
+                <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" DropDownOpened="Profiles_DropDownOpened" />
                 <Button Content="New" Command="{Binding NewProfileCommand}" />
                 <Button Content="Save" Command="{Binding SaveProfileCommand}" />
                 <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />

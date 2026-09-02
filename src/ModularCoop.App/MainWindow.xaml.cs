@@ -37,6 +37,8 @@ public partial class MainWindow : Window
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;
 
+    private void Profiles_DropDownOpened(object sender, System.EventArgs e) => ViewModel.RefreshProfileList();
+
     private void Command_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && ViewModel.SendCommandCommand.CanExecute(null)) ViewModel.SendCommandCommand.Execute(null);
