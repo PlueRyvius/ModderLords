@@ -77,9 +77,25 @@ heroes, item rosters) needs nothing beyond the prefix. The IL scan can find thos
 
 ### Layer 2: mod-owned state through Coop's sync (both sides)
 
-- **Settings (MCM v5 and plain static settings classes)**: one generic bridge. Enumerate `SettingsDefinitions`,
-  serialise settable properties, push to joining clients, apply, mark the options read-only in the client UI. Replaces
-  the MCM adapter and half of Drift's.
+- **Settings (Layer 2a, shipped v0.6/v0.7)**: one generic bridge with two sources behind `ISettingsSource`
+  (`src/ModularCoop.CompatSync`): `McmSettingsSource` (MCM v5 `SettingsDefinitions` by reflection, MCM's own
+  SettingsIds) and `StaticSettingsSource` (plain settings classes in community mod assemblies, ids
+  `static:<Assembly>:<Type>`). Discovery rule for the static source, mirrored by the launcher's IL scan
+  (`AssemblyScan.SettingsClasses`): a non-generic class whose name ends in Settings/Setting/Config/Configs/
+  Configuration/Options, or that has a public static `Instance|Current|Settings|Config|Default` of its own type;
+  reachable through static members, that singleton, or one hop `Holder.Instance.<Config|Settings|Configuration|
+  Options|Current>`; public settable bool/number/string/enum members; excluding ViewModel/behaviour/MBSubModuleBase/
+  ScreenBase/GameModel bases, MCM-derived types (incl. generic bases), `[SaveableClass]` types, any namespace segment
+  SaveData/Saveable/Serialization, namespace tails Data/DataTypes, names containing Template/Snapshot/Dto/ViewModel/VM,
+  and singleton-only types ending Manager/UI/Screen/Widget/Behavior/Handler/Service/Controller/Patch. Non-auto
+  singleton getters are read only once a campaign exists (or after 60 s). Hints: `CompatRecord.SettingsTypes` /
+  `IgnoreSettingsTypes` → `recipes.json` `Mods[].Settings.Include/Exclude` → `SettingsHints`. Persist: MCM
+  `SaveSettings`, else a zero-arg Save*/Write*/Store*/Persist*/Serialize*/Flush* or Create*/Update*Config* method on
+  the object, its holder or the holder type. Wire: unchanged `NetworkSettingsSnapshot` (id + payload); clients keep
+  snapshots for objects not created yet and apply them from the tick; a new `Campaign.Current` re-applies. Host
+  overrides: `<profile>.settings.json` staged as `overrides.json` in the live dir, applied by `Overrides` on the
+  server at start and on campaign change, acked in `ack-overrides.json`. Not done: marking options read-only in the
+  client MCM UI; per-save (in-save) settings data, which is Layer 2 state, not settings.
 - **Mod-owned objects**: for each type in the recipe, a generated `AutoRegistryBase<T>` (id = recipe-declared key,
   e.g. `StringId` or a field) so instances created on the server appear on clients with stable network ids. Replaces
   MyLittleWarband's hand-written registry patch.
