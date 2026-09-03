@@ -83,7 +83,10 @@ public static class AssemblyScan
     private static readonly string[] SingletonNames = ["Instance", "Current", "Settings", "Config", "Default"];
     private static readonly string[] SettingsExcludedBases = ["ViewModel", "CampaignBehaviorBase", "MissionBehavior", "MissionLogic", "MBSubModuleBase", "ScreenBase", "GameModel", "MissionView"];
     private static readonly string[] SettingsExcludedNameParts = ["Template", "Snapshot", "Dto", "ViewModel", "VM"];
-    private static readonly string[] SettingsExcludedNamespaceTails = ["SaveData", "Saveable", "Data", "Serialization"];
+    private static readonly string[] SettingsExcludedNamespaceSegments = ["SaveData", "Saveable", "Serialization"];
+    private static readonly string[] SettingsExcludedNamespaceTails = ["Data", "DataTypes"];
+    private static readonly string[] SingletonOnlyExcludedSuffixes = ["Manager", "UI", "Screen", "Widget", "Behavior", "Behaviour", "Handler", "Service", "Controller", "Patch", "Patches"];
+    private static readonly string[] HolderProps = ["Config", "Settings", "Configuration", "Options", "Current"];
 
     public static ScanResult Scan(DiscoveredModule mod)
     {
@@ -160,7 +163,14 @@ public static class AssemblyScan
                                 break;
                             }
                             case HandleKind.TypeDefinition: { var bd = md.GetTypeDefinition((TypeDefinitionHandle)td.BaseType); baseName = (md.GetString(bd.Namespace) + "." + md.GetString(bd.Name)).TrimStart('.'); break; }
-                            default: continue;   // TypeSpecification (generic base): not a behaviour base we gate
+                            case HandleKind.TypeSpecification:
+                            {
+                                // Generic base (AttributeGlobalSettings<T> and friends): decode to find the open type's assembly.
+                                var spec = md.GetTypeSpecification((TypeSpecificationHandle)td.BaseType).DecodeSignature(new PrimitiveSignatureProvider(md, []), null);
+                                if (spec.StartsWith("ref:MCM", StringComparison.OrdinalIgnoreCase)) baseFromMcm.Add(full);
+                                continue;
+                            }
+                            default: continue;
                         }
                         if (!td.Attributes.HasFlag(TypeAttributes.Abstract) || td.Attributes.HasFlag(TypeAttributes.Sealed)) defBase[full] = baseName;
                     }
@@ -173,11 +183,12 @@ public static class AssemblyScan
                     if (b == "CampaignBehaviorBase") campaignBehaviors.Add(kv.Key);
                     else if (b is "MissionLogic" or "MissionBehavior" or "MissionNetwork") missionBehaviors.Add(kv.Key);
                 }
+                var reachable = ReachableThroughHolders(md, defs);
                 foreach (var (full, td) in defs)
                 {
                     try
                     {
-                        var n = SettingsValueCount(md, full, td, defBase, baseFromMcm, defs);
+                        var n = SettingsValueCount(md, full, td, defBase, baseFromMcm, defs, reachable);
                         if (n > 0) settingsClasses.Add($"{full} ({n} value{(n == 1 ? "" : "s")})");
                     }
                     catch (Exception ex) { notes.Add("settings scan: " + ex.Message); }
@@ -207,7 +218,42 @@ public static class AssemblyScan
     // ---- settings-shaped classes (metadata only) ----------------------------------------------------------------
 
     /// <summary>Number of public settable primitive/string/enum members on a type that passes the runtime heuristic's name and exclusion rules; 0 = not a settings class.</summary>
-    private static int SettingsValueCount(MetadataReader md, string full, TypeDefinition td, Dictionary<string, string> defBase, HashSet<string> baseFromMcm, List<(string full, TypeDefinition td)> defs)
+    /// <summary>Types returned by an instance getter named Config/Settings/... on a type that itself has a static singleton (Holder.Instance.Config).</summary>
+    private static HashSet<string> ReachableThroughHolders(MetadataReader md, List<(string full, TypeDefinition td)> defs)
+    {
+        var reachable = new HashSet<string>(StringComparer.Ordinal);
+        var provider = new PrimitiveSignatureProvider(md, defs);
+        foreach (var (full, td) in defs)
+        {
+            var isHolder = false;
+            var getters = new List<string>();
+            foreach (var ph in td.GetProperties())
+            {
+                var pd = md.GetPropertyDefinition(ph);
+                var acc = pd.GetAccessors();
+                if (acc.Getter.IsNil) continue;
+                MethodSignature<string> sig;
+                try { sig = pd.DecodeSignature(provider, null); } catch { continue; }
+                var g = md.GetMethodDefinition(acc.Getter);
+                if ((g.Attributes & MethodAttributes.MemberAccessMask) != MethodAttributes.Public) continue;
+                var pn = md.GetString(pd.Name);
+                if (g.Attributes.HasFlag(MethodAttributes.Static)) { if (SingletonNames.Contains(pn) && sig.ReturnType == "def:" + full) isHolder = true; }
+                else if (HolderProps.Contains(pn)) getters.Add(sig.ReturnType);
+            }
+            foreach (var fh in td.GetFields())
+            {
+                var fd = md.GetFieldDefinition(fh);
+                if (!fd.Attributes.HasFlag(FieldAttributes.Static) || (fd.Attributes & FieldAttributes.FieldAccessMask) != FieldAttributes.Public) continue;
+                string ft; try { ft = fd.DecodeSignature(provider, null); } catch { continue; }
+                if (SingletonNames.Contains(md.GetString(fd.Name)) && ft == "def:" + full) isHolder = true;
+            }
+            if (!isHolder) continue;
+            foreach (var type in getters) if (type.StartsWith("def:", StringComparison.Ordinal)) reachable.Add(type.Substring(4));
+        }
+        return reachable;
+    }
+
+    private static int SettingsValueCount(MetadataReader md, string full, TypeDefinition td, Dictionary<string, string> defBase, HashSet<string> baseFromMcm, List<(string full, TypeDefinition td)> defs, HashSet<string> reachable)
     {
         var attrs = td.Attributes;
         if ((attrs & TypeAttributes.ClassSemanticsMask) == TypeAttributes.Interface) return 0;
@@ -218,8 +264,9 @@ public static class AssemblyScan
         if (name.StartsWith('<')) return 0;                                                      // compiler-generated
         if (SettingsExcludedNameParts.Any(p => name.Contains(p, StringComparison.Ordinal))) return 0;
         var ns = md.GetString(td.Namespace);
-        var tail = ns.Contains('.') ? ns[(ns.LastIndexOf('.') + 1)..] : ns;
-        if (SettingsExcludedNamespaceTails.Contains(tail, StringComparer.OrdinalIgnoreCase)) return 0;
+        var segments = ns.Split('.');
+        if (segments.Any(s => SettingsExcludedNamespaceSegments.Contains(s, StringComparer.OrdinalIgnoreCase))) return 0;
+        if (SettingsExcludedNamespaceTails.Contains(segments[^1], StringComparer.OrdinalIgnoreCase)) return 0;
         if (baseFromMcm.Contains(full)) return 0;
         // Base chain (one level inside the mod, then the external base name).
         if (defBase.TryGetValue(full, out var b))
@@ -236,7 +283,9 @@ public static class AssemblyScan
         }
 
         var nameMatch = SettingsNameSuffixes.Any(s => name.EndsWith(s, StringComparison.OrdinalIgnoreCase));
+        if (!nameMatch && SingletonOnlyExcludedSuffixes.Any(s => name.EndsWith(s, StringComparison.Ordinal))) return 0;
         var hasSingleton = false;
+        var hasStatic = false;
         var count = 0;
         var provider = new PrimitiveSignatureProvider(md, defs);
         foreach (var ph in td.GetProperties())
@@ -252,7 +301,7 @@ public static class AssemblyScan
             var s = md.GetMethodDefinition(acc.Setter);
             if ((g.Attributes & MethodAttributes.MemberAccessMask) != MethodAttributes.Public || (s.Attributes & MethodAttributes.MemberAccessMask) != MethodAttributes.Public) continue;
             if (sig.ParameterTypes.Length > 0) continue;                                        // indexer
-            if (provider.IsSupported(sig.ReturnType)) count++;
+            if (provider.IsSupported(sig.ReturnType)) { count++; if (s.Attributes.HasFlag(MethodAttributes.Static)) hasStatic = true; }
         }
         foreach (var fh in td.GetFields())
         {
@@ -263,9 +312,12 @@ public static class AssemblyScan
             try { ft = fd.DecodeSignature(provider, null); } catch { continue; }
             var fn = md.GetString(fd.Name);
             if (fa.HasFlag(FieldAttributes.Static) && SingletonNames.Contains(fn) && ft == "def:" + full) hasSingleton = true;
-            if (provider.IsSupported(ft)) count++;
+            if (provider.IsSupported(ft)) { count++; if (fa.HasFlag(FieldAttributes.Static)) hasStatic = true; }
         }
-        return (nameMatch || hasSingleton) ? count : 0;
+        // Same reach rule as the runtime: static members, a singleton of its own type, or Holder.Instance.<Config>.
+        if (!(nameMatch || hasSingleton)) return 0;
+        if (!(hasStatic || hasSingleton || reachable.Contains(full))) return 0;
+        return count;
     }
 
     private static bool IsEnumBase(MetadataReader md, TypeDefinition td)
@@ -320,13 +372,18 @@ public static class AssemblyScan
             if (_enumDefs.Contains(full)) return "enum";
             return "def:" + full;
         }
-        public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) => rawTypeKind == 0x11 ? "valuetype" : "other";
+        public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind)
+        {
+            var tr = reader.GetTypeReference(handle);
+            var asm = tr.ResolutionScope.Kind == HandleKind.AssemblyReference ? reader.GetString(reader.GetAssemblyReference((AssemblyReferenceHandle)tr.ResolutionScope).Name) : "";
+            return "ref:" + asm + ":" + reader.GetString(tr.Name);
+        }
         public string GetTypeFromSpecification(MetadataReader reader, object? genericContext, TypeSpecificationHandle handle, byte rawTypeKind) => "other";
         public string GetSZArrayType(string elementType) => "other";
         public string GetArrayType(string elementType, ArrayShape shape) => "other";
         public string GetByReferenceType(string elementType) => "other";
         public string GetPointerType(string elementType) => "other";
-        public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments) => "other";
+        public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments) => genericType;
         public string GetGenericMethodParameter(object? genericContext, int index) => "other";
         public string GetGenericTypeParameter(object? genericContext, int index) => "other";
         public string GetFunctionPointerType(MethodSignature<string> signature) => "other";

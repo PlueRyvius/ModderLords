@@ -22,6 +22,7 @@ public class ScanProbe
             if (m is null || m.Id is not ("ImprovedGarrisons" or "HealOnKill" or "ModularSmithing2")) continue;
             var s = AssemblyScan.Scan(m);
             _out.WriteLine($"{m.Id}: {s.Summary}; campaign=[{string.Join(", ", s.CampaignBehaviors)}]; mission=[{string.Join(", ", s.MissionBehaviors)}]; notes=[{string.Join("; ", s.Notes)}]");
+            _out.WriteLine($"  settings: {s.SettingsSummary}; classes=[{string.Join(", ", s.SettingsClasses)}]");
         }
     }
 }

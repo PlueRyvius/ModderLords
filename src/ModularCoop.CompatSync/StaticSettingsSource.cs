@@ -23,7 +23,10 @@ public sealed class StaticSettingsSource : ISettingsSource
     private static readonly string[] HolderProps = { "Config", "Settings", "Configuration", "Options", "Current" };
     private static readonly string[] ExcludedBases = { "ViewModel", "CampaignBehaviorBase", "MissionBehavior", "MissionLogic", "MBSubModuleBase", "ScreenBase", "GameModel", "MissionView" };
     private static readonly string[] ExcludedNameParts = { "Template", "Snapshot", "Dto", "ViewModel", "VM" };
-    private static readonly string[] ExcludedNamespaceTails = { "SaveData", "Saveable", "Data", "Serialization" };
+    private static readonly string[] ExcludedNamespaceSegments = { "SaveData", "Saveable", "Serialization" };
+    private static readonly string[] ExcludedNamespaceTails = { "Data", "DataTypes" };
+    /// <summary>A singleton alone is weak evidence; skip obvious managers/UI when the name does not look like settings.</summary>
+    private static readonly string[] SingletonOnlyExcludedSuffixes = { "Manager", "UI", "Screen", "Widget", "Behavior", "Behaviour", "Handler", "Service", "Controller", "Patch", "Patches" };
     private static readonly string[] SkipAssemblyPrefixes =
     {
         "TaleWorlds.", "SandBox", "StoryMode", "CustomBattle", "Multiplayer", "BirthAndDeath", "System", "Microsoft", "mscorlib", "netstandard",
@@ -226,8 +229,9 @@ public sealed class StaticSettingsSource : ISettingsSource
         if (t.IsAbstract && !t.IsSealed) return false;                       // abstract (static classes are abstract+sealed)
         if (ExcludedNameParts.Any(p => t.Name.IndexOf(p, StringComparison.Ordinal) >= 0)) return false;
         var ns = t.Namespace ?? "";
-        var tail = ns.Contains(".") ? ns.Substring(ns.LastIndexOf('.') + 1) : ns;
-        if (ExcludedNamespaceTails.Contains(tail, StringComparer.OrdinalIgnoreCase)) return false;
+        var segments = ns.Split('.');
+        if (segments.Any(s => ExcludedNamespaceSegments.Contains(s, StringComparer.OrdinalIgnoreCase))) return false;
+        if (ExcludedNamespaceTails.Contains(segments[segments.Length - 1], StringComparer.OrdinalIgnoreCase)) return false;
         for (var b = t.BaseType; b != null && b != typeof(object); b = b.BaseType)
         {
             if (ExcludedBases.Contains(b.Name)) return false;
@@ -241,6 +245,7 @@ public sealed class StaticSettingsSource : ISettingsSource
         }
         catch { return false; }
         if (NameSuffixes.Any(s => t.Name.EndsWith(s, StringComparison.OrdinalIgnoreCase))) return true;
+        if (SingletonOnlyExcludedSuffixes.Any(s => t.Name.EndsWith(s, StringComparison.Ordinal))) return false;
         return SingletonMember(t, t) != null;
     }
 

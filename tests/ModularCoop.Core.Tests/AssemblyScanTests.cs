@@ -7,11 +7,15 @@ public class ViewModel { }
 public sealed class FakeModSettings { public bool Enabled { get; set; } public int Max { get; set; } public float Rate { get; set; } public string Name { get; set; } = ""; public int[] Ignored { get; set; } = []; public int ReadOnly { get; } }
 public sealed class FakeSettingsVM : ViewModel { public bool Enabled { get; set; } }
 public sealed class FakeStaticConfig { public static int Count; public static bool On { get; set; } public static readonly int Const = 1; }
-public sealed class FakeManager { public static FakeManager Instance { get; } = new(); public FakePlain Plain { get; } = new(); }
+public sealed class FakeManager { public static FakeManager Instance { get; } = new(); public FakeModSettings Settings { get; } = new(); public FakePlain Plain { get; } = new(); }   // Holder.Instance.Settings reach
 public sealed class FakePlain { public static FakePlain? Current { get; set; } public int Value { get; set; } public FakeMode Mode { get; set; } }
 public enum FakeMode { A, B }
 public sealed class FakeThing { public int Value { get; set; } }                       // no name match, no singleton
 public sealed class FakeTemplateSettings { public int Value { get; set; } }             // excluded by name part
+public sealed class FakeUIManager { public static FakeUIManager Instance = new(); public int Value { get; set; } } // singleton only + Manager suffix
+public sealed class FakeOrphanSettings { public int Value { get; set; } }              // name match but unreachable (no statics, no singleton, no holder)
+public abstract class FakeMcmBase<T> { }
+public sealed class FakeMcmSettings : FakeMcmBase<FakeMcmSettings> { public static FakeMcmSettings Instance = new(); public int Value { get; set; } }
 
 public sealed class AssemblyScanTests
 {
@@ -34,9 +38,13 @@ public sealed class AssemblyScanTests
         Assert.DoesNotContain(r.SettingsClasses, s => s.StartsWith("ModularCoop.Core.Tests.FakeThing"));
         Assert.DoesNotContain(r.SettingsClasses, s => s.StartsWith("ModularCoop.Core.Tests.FakeTemplateSettings"));
         Assert.DoesNotContain(r.SettingsClasses, s => s.StartsWith("ModularCoop.Core.Tests.FakeManager"));
+        Assert.DoesNotContain(r.SettingsClasses, s => s.StartsWith("ModularCoop.Core.Tests.FakeUIManager"));      // singleton-only + Manager suffix
+        Assert.DoesNotContain(r.SettingsClasses, s => s.StartsWith("ModularCoop.Core.Tests.FakeOrphanSettings"));  // unreachable
+        Assert.DoesNotContain(r.SettingsClasses, s => s.StartsWith("SaveData."));                                   // SaveData namespace segment
         Assert.False(r.UsesMcm);
         Assert.StartsWith("own settings (", r.SettingsSummary);
-        Assert.Equal(8, r.SettingsValueCount);
+        Assert.Contains("ModularCoop.Core.Tests.FakeMcmSettings (1 value)", r.SettingsClasses);   // its generic base is local, not from an MCM assembly
+        Assert.Equal(9, r.SettingsValueCount);
     }
 
     [Fact]
