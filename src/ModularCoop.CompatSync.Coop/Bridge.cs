@@ -7,7 +7,10 @@ public static class Bridge
 
     /// <summary>Server: broadcast settings objects whose values changed since the last capture. No-op elsewhere.</summary>
     public static void Tick()
-        => global::Coop.Core.Server.Services.ModularCoopCompat.Handlers.ServerSettingsHandler.Current?.BroadcastChanges();
+    {
+        global::Coop.Core.Server.Services.ModularCoopCompat.Handlers.ServerSettingsHandler.Current?.BroadcastChanges();
+        global::Coop.Core.Client.Services.ModularCoopCompat.Handlers.ClientSettingsHandler.Current?.ApplyPending();
+    }
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
     public static string VerificationSummary() => BehaviorGate.VerificationSummary();

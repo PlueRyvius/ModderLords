@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Common.Messaging;
 using Common.Network;
 using GameInterface.Services.GameState.Messages;
@@ -32,7 +35,8 @@ public sealed class ClientSettingsHandler : IHandler
         broker.Subscribe<NetworkSettingsSnapshot>(HandleSnapshot);
         broker.Subscribe<NetworkCompatRecipes>(HandleRecipes);
         broker.Subscribe<CampaignReady>(HandleCampaignReady);
-        Log.Info("settings sync (client) armed" + (McmBridge.Present ? "" : " (MCM absent: settings will not be applied)"));
+        Current = this;
+        Log.Info("settings sync (client) armed; settings sources: " + SettingsSources.Summary());
         // A copy of the recipe may already ship with the module; apply it now, then ask the server for the live one.
         var local = BehaviorGate.ReadLocalRecipes();
         if (local is not null) Log.Info("local recipes: " + BehaviorGate.Apply(local));
@@ -46,7 +50,6 @@ public sealed class ClientSettingsHandler : IHandler
 
     private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
     {
-        if (!McmBridge.Present) return;
         network.SendAll(new NetworkRequestSettingsSnapshots { ProtocolVersion = Bridge.ProtocolVersion });
         Log.Info("settings sync: requested the server's settings");
     }
@@ -54,13 +57,40 @@ public sealed class ClientSettingsHandler : IHandler
     private void HandleSnapshot(MessagePayload<NetworkSettingsSnapshot> payload)
     {
         var msg = payload.What;
-        McmBridge.Apply(msg.SettingsId, msg.Payload, out var report);
+        received[msg.SettingsId] = msg.Payload;
+        if (SettingsSources.Owner(msg.SettingsId) is null)
+        {
+            // A plain settings object the mod has not created yet: keep the snapshot and apply it once discovery finds it.
+            pending.Add(msg.SettingsId);
+            Log.Info($"settings sync: '{msg.SettingsId}' from server: not created here yet, will apply when it appears");
+            return;
+        }
+        SettingsSources.Apply(msg.SettingsId, msg.Payload, out var report);
         Log.Info($"settings sync: '{msg.SettingsId}' from server: {report}");
     }
+
+    private readonly Dictionary<string, string> received = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly HashSet<string> pending = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Called from the submodule tick on clients: applies snapshots whose settings object appeared after they arrived.</summary>
+    public void ApplyPending()
+    {
+        if (pending.Count == 0) return;
+        foreach (var id in pending.ToList())
+        {
+            if (SettingsSources.Owner(id) is null || !received.TryGetValue(id, out var payload)) continue;
+            SettingsSources.Apply(id, payload, out var report);
+            pending.Remove(id);
+            Log.Info($"settings sync: '{id}' from server (deferred): {report}");
+        }
+    }
+
+    public static ClientSettingsHandler? Current { get; private set; }
 
     public void Dispose()
     {
         if (!active) return;
+        if (ReferenceEquals(Current, this)) Current = null;
         broker.Unsubscribe<NetworkSettingsSnapshot>(HandleSnapshot);
         broker.Unsubscribe<NetworkCompatRecipes>(HandleRecipes);
         broker.Unsubscribe<CampaignReady>(HandleCampaignReady);

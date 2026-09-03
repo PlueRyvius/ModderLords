@@ -75,8 +75,8 @@ public static class LiveSettings
                 var obj = MiniJson.GetObject(req, "Values");
                 if (obj != null) foreach (var kv in obj) values[kv.Key] = MiniJson.GetString(obj, kv.Key) ?? "";
 
-                var changed = McmBridge.Apply(settingsId, values, out var report);
-                var persisted = changed > 0 ? McmBridge.Save(settingsId) : "nothing to persist";
+                var changed = SettingsSources.Apply(settingsId, values, out var report);
+                var persisted = changed > 0 ? SettingsSources.Save(settingsId) : "nothing to persist";
                 ack["Ok"] = true;
                 ack["SettingsId"] = settingsId;
                 ack["Changed"] = changed;
@@ -101,8 +101,8 @@ public static class LiveSettings
 
     private static void WriteDescriptionIfChanged()
     {
-        if (!McmBridge.Present) return;
-        var objects = McmBridge.Describe();
+        if (!SettingsSources.AnyPresent) return;
+        var objects = SettingsSources.Describe();
         var body = MiniJson.Serialize(objects);
         if (body == _lastBody) return;
         var doc = new Dictionary<string, object?>
