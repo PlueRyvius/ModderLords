@@ -4,7 +4,7 @@
         Title="Server-only behaviours" Height="480" Width="720" WindowStartupLocation="CenterOwner">
     <DockPanel Margin="10">
         <TextBlock DockPanel.Dock="Top" x:Name="Header" FontWeight="Bold" Margin="0,0,0,4" />
-        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="#666" Margin="0,0,0,8"
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
                    Text="Ticked behaviours run on the server only: players' copies skip them and receive the results through Coop. Untick a behaviour to keep it running on players' clients too (typically a mod's own UI/menu behaviour). Campaign behaviours are gated at RegisterEvents; mission behaviours are dropped when a battle starts on the client." />
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
             <Button Content="All server-only" Click="All_Click" MinWidth="110" Margin="4,0" />

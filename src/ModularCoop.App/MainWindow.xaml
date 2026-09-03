@@ -11,23 +11,11 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <vm:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="10,4" />
-            <Setter Property="Margin" Value="4,0" />
-            <Setter Property="MinWidth" Value="70" />
-        </Style>
-        <Style TargetType="CheckBox">
-            <Setter Property="Margin" Value="6,0" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="3" />
-        </Style>
     </Window.Resources>
 
     <DockPanel>
         <!-- top bar: profile + launch -->
-        <Border DockPanel.Dock="Top" Padding="8" Background="#F3F3F3">
+        <Border DockPanel.Dock="Top" Padding="8" Background="{DynamicResource ChromeBackground}">
             <DockPanel>
                 <TextBlock Text="Profile" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" DropDownOpened="Profiles_DropDownOpened" />
@@ -37,15 +25,17 @@
                 <Button Content="Rescan mods" Command="{Binding RescanCommand}" />
                 <Button Content="Re-sync junctions" Command="{Binding ResyncCommand}" ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
-                    <Button Content="Launch server" Command="{Binding LaunchCommand}" FontWeight="Bold" Background="#DFF0D8" />
-                    <Button Content="Stop" Command="{Binding StopCommand}" Background="#F2DEDE" />
+                    <Button x:Name="ThemeButton" Content="Dark" Click="Theme_Click" MinWidth="52" Margin="4,0,12,0"
+                            ToolTip="Switch between the light and dark theme" />
+                    <Button Content="Launch server" Command="{Binding LaunchCommand}" FontWeight="Bold" Background="{DynamicResource SuccessBackground}" />
+                    <Button Content="Stop" Command="{Binding StopCommand}" Background="{DynamicResource DangerBackground}" />
                 </StackPanel>
                 <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" FontStyle="Italic" />
             </DockPanel>
         </Border>
 
         <!-- drift banner -->
-        <Border DockPanel.Dock="Top" Padding="8,6" Background="#FFF4CE" BorderBrush="#E0C060" BorderThickness="0,0,0,1">
+        <Border DockPanel.Dock="Top" Padding="8,6" Background="{DynamicResource WarningBackground}" BorderBrush="{DynamicResource WarningBorder}" BorderThickness="0,0,0,1">
             <Border.Style>
                 <Style TargetType="Border">
                     <Style.Triggers>
@@ -57,7 +47,7 @@
         </Border>
 
         <!-- status bar -->
-        <Border DockPanel.Dock="Bottom" Padding="8,4" Background="#F3F3F3">
+        <Border DockPanel.Dock="Bottom" Padding="8,4" Background="{DynamicResource ChromeBackground}">
             <StackPanel>
                 <TextBlock><Run Text="Server: " FontWeight="Bold" /><Run Text="{Binding ServerRoot}" /></TextBlock>
                 <TextBlock><Run Text="Game:   " FontWeight="Bold" /><Run Text="{Binding GameRoot}" /></TextBlock>
@@ -69,8 +59,9 @@
             <TabItem Header="Mods">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="300" />
+                        <ColumnDefinition Width="*" MinWidth="360" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition x:Name="ModsSidebarColumn" Width="300" MinWidth="220" />
                     </Grid.ColumnDefinitions>
                     <DockPanel Grid.Column="0">
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
@@ -81,7 +72,7 @@
                             <Button Content="Record…" Command="{Binding RecordCompatCommand}" Margin="12,0,0,0" ToolTip="Record how the selected mod behaves under Coop (verdict, notes, defaults). Saved to your local compat database." />
                             <Button Content="Export…" Command="{Binding ExportCompatCommand}" ToolTip="Write the selected mod's record (or all your local records) to a file you can share" />
                             <Button Content="Import…" Command="{Binding ImportCompatCommand}" ToolTip="Merge a shared record file into your local compat database (newer records win)" />
-                            <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="#666"
+                            <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MutedForeground}"
                                        Text="Run = load its code on the server. DependencyOnly = listed for the handshake, no code (UI frameworks). AsShipped = let the engine decide." />
                         </StackPanel>
                         <DataGrid ItemsSource="{Binding Mods}" SelectedItem="{Binding SelectedMod}" AutoGenerateColumns="False" CanUserAddRows="False"
@@ -131,12 +122,21 @@
                             </DataGrid.Columns>
                         </DataGrid>
                     </DockPanel>
-                    <DockPanel Grid.Column="1" Margin="8,0,0,0">
-                        <TextBlock DockPanel.Dock="Top" Text="Engine load order" FontWeight="Bold" Margin="0,0,0,4" />
-                        <ListBox DockPanel.Dock="Top" ItemsSource="{Binding LoadOrderPreview}" Height="260" />
-                        <TextBlock DockPanel.Dock="Top" Text="Messages" FontWeight="Bold" Margin="0,8,0,4" />
-                        <ListBox ItemsSource="{Binding Messages}" />
-                    </DockPanel>
+                    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="2,0" />
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition x:Name="LoadOrderRow" Height="260" MinHeight="80" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" MinHeight="80" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Engine load order" FontWeight="Bold" Margin="0,0,0,4" />
+                        <ListBox Grid.Row="1" ItemsSource="{Binding LoadOrderPreview}" />
+                        <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,2" />
+                        <TextBlock Grid.Row="3" Text="Messages" FontWeight="Bold" Margin="0,4,0,4" />
+                        <ListBox Grid.Row="4" ItemsSource="{Binding Messages}" />
+                    </Grid>
                 </Grid>
             </TabItem>
 
@@ -146,10 +146,17 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <TextBlock Text="Save to host:" VerticalAlignment="Center" />
                         <TextBox Width="260" Margin="6,0" Text="{Binding Profile.SaveName, UpdateSourceTrigger=PropertyChanged}" />
-                        <TextBlock VerticalAlignment="Center" Foreground="#666" Text="Pick one below or type a new name; a new name starts a fresh world from default_new_game.sav." />
+                        <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource MutedForeground}" Text="Pick one below or type a new name; a new name starts a fresh world from default_new_game.sav." />
                     </StackPanel>
-                    <TextBox DockPanel.Dock="Bottom" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" Height="110" FontFamily="Consolas" Margin="0,6,0,0" />
-                    <DataGrid ItemsSource="{Binding Saves}" SelectedItem="{Binding SelectedSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" MinHeight="80" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition x:Name="SaveDiffRow" Height="110" MinHeight="60" />
+                        </Grid.RowDefinitions>
+                        <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,2" />
+                        <TextBox Grid.Row="2" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" />
+                    <DataGrid Grid.Row="0" ItemsSource="{Binding Saves}" SelectedItem="{Binding SelectedSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Save" Binding="{Binding Name}" Width="200" />
                             <DataGridTextColumn Header="Character" Binding="{Binding Character}" Width="120" />
@@ -159,13 +166,14 @@
                             <DataGridTextColumn Header="Community modules in save" Binding="{Binding Mods}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
+                    </Grid>
                 </DockPanel>
             </TabItem>
 
             <!-- SERVER -->
             <TabItem Header="Server">
                 <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
-                    <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="#666" Margin="0,0,0,10" />
+                    <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,10" />
                     <UniformGrid Columns="2" Rows="14">
                         <TextBlock Text="Join port (UDP, forward this)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.JoinPort}" />
@@ -195,7 +203,7 @@
                             <CheckBox IsChecked="{Binding Profile.Server.TraceBandits}" />
                         </StackPanel>
                     </UniformGrid>
-                    <TextBlock Margin="0,12,0,0" Foreground="#666" TextWrapping="Wrap"
+                    <TextBlock Margin="0,12,0,0" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap"
                                Text="Gameplay settings (difficulty, fast forward, cheats) live in CoopData\mod-config.json and are owned by the Coop mod; edit that file directly for now." />
                 </StackPanel>
             </TabItem>
@@ -206,7 +214,7 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <Button Content="Reload" Command="{Binding LoadGameplayCommand}" />
                         <Button Content="Save to mod-config.json" Command="{Binding SaveGameplayCommand}" />
-                        <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="#666" TextWrapping="Wrap"
+                        <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap"
                                    Text="CoopData\mod-config.json, owned by the Coop mod. Values are replaced in place so its comments stay; a backup goes to config-backups. Applies on the next server start." />
                     </StackPanel>
                     <DataGrid ItemsSource="{Binding Gameplay}" AutoGenerateColumns="False" CanUserAddRows="False" RowHeaderWidth="0" HeadersVisibility="Column">
@@ -237,31 +245,32 @@
                         <Button Content="Revert" Command="{Binding RevertCommand}" ToolTip="Discard unsent edits in this settings object" />
                         <Button Content="Reload" Command="{Binding ReloadCommand}" ToolTip="Re-read what the server last reported" />
                         <Button Content="Clear overrides" Command="{Binding ClearOverridesCommand}" ToolTip="Forget the stored host overrides for the selected settings object (they are re-applied at every launch until cleared)" />
-                        <Border VerticalAlignment="Center" Margin="12,0,0,0" Padding="8,2" CornerRadius="9" Background="#DDD">
+                        <Border VerticalAlignment="Center" Margin="12,0,0,0" Padding="8,2" CornerRadius="9" Background="{DynamicResource BadgeBackground}">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsLive}" Value="True"><Setter Property="Background" Value="#DFF0D8" /></DataTrigger>
+                                        <DataTrigger Binding="{Binding IsLive}" Value="True"><Setter Property="Background" Value="{DynamicResource SuccessBackground}" /></DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
                             <TextBlock Text="{Binding ModeText}" FontWeight="Bold" FontSize="11" />
                         </Border>
-                        <TextBlock VerticalAlignment="Center" Margin="8,0" Text="{Binding StatusText}" Foreground="#666" TextWrapping="Wrap" MaxWidth="700" />
+                        <TextBlock VerticalAlignment="Center" Margin="8,0" Text="{Binding StatusText}" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" MaxWidth="700" />
                     </StackPanel>
-                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding ApplyReport}" Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#2E7D32" />
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding ApplyReport}" Margin="0,6,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SuccessForeground}" />
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="260" />
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="SettingsObjectsColumn" Width="260" MinWidth="180" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" MinWidth="280" />
                         </Grid.ColumnDefinitions>
                         <ListBox Grid.Column="0" ItemsSource="{Binding Objects}" SelectedItem="{Binding SelectedObject}" HorizontalContentAlignment="Stretch">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="2">
                                         <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" />
-                                        <TextBlock Text="{Binding Subtitle}" Foreground="#666" FontSize="11" TextWrapping="Wrap" />
-                                        <TextBlock Foreground="#B26A00" FontSize="11">
+                                        <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource MutedForeground}" FontSize="11" TextWrapping="Wrap" />
+                                        <TextBlock Foreground="{DynamicResource WarningForeground}" FontSize="11">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Text" Value="{Binding OverrideCount, StringFormat='{}{0} override(s)'}" />
@@ -275,7 +284,8 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <ScrollViewer Grid.Column="1" Margin="8,0,0,0" VerticalScrollBarVisibility="Auto">
+                        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="2,0" />
+                        <ScrollViewer Grid.Column="2" Margin="8,0,0,0" VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding SelectedObject.Groups}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -295,7 +305,7 @@
                                                                     <Style TargetType="TextBlock">
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding IsDirty}" Value="True"><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
-                                                                            <DataTrigger Binding="{Binding IsReadOnly}" Value="True"><Setter Property="Foreground" Value="#999" /></DataTrigger>
+                                                                            <DataTrigger Binding="{Binding IsReadOnly}" Value="True"><Setter Property="Foreground" Value="{DynamicResource SubtleForeground}" /></DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
                                                                 </TextBlock.Style>
@@ -304,16 +314,16 @@
                                                                 <CheckBox IsChecked="{Binding BoolValue, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding IsBool, Converter={StaticResource BoolToVis}}" HorizontalAlignment="Left" />
                                                                 <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding IsEnum, Converter={StaticResource BoolToVis}}" />
                                                                 <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding IsText, Converter={StaticResource BoolToVis}}" />
-                                                                <TextBlock Text="{Binding Value}" Foreground="#999" VerticalAlignment="Center" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{Binding Value}" Foreground="{DynamicResource SubtleForeground}" VerticalAlignment="Center" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}" TextTrimming="CharacterEllipsis" />
                                                             </Grid>
                                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
-                                                                <Border Background="#FFF4CE" BorderBrush="#E0C060" BorderThickness="1" CornerRadius="3" Padding="4,0" Margin="0,0,8,0"
+                                                                <Border Background="{DynamicResource WarningBackground}" BorderBrush="{DynamicResource WarningBorder}" BorderThickness="1" CornerRadius="3" Padding="4,0" Margin="0,0,8,0"
                                                                         Visibility="{Binding HasOverride, Converter={StaticResource BoolToVis}}" ToolTip="{Binding OverrideTip}">
                                                                     <TextBlock Text="override" FontSize="10" />
                                                                 </Border>
-                                                                <TextBlock Text="{Binding RangeText}" Foreground="#888" FontSize="11" />
-                                                                <TextBlock Text="{Binding KindText}" Foreground="#AAA" FontSize="11" Margin="8,0,0,0" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}" />
-                                                                <TextBlock Text="{Binding Error}" Foreground="#C62828" FontSize="11" Margin="8,0,0,0" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
+                                                                <TextBlock Text="{Binding RangeText}" Foreground="{DynamicResource MutedForeground}" FontSize="11" />
+                                                                <TextBlock Text="{Binding KindText}" Foreground="{DynamicResource SubtleForeground}" FontSize="11" Margin="8,0,0,0" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}" />
+                                                                <TextBlock Text="{Binding Error}" Foreground="{DynamicResource DangerForeground}" FontSize="11" Margin="8,0,0,0" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
                                                             </StackPanel>
                                                         </Grid>
                                                     </DataTemplate>
@@ -355,20 +365,20 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Time}" Foreground="#999" Margin="0,0,8,0" />
-                                    <TextBlock Text="{Binding Category}" Width="80" Foreground="#666" />
+                                    <TextBlock Text="{Binding Time}" Foreground="{DynamicResource LogTimestamp}" Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding Category}" Width="80" Foreground="{DynamicResource MutedForeground}" />
                                     <TextBlock Text="{Binding Text}">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Error}"><Setter Property="Foreground" Value="#C00" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
-                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Warning}"><Setter Property="Foreground" Value="#A60" /></DataTrigger>
-                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Milestone}"><Setter Property="Foreground" Value="#080" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
-                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Tool}"><Setter Property="Foreground" Value="#06A" /></DataTrigger>
-                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Probe}"><Setter Property="Foreground" Value="#AAA" /></DataTrigger>
-                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Engine}"><Setter Property="Foreground" Value="#888" /></DataTrigger>
-                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.ModuleLoad}"><Setter Property="Foreground" Value="#067" /></DataTrigger>
-                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Coop}"><Setter Property="Foreground" Value="#63A" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Error}"><Setter Property="Foreground" Value="{DynamicResource LogError}" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Warning}"><Setter Property="Foreground" Value="{DynamicResource LogWarning}" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Milestone}"><Setter Property="Foreground" Value="{DynamicResource LogMilestone}" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Tool}"><Setter Property="Foreground" Value="{DynamicResource LogTool}" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Probe}"><Setter Property="Foreground" Value="{DynamicResource LogProbe}" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Engine}"><Setter Property="Foreground" Value="{DynamicResource LogEngine}" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.ModuleLoad}"><Setter Property="Foreground" Value="{DynamicResource LogModuleLoad}" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Coop}"><Setter Property="Foreground" Value="{DynamicResource LogCoop}" /></DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </TextBlock.Style>

@@ -1,0 +1,46 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Dark theme. Same key set as Light.xaml — the dictionaries are swapped wholesale at runtime.
+         The log colours are NOT mechanical inversions of the light ones: #080 and #06A are unreadable
+         on a dark ground, so each category was re-picked to stay legible and stay distinct from its
+         neighbours. Console legibility is the whole point of this app's busiest screen. -->
+
+    <!-- Surfaces -->
+    <SolidColorBrush x:Key="WindowBackground" Color="#1E1E1E" />
+    <SolidColorBrush x:Key="ChromeBackground" Color="#2A2A2C" />
+    <SolidColorBrush x:Key="ControlBackground" Color="#252526" />
+    <SolidColorBrush x:Key="ControlBorder" Color="#4A4A4D" />
+    <SolidColorBrush x:Key="GridLine" Color="#3A3A3C" />
+    <SolidColorBrush x:Key="HeaderBackground" Color="#333335" />
+    <SolidColorBrush x:Key="SelectionBackground" Color="#2C4F72" />
+    <SolidColorBrush x:Key="SplitterBrush" Color="#3A3A3C" />
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="Foreground" Color="#E6E6E6" />
+    <SolidColorBrush x:Key="MutedForeground" Color="#A0A0A0" />
+    <SolidColorBrush x:Key="SubtleForeground" Color="#7A7A7A" />
+
+    <!-- Semantic fills. Dark grounds with the normal light Foreground on top, rather than the pale
+         pastels the light theme uses. -->
+    <SolidColorBrush x:Key="SuccessBackground" Color="#2C4A2E" />
+    <SolidColorBrush x:Key="SuccessForeground" Color="#7BC47F" />
+    <SolidColorBrush x:Key="DangerBackground" Color="#5A2C2C" />
+    <SolidColorBrush x:Key="DangerForeground" Color="#F08A8A" />
+    <SolidColorBrush x:Key="WarningBackground" Color="#3A3320" />
+    <SolidColorBrush x:Key="WarningBorder" Color="#7A6A2E" />
+    <SolidColorBrush x:Key="WarningForeground" Color="#E8C27A" />
+    <SolidColorBrush x:Key="BadgeBackground" Color="#3A3A3C" />
+
+    <!-- Console log categories, re-picked for a #1E1E1E ground -->
+    <SolidColorBrush x:Key="LogError" Color="#FF6B6B" />
+    <SolidColorBrush x:Key="LogWarning" Color="#E0A54A" />
+    <SolidColorBrush x:Key="LogMilestone" Color="#6FD07A" />
+    <SolidColorBrush x:Key="LogTool" Color="#5AB0F0" />
+    <SolidColorBrush x:Key="LogProbe" Color="#6E6E6E" />
+    <SolidColorBrush x:Key="LogEngine" Color="#8A8A8A" />
+    <SolidColorBrush x:Key="LogModuleLoad" Color="#4EC9C9" />
+    <SolidColorBrush x:Key="LogCoop" Color="#C08FF0" />
+    <SolidColorBrush x:Key="LogTimestamp" Color="#7A7A7A" />
+
+</ResourceDictionary>
