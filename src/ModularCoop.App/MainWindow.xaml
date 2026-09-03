@@ -107,6 +107,11 @@
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="Behaviours" Binding="{Binding Behaviors}" IsReadOnly="True" Width="120" />
+                                <DataGridTextColumn Header="Settings" Binding="{Binding Settings}" IsReadOnly="True" Width="150">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding SettingsTip}" /></Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
                                 <DataGridTextColumn Header="Bins" Binding="{Binding Bins}" IsReadOnly="True" Width="100" />
                                 <DataGridTemplateColumn Header="Compat" Width="150" SortMemberPath="CompatText">
                                     <DataGridTemplateColumn.CellTemplate>

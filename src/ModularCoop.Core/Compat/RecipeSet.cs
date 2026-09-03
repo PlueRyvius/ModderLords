@@ -17,6 +17,14 @@ public sealed class ModRecipe
     /// <summary>Full type names of MissionLogic/MissionBehavior subclasses that clients do not add to missions.</summary>
     public List<string> MissionBehaviors { get; set; } = new();
     public string? Notes { get; set; }
+    /// <summary>Hints for the module's static-settings discovery (full type names or trailing-* globs); null = none.</summary>
+    public ModRecipeSettings? Settings { get; set; }
+}
+
+public sealed class ModRecipeSettings
+{
+    public List<string> Include { get; set; } = new();
+    public List<string> Exclude { get; set; } = new();
 }
 
 public sealed class RecipeSet
@@ -33,7 +41,8 @@ public sealed class RecipeSet
     public static RecipeSet FromJson(string json) => JsonSerializer.Deserialize<RecipeSet>(json, Json) ?? new RecipeSet();
 
     /// <summary>Builds the recipe for every mod flagged server-authoritative from its assembly scan.</summary>
-    public static RecipeSet Build(IEnumerable<(string id, ScanResult scan, IReadOnlyCollection<string> keepClientSide)> serverAuthoritative, string generatedBy)
+    public static RecipeSet Build(IEnumerable<(string id, ScanResult scan, IReadOnlyCollection<string> keepClientSide)> serverAuthoritative, string generatedBy,
+        IEnumerable<(string id, IReadOnlyList<string> include, IReadOnlyList<string> exclude)>? settingsHints = null)
     {
         var set = new RecipeSet { GeneratedBy = generatedBy };
         foreach (var (id, scan, keep) in serverAuthoritative)
@@ -43,6 +52,14 @@ public sealed class RecipeSet
             if (campaign.Count == 0 && mission.Count == 0) continue;
             set.Mods.Add(new ModRecipe { Id = id, CampaignBehaviors = campaign, MissionBehaviors = mission,
                 Notes = keep.Count > 0 ? "kept client-side: " + string.Join(", ", keep) : null });
+        }
+        // Settings hints ride along for any mod that has them, gated or not (the module reads Mods[].Settings only).
+        foreach (var (id, include, exclude) in settingsHints ?? [])
+        {
+            if (include.Count + exclude.Count == 0) continue;
+            var recipe = set.Mods.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (recipe is null) { recipe = new ModRecipe { Id = id }; set.Mods.Add(recipe); }
+            recipe.Settings = new ModRecipeSettings { Include = include.ToList(), Exclude = exclude.ToList() };
         }
         return set;
     }
