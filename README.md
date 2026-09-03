@@ -94,6 +94,7 @@ One row per community mod found on this PC. Stock modules and Coop itself are al
 | Role | See below. |
 | Bins | Which builds the mod ships: `server` (made for dedicated servers), `client`, or both. |
 | Compat | The curated verdict from the compatibility database (see below): green **Works**, amber **Needs recipe** (works with Server-only logic and the recorded behaviours), red **Broken**, grey **Unknown**. `· untested version` means your copy is not one of the versions the record was checked with. Hover for notes, tested versions and where the record came from. Empty = no record yet. |
+| Settings | What the Mod settings tab will find for this mod: `MCM`, `own settings (N values)` (a plain settings class found by the scan), both, or `none found`. Hover for the class names. |
 | Server verdict | `server-safe`: no UI or client-only references. `guarded`: uses inquiries or screens that the server guards handle. `needs review`: constructs UI objects or references StoryMode; may still work (hover for details), test it. |
 | Notes | `client-only tags`: its manifest asks servers to skip it (handled by the Run role). `data only`: XML content, no code. |
 | Folder | Where the mod lives. A number as the folder name means a Steam Workshop item. |
@@ -163,6 +164,7 @@ differs, extra mod enabled, DLC enabled).
 |---|---|
 | Profiles | `%LOCALAPPDATA%\ModularCoop\profiles\<name>.json` |
 | Compatibility database | `compat-db.json` next to the launcher (bundled); your records in `%LOCALAPPDATA%\ModularCoop\compat-db.local.json` |
+| Mod settings overrides / cache | `%LOCALAPPDATA%\ModularCoop\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModularCoop\cache\<profile>.settings-cache.json` |
 | Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModularCoop\overlay\<profile>\` |
 | Launcher logs | `%LOCALAPPDATA%\ModularCoop\logs\launch-*.log`, `app-errors.log` |
 | Server data (saves, server-config.json, server logs, config backups) | `Documents\Mount and Blade II Bannerlord\CoopData\DedicatedServer\` |
@@ -250,26 +252,51 @@ After a session, open the two logs in `Documents\Mount and Blade II Bannerlord\C
 
 (An empty server shows 0 because the campaign clock is paused until a player joins.)
 
-## Mod settings (host-side, live)
+## Mod settings (host-side, live or offline)
 
-With **Settings sync** on, the **Mod settings** tab shows the MCM settings of every mod on the *running* server and lets
-you change them without a restart:
+With **Settings sync** on, the **Mod settings** tab shows the settings of every mod on the server and lets you change
+them without a restart. It covers two kinds of mod:
 
-1. Launch the server. The tab enables itself and reads "Waiting for the server's settings…" until the shared module has
-   loaded (about a minute), then "Live, N settings object(s), updated hh:mm:ss".
-2. Pick a mod on the left, change values on the right (bold = changed, red text = out of range), press **Apply**.
-3. The server applies the values on its next tick (up to 3 s), saves them through MCM so they survive a restart, and
-   the existing settings sync pushes them to connected players on the following tick. The result line under the editor
-   and a `[ModularCoop.Compat] live apply …` line in the Console tell you what changed; the same appears in
-   `Documents\Mount and Blade II Bannerlord\Configs\ModLogs\ModularCoop.Compat-server.log`.
+- **MCM mods** (Mod Configuration Menu): every settings object MCM knows about, with groups, hints and ranges.
+- **Mods with their own settings** (no MCM): the shared module looks, by reflection, for plain settings classes in
+  each community mod, e.g. a `Config`/`Settings`/`Options` class reached through a static `Instance`, or through a
+  manager's `Instance.Config`. Their public booleans, numbers, text and enum values are listed under one "General"
+  group; the tooltip names the class and member. ImprovedGarrisons' configuration (53 values) is found this way.
+  Per-town or per-save data stored inside the save is not a setting and is not shown.
 
-**Revert** drops unsent edits; **Reload** re-reads what the server last reported. A fresh description arrives whenever
-a value changes on the server, so an edit made elsewhere shows up here too (your own unsent edits are kept).
+The **Settings** column on the Mods tab tells you in advance what the scan expects: `MCM`, `own settings (N values)`,
+both, or `none found` (hover for the class names). If a mod's settings class is missed or a data class is picked up by
+mistake, add its full type name to `SettingsTypes` or `IgnoreSettingsTypes` in your compat record
+(`%LOCALAPPDATA%\ModularCoop\compat-db.local.json`); the hint travels to the module through `recipes.json`.
 
-What is not editable here: dropdowns, colours, buttons and other custom MCM types are listed greyed with their type name
-(the sync module only carries booleans, numbers, text and enums). A setting the mod marks *restart required* is applied
-and saved, but the mod may not act on it until the next start; the result line says so. The files behind the tab live
-in `%LOCALAPPDATA%\ModularCoop\live\<profile>\` and are recreated at each launch.
+**Live** (server running):
+
+1. Launch the server. The tab reads "Waiting for the server's settings…" until the shared module has loaded (about a
+   minute), then "Live, N settings object(s), updated hh:mm:ss". Settings classes a mod creates lazily appear when
+   the mod creates them, usually once the campaign is up.
+2. Pick a settings object on the left, change values on the right (bold = changed, red text = out of range), press
+   **Apply**.
+3. The server applies the values on its next tick (up to 3 s), saves them through MCM or the mod's own save method
+   when one can be found, and the existing settings sync pushes them to connected players on the following tick.
+   The result line under the editor and a `[ModularCoop.Compat] live apply …` line in the Console say what changed;
+   the same appears in `Documents\Mount and Blade II Bannerlord\Configs\ModLogs\ModularCoop.Compat-server.log`.
+
+**Offline** (server stopped): the tab stays enabled with the last values the server reported. Edits you Apply become
+**host overrides** for the profile, staged at the next launch and applied once the mod has created its settings
+(Console: `N override(s) applied at start`). Every live Apply is stored as an override too, so a value survives a
+restart even for a mod that has no way to save it (result line `not persisted (overrides re-applied at launch)`).
+Values with an override carry an "override" tag; **Clear overrides** forgets them for the selected object. Overrides
+are re-applied when a campaign is loaded mid-session, in case the mod restores its own values then.
+
+**Revert** drops unsent edits; **Reload** re-reads what the server last reported (or the cached copy). A fresh
+description arrives whenever a value changes on the server, so an edit made elsewhere shows up here too (your own
+unsent edits are kept).
+
+What is not editable here: dropdowns, colours, buttons and other custom types are listed greyed with their type name
+(the sync module only carries booleans, numbers, text and enums); a mod's `Version` string is shown but locked. A
+setting the mod marks *restart required* is applied and saved, but the mod may not act on it until the next start.
+Files: `%LOCALAPPDATA%\ModularCoop\live\<profile>\` (recreated at each launch), `profiles\<profile>.settings.json`
+(overrides) and `cache\<profile>.settings-cache.json` (last description).
 
 ## Compatibility database
 
