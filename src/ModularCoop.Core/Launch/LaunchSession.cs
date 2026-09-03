@@ -127,7 +127,16 @@ public sealed class LaunchSession
         {
             var liveDir = Live.LiveProtocol.LiveDirFor(profile.Name);
             extraEnv[Live.LiveProtocol.EnvVar] = liveDir;
-            if (applySideEffects) Live.LiveProtocol.Reset(liveDir);
+            if (applySideEffects)
+            {
+                Live.LiveProtocol.Reset(liveDir);
+                var overrides = Live.SettingsOverridesStore.Load(profile.Name);
+                if (!overrides.IsEmpty)
+                {
+                    Live.SettingsOverridesStore.WriteToLiveDir(liveDir, overrides);
+                    messages.Add($"mod settings: {overrides.Count} override(s) in {overrides.Objects.Count} settings object(s) staged; applied once the server has loaded");
+                }
+            }
         }
 
         if (applySideEffects)

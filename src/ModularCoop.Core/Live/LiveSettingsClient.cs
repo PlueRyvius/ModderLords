@@ -66,6 +66,8 @@ public static class LiveProtocol
     public const string SettingsFileName = "settings.json";
     public const string RequestPrefix = "apply-";
     public const string AckPrefix = "ack-";
+    public const string OverridesFileName = "overrides.json";
+    public const string OverridesAckFileName = "ack-overrides.json";
 
     private static readonly JsonSerializerOptions Json = new()
     {

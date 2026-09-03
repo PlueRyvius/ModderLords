@@ -52,7 +52,7 @@ public sealed class SyncSubModule : MBSubModuleBase
             _sinceTick = 0f;
             // Discover lazily created settings objects (both sides), then host-side live edits, then the adapter tick
             // broadcasts anything that changed and re-applies snapshots that arrived before their object existed.
-            try { SettingsSources.Refresh(); }
+            try { CampaignWatch.Tick(); SettingsSources.Refresh(); }
             catch (Exception ex) { Log.Warn("settings discovery failed: " + ex.GetBaseException().Message); }
             LiveSettings.Poll();
             if (_adapterTick is null) { TryLoadAdapter(); }

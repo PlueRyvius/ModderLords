@@ -71,10 +71,21 @@ public sealed class ClientSettingsHandler : IHandler
 
     private readonly Dictionary<string, string> received = new Dictionary<string, string>(StringComparer.Ordinal);
     private readonly HashSet<string> pending = new HashSet<string>(StringComparer.Ordinal);
+    private int generation;
 
     /// <summary>Called from the submodule tick on clients: applies snapshots whose settings object appeared after they arrived.</summary>
     public void ApplyPending()
     {
+        // A (re)loaded campaign may restore a mod's own values; push the server's snapshots again.
+        if (CampaignWatch.Generation != generation)
+        {
+            generation = CampaignWatch.Generation;
+            if (received.Count > 0)
+            {
+                foreach (var id in received.Keys) pending.Add(id);
+                Log.Info("settings sync: campaign changed, re-applying " + received.Count + " settings object(s) from the server");
+            }
+        }
         if (pending.Count == 0) return;
         foreach (var id in pending.ToList())
         {
