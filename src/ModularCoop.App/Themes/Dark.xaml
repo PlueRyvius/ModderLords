@@ -43,4 +43,15 @@
     <SolidColorBrush x:Key="LogCoop" Color="#C08FF0" />
     <SolidColorBrush x:Key="LogTimestamp" Color="#7A7A7A" />
 
+    <!-- Buttons and tabs are fully templated in Shared.xaml, so these are honoured on every state. -->
+    <SolidColorBrush x:Key="ButtonBackground" Color="#3A3A3D" />
+    <SolidColorBrush x:Key="ButtonHoverBackground" Color="#4A4A4E" />
+    <SolidColorBrush x:Key="ButtonPressedBackground" Color="#2C4F72" />
+    <SolidColorBrush x:Key="ButtonBorder" Color="#5A5A5E" />
+    <SolidColorBrush x:Key="DisabledForeground" Color="#6A6A6A" />
+    <SolidColorBrush x:Key="DisabledBackground" Color="#2A2A2C" />
+    <SolidColorBrush x:Key="TabBackground" Color="#2A2A2C" />
+    <SolidColorBrush x:Key="TabHoverBackground" Color="#3A3A3D" />
+    <SolidColorBrush x:Key="TabSelectedBackground" Color="#1E1E1E" />
+
 </ResourceDictionary>

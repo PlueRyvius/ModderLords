@@ -6,8 +6,9 @@
 
          Why the container controls (DataGrid, ListBox, TabControl, ComboBox) are styled at all: WPF's
          stock templates paint themselves white regardless of what the window's brushes say, so without
-         these the dark theme would leave the Mods grid and the console blazing white. These set colours
-         only — no retemplating — so the Aero chrome, focus rings and mouse-over behaviour are untouched. -->
+         these the dark theme would leave the Mods grid and the console blazing white. Those are colour-only
+         overrides, leaving the stock chrome and focus rings alone. Button and TabItem are the exception —
+         see the note above their styles: for those, colour alone is not enough. -->
 
     <!-- Text foreground is inherited (TextElement.Foreground), so setting it on Window carries it to every
          TextBlock and Run in the tree. That is deliberate: it means no implicit TextBlock style, which would
@@ -18,11 +19,42 @@
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
     </Style>
 
+    <!-- Buttons and tabs are templated rather than merely re-coloured. WPF's stock templates draw their own
+         light chrome and ignore Background, so setting Foreground alone produced near-white text on a
+         light-grey face in the dark theme: unreadable. A template is the only way these honour the theme in
+         every state, disabled and mouse-over included. -->
     <Style TargetType="Button">
         <Setter Property="Padding" Value="10,4" />
         <Setter Property="Margin" Value="4,0" />
         <Setter Property="MinWidth" Value="70" />
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="2" SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" RecognizesAccessKey="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ButtonHoverBackground}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ButtonPressedBackground}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource DisabledBackground}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledForeground}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="CheckBox">
@@ -67,6 +99,35 @@
 
     <Style TargetType="TabItem">
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+        <Setter Property="Background" Value="{DynamicResource TabBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1,1,1,0" CornerRadius="3,3,0,0" Margin="0,0,2,0">
+                        <ContentPresenter ContentSource="Header" Margin="10,4" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource TabSelectedBackground}" />
+                            <Setter Property="FontWeight" Value="Bold" />
+                            <Setter Property="Panel.ZIndex" Value="1" />
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="False" />
+                                <Condition Property="IsMouseOver" Value="True" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource TabHoverBackground}" />
+                        </MultiTrigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledForeground}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="DataGrid">

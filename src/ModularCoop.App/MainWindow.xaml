@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:ModularCoop.App.ViewModels"
         xmlns:logs="clr-namespace:ModularCoop.Core.Logs;assembly=ModularCoop.Core"
+        xmlns:compat="clr-namespace:ModularCoop.Core.Compat;assembly=ModularCoop.Core"
         Title="Modular Bannerlords Coop" Height="820" Width="1280" MinWidth="960" MinHeight="600"
         Closing="Window_Closing">
     <Window.DataContext>
@@ -107,7 +108,18 @@
                                 <DataGridTemplateColumn Header="Compat" Width="150" SortMemberPath="CompatText">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <TextBlock Text="{Binding CompatText}" Foreground="{Binding CompatColor}" ToolTip="{Binding CompatTip}" VerticalAlignment="Center" Margin="2,0" />
+                                            <TextBlock Text="{Binding CompatText}" ToolTip="{Binding CompatTip}" VerticalAlignment="Center" Margin="2,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource MutedForeground}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding CompatVerdictValue}" Value="{x:Static compat:CompatVerdict.Works}"><Setter Property="Foreground" Value="{DynamicResource SuccessForeground}" /></DataTrigger>
+                                                            <DataTrigger Binding="{Binding CompatVerdictValue}" Value="{x:Static compat:CompatVerdict.NeedsRecipe}"><Setter Property="Foreground" Value="{DynamicResource WarningForeground}" /></DataTrigger>
+                                                            <DataTrigger Binding="{Binding CompatVerdictValue}" Value="{x:Static compat:CompatVerdict.Broken}"><Setter Property="Foreground" Value="{DynamicResource DangerForeground}" /></DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>

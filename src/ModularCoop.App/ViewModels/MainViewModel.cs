@@ -56,7 +56,7 @@ public partial class ModRow : ObservableObject
 
     /// <summary>Curated verdict from the compat database (bundled + local override); refreshed by Rescan and after Record….</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CompatText), nameof(CompatColor), nameof(CompatTip))]
+    [NotifyPropertyChangedFor(nameof(CompatText), nameof(CompatVerdictValue), nameof(CompatTip))]
     private CompatBadge _compat = CompatBadge.None;
 
     public string CompatText => Compat.Verdict switch
@@ -67,13 +67,11 @@ public partial class ModRow : ObservableObject
         _ => Compat.Source == CompatSource.None ? "" : "Unknown",
     } + (Compat.VersionUntested ? " · untested version" : "");
 
-    public string CompatColor => Compat.Verdict switch
-    {
-        CompatVerdict.Works => "#2E7D32",
-        CompatVerdict.NeedsRecipe => "#B26A00",
-        CompatVerdict.Broken => "#C62828",
-        _ => "#777777",
-    };
+    /// <summary>
+    /// The verdict itself, for the Mods grid to colour by. The colour used to be a hex string built here,
+    /// which meant the Compat column ignored the theme entirely; the view now maps this to a theme brush.
+    /// </summary>
+    public CompatVerdict CompatVerdictValue => Compat.Verdict;
 
     public string CompatTip
     {
