@@ -231,7 +231,18 @@
                         <Button Content="Apply" Command="{Binding ApplyCommand}" FontWeight="Bold" ToolTip="Send the changed values to the running server; players get them on the next sync tick" />
                         <Button Content="Revert" Command="{Binding RevertCommand}" ToolTip="Discard unsent edits in this settings object" />
                         <Button Content="Reload" Command="{Binding ReloadCommand}" ToolTip="Re-read what the server last reported" />
-                        <TextBlock VerticalAlignment="Center" Margin="12,0" Text="{Binding StatusText}" Foreground="#666" TextWrapping="Wrap" />
+                        <Button Content="Clear overrides" Command="{Binding ClearOverridesCommand}" ToolTip="Forget the stored host overrides for the selected settings object (they are re-applied at every launch until cleared)" />
+                        <Border VerticalAlignment="Center" Margin="12,0,0,0" Padding="8,2" CornerRadius="9" Background="#DDD">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsLive}" Value="True"><Setter Property="Background" Value="#DFF0D8" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="{Binding ModeText}" FontWeight="Bold" FontSize="11" />
+                        </Border>
+                        <TextBlock VerticalAlignment="Center" Margin="8,0" Text="{Binding StatusText}" Foreground="#666" TextWrapping="Wrap" MaxWidth="700" />
                     </StackPanel>
                     <TextBlock DockPanel.Dock="Bottom" Text="{Binding ApplyReport}" Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#2E7D32" />
                     <Grid>
@@ -245,6 +256,16 @@
                                     <StackPanel Margin="2">
                                         <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" />
                                         <TextBlock Text="{Binding Subtitle}" Foreground="#666" FontSize="11" TextWrapping="Wrap" />
+                                        <TextBlock Foreground="#B26A00" FontSize="11">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="{Binding OverrideCount, StringFormat='{}{0} override(s)'}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding OverrideCount}" Value="0"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </StackPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
@@ -281,6 +302,10 @@
                                                                 <TextBlock Text="{Binding Value}" Foreground="#999" VerticalAlignment="Center" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}" TextTrimming="CharacterEllipsis" />
                                                             </Grid>
                                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                                <Border Background="#FFF4CE" BorderBrush="#E0C060" BorderThickness="1" CornerRadius="3" Padding="4,0" Margin="0,0,8,0"
+                                                                        Visibility="{Binding HasOverride, Converter={StaticResource BoolToVis}}" ToolTip="{Binding OverrideTip}">
+                                                                    <TextBlock Text="override" FontSize="10" />
+                                                                </Border>
                                                                 <TextBlock Text="{Binding RangeText}" Foreground="#888" FontSize="11" />
                                                                 <TextBlock Text="{Binding KindText}" Foreground="#AAA" FontSize="11" Margin="8,0,0,0" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}" />
                                                                 <TextBlock Text="{Binding Error}" Foreground="#C62828" FontSize="11" Margin="8,0,0,0" Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}" />
