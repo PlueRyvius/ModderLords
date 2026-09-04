@@ -20,9 +20,12 @@ public partial class LauncherSyncWindow : Window
         BackupLine.Text = "A copy of the current file is saved to " + backupRoot + " first.";
 
         Section("Enable", "Turn on — the server runs these", plan.Changes.Where(c => c.Action == LauncherDataSync.SyncAction.Enable));
+        Section("Add", "Add to the list — installed, but the Bannerlord launcher has never listed them", plan.Changes.Where(c => c.Action == LauncherDataSync.SyncAction.Add));
         Section("Disable", "Turn off — the server does not run these, and Coop rejects extras", plan.Changes.Where(c => c.Action == LauncherDataSync.SyncAction.Disable));
         Section("Move", "Reorder to match the server's load order", plan.Changes.Where(c => c.Action == LauncherDataSync.SyncAction.Move));
         Section("Blocked", "Cannot be fixed from here — you will still be able to launch, but the join may be refused", plan.Blockers);
+        if (!plan.HasChanges)
+            Sections.Children.Add(new TextBlock { Text = "Your mod list already matches the server; nothing to change.", Margin = new Thickness(0, 8, 0, 4), TextWrapping = TextWrapping.Wrap });
     }
 
     private void Section(string _, string heading, IEnumerable<LauncherDataSync.PlannedChange> changes)

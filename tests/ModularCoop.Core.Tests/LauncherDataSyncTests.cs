@@ -240,6 +240,53 @@ public class LauncherDataSyncTests : IDisposable
     }
 
     [Fact]
+    public void A_mod_the_launcher_has_never_listed_is_added_not_called_missing()
+    {
+        // Freshly subscribed: on disk where the client loads from, but absent from the file because the launcher
+        // has not run since. Reporting "not installed" was wrong and left the player with nothing to do.
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true));
+        var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MyLittleWarband" };
+        var plan = LauncherDataSync.ComputePlan([E("MyLittleWarband", "e1.4.6")], Order("MyLittleWarband"), path, installed);
+
+        Assert.Contains(plan.Changes, c => c.Id == "MyLittleWarband" && c.Action == LauncherDataSync.SyncAction.Add);
+        Assert.Empty(plan.Blockers);
+
+        var result = LauncherDataSync.Apply(plan, path, BackupRoot);
+        Assert.Equal(1, result!.Added);
+        var after = Read(path).Single(x => x.Id == "MyLittleWarband");
+        Assert.True(after.Selected);
+    }
+
+    [Fact]
+    public void Without_an_installed_set_an_absent_entry_is_still_reported_as_missing()
+    {
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true));
+        var plan = LauncherDataSync.ComputePlan([E("MyLittleWarband", "e1.4.6")], Order("MyLittleWarband"), path);
+        Assert.Contains(plan.Blockers, c => c.Id == "MyLittleWarband" && c.Action == LauncherDataSync.SyncAction.Unfixable);
+    }
+
+    [Fact]
+    public void An_added_entry_is_ordered_in_the_same_pass()
+    {
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("B", "v1", true));
+        var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "A", "B" };
+        var plan = LauncherDataSync.ComputePlan([E("A", "v1"), E("B", "v1")], Order("A", "B"), path, installed);
+
+        LauncherDataSync.Apply(plan, path, BackupRoot);
+        var ids = Read(path).Select(x => x.Id).ToList();
+        Assert.True(ids.IndexOf("A") < ids.IndexOf("B"));   // converges in one run, not two
+    }
+
+    [Fact]
+    public void A_ticked_mod_whose_folder_is_gone_is_flagged()
+    {
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("ModularCoop.Compat", "v0.1.0", true));
+        var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // nothing on disk any more
+        var plan = LauncherDataSync.ComputePlan([E("ModularCoop.Compat", "v0.1.0")], Order("ModularCoop.Compat"), path, installed);
+        Assert.Contains(plan.Blockers, c => c.Id == "ModularCoop.Compat" && c.Detail.Contains("not on this PC any more"));
+    }
+
+    [Fact]
     public void A_missing_file_is_reported_and_never_created()
     {
         var path = Path.Combine(_dir, "nope", "LauncherData.xml");

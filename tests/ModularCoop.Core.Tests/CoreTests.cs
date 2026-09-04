@@ -173,6 +173,21 @@ public class ClientLauncherTests
         finally { Directory.Delete(root, true); }
     }
 
+    /// <summary>
+    /// Bannerlord.exe is the STARTER, not the launcher: run bare it loads the default modules, because the game
+    /// takes its list from the _MODULES_ argument the launcher builds and never reads LauncherData.xml. Starting it
+    /// dropped every mod including Coop, so the launcher UI must stay the preferred exe.
+    /// </summary>
+    [Fact]
+    public void The_preferred_exe_is_the_launcher_ui_not_the_game_starter()
+    {
+        Assert.Equal("TaleWorlds.MountAndBlade.Launcher.exe", ClientLauncher.LauncherExeName);
+        Assert.Equal("Bannerlord.exe", ClientLauncher.GameExeName);
+        var root = MakeGameRoot(ClientLauncher.LauncherExeName, ClientLauncher.GameExeName);
+        try { Assert.EndsWith(ClientLauncher.LauncherExeName, ClientLauncher.FindExe(root)); }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Fact]
     public void Falls_back_to_whichever_exe_exists()
     {

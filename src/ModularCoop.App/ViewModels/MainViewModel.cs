@@ -675,6 +675,42 @@ public partial class MainViewModel : ObservableObject
     /// refused over a mod list. Returns false only when the player cancels the confirmation; anything the sync
     /// cannot fix is reported and we launch anyway, since Coop's own rejection message says more than we could.
     /// </summary>
+    /// <summary>
+    /// Ids the CLIENT can load: the game's own Modules folder and the Steam workshop. Lets the sync tell a mod the
+    /// Bannerlord launcher has simply never scanned from one that really is not installed.
+    /// </summary>
+    private IReadOnlySet<string> InstalledClientSide() =>
+        _prepared is null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : _prepared.Catalog.Modules
+                .Where(m => m.Source is ModuleSourceKind.GameModules or ModuleSourceKind.Workshop)
+                .Select(m => m.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Shows the mod-list diff on demand, including when there is nothing to change — Launch client only opens it
+    /// when there are edits, so this is how you check what it would do without launching anything.
+    /// </summary>
+    [RelayCommand]
+    private void MatchServer()
+    {
+        if (_prepared is null) RefreshPreview();
+        if (_prepared is null) { Status = "Nothing to compare yet: rescan the mods first."; return; }
+        var path = ClientManifest.DefaultLauncherDataPath();
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared), _prepared.Order, path, InstalledClientSide());
+        var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
+        if (win.ShowDialog() != true) return;
+        try
+        {
+            var result = LauncherDataSync.Apply(plan, path, LauncherDataSync.DefaultBackupRoot());
+            Status = result is null
+                ? "Your mod list already matches the server."
+                : $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved).";
+            if (result is not null) AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced (backup: {result.BackupPath})");
+        }
+        catch (Exception ex) { Status = ex.Message; }
+    }
+
     private bool SyncLauncherData()
     {
         var path = ClientManifest.DefaultLauncherDataPath();
@@ -685,7 +721,7 @@ public partial class MainViewModel : ObservableObject
             return true;
         }
 
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared), _prepared.Order, path);
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared), _prepared.Order, path, InstalledClientSide());
         foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModularCoop] mod list: {b.Id} — {b.Detail}");
         if (!plan.HasChanges)
         {
@@ -712,8 +748,8 @@ public partial class MainViewModel : ObservableObject
         var result = LauncherDataSync.Apply(plan, path, backupRoot);
         if (result is not null)
         {
-            AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced: {result.Enabled} enabled, {result.Disabled} disabled, {result.Moved} reordered (backup: {result.BackupPath})");
-            Status = $"Mod list synced ({result.Enabled} on, {result.Disabled} off, {result.Moved} moved).";
+            AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced: {result.Enabled} enabled, {result.Added} added, {result.Disabled} disabled, {result.Moved} reordered (backup: {result.BackupPath})");
+            Status = $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved).";
         }
         return true;
     }

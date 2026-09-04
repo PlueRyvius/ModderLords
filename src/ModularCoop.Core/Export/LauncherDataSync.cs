@@ -21,6 +21,11 @@ public static class LauncherDataSync
     {
         /// <summary>Tick a module the server runs.</summary>
         Enable,
+        /// <summary>
+        /// Add a list entry for a module that is installed but that the Bannerlord launcher has never scanned —
+        /// it only learns about a mod when it runs, so anything subscribed since is simply absent from the file.
+        /// </summary>
+        Add,
         /// <summary>Untick a community module the server does not run (the validator rejects extras).</summary>
         Disable,
         /// <summary>Move a module so the client's load order matches the server's.</summary>
@@ -31,7 +36,8 @@ public static class LauncherDataSync
         Warning,
     }
 
-    public sealed record PlannedChange(string Id, SyncAction Action, string Detail)
+    /// <param name="Version">Only set for Add: the version to record in the new entry.</param>
+    public sealed record PlannedChange(string Id, SyncAction Action, string Detail, string? Version = null)
     {
         public override string ToString() => $"{Action,-9} {Id,-30} {Detail}";
     }
@@ -46,16 +52,16 @@ public static class LauncherDataSync
     {
         /// <summary>Edits we are going to make. A plan with none of these needs no dialog and writes nothing.</summary>
         public IReadOnlyList<PlannedChange> Edits =>
-            Changes.Where(c => c.Action is SyncAction.Enable or SyncAction.Disable or SyncAction.Move).ToList();
+            Changes.Where(c => c.Action is SyncAction.Enable or SyncAction.Add or SyncAction.Disable or SyncAction.Move).ToList();
 
         /// <summary>Things the player has to fix themselves. Always reported, whether or not there are edits.</summary>
         public IReadOnlyList<PlannedChange> Blockers =>
             Changes.Where(c => c.Action is SyncAction.Unfixable or SyncAction.Warning).ToList();
 
-        public bool HasChanges => Changes.Any(c => c.Action is SyncAction.Enable or SyncAction.Disable or SyncAction.Move);
+        public bool HasChanges => Changes.Any(c => c.Action is SyncAction.Enable or SyncAction.Add or SyncAction.Disable or SyncAction.Move);
     }
 
-    public sealed record SyncResult(string BackupPath, int Enabled, int Disabled, int Moved);
+    public sealed record SyncResult(string BackupPath, int Enabled, int Added, int Disabled, int Moved);
 
     /// <summary>Backups live next to the profiles, not in the game's Configs folder, which belongs to the game.</summary>
     public static string DefaultBackupRoot() => Path.Combine(ProfileStore.RootDir, "launcher-backups");
@@ -68,7 +74,13 @@ public static class LauncherDataSync
     /// Works out what would have to change for this client to satisfy the server, without touching anything.
     /// <paramref name="order"/> is the server's computed load order (LaunchSession.Prepared.Order).
     /// </summary>
-    public static SyncPlan ComputePlan(IReadOnlyList<ClientManifest.Entry> serverMods, LoadOrder.Result order, string launcherDataPath)
+    /// <param name="installedClientSide">
+    /// Ids the client can actually load (game Modules + Steam workshop, from the catalog we already scanned). Used to
+    /// tell "the launcher has not seen it yet", which we can fix by writing the entry, from "not installed", which we
+    /// cannot. Pass null to skip the distinction and report every absent entry as not installed.
+    /// </param>
+    public static SyncPlan ComputePlan(IReadOnlyList<ClientManifest.Entry> serverMods, LoadOrder.Result order, string launcherDataPath,
+                                       IReadOnlySet<string>? installedClientSide = null)
     {
         var changes = new List<PlannedChange>();
         if (!File.Exists(launcherDataPath))
@@ -107,7 +119,17 @@ public static class LauncherDataSync
         {
             if (!byId.TryGetValue(e.Id, out var c))
             {
-                changes.Add(new PlannedChange(e.Id, SyncAction.Unfixable, $"the server runs {e.Version} but it is not installed on this PC"));
+                // No entry is not the same as not installed: the launcher only lists what it has scanned, so a mod
+                // subscribed since it last ran is missing from the file even though the client could load it fine.
+                if (installedClientSide?.Contains(e.Id) == true)
+                {
+                    changes.Add(new PlannedChange(e.Id, SyncAction.Add, "installed, but the Bannerlord launcher has not listed it yet", e.Version));
+                    enabling.Add(e.Id);
+                }
+                else
+                {
+                    changes.Add(new PlannedChange(e.Id, SyncAction.Unfixable, $"the server runs {e.Version} but it is not installed on this PC"));
+                }
                 continue;
             }
             // A version mismatch cannot be ticked away: the validator compares versions, so ticking the wrong one
@@ -131,7 +153,16 @@ public static class LauncherDataSync
                 c.Id.Equals("NavalDLC", StringComparison.OrdinalIgnoreCase) ? "DLC must be off to join" : "the server does not run it"));
         }
 
-        changes.AddRange(PlanOrder(client, order, enabling, out var targetOrder));
+        // A ticked entry whose module is no longer on disk: the launcher keeps the entry until it rescans, and the
+        // player sees a mod they think is on. Worth saying out loud; we leave the entry alone.
+        if (installedClientSide is not null)
+            foreach (var c in client)
+                if (c.Selected && !installedClientSide.Contains(c.Id)
+                    && !ClientManifest.OfficialModuleIds.Contains(c.Id) && !ClientManifest.CoopClientModuleIds.Contains(c.Id))
+                    changes.Add(new PlannedChange(c.Id, SyncAction.Warning, "enabled in the launcher, but its folder is not on this PC any more"));
+
+        var added = changes.Where(x => x.Action == SyncAction.Add).Select(x => x.Id).ToList();
+        changes.AddRange(PlanOrder(client, added, order, enabling, out var targetOrder));
         return new SyncPlan(changes, targetOrder);
     }
 
@@ -140,7 +171,7 @@ public static class LauncherDataSync
     /// in the positions they already occupy. Officials, the Coop entry and anything left unticked never move, so the
     /// player's own arrangement of mods they are not using now survives.
     /// </summary>
-    private static List<PlannedChange> PlanOrder(IReadOnlyList<ClientEntry> client, LoadOrder.Result order,
+    private static List<PlannedChange> PlanOrder(IReadOnlyList<ClientEntry> client, IReadOnlyList<string> added, LoadOrder.Result order,
                                                  IReadOnlySet<string> enabling, out IReadOnlyList<string> targetOrder)
     {
         var moves = new List<PlannedChange>();
@@ -154,6 +185,7 @@ public static class LauncherDataSync
 
         // Their current relative order in the file, ignoring everything we are not moving.
         var current = client.Select(c => c.Id).Where(id => target.Contains(id, StringComparer.OrdinalIgnoreCase)).ToList();
+        current.AddRange(added.Where(id => target.Contains(id, StringComparer.OrdinalIgnoreCase)));   // Apply appends them first
         if (current.Count != target.Count || current.SequenceEqual(target, StringComparer.OrdinalIgnoreCase)) return moves;
 
         targetOrder = target;
@@ -182,6 +214,12 @@ public static class LauncherDataSync
         // declaration, the xmlns attributes, MultiplayerData, DLLCheckData — is then untouched by construction.
         var doc = new XmlDocument();
         doc.Load(launcherDataPath);
+
+        // Entries the launcher has never written are appended first, so the passes below treat them like any other.
+        var added = 0;
+        foreach (var change in plan.Changes.Where(x => x.Action == SyncAction.Add))
+            if (AppendEntry(doc, change.Id, change.Version ?? "")) added++;
+
         var client = ReadClientList(doc);
         var byId = client.GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
                          .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
@@ -201,7 +239,7 @@ public static class LauncherDataSync
         var tmp = launcherDataPath + ".tmp";
         doc.Save(tmp);
         File.Move(tmp, launcherDataPath, overwrite: true);
-        return new SyncResult(backup, enabled, disabled, moved);
+        return new SyncResult(backup, enabled, added, disabled, moved);
     }
 
     /// <summary>Document order is the load order — there is no priority field — so this physically moves the nodes.</summary>
@@ -233,6 +271,21 @@ public static class LauncherDataSync
         }
         for (var i = 0; i < ordered.Count; i++) parent.ReplaceChild(ordered[i], placeholders[i]);
         return changed;
+    }
+
+    /// <summary>Writes a new UserModData with the same three children the launcher uses, selected, at the end of the list.</summary>
+    private static bool AppendEntry(XmlDocument doc, string id, string version)
+    {
+        if (doc.SelectSingleNode("/UserData/SingleplayerData/ModDatas") is not XmlElement parent) return false;
+        var entry = doc.CreateElement("UserModData");
+        foreach (var (name, value) in new[] { ("Id", id), ("LastKnownVersion", version), ("IsSelected", "true") })
+        {
+            var child = doc.CreateElement(name);
+            child.InnerText = value;
+            entry.AppendChild(child);
+        }
+        parent.AppendChild(entry);
+        return true;
     }
 
     private static List<ClientEntry> ReadClientList(XmlDocument doc)

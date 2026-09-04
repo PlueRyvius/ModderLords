@@ -15,11 +15,18 @@ namespace ModularCoop.Core.Launch;
 /// </summary>
 public static class ClientLauncher
 {
-    /// <summary>The TaleWorlds launcher, where the player picks their module list.</summary>
-    public const string LauncherExeName = "Bannerlord.exe";
+    /// <summary>
+    /// The TaleWorlds launcher UI (its FileDescription is "BannerlordLauncher"), which is what Steam's Play button
+    /// opens. Bannerlord.exe is NOT this: it is the starter, and it is the wrong thing to run — see below.
+    /// </summary>
+    public const string LauncherExeName = "TaleWorlds.MountAndBlade.Launcher.exe";
 
-    /// <summary>The game itself, started with whatever module list the launcher last saved.</summary>
-    public const string GameExeName = "Bannerlord.Native.exe";
+    /// <summary>
+    /// The game starter ("BannerlordStarter"). Started bare it loads the default module set: the game takes its
+    /// list from the _MODULES_*...*_MODULES_ argument the launcher builds, NOT from LauncherData.xml, so running
+    /// this instead of the launcher silently drops every mod, Coop included. Only a fallback.
+    /// </summary>
+    public const string GameExeName = "Bannerlord.exe";
 
     public static string ClientBin(string gameRoot) => Path.Combine(gameRoot, "bin", "Win64_Shipping_Client");
 
@@ -43,10 +50,12 @@ public static class ClientLauncher
         return null;
     }
 
+    /// <summary>The launcher, the starter and the game itself, by process name.</summary>
+    private static readonly string[] ClientProcessNames =
+        ["TaleWorlds.MountAndBlade.Launcher", "Launcher.Native", "Bannerlord", "Bannerlord.Native"];
+
     /// <summary>True when a client or the TaleWorlds launcher is already up, so we don't start a second one.</summary>
-    public static bool IsClientRunning()
-        => Process.GetProcessesByName("Bannerlord").Length > 0
-           || Process.GetProcessesByName("Bannerlord.Native").Length > 0;
+    public static bool IsClientRunning() => ClientProcessNames.Any(n => Process.GetProcessesByName(n).Length > 0);
 
     /// <summary>
     /// Starts the client detached: no job object (unlike the engine, it must survive closing the launcher),
