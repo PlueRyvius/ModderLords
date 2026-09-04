@@ -1,3 +1,4 @@
+﻿using ModularCoop.Core.Export;
 using ModularCoop.Core.Launch;
 using ModularCoop.Core.Logs;
 using ModularCoop.Core.Modules;
@@ -65,7 +66,30 @@ switch (cmd)
         return result is null ? 2 : 0;
     }
 
-    case "launch" when opts.ContainsKey("profile"):
+    // What Launch client would do to this PC's Bannerlord launcher mod list, without touching anything.
+    case "client-plan" when opts.ContainsKey("profile"):
+    {
+        var name = opts["profile"];
+        var profile = ProfileStore.Load(name);
+        if (profile is null) { Console.Error.WriteLine("[ModularCoop] no such profile: " + name); return 2; }
+        var prepared = LaunchSession.Prepare(profile, applySideEffects: false);
+        var installed = prepared.Catalog.Modules
+            .Where(m => m.Source is ModuleSourceKind.GameModules or ModuleSourceKind.Workshop)
+            .Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var launcherData = ClientManifest.DefaultLauncherDataPath();
+
+        Console.WriteLine("launcher data : " + launcherData);
+        Console.WriteLine("server order  : " + string.Join(", ", prepared.Order.ModuleIds));
+        Console.WriteLine("server mods   : " + string.Join(", ", ClientManifest.From(prepared).Select(e => $"{e.Id} {e.Version}")));
+        Console.WriteLine("client-visible: " + string.Join(", ", installed.OrderBy(x => x)));
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(prepared), prepared.Order, launcherData, installed);
+        Console.WriteLine("target order  : " + string.Join(", ", plan.TargetOrder));
+        Console.WriteLine(plan.Changes.Count == 0 ? "no changes" : "changes:");
+        foreach (var ch in plan.Changes) Console.WriteLine("  " + ch);
+        return 0;
+    }
+
+    case "launch" when opts.ContainsKey("profile"):    case "launch" when opts.ContainsKey("profile"):
     {
         // Same path the app uses: profile -> overlay -> config -> recipes -> engine.
         var profile = ProfileStore.Load(opts["profile"]);
