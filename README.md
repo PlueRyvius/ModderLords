@@ -92,8 +92,20 @@ something this launcher does.
 
 **Launch client** in the top bar starts Bannerlord straight from the game folder
 (`bin\Win64_Shipping_Client\Bannerlord.exe`), which Steam does not block. Steam still sees the client and signs it
-in as usual, and you still pick your module list in the TaleWorlds launcher as normal. The client is independent of
+in as usual, and the TaleWorlds launcher opens as normal. The client is independent of
 this app — closing the launcher does not close your game.
+
+Before it starts the game it also brings your module list in line with the server, so the join is not refused over
+a mismatched mod list. It shows you exactly what it will change first — which mods it turns on, which it turns off
+(Coop rejects a client that has community mods the server does not), and any it reorders to match the server's load
+order — and nothing is written until you accept. Tick **Don't ask again for this profile** to have it apply silently
+from then on.
+
+It is deliberately narrow about what it touches. The official TaleWorlds modules, the Coop mod itself, your
+multiplayer mod list and the launcher's DLL list are never modified, and the previous file is copied to
+`%LOCALAPPDATA%\ModularCoop\launcher-backups\<timestamp>\` before every change. What it cannot do is install a
+missing mod or change a version already on disk: those are reported in the console, and the client still starts, so
+you will see Coop's own message if the join is refused.
 
 ---
 
