@@ -1,4 +1,4 @@
-<Window x:Class="ModularCoop.App.MainWindow"
+﻿<Window x:Class="ModularCoop.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:ModularCoop.App.ViewModels"
@@ -29,6 +29,8 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
                     <Button x:Name="ThemeButton" Content="Dark" Click="Theme_Click" MinWidth="52" Margin="4,0,12,0"
                             ToolTip="Switch between the light and dark theme" />
+                    <Button Content="Launch client" Command="{Binding LaunchClientCommand}" Margin="4,0,20,0"
+                            ToolTip="Start Bannerlord from the game folder. Steam's Play button is blocked while the coop server is running, because the Coop mod logs the server on to Steam as a game server; starting the exe here is not blocked." />
                     <Button Content="Launch server" Command="{Binding LaunchCommand}" FontWeight="Bold" Background="{DynamicResource SuccessBackground}" />
                     <Button Content="Stop" Command="{Binding StopCommand}" Background="{DynamicResource DangerBackground}" />
                 </StackPanel>

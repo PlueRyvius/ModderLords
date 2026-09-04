@@ -1,4 +1,4 @@
-# Modular Bannerlords Coop
+﻿# Modular Bannerlords Coop
 
 Run the **Bannerlord Coop dedicated server with your mods**, using the untouched official server from the Steam
 Workshop and the mods exactly where they already live for single player. No copying mods around, no patched server
@@ -78,7 +78,22 @@ not the five stock folders `Native`, `SandBoxCore`, `SandBox`, `Coop`, `Dedicate
    the server is ready. First load takes about a minute.
 5. **Players tab**: click **Copy** and send the list to your players. They enable exactly those mods and join through
    the Coop mod's server browser (Steam) or by direct IP.
-6. When you are done, click **Stop**. The server shuts down cleanly and autosaves.
+6. Hosting and playing on the same PC? Use **Launch client** rather than Steam's Play button — see below.
+7. When you are done, click **Stop**. The server shuts down cleanly and autosaves.
+
+---
+
+## Playing on the machine that runs the server
+
+While the coop server is up, Steam's **Play** button for Bannerlord is unavailable: the Coop mod logs the server on
+to Steam as a game server for Bannerlord, so Steam treats the game as already running. This is part of the official
+Coop dedicated server package (its assemblies are hash-verified at boot, so it cannot be turned off) and not
+something this launcher does.
+
+**Launch client** in the top bar starts Bannerlord straight from the game folder
+(`bin\Win64_Shipping_Client\Bannerlord.exe`), which Steam does not block. Steam still sees the client and signs it
+in as usual, and you still pick your module list in the TaleWorlds launcher as normal. The client is independent of
+this app — closing the launcher does not close your game.
 
 ---
 
