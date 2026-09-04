@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:ModularCoop.App.ViewModels"
         xmlns:logs="clr-namespace:ModularCoop.Core.Logs;assembly=ModularCoop.Core"
         xmlns:compat="clr-namespace:ModularCoop.Core.Compat;assembly=ModularCoop.Core"
+        xmlns:controls="clr-namespace:ModularCoop.App.Controls"
         Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
         Title="Modular Bannerlords Coop" Height="820" Width="1280" MinWidth="960" MinHeight="600"
         Closing="Window_Closing">
@@ -464,6 +465,59 @@
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
                     </DockPanel>
                 </Grid>
+            </TabItem>
+
+            <!-- PERFORMANCE -->
+            <TabItem Header="Performance">
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Performance.SessionState}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,4" />
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
+                               Text="Measured against what YOUR server normally does this session, not against fixed numbers — the first minute after launch is ignored as world load. Samples arrive every 10 seconds." />
+
+                    <Border DockPanel.Dock="Top" Padding="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Campaign time: " Foreground="{DynamicResource MutedForeground}" />
+                            <TextBlock Text="{Binding Performance.CampaignMode}" Margin="0,0,20,0" />
+                            <TextBlock Text="Players: " Foreground="{DynamicResource MutedForeground}" />
+                            <TextBlock Text="{Binding Performance.Players}" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding Performance.PlayersNote}" Foreground="{DynamicResource MutedForeground}" FontStyle="Italic" />
+                        </StackPanel>
+                    </Border>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Performance.Metrics}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{DynamicResource ButtonBorder}" BorderThickness="1" CornerRadius="2" Padding="10" Margin="0,0,0,8">
+                                        <DockPanel>
+                                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                                                <TextBlock Text="{Binding Title}" FontWeight="Bold" />
+                                                <TextBlock Text="{Binding Value}" HorizontalAlignment="Right" DockPanel.Dock="Right" FontFamily="Consolas" FontSize="15" />
+                                            </DockPanel>
+                                            <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,0,0,2">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Departed}" Value="True">
+                                                                <Setter Property="Foreground" Value="{DynamicResource WarningBorder}" />
+                                                                <Setter Property="FontWeight" Value="Bold" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock DockPanel.Dock="Bottom" Text="{Binding Explanation}" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource MutedForeground}" FontSize="11" Margin="0,4,0,0" />
+                                            <controls:Sparkline Values="{Binding History}" BandLow="{Binding BandLow}"
+                                                                BandHigh="{Binding BandHigh}" HasBand="{Binding HasBand}" Height="52" />
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
             </TabItem>
         </TabControl>
     </DockPanel>

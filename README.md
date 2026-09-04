@@ -123,6 +123,27 @@ you can check what Launch client would do without launching anything.
 
 ---
 
+## Performance
+
+The **Performance** tab shows how the server is running: tick rate, the worst single frame in each window, the
+engine process's CPU share and memory, plus whether campaign time is actually moving.
+
+There are no fixed good/bad numbers, because there aren't any — what is normal depends on your machine, your mod
+set and how many people are on. Instead it learns what YOUR server does: the first minute after launch is ignored
+as world load, and after that each reading is compared against the session's own normal range. It only says
+something is wrong when a metric has sat outside that range for 30 seconds, so a save write or someone joining does
+not raise a false alarm.
+
+Measuring is deliberately cheap. The server counts frames in a few variables and prints one line every ten seconds;
+CPU and memory are read by the launcher watching the process, which costs the server nothing at all. Those two are
+the numbers that would have shown v0.8.3's runaway long before the stutter was noticeable. Tick rate needs the
+compat guards module (on by default); the player count needs Settings sync, and the tab says so when it is missing.
+
+Each session's summary is written to `%LOCALAPPDATA%\ModularCoop\perf\` so real thresholds can be worked out later
+from real data.
+
+---
+
 ## Sharing a mod list
 
 **Players tab → Export…** writes the mod list to a `.json` file: every mod with its version and workshop link, the

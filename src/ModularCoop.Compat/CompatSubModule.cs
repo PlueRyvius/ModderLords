@@ -14,6 +14,9 @@ public sealed class CompatSubModule : MBSubModuleBase
     public const string HarmonyId = "ModularCoop.Compat";
     internal static readonly Harmony Harmony = new Harmony(HarmonyId);
 
+    /// <summary>Null off a dedicated server, so the tick override costs a null check and nothing else.</summary>
+    private PerfSampler _perf;
+
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();
@@ -26,11 +29,25 @@ public sealed class CompatSubModule : MBSubModuleBase
             }
             var installed = Guards.InstallAll(Harmony);
             Log.Info($"server guards installed: {installed}");
+            _perf = new PerfSampler();
+            Log.Info($"performance samples every {PerfSampler.ReportPeriodSeconds:0} seconds");
         }
         catch (Exception ex)
         {
             Log.Error("guard installation failed: " + ex);
         }
+    }
+
+    /// <summary>
+    /// The engine already calls this every frame for every submodule; dt is the frame delta it hands us. Measuring
+    /// from here adds an add and a compare per frame and no allocation at all — see PerfSampler for why that matters.
+    /// </summary>
+    protected override void OnApplicationTick(float dt)
+    {
+        base.OnApplicationTick(dt);
+        if (_perf is null) return;
+        try { _perf.Tick(dt); }
+        catch { _perf = null; }   // never let a meter break the server it is measuring
     }
 }
 
