@@ -71,15 +71,85 @@
         <Setter Property="CaretBrush" Value="{DynamicResource Foreground}" />
     </Style>
 
+    <!-- Same story again: the stock ComboBox renders a white box and puts the theme light text on it, which in
+         dark mode made the profile picker unreadable. Templated down to the parts that carry colour. -->
+    <Style x:Key="ComboToggle" TargetType="ToggleButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="ClickMode" Value="Press" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Chrome" Background="{DynamicResource ControlBackground}" BorderBrush="{DynamicResource ControlBorder}"
+                            BorderThickness="1" CornerRadius="2">
+                        <Path x:Name="Arrow" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"
+                              Data="M 0 0 L 4 4 L 8 0 Z" Fill="{DynamicResource Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ButtonHoverBackground}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource DisabledBackground}" />
+                            <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource DisabledForeground}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="ComboBox">
         <Setter Property="Background" Value="{DynamicResource ControlBackground}" />
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}" />
+        <Setter Property="MinHeight" Value="22" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton Style="{StaticResource ComboToggle}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" />
+                        <ContentPresenter x:Name="Content" Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          Margin="6,0,20,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                        <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True"
+                               Focusable="False" PopupAnimation="Slide">
+                            <Border Background="{DynamicResource ControlBackground}" BorderBrush="{DynamicResource ControlBorder}"
+                                    BorderThickness="1" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                <ScrollViewer>
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledForeground}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="ComboBoxItem">
         <Setter Property="Background" Value="{DynamicResource ControlBackground}" />
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Chrome" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SelectionBackground}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="ListBox">
@@ -92,9 +162,28 @@
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
     </Style>
 
+    <!-- Templated for the same reason as Button: the stock TabControl paints its content panel a hardcoded
+         white and ignores Background, which left a white frame around every tab in the dark theme. -->
     <Style TargetType="TabControl">
-        <Setter Property="Background" Value="{DynamicResource WindowBackground}" />
+        <Setter Property="Background" Value="{DynamicResource ControlBackground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TabPanel Grid.Row="0" IsItemsHost="True" Panel.ZIndex="1" Margin="0,0,0,-1" KeyboardNavigation.TabIndex="1" />
+                        <Border Grid.Row="1" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="0,3,3,3">
+                            <ContentPresenter ContentSource="SelectedContent" Margin="{TemplateBinding Padding}" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="TabItem">

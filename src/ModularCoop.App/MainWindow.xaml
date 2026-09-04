@@ -360,17 +360,22 @@
                         <CheckBox Content="Coop" IsChecked="{Binding ShowCoop}" />
                         <CheckBox Content="Warnings" IsChecked="{Binding ShowWarnings}" />
                         <CheckBox Content="DLL probes" IsChecked="{Binding ShowProbes}" ToolTip="The engine tries every referenced DLL by bare name first and logs a miss before resolving it properly. Harmless." />
+                        <CheckBox Content="Console input + replies" IsChecked="{Binding ShowConsoleIo}"
+                                  ToolTip="Show the commands you type and whatever the server prints just after them. Stays visible even with &quot;Errors + milestones only&quot; ticked." />
                         <CheckBox Content="Errors + milestones only" IsChecked="{Binding ErrorsOnly}" />
                         <CheckBox Content="Auto-scroll" IsChecked="{Binding AutoScroll}" />
                         <TextBlock Text="Find:" VerticalAlignment="Center" Margin="12,0,4,0" />
                         <TextBox Width="220" Text="{Binding ConsoleFilter, UpdateSourceTrigger=PropertyChanged}" />
                         <Button Content="Logs folder" Command="{Binding OpenLogsFolderCommand}" />
                     </StackPanel>
-                    <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                        <Button DockPanel.Dock="Right" Content="Send" Command="{Binding SendCommandCommand}" />
-                        <TextBox Text="{Binding CommandText, UpdateSourceTrigger=PropertyChanged}" KeyDown="Command_KeyDown"
-                                 IsEnabled="{Binding IsRunning}" FontFamily="Consolas" />
-                    </DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Send" Command="{Binding SendCommandCommand}" />
+                            <TextBox Text="{Binding CommandText, UpdateSourceTrigger=PropertyChanged}" KeyDown="Command_KeyDown"
+                                     IsEnabled="{Binding IsRunning}" FontFamily="Consolas" />
+                        </DockPanel>
+                        <TextBlock Text="{Binding CommandStatus}" Foreground="{DynamicResource MutedForeground}" Margin="2,3,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
                     <ListBox x:Name="ConsoleList" ItemsSource="{Binding ConsoleView}" FontFamily="Consolas" FontSize="12"
                              VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                              ScrollViewer.HorizontalScrollBarVisibility="Visible" ScrollViewer.VerticalScrollBarVisibility="Visible">
@@ -387,6 +392,8 @@
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Warning}"><Setter Property="Foreground" Value="{DynamicResource LogWarning}" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Milestone}"><Setter Property="Foreground" Value="{DynamicResource LogMilestone}" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Tool}"><Setter Property="Foreground" Value="{DynamicResource LogTool}" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Command}"><Setter Property="Foreground" Value="{DynamicResource LogCommand}" /><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.CommandReply}"><Setter Property="Foreground" Value="{DynamicResource LogCommandReply}" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Probe}"><Setter Property="Foreground" Value="{DynamicResource LogProbe}" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.Engine}"><Setter Property="Foreground" Value="{DynamicResource LogEngine}" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Category}" Value="{x:Static logs:LogCategory.ModuleLoad}"><Setter Property="Foreground" Value="{DynamicResource LogModuleLoad}" /></DataTrigger>

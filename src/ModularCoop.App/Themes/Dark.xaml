@@ -41,6 +41,8 @@
     <SolidColorBrush x:Key="LogEngine" Color="#8A8A8A" />
     <SolidColorBrush x:Key="LogModuleLoad" Color="#4EC9C9" />
     <SolidColorBrush x:Key="LogCoop" Color="#C08FF0" />
+    <SolidColorBrush x:Key="LogCommand" Color="#6FC3FF" />
+    <SolidColorBrush x:Key="LogCommandReply" Color="#4FD6BE" />
     <SolidColorBrush x:Key="LogTimestamp" Color="#7A7A7A" />
 
     <!-- Buttons and tabs are fully templated in Shared.xaml, so these are honoured on every state. -->
