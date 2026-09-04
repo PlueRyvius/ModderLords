@@ -486,3 +486,82 @@ public class ReleaseLayoutTests : IDisposable
         Assert.Equal(beside, CompatDb.BundledPathIn(_dir));
     }
 }
+
+/// <summary>
+/// Your order is a preference, and it used to be honoured all or nothing: one dependency conflict discarded every
+/// other choice you had made, so dragging an unrelated mod appeared to do nothing at all.
+/// </summary>
+public class PreferredOrderTests
+{
+    private static DiscoveredModule Mod(string id, params string[] needs) =>
+        new(id, "v1.0.0", @"G\" + id, ModuleSourceKind.GameModules, new ModuleInfoExtended
+        {
+            Id = id, Name = id, Version = ApplicationVersion.Empty,
+            DependentModules = needs.Select(n => new DependentModule { Id = n }).ToList(),
+        });
+
+    private static DiscoveredModule Stock(string id) =>
+        new(id, "v1.0.0", @"S\" + id, ModuleSourceKind.ServerStock, new ModuleInfoExtended
+        { Id = id, Name = id, Version = ApplicationVersion.Empty, IsOfficial = true });
+
+    private static readonly DiscoveredModule[] StockSet = [Stock("Native"), Stock("SandBoxCore"), Stock("Sandbox")];
+
+    private static List<string> Community(LoadOrder.Result r, params string[] ids) =>
+        r.ModuleIds.Where(ids.Contains).ToList();
+
+    [Fact]
+    public void An_unrelated_mod_keeps_the_place_you_moved_it_to()
+    {
+        // Framework needs Dependent. Alpha and Zulu depend on nothing, so your order for them must be respected
+        // even though the Framework/Dependent pair is the wrong way round in the preference.
+        var community = new[] { Mod("Framework"), Mod("Dependent", "Framework"), Mod("Alpha"), Mod("Zulu") };
+        var preferred = new[] { "Dependent", "Framework", "Zulu", "Alpha" };
+
+        var r = LoadOrder.Compute(StockSet, community, preferred);
+
+        Assert.Equal(["Framework", "Dependent"], Community(r, "Framework", "Dependent"));   // repaired
+        Assert.Equal(["Zulu", "Alpha"], Community(r, "Zulu", "Alpha"));                      // your order kept
+    }
+
+    [Fact]
+    public void Only_the_conflicting_pair_is_reported()
+    {
+        var community = new[] { Mod("Framework"), Mod("Dependent", "Framework"), Mod("Alpha") };
+        var r = LoadOrder.Compute(StockSet, community, ["Dependent", "Framework", "Alpha"]);
+
+        var moved = r.Issues.Where(i => i.StartsWith("moved to satisfy")).ToList();
+        Assert.Single(moved);
+        Assert.Contains("Dependent", moved[0]);
+        Assert.Contains("Framework", moved[0]);
+        Assert.DoesNotContain(r.Issues, i => i.Contains("Alpha"));
+    }
+
+    [Fact]
+    public void A_valid_preference_is_followed_exactly_and_reported_as_nothing_moved()
+    {
+        var community = new[] { Mod("Framework"), Mod("Dependent", "Framework"), Mod("Alpha") };
+        var r = LoadOrder.Compute(StockSet, community, ["Alpha", "Framework", "Dependent"]);
+
+        Assert.Equal(["Alpha", "Framework", "Dependent"], Community(r, "Alpha", "Framework", "Dependent"));
+        Assert.DoesNotContain(r.Issues, i => i.StartsWith("moved to satisfy"));
+    }
+
+    [Fact]
+    public void Real_frameworks_are_repaired_but_the_rest_of_the_list_survives()
+    {
+        // Andy's actual case: ButterLib before Harmony and MCM before UIExtenderEx, both backwards.
+        var community = new[]
+        {
+            Mod("Bannerlord.Harmony"), Mod("Bannerlord.ButterLib", "Bannerlord.Harmony"),
+            Mod("Bannerlord.UIExtenderEx"), Mod("Bannerlord.MBOptionScreen", "Bannerlord.UIExtenderEx"),
+            Mod("MyLittleWarband"), Mod("ModularSmithing2"),
+        };
+        var r = LoadOrder.Compute(StockSet, community,
+            ["Bannerlord.ButterLib", "Bannerlord.Harmony", "Bannerlord.MBOptionScreen", "Bannerlord.UIExtenderEx", "MyLittleWarband", "ModularSmithing2"]);
+
+        var ids = r.ModuleIds.ToList();
+        Assert.True(ids.IndexOf("Bannerlord.Harmony") < ids.IndexOf("Bannerlord.ButterLib"));
+        Assert.True(ids.IndexOf("Bannerlord.UIExtenderEx") < ids.IndexOf("Bannerlord.MBOptionScreen"));
+        Assert.True(ids.IndexOf("MyLittleWarband") < ids.IndexOf("ModularSmithing2"));   // untouched by the repair
+    }
+}

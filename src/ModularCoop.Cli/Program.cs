@@ -80,6 +80,7 @@ switch (cmd)
 
         Console.WriteLine("launcher data : " + launcherData);
         Console.WriteLine("server order  : " + string.Join(", ", prepared.Order.ModuleIds));
+        foreach (var issue in prepared.Order.Issues) Console.WriteLine("order issue   : " + issue);
         Console.WriteLine("server mods   : " + string.Join(", ", ClientManifest.From(prepared).Select(e => $"{e.Id} {e.Version}")));
         Console.WriteLine("client-visible: " + string.Join(", ", installed.OrderBy(x => x)));
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(prepared), prepared.Order, launcherData, installed);

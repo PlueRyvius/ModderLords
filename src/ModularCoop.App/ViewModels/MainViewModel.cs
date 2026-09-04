@@ -444,6 +444,31 @@ public partial class MainViewModel : ObservableObject
         RefreshPreview();
     }
 
+    /// <summary>
+    /// Sorts the mod list into the order the engine actually uses. Your own order is only a preference: when it
+    /// would load a mod before something it depends on, the whole preference is discarded and the dependency sort
+    /// wins — which leaves the list on the left disagreeing with the engine order on the right, with no obvious way
+    /// to reconcile them. This is that way.
+    /// </summary>
+    [RelayCommand]
+    private void UseEngineOrder()
+    {
+        if (_prepared is null) RefreshPreview();
+        if (_prepared is null) { Status = "Nothing to order yet: rescan the mods first."; return; }
+
+        var position = _prepared.Order.ModuleIds
+            .Select((id, i) => (id, i))
+            .ToDictionary(x => x.id, x => x.i, StringComparer.OrdinalIgnoreCase);
+        var sorted = Mods.OrderBy(m => position.TryGetValue(m.Id, out var i) ? i : int.MaxValue).ToList();
+        for (var target = 0; target < sorted.Count; target++)
+        {
+            var from = Mods.IndexOf(sorted[target]);
+            if (from != target) Mods.Move(from, target);
+        }
+        RefreshPreview();
+        Status = "Mod list sorted into the engine's load order.";
+    }
+
     [RelayCommand]
     public void RefreshPreview()
     {
