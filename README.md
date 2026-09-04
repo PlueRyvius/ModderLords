@@ -323,11 +323,16 @@ the record; the mod may still work.
 
 ## Licence
 
-Modular Bannerlords Coop is released under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Modular Bannerlords Coop is released under the [PolyForm Strict License 1.0.0](LICENSE).
 
-In plain terms: **use it, change it, and share it freely for anything noncommercial** — running servers for
-you and your friends, modding, streaming, hobby projects. **Making money from it needs my written permission
-first.** If you want to use it commercially, open an issue and ask; I am not unreasonable.
+In plain terms:
+
+- **Run it all you like** for anything noncommercial — host servers, play, stream, mod your own game with it.
+- **Do not re-upload it, distribute it, or publish modified versions.**
+- **Do not use it commercially.**
+
+Those last two are available by asking rather than being a flat no. If you want to modify, bundle, fork,
+translate, or commercialise it, open an issue and ask; I would rather say yes to someone who asked.
 
 This is a source-available licence, not an open-source one, and that is deliberate.
 
