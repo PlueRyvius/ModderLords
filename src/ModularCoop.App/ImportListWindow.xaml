@@ -1,0 +1,28 @@
+<Window x:Class="ModularCoop.App.ImportListWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
+        Title="Import a shared mod list" Height="520" Width="680" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" x:Name="Header" FontWeight="Bold" Margin="0,0,0,2" TextWrapping="Wrap" />
+        <TextBlock DockPanel.Dock="Top" x:Name="SourceLine" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8" TextWrapping="Wrap" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Right" FlowDirection="RightToLeft">
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Margin="4,0" />
+            <Button Content="Import" Click="Import_Click" MinWidth="90" Margin="4,0" IsDefault="True" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <CheckBox x:Name="ApplyBox" Content="Set up my Bannerlord launcher to match (you will see what changes first)" IsChecked="True" Margin="0,0,0,6" />
+            <StackPanel Orientation="Horizontal">
+                <CheckBox x:Name="ProfileBox" Content="Create a server profile called" VerticalAlignment="Center" />
+                <TextBox x:Name="ProfileName" Width="180" Margin="6,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <TextBox x:Name="Listing" IsReadOnly="True" FontFamily="Consolas" TextWrapping="NoWrap"
+                     Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Foreground}" />
+        </ScrollViewer>
+    </DockPanel>
+</Window>

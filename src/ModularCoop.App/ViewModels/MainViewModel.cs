@@ -547,6 +547,72 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void CopyManifest() => Clipboard.SetText(ClientManifestText);
 
+    /// <summary>Writes the current mod list, versions and load order to a file another player or host can import.</summary>
+    [RelayCommand]
+    private void ExportList()
+    {
+        if (_prepared is null) RefreshPreview();
+        if (_prepared is null) { Status = "Nothing to export yet: rescan the mods first."; return; }
+        var dlg = new SaveFileDialog
+        {
+            Title = "Export this mod list",
+            Filter = "Mod list (*.json)|*.json",
+            FileName = $"modlist-{ProfileStore.Safe(Profile.Name)}.json",
+        };
+        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            var file = ModListFile.From(_prepared, Profile, "Modular Bannerlords Coop");
+            ModListFile.Write(dlg.FileName, file);
+            Status = $"Exported {file.Mods.Count} mods to {dlg.FileName}";
+        }
+        catch (Exception ex) { Status = ex.Message; }
+    }
+
+    /// <summary>
+    /// Reads a shared mod list and offers the two things it is good for: setting this PC's Bannerlord launcher up to
+    /// match, and creating a server profile that runs the same set in the same order.
+    /// </summary>
+    [RelayCommand]
+    private void ImportList()
+    {
+        var dlg = new OpenFileDialog { Title = "Import a shared mod list", Filter = "Mod list (*.json)|*.json|All files (*.*)|*.*" };
+        if (dlg.ShowDialog() != true) return;
+        ModListFile file;
+        try { file = ModListFile.Read(dlg.FileName); }
+        catch (Exception ex) { Status = ex.Message; Messages.Add("import: " + ex.Message); return; }
+
+        var win = new ImportListWindow(file, dlg.FileName, ProfileStore.List().ToList()) { Owner = Application.Current.MainWindow };
+        if (win.ShowDialog() != true) return;
+
+        try
+        {
+            if (win.CreateProfile)
+            {
+                var imported = file.ToProfile(win.ProfileNameText);
+                ProfileStore.Save(imported);
+                LoadProfileList();
+                SelectedProfileName = imported.Name;
+                AddLine(LogCategory.Tool, $"[ModularCoop] imported profile “{imported.Name}” with {file.Mods.Count} mods");
+            }
+            if (win.ApplyToLauncher)
+            {
+                var path = ClientManifest.DefaultLauncherDataPath();
+                var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide());
+                foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModularCoop] shared list: {b.Id} — {b.Detail}");
+                var confirm = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
+                if (confirm.ShowDialog() == true)
+                {
+                    var applied = LauncherDataSync.Apply(plan, path, LauncherDataSync.DefaultBackupRoot());
+                    if (applied is not null)
+                        AddLine(LogCategory.Tool, $"[ModularCoop] launcher mod list set from the shared file (backup: {applied.BackupPath})");
+                }
+            }
+            Status = "Import done.";
+        }
+        catch (Exception ex) { Status = ex.Message; AddLine(LogCategory.Error, "[ModularCoop] import: " + ex); }
+    }
+
     [RelayCommand]
     private void CheckMyClient()
     {
