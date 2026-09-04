@@ -287,6 +287,33 @@ public class LauncherDataSyncTests : IDisposable
     }
 
     [Fact]
+    public void A_mod_listed_twice_loses_the_spare_entry_and_keeps_the_enabled_one()
+    {
+        // Seen for real: our Add wrote an entry, then the Bannerlord launcher rescanned and wrote its own, and the
+        // launcher then flagged the duplicated mod.
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("ModularSmithing2", "v0.9.30", true),
+                             Mod("ModularSmithing2", "v0.9.30", false));
+        var plan = LauncherDataSync.ComputePlan([E("ModularSmithing2", "v0.9.30")], Order("ModularSmithing2"), path);
+
+        Assert.Contains(plan.Changes, c => c.Id == "ModularSmithing2" && c.Action == LauncherDataSync.SyncAction.RemoveDuplicate);
+
+        var result = LauncherDataSync.Apply(plan, path, BackupRoot);
+        Assert.Equal(1, result!.DuplicatesRemoved);
+        var rows = Read(path).Where(x => x.Id == "ModularSmithing2").ToList();
+        Assert.Single(rows);
+        Assert.True(rows[0].Selected);   // the surviving entry is the one that was on
+    }
+
+    [Fact]
+    public void A_list_with_no_duplicates_plans_no_removals()
+    {
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("HealOnKill", "v1.2", true));
+        var plan = LauncherDataSync.ComputePlan([E("HealOnKill", "v1.2")], Order("HealOnKill"), path);
+        Assert.DoesNotContain(plan.Changes, c => c.Action == LauncherDataSync.SyncAction.RemoveDuplicate);
+        Assert.False(plan.HasChanges);
+    }
+
+    [Fact]
     public void A_missing_file_is_reported_and_never_created()
     {
         var path = Path.Combine(_dir, "nope", "LauncherData.xml");

@@ -13,8 +13,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // The version comes from Directory.Build.props, so a local build shows the real number rather than 1.0.0.
+        // Debug builds say so: a screenshot from an unreleased build should never look like a release.
         var v = typeof(MainWindow).Assembly.GetName().Version;
         if (v is not null) Title += $"  v{v.Major}.{v.Minor}.{v.Build}";
+#if DEBUG
+        Title += " (dev build)";
+#endif
         // Follow the tail only while the user is already at the bottom; scrolling up pins the view until they return.
         ViewModel.ConsoleFlushed += () =>
         {

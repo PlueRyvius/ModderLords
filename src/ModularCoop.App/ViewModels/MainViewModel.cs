@@ -799,7 +799,7 @@ public partial class MainViewModel : ObservableObject
             var result = LauncherDataSync.Apply(plan, path, LauncherDataSync.DefaultBackupRoot());
             Status = result is null
                 ? "Your mod list already matches the server."
-                : $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved).";
+                : $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved, {result.DuplicatesRemoved} duplicates removed).";
             if (result is not null) AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced (backup: {result.BackupPath})");
         }
         catch (Exception ex) { Status = ex.Message; }
@@ -870,8 +870,8 @@ public partial class MainViewModel : ObservableObject
         var result = LauncherDataSync.Apply(plan, path, backupRoot);
         if (result is not null)
         {
-            AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced: {result.Enabled} enabled, {result.Added} added, {result.Disabled} disabled, {result.Moved} reordered (backup: {result.BackupPath})");
-            Status = $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved).";
+            AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced: {result.Enabled} enabled, {result.Added} added, {result.Disabled} disabled, {result.Moved} reordered, {result.DuplicatesRemoved} duplicates removed (backup: {result.BackupPath})");
+            Status = $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved, {result.DuplicatesRemoved} duplicates removed).";
         }
         return true;
     }

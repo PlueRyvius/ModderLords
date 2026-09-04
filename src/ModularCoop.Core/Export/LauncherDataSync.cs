@@ -30,6 +30,11 @@ public static class LauncherDataSync
         Disable,
         /// <summary>Move a module so the client's load order matches the server's.</summary>
         Move,
+        /// <summary>
+        /// Delete a second entry for a module that is already in the list. The launcher writes its own entry when it
+        /// rescans, so a mod we added just before it did can end up listed twice, which it then flags as a problem.
+        /// </summary>
+        RemoveDuplicate,
         /// <summary>Nothing here can fix it: the mod is missing on this PC, or installed at a different version.</summary>
         Unfixable,
         /// <summary>Something ambiguous we refuse to guess at.</summary>
@@ -52,16 +57,16 @@ public static class LauncherDataSync
     {
         /// <summary>Edits we are going to make. A plan with none of these needs no dialog and writes nothing.</summary>
         public IReadOnlyList<PlannedChange> Edits =>
-            Changes.Where(c => c.Action is SyncAction.Enable or SyncAction.Add or SyncAction.Disable or SyncAction.Move).ToList();
+            Changes.Where(c => c.Action is SyncAction.Enable or SyncAction.Add or SyncAction.Disable or SyncAction.Move or SyncAction.RemoveDuplicate).ToList();
 
         /// <summary>Things the player has to fix themselves. Always reported, whether or not there are edits.</summary>
         public IReadOnlyList<PlannedChange> Blockers =>
             Changes.Where(c => c.Action is SyncAction.Unfixable or SyncAction.Warning).ToList();
 
-        public bool HasChanges => Changes.Any(c => c.Action is SyncAction.Enable or SyncAction.Add or SyncAction.Disable or SyncAction.Move);
+        public bool HasChanges => Changes.Any(c => c.Action is SyncAction.Enable or SyncAction.Add or SyncAction.Disable or SyncAction.Move or SyncAction.RemoveDuplicate);
     }
 
-    public sealed record SyncResult(string BackupPath, int Enabled, int Added, int Disabled, int Moved);
+    public sealed record SyncResult(string BackupPath, int Enabled, int Added, int Disabled, int Moved, int DuplicatesRemoved);
 
     /// <summary>Backups live next to the profiles, not in the game's Configs folder, which belongs to the game.</summary>
     public static string DefaultBackupRoot() => Path.Combine(ProfileStore.RootDir, "launcher-backups");
@@ -161,6 +166,16 @@ public static class LauncherDataSync
                     && !ClientManifest.OfficialModuleIds.Contains(c.Id) && !ClientManifest.CoopClientModuleIds.Contains(c.Id))
                     changes.Add(new PlannedChange(c.Id, SyncAction.Warning, "enabled in the launcher, but its folder is not on this PC any more"));
 
+        // One id, two entries: the launcher rescans and writes its own alongside one we added, and then complains
+        // about the list. Keep the entry that is switched on (or the first, if neither is) and drop the rest.
+        foreach (var group in client.GroupBy(e => e.Id, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+        {
+            var keep = group.FirstOrDefault(e => e.Selected) ?? group.First();
+            foreach (var extra in group.Where(e => !ReferenceEquals(e, keep)))
+                changes.Add(new PlannedChange(extra.Id, SyncAction.RemoveDuplicate,
+                    $"listed {group.Count()} times; keeping the {(keep.Selected ? "enabled" : "first")} entry"));
+        }
+
         var added = changes.Where(x => x.Action == SyncAction.Add).Select(x => x.Id).ToList();
         changes.AddRange(PlanOrder(client, added, order, enabling, out var targetOrder));
         return new SyncPlan(changes, targetOrder);
@@ -220,6 +235,17 @@ public static class LauncherDataSync
         foreach (var change in plan.Changes.Where(x => x.Action == SyncAction.Add))
             if (AppendEntry(doc, change.Id, change.Version ?? "")) added++;
 
+        var duplicates = 0;
+        foreach (var id in plan.Changes.Where(x => x.Action == SyncAction.RemoveDuplicate).Select(x => x.Id))
+        {
+            var group = ReadClientList(doc).Where(e => e.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (group.Count < 2) continue;
+            var keep = group.FirstOrDefault(e => e.Selected) ?? group[0];
+            var drop = group.First(e => !ReferenceEquals(e, keep));
+            drop.Element.ParentNode?.RemoveChild(drop.Element);
+            duplicates++;
+        }
+
         var client = ReadClientList(doc);
         var byId = client.GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
                          .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
@@ -239,7 +265,7 @@ public static class LauncherDataSync
         var tmp = launcherDataPath + ".tmp";
         doc.Save(tmp);
         File.Move(tmp, launcherDataPath, overwrite: true);
-        return new SyncResult(backup, enabled, added, disabled, moved);
+        return new SyncResult(backup, enabled, added, disabled, moved, duplicates);
     }
 
     /// <summary>Document order is the load order — there is no priority field — so this physically moves the nodes.</summary>

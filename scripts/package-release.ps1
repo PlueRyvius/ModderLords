@@ -1,9 +1,17 @@
-# Builds a self-contained win-x64 release zip: app + hook + README + roadmap.
+﻿# Builds a self-contained win-x64 release zip: app + hook + README + roadmap.
 # Usage: .\scripts\package-release.ps1 -Version 0.3.0
 param([Parameter(Mandatory = $true)][string]$Version)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+
+# The version lives in Directory.Build.props so every build reports it, dev builds included. Refuse to package a
+# different number rather than shipping a zip whose title bar disagrees with its release tag.
+$propsPath = Join-Path $root 'Directory.Build.props'
+$declared = ([xml](Get-Content $propsPath)).Project.PropertyGroup.VersionPrefix
+if ($declared -ne $Version) {
+    throw "Directory.Build.props says $declared but you asked to package $Version. Bump VersionPrefix first (one line, then commit it)."
+}
 $out = Join-Path $root "artifacts\ModularBannerlordsCoop-$Version"
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null
