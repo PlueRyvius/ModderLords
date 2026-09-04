@@ -318,3 +318,25 @@ changed.
 
 The badge is a claim about what someone tested, so `· untested version` appears whenever your copy's version is not in
 the record; the mod may still work.
+
+---
+
+## Licence
+
+Modular Bannerlords Coop is released under the [PolyForm Strict License 1.0.0](LICENSE).
+
+In plain terms:
+
+- **Run it all you like** for anything noncommercial — host servers, play, stream, mod your own game with it.
+- **Do not re-upload it, distribute it, or publish modified versions.**
+- **Do not use it commercially.**
+
+Those last two are available by asking rather than being a flat no. If you want to modify, bundle, fork,
+translate, or commercialise it, open an issue and ask; I would rather say yes to someone who asked.
+
+This is a source-available licence, not an open-source one, and that is deliberate.
+
+The licence covers this repository's code only. It grants no rights over Mount & Blade II: Bannerlord, over
+the Bannerlord Coop mod, or over the third-party components inside the release archive — see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). No game or Coop code is copied, patched, or redistributed
+by this project; the launcher runs what is already installed on your machine.
