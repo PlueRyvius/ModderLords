@@ -20,13 +20,18 @@ public partial class MainWindow : Window
 #if DEBUG
         Title += " (dev build)";
 #endif
-        // Follow the tail only while the user is already at the bottom; scrolling up pins the view until they return.
+        // Auto-scroll means auto-scroll: the tick follows the tail wherever you are, and unticking is how you stop
+        // it to read something. It used to also require you to already be at the bottom, so scrolling up silently
+        // disabled it and ticking the box while scrolled up appeared to do nothing at all.
         ViewModel.ConsoleFlushed += () =>
         {
-            var sv = FindScrollViewer(ConsoleList);
-            if (sv is null) return;
-            var atBottom = sv.ScrollableHeight - sv.VerticalOffset < 3;
-            if (ViewModel.AutoScroll && atBottom) sv.ScrollToEnd();
+            if (ViewModel.AutoScroll) FindScrollViewer(ConsoleList)?.ScrollToEnd();
+        };
+        // Ticking the box jumps to the bottom straight away, rather than waiting for the server to say something.
+        ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.AutoScroll) && ViewModel.AutoScroll)
+                Dispatcher.BeginInvoke(() => FindScrollViewer(ConsoleList)?.ScrollToEnd());
         };
     }
 
