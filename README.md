@@ -123,6 +123,24 @@ you can check what Launch client would do without launching anything.
 
 ---
 
+## Sharing a mod list
+
+**Players tab → Export…** writes the mod list to a `.json` file: every mod with its version and workshop link, the
+Coop build you are running, the server-side roles, and — as the order of the list itself — the load order. Send that
+file to whoever needs it.
+
+**Import…** reads one back and offers the two things it is good for, either or both:
+
+- **Set up my Bannerlord launcher to match.** For a player joining your server: it ticks the right mods, unticks the
+  rest and puts them in your order, showing you the changes first, exactly as Launch client does.
+- **Create a server profile.** For another host: same mods, same roles, same order, ready to launch. Copies are found
+  by id on their PC, so your folder layout does not have to be reproduced.
+
+The file cannot install mods. Anything the importer does not have is listed as missing, with the workshop link where
+one is known.
+
+---
+
 ## The tabs
 
 ### Mods

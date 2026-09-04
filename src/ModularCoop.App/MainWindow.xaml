@@ -445,6 +445,10 @@
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Mod list for players" FontWeight="Bold" VerticalAlignment="Center" />
                             <Button Content="Copy" Command="{Binding CopyManifestCommand}" />
+                <Button Content="Export…" Command="{Binding ExportListCommand}"
+                        ToolTip="Save this mod list, versions and load order to a file you can send to a player or another host" />
+                <Button Content="Import…" Command="{Binding ImportListCommand}"
+                        ToolTip="Read a mod list somebody shared: set up this PC's Bannerlord launcher to match, and/or create a server profile from it" />
                         </StackPanel>
                         <TextBox Text="{Binding ClientManifestText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="NoWrap"
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />

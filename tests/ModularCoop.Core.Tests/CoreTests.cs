@@ -330,3 +330,85 @@ public class ClientModuleInstallerTests : IDisposable
         Assert.Equal(ClientModuleInstaller.InstallOutcome.Unavailable, r.Outcome);
     }
 }
+
+public class ModListFileTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "mc-mlf-" + Guid.NewGuid().ToString("N"));
+
+    public ModListFileTests() => Directory.CreateDirectory(_dir);
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    private static ModListFile Sample() => new()
+    {
+        Name = "profile1",
+        Coop = new ModListFile.CoopRef("CoopNightly", "v0.1.4"),
+        Mods =
+        [
+            new("Bannerlord.Harmony", "v2.4.2.248", null, ServerRole.DependencyOnly, false),
+            new("ModularSmithing2", "v0.9.28", "https://steamcommunity.com/sharedfiles/filedetails/?id=3790263286", ServerRole.Run, true),
+            new("ImprovedGarrisons", "v4.2.0.7", null, ServerRole.Run, false),
+        ],
+    };
+
+    [Fact]
+    public void Round_trips_through_a_file_keeping_order_and_roles()
+    {
+        var path = Path.Combine(_dir, "list.json");
+        ModListFile.Write(path, Sample());
+        var read = ModListFile.Read(path);
+
+        Assert.Equal(["Bannerlord.Harmony", "ModularSmithing2", "ImprovedGarrisons"], read.Mods.Select(m => m.Id));
+        Assert.Equal(ServerRole.DependencyOnly, read.Mods[0].Role);
+        Assert.True(read.Mods[1].ServerAuthoritative);
+        Assert.Equal("CoopNightly", read.Coop!.Id);
+        Assert.Contains("3790263286", read.Mods[1].Source);
+    }
+
+    [Fact]
+    public void The_order_it_carries_is_the_order_the_sync_will_use()
+    {
+        var file = Sample();
+        Assert.Equal(file.Mods.Select(m => m.Id), file.ToOrder().ModuleIds);
+        Assert.Equal(file.Mods.Select(m => m.Version), file.ToClientEntries().Select(e => e.Version));
+    }
+
+    [Fact]
+    public void Becomes_a_runnable_profile_with_the_same_mods_and_roles()
+    {
+        var p = ModListFile.Read(Round(Sample())).ToProfile("shared");
+        Assert.Equal("shared", p.Name);
+        Assert.Equal(["Bannerlord.Harmony", "ModularSmithing2", "ImprovedGarrisons"], p.Mods.Select(m => m.Id));
+        Assert.All(p.Mods, m => Assert.True(m.Enabled));
+        Assert.Equal(ServerRole.DependencyOnly, p.Mods[0].Role);
+        Assert.True(p.Mods[1].ServerAuthoritative);
+        Assert.Null(p.Mods[0].SourcePath);   // resolved by id on the importer's PC, not the exporter's layout
+    }
+
+    private string Round(ModListFile f)
+    {
+        var path = Path.Combine(_dir, "round.json");
+        ModListFile.Write(path, f);
+        return path;
+    }
+
+    [Fact]
+    public void A_newer_format_is_refused_with_a_readable_message()
+    {
+        var path = Path.Combine(_dir, "future.json");
+        File.WriteAllText(path, "{\"FormatVersion\":99,\"Mods\":[{\"Id\":\"X\",\"Version\":\"v1\",\"Role\":\"Run\",\"ServerAuthoritative\":false}]}");
+        var ex = Assert.Throws<InvalidOperationException>(() => ModListFile.Read(path));
+        Assert.Contains("newer launcher", ex.Message);
+    }
+
+    [Fact]
+    public void Junk_and_empty_lists_are_refused_without_a_raw_json_error()
+    {
+        var junk = Path.Combine(_dir, "junk.json");
+        File.WriteAllText(junk, "not json at all");
+        Assert.Contains("not a mod list", Assert.Throws<InvalidOperationException>(() => ModListFile.Read(junk)).Message);
+
+        var empty = Path.Combine(_dir, "empty.json");
+        File.WriteAllText(empty, "{\"FormatVersion\":1,\"Mods\":[]}");
+        Assert.Contains("lists no mods", Assert.Throws<InvalidOperationException>(() => ModListFile.Read(empty)).Message);
+    }
+}
