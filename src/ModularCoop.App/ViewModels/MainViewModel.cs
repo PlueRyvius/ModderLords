@@ -792,7 +792,7 @@ public partial class MainViewModel : ObservableObject
         if (_prepared is null) { Status = "Nothing to compare yet: rescan the mods first."; return; }
         var path = ClientManifest.DefaultLauncherDataPath();
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared), _prepared.Order, path, InstalledClientSide());
-        var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
+        var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot(), launching: false) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         try
         {
