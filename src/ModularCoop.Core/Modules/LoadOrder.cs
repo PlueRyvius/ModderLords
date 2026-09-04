@@ -49,13 +49,16 @@ public static class LoadOrder
             communitySorted.Add(c.Id);
         }
 
-        // Honour a user-preferred order where it does not contradict a hard dependency.
+        // Honour the user's order as far as the dependencies allow. It used to be all or nothing: one bad pair
+        // discarded the whole preference, so moving any mod appeared to do nothing and the list disagreed with the
+        // engine order with no way to reconcile them. Now only the mods that must move are moved.
         if (preferredOrder is { Count: > 0 })
         {
             var pref = preferredOrder.Where(id => communityIds.Contains(id)).ToList();
-            var stable = communitySorted.OrderBy(id => { var i = pref.FindIndex(p => p.Equals(id, StringComparison.OrdinalIgnoreCase)); return i < 0 ? int.MaxValue : i; }).ToList();
-            if (!ViolatesDependencies(stable, community)) communitySorted = stable;
-            else issues.Add("preferred order ignored: it would load a module before one it depends on");
+            var wanted = communitySorted.OrderBy(id => { var i = pref.FindIndex(p => p.Equals(id, StringComparison.OrdinalIgnoreCase)); return i < 0 ? int.MaxValue : i; }).ToList();
+            communitySorted = SortRespectingPreference(wanted, community, communitySorted);
+            foreach (var conflict in DependencyConflicts(wanted, community))
+                issues.Add("moved to satisfy a dependency: " + conflict);
         }
 
         // Whole-set topological order from BUTR (this is what lets frameworks that declare "load Native after me",
@@ -98,18 +101,65 @@ public static class LoadOrder
         return new Result(ordered, issues);
     }
 
-    private static bool ViolatesDependencies(IReadOnlyList<string> order, IReadOnlyList<DiscoveredModule> community)
+    /// <summary>
+    /// Orders the community block by dependency, breaking every free choice in favour of the order the user asked
+    /// for. A mod only moves when something it needs would otherwise load after it, so an unrelated mod dragged up
+    /// or down keeps its new place.
+    /// </summary>
+    private static List<string> SortRespectingPreference(IReadOnlyList<string> wanted, IReadOnlyList<DiscoveredModule> community, IReadOnlyList<string> fallback)
     {
+        var rank = wanted.Select((id, i) => (id, i)).ToDictionary(x => x.id, x => x.i, StringComparer.OrdinalIgnoreCase);
+        var before = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);   // id -> what must load before it
+        foreach (var id in wanted) before[id] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var m in community)
+        {
+            if (!before.ContainsKey(m.Id)) continue;
+            var deps = m.Info.DependentModules.Select(d => d.Id)
+                .Concat(m.Info.DependentModuleMetadatas.Where(d => d.LoadType == LoadType.LoadBeforeThis && !d.IsIncompatible).Select(d => d.Id));
+            foreach (var dep in deps)
+                if (before.ContainsKey(dep)) before[m.Id].Add(dep);
+            foreach (var after in m.Info.ModulesToLoadAfterThis.Select(d => d.Id))
+                if (before.ContainsKey(after)) before[after].Add(m.Id);
+        }
+
+        var result = new List<string>(wanted.Count);
+        var placed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var remaining = new List<string>(wanted);
+        while (remaining.Count > 0)
+        {
+            // Of everything whose dependencies are already placed, take whichever the user put first.
+            var next = remaining.Where(id => before[id].All(placed.Contains))
+                                .OrderBy(id => rank.TryGetValue(id, out var r) ? r : int.MaxValue)
+                                .FirstOrDefault();
+            if (next is null) return fallback.ToList();   // a cycle: leave it to the sorter that already coped
+            result.Add(next);
+            placed.Add(next);
+            remaining.Remove(next);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Every place the requested order would load something before what it needs, described well enough to act on:
+    /// which mod, which dependency, and which way round they have to go.
+    /// </summary>
+    private static List<string> DependencyConflicts(IReadOnlyList<string> order, IReadOnlyList<DiscoveredModule> community)
+    {
+        var conflicts = new List<string>();
         var index = order.Select((id, i) => (id, i)).ToDictionary(t => t.id, t => t.i, StringComparer.OrdinalIgnoreCase);
         foreach (var m in community)
         {
             var deps = m.Info.DependentModules.Select(d => d.Id)
                 .Concat(m.Info.DependentModuleMetadatas.Where(d => d.LoadType == LoadType.LoadBeforeThis && !d.IsIncompatible).Select(d => d.Id));
             foreach (var dep in deps)
-                if (index.TryGetValue(dep, out var di) && index.TryGetValue(m.Id, out var mi) && di > mi) return true;
+                if (index.TryGetValue(dep, out var di) && index.TryGetValue(m.Id, out var mi) && di > mi)
+                    conflicts.Add($"{m.Id} needs {dep} loaded first, but you put {dep} after it");
             foreach (var after in m.Info.ModulesToLoadAfterThis.Select(d => d.Id))
-                if (index.TryGetValue(after, out var ai) && index.TryGetValue(m.Id, out var mi2) && ai < mi2) return true;
+                if (index.TryGetValue(after, out var ai) && index.TryGetValue(m.Id, out var mi2) && ai < mi2)
+                    conflicts.Add($"{m.Id} declares that {after} loads after it, but you put {after} first");
         }
-        return false;
+        // The same pair can be declared both ways round in a manifest; say it once.
+        return conflicts.Distinct().ToList();
     }
 }

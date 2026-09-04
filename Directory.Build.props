@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    The one place the version lives. Without it every build reported 1.0.0, which made a dev build and a release
+    indistinguishable in the title bar — and left no way to tell which build someone was reporting a bug from.
+
+    Bump this when cutting a release; scripts\package-release.ps1 refuses to package a different number, so the two
+    cannot drift apart.
+  -->
+  <PropertyGroup>
+    <VersionPrefix>0.8.7</VersionPrefix>
+  </PropertyGroup>
+</Project>

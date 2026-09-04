@@ -15,6 +15,7 @@ public enum LogCategory
     Probe,         // engine AssemblyLoader eager-probe misses ("Cannot load: X.dll"); resolved properly right after, not real errors
     Command,       // a console command the host typed, echoed back
     CommandReply,  // engine output attributed to the command just sent (see MainViewModel: a time window, not a protocol)
+    Perf,          // our own periodic performance samples; data for the Performance tab, hidden from the console by default
 }
 
 public sealed record ClassifiedLine(string Text, LogCategory Category);
@@ -29,6 +30,9 @@ public static partial class LogClassifier
 
         if (t.Contains("Command Args:", StringComparison.Ordinal) || t.Contains("SERVING", StringComparison.Ordinal))
             return new(line, LogCategory.Milestone);
+
+        // Before the general [ModularCoop] branch below, which would otherwise swallow these into Tool.
+        if (t.StartsWith(PerfLineParser.Prefix, StringComparison.Ordinal)) return new(line, LogCategory.Perf);
 
         if (t.StartsWith("[ModularCoop]", StringComparison.Ordinal) || t.StartsWith("[ModularCoop.Hook]", StringComparison.Ordinal)
             || t.StartsWith("[ModularCoop.Compat]", StringComparison.Ordinal)) return new(line, LogCategory.Tool);

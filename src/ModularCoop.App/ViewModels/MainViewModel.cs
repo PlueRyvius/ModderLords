@@ -13,6 +13,7 @@ using ModularCoop.Core.Live;
 using ModularCoop.Core.Logs;
 using ModularCoop.Core.Modules;
 using ModularCoop.Core.Overlay;
+using ModularCoop.Core.Perf;
 using ModularCoop.Core.Profiles;
 using ModularCoop.Core.Saves;
 
@@ -117,7 +118,16 @@ public partial class MainViewModel : ObservableObject
     /// right — but never silently, hence the drop count reported in FlushConsole.
     /// </summary>
     private readonly BoundedQueue<ConsoleLine> _pending = new(100_000);
+    /// <summary>The Performance tab's state. Fed on the console flush tick; see DrainPerf.</summary>
+    public PerformanceViewModel Performance { get; } = new();
     private readonly System.Windows.Threading.DispatcherTimer _flushTimer;
+    /// <summary>
+    /// Perf samples waiting to be applied. Bounded like the console queue, though at one line per ten seconds this
+    /// is a formality: it exists so a duplicated or runaway sampler can never grow memory the way v0.8.3 did.
+    /// </summary>
+    private readonly BoundedQueue<PerfSample> _pendingPerf = new(1000);
+    private ProcessResourceSampler? _resources;
+    private DateTime _lastPerfSave = DateTime.MinValue;
     /// <summary>Raised on the UI thread after a batch of console lines was added (the view scrolls once per batch).</summary>
     public event Action? ConsoleFlushed;
     private LaunchSession.Prepared? _prepared;
@@ -162,6 +172,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showProbes;
     /// <summary>Console tab: show the commands the host typed and whatever the server said back.</summary>
     [ObservableProperty] private bool _showConsoleIo = true;
+    /// <summary>Perf lines are data for the Performance tab, not prose; showing them every 10 s forever just crowds the console.</summary>
+    [ObservableProperty] private bool _showPerf;
     /// <summary>One-line feedback under the command box: what was sent, and whether anything came back.</summary>
     [ObservableProperty] private string _commandStatus = "";
     [ObservableProperty] private SaveRow? _selectedSave;
@@ -432,6 +444,31 @@ public partial class MainViewModel : ObservableObject
         RefreshPreview();
     }
 
+    /// <summary>
+    /// Sorts the mod list into the order the engine actually uses. Your own order is only a preference: when it
+    /// would load a mod before something it depends on, the whole preference is discarded and the dependency sort
+    /// wins — which leaves the list on the left disagreeing with the engine order on the right, with no obvious way
+    /// to reconcile them. This is that way.
+    /// </summary>
+    [RelayCommand]
+    private void UseEngineOrder()
+    {
+        if (_prepared is null) RefreshPreview();
+        if (_prepared is null) { Status = "Nothing to order yet: rescan the mods first."; return; }
+
+        var position = _prepared.Order.ModuleIds
+            .Select((id, i) => (id, i))
+            .ToDictionary(x => x.id, x => x.i, StringComparer.OrdinalIgnoreCase);
+        var sorted = Mods.OrderBy(m => position.TryGetValue(m.Id, out var i) ? i : int.MaxValue).ToList();
+        for (var target = 0; target < sorted.Count; target++)
+        {
+            var from = Mods.IndexOf(sorted[target]);
+            if (from != target) Mods.Move(from, target);
+        }
+        RefreshPreview();
+        Status = "Mod list sorted into the engine's load order.";
+    }
+
     [RelayCommand]
     public void RefreshPreview()
     {
@@ -665,6 +702,15 @@ public partial class MainViewModel : ObservableObject
 
             _engine = EngineProcess.Start(prepared.Plan);
             IsRunning = true;
+            Performance.SessionStarted();
+            // CPU and working set come from the launcher watching the process, so they cost the server nothing and
+            // work even when the compat module is not loaded. Its own timer; never the dispatcher.
+            if (_engine.ProcessId is { } pid)
+            {
+                _resources = new ProcessResourceSampler(pid);
+                _resources.SampleReady += r => Application.Current.Dispatcher.BeginInvoke(() => Performance.Apply(r));
+                _resources.Start();
+            }
             Status = $"Engine pid {_engine.ProcessId}, loading…";
             LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModularCoop] " + s));
             LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, Profile.SettingsSync, Profile.Name);
@@ -677,11 +723,18 @@ public partial class MainViewModel : ObservableObject
                 // Bounded: if the engine outruns the flush timer the oldest waiting lines are dropped and
                 // counted, rather than the queue growing without limit.
                 _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
+                // Parse here (cheap, off the UI thread) but apply on the flush tick, so a perf line is no more
+                // able to touch the UI per line than any other.
+                if (c.Category == LogCategory.Perf && PerfLineParser.TryParse(line.Text, line.At) is { } sample)
+                    _pendingPerf.Enqueue(sample);
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
                     Application.Current.Dispatcher.BeginInvoke(() => Status = "SERVING, waiting for clients");
             };
             var code = await _engine.Exited;
             IsRunning = false;
+            _resources?.Dispose(); _resources = null;
+            if (Performance.WriteSessionSummary(Profile.Name) is { } summary)
+                AddLine(LogCategory.Tool, "[ModularCoop] performance summary written to " + summary);
             Status = $"Engine exited with {code}: {ExitCodeExplainer.Explain(code)}";
             AddLine(LogCategory.Milestone, "[ModularCoop] " + Status);
             _launchLog?.Dispose(); _launchLog = null;
@@ -764,14 +817,14 @@ public partial class MainViewModel : ObservableObject
         if (_prepared is null) { Status = "Nothing to compare yet: rescan the mods first."; return; }
         var path = ClientManifest.DefaultLauncherDataPath();
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared), _prepared.Order, path, InstalledClientSide());
-        var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
+        var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot(), launching: false) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         try
         {
             var result = LauncherDataSync.Apply(plan, path, LauncherDataSync.DefaultBackupRoot());
             Status = result is null
                 ? "Your mod list already matches the server."
-                : $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved).";
+                : $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved, {result.DuplicatesRemoved} duplicates removed).";
             if (result is not null) AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced (backup: {result.BackupPath})");
         }
         catch (Exception ex) { Status = ex.Message; }
@@ -842,8 +895,8 @@ public partial class MainViewModel : ObservableObject
         var result = LauncherDataSync.Apply(plan, path, backupRoot);
         if (result is not null)
         {
-            AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced: {result.Enabled} enabled, {result.Added} added, {result.Disabled} disabled, {result.Moved} reordered (backup: {result.BackupPath})");
-            Status = $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved).";
+            AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced: {result.Enabled} enabled, {result.Added} added, {result.Disabled} disabled, {result.Moved} reordered, {result.DuplicatesRemoved} duplicates removed (backup: {result.BackupPath})");
+            Status = $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved, {result.DuplicatesRemoved} duplicates removed).";
         }
         return true;
     }
@@ -913,6 +966,7 @@ public partial class MainViewModel : ObservableObject
 
     private void FlushConsole()
     {
+        DrainPerf();
         if (_pending.IsEmpty) return;
         // No DeferRefresh here: a ListCollectionView throws if its source changes while a refresh is deferred.
         var n = 0;
@@ -936,12 +990,29 @@ public partial class MainViewModel : ObservableObject
         ConsoleFlushed?.Invoke();
     }
 
+    /// <summary>
+    /// Applies whatever perf samples arrived since the last tick. At one line per ten seconds this is almost always
+    /// nothing; it rides the console timer so there is no second timer and no per-line UI work.
+    /// </summary>
+    private void DrainPerf()
+    {
+        while (_pendingPerf.TryDequeue(out var sample)) Performance.Apply(sample);
+        _pendingPerf.TakeDropped();
+        // Keep a summary on disk even if the session ends badly; every five minutes is cheap and loses little.
+        if (IsRunning && DateTime.Now - _lastPerfSave > TimeSpan.FromMinutes(5))
+        {
+            _lastPerfSave = DateTime.Now;
+            Performance.WriteSessionSummary(Profile.Name);
+        }
+    }
+
     private bool FilterLine(object o)
     {
         if (o is not ConsoleLine l) return false;
         // Console I/O is deliberately checked before ErrorsOnly: when you are driving the server by hand you want
         // your own commands and their replies visible even while filtered down to errors.
         if (l.Category is LogCategory.Command or LogCategory.CommandReply) return ShowConsoleIo && MatchesFilter(l);
+        if (l.Category is LogCategory.Perf) return ShowPerf && MatchesFilter(l);
         if (ErrorsOnly && l.Category is not (LogCategory.Error or LogCategory.Milestone)) return false;
         var visible = l.Category switch
         {
@@ -968,6 +1039,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnShowWarningsChanged(bool value) => ConsoleView.Refresh();
     partial void OnShowProbesChanged(bool value) => ConsoleView.Refresh();
     partial void OnShowConsoleIoChanged(bool value) => ConsoleView.Refresh();
+    partial void OnShowPerfChanged(bool value) => ConsoleView.Refresh();
     partial void OnErrorsOnlyChanged(bool value) => ConsoleView.Refresh();
     partial void OnConsoleFilterChanged(string value) => ConsoleView.Refresh();
 

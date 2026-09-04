@@ -1,4 +1,5 @@
 ﻿using Bannerlord.ModuleManager;
+using ModularCoop.Core.Compat;
 using ModularCoop.Core.Export;
 using ModularCoop.Core.Launch;
 using ModularCoop.Core.Logs;
@@ -215,6 +216,27 @@ public class ClientManifestTests
     /// prefix test used to exempt it silently, so a client running it against a server that does not would be
     /// reported as fine and then rejected at the join screen.
     /// </summary>
+    /// <summary>
+    /// The launcher's own DedicatedServer.* module runs on the server and cannot exist on a client. It used to be
+    /// listed in the manifest players are told to enable, and reported as "missing on client" on every check.
+    /// </summary>
+    [Fact]
+    public void Server_only_modules_are_not_reported_missing_on_the_client()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "mc-cm2-" + Guid.NewGuid().ToString("N") + ".xml");
+        File.WriteAllText(path,
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><UserData><SingleplayerData><ModDatas>" +
+            "<UserModData><Id>CoopNightly</Id><LastKnownVersion>v0.1.4</LastKnownVersion><IsSelected>true</IsSelected></UserModData>" +
+            "</ModDatas></SingleplayerData></UserData>");
+        try
+        {
+            var checks = ClientManifest.CompareWithLauncherData(
+                [new ClientManifest.Entry("DedicatedServer.ModularCoopCompat", "v0.1.0", null)], path);
+            Assert.DoesNotContain(checks, c => c.Id.StartsWith("DedicatedServer."));
+        }
+        finally { File.Delete(path); }
+    }
+
     [Fact]
     public void CoopModPatch_on_the_client_only_is_reported_as_an_extra()
     {
@@ -410,5 +432,136 @@ public class ModListFileTests : IDisposable
         var empty = Path.Combine(_dir, "empty.json");
         File.WriteAllText(empty, "{\"FormatVersion\":1,\"Mods\":[]}");
         Assert.Contains("lists no mods", Assert.Throws<InvalidOperationException>(() => ModListFile.Read(empty)).Message);
+    }
+}
+
+/// <summary>
+/// The release ships a single-file exe with its odds and ends in folders, so what a player unzips is readable.
+/// A dev build leaves the same files next to the exe. Both layouts have to work, or the launcher silently loses
+/// its assembly-resolution hook (mods stop loading) or its compatibility database (every badge goes blank).
+/// </summary>
+public class ReleaseLayoutTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "mc-layout-" + Guid.NewGuid().ToString("N"));
+
+    public ReleaseLayoutTests() => Directory.CreateDirectory(_dir);
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    private string Write(params string[] parts)
+    {
+        var path = Path.Combine(new[] { _dir }.Concat(parts).ToArray());
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "x");
+        return path;
+    }
+
+    [Fact]
+    public void The_hook_is_found_in_the_release_bin_folder()
+        => Assert.Equal(Write(HookSetup.BinFolder, HookSetup.HookFileName), HookSetup.LocateHookIn(_dir));
+
+    [Fact]
+    public void The_hook_is_still_found_next_to_the_exe_in_a_dev_build()
+        => Assert.Equal(Write(HookSetup.HookFileName), HookSetup.LocateHookIn(_dir));
+
+    [Fact]
+    public void The_release_copy_of_the_hook_wins_when_both_exist()
+    {
+        Write(HookSetup.HookFileName);
+        var inBin = Write(HookSetup.BinFolder, HookSetup.HookFileName);
+        Assert.Equal(inBin, HookSetup.LocateHookIn(_dir));
+    }
+
+    [Fact]
+    public void No_hook_anywhere_is_null_rather_than_a_bogus_path()
+        => Assert.Null(HookSetup.LocateHookIn(_dir));
+
+    [Fact]
+    public void The_compat_database_is_found_in_the_release_data_folder()
+        => Assert.Equal(Write(CompatDb.DataFolder, CompatDb.BundledFileName), CompatDb.BundledPathIn(_dir));
+
+    [Fact]
+    public void The_compat_database_falls_back_to_next_to_the_exe()
+    {
+        var beside = Write(CompatDb.BundledFileName);
+        Assert.Equal(beside, CompatDb.BundledPathIn(_dir));
+    }
+}
+
+/// <summary>
+/// Your order is a preference, and it used to be honoured all or nothing: one dependency conflict discarded every
+/// other choice you had made, so dragging an unrelated mod appeared to do nothing at all.
+/// </summary>
+public class PreferredOrderTests
+{
+    private static DiscoveredModule Mod(string id, params string[] needs) =>
+        new(id, "v1.0.0", @"G\" + id, ModuleSourceKind.GameModules, new ModuleInfoExtended
+        {
+            Id = id, Name = id, Version = ApplicationVersion.Empty,
+            DependentModules = needs.Select(n => new DependentModule { Id = n }).ToList(),
+        });
+
+    private static DiscoveredModule Stock(string id) =>
+        new(id, "v1.0.0", @"S\" + id, ModuleSourceKind.ServerStock, new ModuleInfoExtended
+        { Id = id, Name = id, Version = ApplicationVersion.Empty, IsOfficial = true });
+
+    private static readonly DiscoveredModule[] StockSet = [Stock("Native"), Stock("SandBoxCore"), Stock("Sandbox")];
+
+    private static List<string> Community(LoadOrder.Result r, params string[] ids) =>
+        r.ModuleIds.Where(ids.Contains).ToList();
+
+    [Fact]
+    public void An_unrelated_mod_keeps_the_place_you_moved_it_to()
+    {
+        // Framework needs Dependent. Alpha and Zulu depend on nothing, so your order for them must be respected
+        // even though the Framework/Dependent pair is the wrong way round in the preference.
+        var community = new[] { Mod("Framework"), Mod("Dependent", "Framework"), Mod("Alpha"), Mod("Zulu") };
+        var preferred = new[] { "Dependent", "Framework", "Zulu", "Alpha" };
+
+        var r = LoadOrder.Compute(StockSet, community, preferred);
+
+        Assert.Equal(["Framework", "Dependent"], Community(r, "Framework", "Dependent"));   // repaired
+        Assert.Equal(["Zulu", "Alpha"], Community(r, "Zulu", "Alpha"));                      // your order kept
+    }
+
+    [Fact]
+    public void Only_the_conflicting_pair_is_reported()
+    {
+        var community = new[] { Mod("Framework"), Mod("Dependent", "Framework"), Mod("Alpha") };
+        var r = LoadOrder.Compute(StockSet, community, ["Dependent", "Framework", "Alpha"]);
+
+        var moved = r.Issues.Where(i => i.StartsWith("moved to satisfy")).ToList();
+        Assert.Single(moved);
+        Assert.Contains("Dependent", moved[0]);
+        Assert.Contains("Framework", moved[0]);
+        Assert.DoesNotContain(r.Issues, i => i.Contains("Alpha"));
+    }
+
+    [Fact]
+    public void A_valid_preference_is_followed_exactly_and_reported_as_nothing_moved()
+    {
+        var community = new[] { Mod("Framework"), Mod("Dependent", "Framework"), Mod("Alpha") };
+        var r = LoadOrder.Compute(StockSet, community, ["Alpha", "Framework", "Dependent"]);
+
+        Assert.Equal(["Alpha", "Framework", "Dependent"], Community(r, "Alpha", "Framework", "Dependent"));
+        Assert.DoesNotContain(r.Issues, i => i.StartsWith("moved to satisfy"));
+    }
+
+    [Fact]
+    public void Real_frameworks_are_repaired_but_the_rest_of_the_list_survives()
+    {
+        // Andy's actual case: ButterLib before Harmony and MCM before UIExtenderEx, both backwards.
+        var community = new[]
+        {
+            Mod("Bannerlord.Harmony"), Mod("Bannerlord.ButterLib", "Bannerlord.Harmony"),
+            Mod("Bannerlord.UIExtenderEx"), Mod("Bannerlord.MBOptionScreen", "Bannerlord.UIExtenderEx"),
+            Mod("MyLittleWarband"), Mod("ModularSmithing2"),
+        };
+        var r = LoadOrder.Compute(StockSet, community,
+            ["Bannerlord.ButterLib", "Bannerlord.Harmony", "Bannerlord.MBOptionScreen", "Bannerlord.UIExtenderEx", "MyLittleWarband", "ModularSmithing2"]);
+
+        var ids = r.ModuleIds.ToList();
+        Assert.True(ids.IndexOf("Bannerlord.Harmony") < ids.IndexOf("Bannerlord.ButterLib"));
+        Assert.True(ids.IndexOf("Bannerlord.UIExtenderEx") < ids.IndexOf("Bannerlord.MBOptionScreen"));
+        Assert.True(ids.IndexOf("MyLittleWarband") < ids.IndexOf("ModularSmithing2"));   // untouched by the repair
     }
 }

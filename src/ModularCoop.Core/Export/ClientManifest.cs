@@ -27,8 +27,14 @@ public static class ClientManifest
     /// <summary>Server-side-only modules (the launcher's own compat module, DedicatedServer.Windows): exempt from the validator, never installed on a client.</summary>
     public static bool IsServerOnly(string id) => id.StartsWith("DedicatedServer.", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// What a player has to match. Server-only modules (the launcher's own DedicatedServer.* guards) are left out:
+    /// they are exempt from the validator, cannot be installed on a client, and telling a player to enable one sends
+    /// them looking for a mod that does not exist.
+    /// </summary>
     public static IReadOnlyList<Entry> From(LaunchSession.Prepared p) =>
-        p.Selections.Select(s => new Entry(s.Module.Id, s.Module.Version, WorkshopUrl(s.Module.FolderPath))).ToList();
+        p.Selections.Where(s => !IsServerOnly(s.Module.Id))
+                    .Select(s => new Entry(s.Module.Id, s.Module.Version, WorkshopUrl(s.Module.FolderPath))).ToList();
 
     public static string ToText(IReadOnlyList<Entry> entries, string coopId, string coopVersion)
     {
@@ -74,6 +80,7 @@ public static class ClientManifest
         }
         foreach (var e in server)
         {
+            if (IsServerOnly(e.Id)) continue;   // never installed on a client; reporting it missing is a false alarm
             if (!client.TryGetValue(e.Id, out var c)) result.Add(new ClientCheck(e.Id, e.Version, null, false, "missing on client"));
             else if (!c.selected) result.Add(new ClientCheck(e.Id, e.Version, c.version, false, "installed but not enabled"));
             else if (!Saves.SaveHeaderReader.VersionsEqual(e.Version, c.version)) result.Add(new ClientCheck(e.Id, e.Version, c.version, true, "version differs"));
