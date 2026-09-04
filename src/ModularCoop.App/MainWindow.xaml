@@ -453,6 +453,8 @@
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="This PC's Bannerlord launcher vs the server" FontWeight="Bold" VerticalAlignment="Center" />
                             <Button Content="Check my client" Command="{Binding CheckMyClientCommand}" />
+                <Button Content="Match server…" Command="{Binding MatchServerCommand}"
+                        ToolTip="Show what Launch client would change in this PC's Bannerlord launcher mod list, and optionally apply it now" />
                         </StackPanel>
                         <TextBox Text="{Binding ClientCheckText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="NoWrap"
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />

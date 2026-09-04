@@ -94,11 +94,22 @@ public static class SaveHeaderReader
         return diffs;
     }
 
+    /// <summary>Orders two module versions numerically, padding to four components. Unparseable parts count as 0.</summary>
+    public static int CompareVersions(string? a, string? b)
+    {
+        if (a is null || b is null) return a is null && b is null ? 0 : a is null ? -1 : 1;
+        var (x, y) = (VersionParts(a), VersionParts(b));
+        for (var i = 0; i < 4; i++) if (x[i] != y[i]) return x[i].CompareTo(y[i]);
+        return 0;
+    }
+
+    private static int[] VersionParts(string v) =>
+        v.TrimStart('v', 'e', 'b', 'a', 'd').Split('.').Select(p => int.TryParse(p, out var n) ? n : 0).Concat(new[] { 0, 0, 0, 0 }).Take(4).ToArray();
+
     /// <summary>Saves store four components (v0.9.28.0); manifests often three (v0.9.28). Compare numerically.</summary>
     public static bool VersionsEqual(string? a, string? b)
     {
         if (a is null || b is null) return a == b;
-        static int[] Parts(string v) => v.TrimStart('v', 'e', 'b', 'a', 'd').Split('.').Select(p => int.TryParse(p, out var n) ? n : 0).Concat(new[] { 0, 0, 0, 0 }).Take(4).ToArray();
-        return Parts(a).SequenceEqual(Parts(b));
+        return VersionParts(a).SequenceEqual(VersionParts(b));
     }
 }

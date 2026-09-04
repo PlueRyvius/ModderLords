@@ -3,6 +3,7 @@ using ModularCoop.Core.Export;
 using ModularCoop.Core.Launch;
 using ModularCoop.Core.Logs;
 using ModularCoop.Core.Modules;
+using ModularCoop.Core.Saves;
 using ModularCoop.Core.Overlay;
 using Xunit;
 
@@ -173,6 +174,21 @@ public class ClientLauncherTests
         finally { Directory.Delete(root, true); }
     }
 
+    /// <summary>
+    /// Bannerlord.exe is the STARTER, not the launcher: run bare it loads the default modules, because the game
+    /// takes its list from the _MODULES_ argument the launcher builds and never reads LauncherData.xml. Starting it
+    /// dropped every mod including Coop, so the launcher UI must stay the preferred exe.
+    /// </summary>
+    [Fact]
+    public void The_preferred_exe_is_the_launcher_ui_not_the_game_starter()
+    {
+        Assert.Equal("TaleWorlds.MountAndBlade.Launcher.exe", ClientLauncher.LauncherExeName);
+        Assert.Equal("Bannerlord.exe", ClientLauncher.GameExeName);
+        var root = MakeGameRoot(ClientLauncher.LauncherExeName, ClientLauncher.GameExeName);
+        try { Assert.EndsWith(ClientLauncher.LauncherExeName, ClientLauncher.FindExe(root)); }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Fact]
     public void Falls_back_to_whichever_exe_exists()
     {
@@ -216,5 +232,101 @@ public class ClientManifestTests
             Assert.DoesNotContain(checks, c => c.Id is "CoopNightly" or "StoryMode");
         }
         finally { File.Delete(path); }
+    }
+}
+
+public class VersionOrderTests
+{
+    [Theory]
+    [InlineData("v0.1.0", "v0.1.0.0", 0)]      // three components vs four: the same version
+    [InlineData("v0.2.0", "v0.1.9", 1)]
+    [InlineData("v0.1.0", "v0.1.1", -1)]
+    [InlineData("e1.4.6", "v1.4.6", 0)]        // workshop mods use an e prefix
+    [InlineData("v1.10.0", "v1.9.0", 1)]       // numeric, not lexicographic
+    public void Versions_order_numerically(string a, string b, int expected)
+        => Assert.Equal(expected, Math.Sign(SaveHeaderReader.CompareVersions(a, b)));
+}
+
+/// <summary>
+/// The installer writes into the player's game folder, so these cover exactly when it does and does not, on temp
+/// directories shaped like a module (SubModule.xml + a bin folder).
+/// </summary>
+public class ClientModuleInstallerTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "mc-cmi-" + Guid.NewGuid().ToString("N"));
+
+    public ClientModuleInstallerTests() => Directory.CreateDirectory(_dir);
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    private string MakeModule(string where, string version, string payload)
+    {
+        var dir = Path.Combine(_dir, where);
+        Directory.CreateDirectory(Path.Combine(dir, "bin", "Win64_Shipping_Client"));
+        File.WriteAllText(Path.Combine(dir, "SubModule.xml"),
+            $"<Module><Name value=\"ModularCoop Compat\" /><Id value=\"{LaunchSession.SyncModuleId}\" /><Version value=\"{version}\" /><SubModules /></Module>");
+        File.WriteAllText(Path.Combine(dir, "bin", "Win64_Shipping_Client", "marker.txt"), payload);
+        return dir;
+    }
+
+    private DiscoveredModule Bundled(string version, string payload = "new") =>
+        ModuleCatalog.TryParse(MakeModule("bundled", version, payload), ModuleSourceKind.Custom, out _)!;
+
+    private string GameRoot()
+    {
+        var root = Path.Combine(_dir, "game");
+        Directory.CreateDirectory(Path.Combine(root, "Modules"));
+        return root;
+    }
+
+    private void Install(string gameRoot, string version, string payload) =>
+        Directory.Move(MakeModule("staged", version, payload), ClientModuleInstaller.TargetDir(gameRoot));
+
+    [Fact]
+    public void Installs_when_the_client_has_no_copy()
+    {
+        var game = GameRoot();
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.Installed, r.Outcome);
+        Assert.True(File.Exists(Path.Combine(ClientModuleInstaller.TargetDir(game), "SubModule.xml")));
+        Assert.Null(r.BackupPath);
+    }
+
+    [Fact]
+    public void Updates_an_older_copy_and_keeps_the_one_it_replaced()
+    {
+        var game = GameRoot();
+        Install(game, "v0.1.0", "old");
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
+
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.Updated, r.Outcome);
+        Assert.Equal("new", File.ReadAllText(Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "marker.txt")));
+        Assert.Equal("old", File.ReadAllText(Path.Combine(r.BackupPath!, "bin", "Win64_Shipping_Client", "marker.txt")));
+    }
+
+    [Fact]
+    public void Leaves_a_current_copy_alone()
+    {
+        var game = GameRoot();
+        Install(game, "v0.2.0", "theirs");
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.UpToDate, r.Outcome);
+        Assert.Equal("theirs", File.ReadAllText(Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "marker.txt")));
+    }
+
+    [Fact]
+    public void Never_downgrades_a_newer_copy()
+    {
+        var game = GameRoot();
+        Install(game, "v0.3.0", "theirs");
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.UpToDate, r.Outcome);
+        Assert.Equal("theirs", File.ReadAllText(Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "marker.txt")));
+    }
+
+    [Fact]
+    public void Says_so_when_there_is_no_game_install()
+    {
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), Path.Combine(_dir, "nope"), Path.Combine(_dir, "backups"));
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.Unavailable, r.Outcome);
     }
 }

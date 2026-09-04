@@ -90,8 +90,8 @@ to Steam as a game server for Bannerlord, so Steam treats the game as already ru
 Coop dedicated server package (its assemblies are hash-verified at boot, so it cannot be turned off) and not
 something this launcher does.
 
-**Launch client** in the top bar starts Bannerlord straight from the game folder
-(`bin\Win64_Shipping_Client\Bannerlord.exe`), which Steam does not block. Steam still sees the client and signs it
+**Launch client** in the top bar starts the Bannerlord launcher straight from the game folder
+(`bin\Win64_Shipping_Client\TaleWorlds.MountAndBlade.Launcher.exe`), which Steam does not block. Steam still sees the client and signs it
 in as usual, and the TaleWorlds launcher opens as normal. The client is independent of
 this app — closing the launcher does not close your game.
 
@@ -106,6 +106,20 @@ multiplayer mod list and the launcher's DLL list are never modified, and the pre
 `%LOCALAPPDATA%\ModularCoop\launcher-backups\<timestamp>\` before every change. What it cannot do is install a
 missing mod or change a version already on disk: those are reported in the console, and the client still starts, so
 you will see Coop's own message if the join is refused.
+
+A mod you subscribed to since the Bannerlord launcher last ran is not in that file at all — the launcher only lists
+what it has scanned — so the sync adds the entry itself rather than telling you the mod is missing. It also warns
+when a mod is still ticked in the launcher but its folder has gone from this PC.
+
+Launch client also keeps the shared `ModularCoop.Compat` module installed for you. When a profile uses Settings
+sync, the launcher copies its own bundled build into `<game>\Modules\ModularCoop.Compat`, and replaces it whenever
+the build it carries is newer than the one already there — so you never copy it out of the release zip by hand, and
+it cannot fall behind. It never downgrades a newer copy, never touches any other module, and keeps the copy it
+replaced under `%LOCALAPPDATA%\ModularCoop\module-backups\`. If your game lives somewhere Windows will not let the
+launcher write, it says so instead of failing quietly.
+
+**Players tab → Match server…** shows the same comparison on demand, including when there is nothing to change, so
+you can check what Launch client would do without launching anything.
 
 ---
 
