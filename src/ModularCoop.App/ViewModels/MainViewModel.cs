@@ -109,7 +109,14 @@ public sealed class SaveRow
 public partial class MainViewModel : ObservableObject
 {
     private EngineProcess? _engine;
-    private readonly System.Collections.Concurrent.ConcurrentQueue<ConsoleLine> _pending = new();
+    /// <summary>
+    /// Lines waiting to reach the console, capped. It used to be an unbounded queue draining at only
+    /// 1500 lines per 250 ms tick, so any engine talking faster than 6000 lines/second grew it forever:
+    /// one session with a Trace switch on reached 19.8 GB of working set and drove the machine into
+    /// paging. The console only ever shows the newest lines, so discarding the oldest waiting ones is
+    /// right — but never silently, hence the drop count reported in FlushConsole.
+    /// </summary>
+    private readonly BoundedQueue<ConsoleLine> _pending = new(100_000);
     private readonly System.Windows.Threading.DispatcherTimer _flushTimer;
     /// <summary>Raised on the UI thread after a batch of console lines was added (the view scrolls once per batch).</summary>
     public event Action? ConsoleFlushed;
@@ -124,7 +131,8 @@ public partial class MainViewModel : ObservableObject
     private string _lastCommand = "";
     private int _repliesSeen;
     private static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(3);
-    private StreamWriter? _launchLog;
+    private CappedLogWriter? _launchLog;
+    private long _totalDropped;
 
     public ObservableCollection<string> ProfileNames { get; } = new();
     public ObservableCollection<ModRow> Mods { get; } = new();
@@ -583,8 +591,11 @@ public partial class MainViewModel : ObservableObject
 
             var logDir = Path.Combine(ProfileStore.RootDir, "logs");
             Directory.CreateDirectory(logDir);
-            Preflight.RotateLogs(logDir, "launch-*.log", keep: 20);
-            _launchLog = new StreamWriter(Path.Combine(logDir, $"launch-{DateTime.Now:yyyyMMdd-HHmmss}.log")) { AutoFlush = true };
+            var rotated = Preflight.RotateLogs(logDir, "launch-*.log", keep: 20);
+            if (rotated > 0) AddLine(LogCategory.Tool, $"[ModularCoop] removed {rotated} old launch log(s)");
+            _launchLog = new CappedLogWriter(Path.Combine(logDir, $"launch-{DateTime.Now:yyyyMMdd-HHmmss}.log"));
+            _pending.Clear();
+            _totalDropped = 0;
 
             _engine = EngineProcess.Start(prepared.Plan);
             IsRunning = true;
@@ -597,6 +608,8 @@ public partial class MainViewModel : ObservableObject
                 c = AttributeToCommand(c);
                 _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
                 // Never touch the UI per line: the engine prints thousands during load. Queue and flush on a timer.
+                // Bounded: if the engine outruns the flush timer the oldest waiting lines are dropped and
+                // counted, rather than the queue growing without limit.
                 _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
                     Application.Current.Dispatcher.BeginInvoke(() => Status = "SERVING, waiting for clients");
@@ -689,6 +702,20 @@ public partial class MainViewModel : ObservableObject
         // No DeferRefresh here: a ListCollectionView throws if its source changes while a refresh is deferred.
         var n = 0;
         while (n < 1500 && _pending.TryDequeue(out var l)) { Console.Add(l); n++; }
+
+        // Tell the user when output is being discarded; a console that silently skips lines is worse
+        // than one that admits it. Reported once per tick, only when something was actually dropped.
+        var dropped = _pending.TakeDropped();
+        if (dropped > 0)
+        {
+            _totalDropped += dropped;
+            Console.Add(new ConsoleLine(DateTime.Now.ToString("HH:mm:ss"), LogCategory.Warning,
+                $"[ModularCoop] console overloaded: dropped {dropped:N0} lines ({_totalDropped:N0} total). " +
+                "The engine is printing faster than this window can show. If a Trace switch is on under the Server tab, turn it off."));
+        }
+
+        // The launch log buffers rather than flushing per line; push it to disk on the same tick.
+        _launchLog?.Flush();
         // Engine chatter is the bulk of the output; drop it first so module-load, probe, server and error lines survive a whole campaign load.
         if (Console.Count > 60000) Console.TrimTo(50000, l => l.Category is LogCategory.Engine);
         ConsoleFlushed?.Invoke();

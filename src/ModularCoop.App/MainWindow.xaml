@@ -228,13 +228,16 @@
                             <TextBox Width="70" Text="{Binding Profile.Server.EnginePort}" />
                             <ComboBox Width="70" Margin="6,0" ItemsSource="{Binding Regions}" SelectedItem="{Binding Profile.Server.Region}" />
                         </StackPanel>
-                        <TextBlock Text="Trace tick / publish / bandits" VerticalAlignment="Center" />
+                        <TextBlock Text="Trace tick / publish / bandits" VerticalAlignment="Center" Foreground="{DynamicResource WarningForeground}"
+                                   ToolTip="Diagnostics only. The engine prints hundreds of thousands of lines a second with these on, which fills the launch log with gigabytes and slows the whole machine. Leave them off unless you are chasing a specific bug." />
                         <StackPanel Orientation="Horizontal">
                             <CheckBox IsChecked="{Binding Profile.Server.TraceTick}" />
                             <CheckBox IsChecked="{Binding Profile.Server.TracePublish}" />
                             <CheckBox IsChecked="{Binding Profile.Server.TraceBandits}" />
                         </StackPanel>
                     </UniformGrid>
+                    <TextBlock Margin="0,12,0,0" Foreground="{DynamicResource WarningForeground}" TextWrapping="Wrap"
+                               Text="Leave the Trace switches off for normal play. They make the engine print hundreds of thousands of lines a second: the launch log grows by gigabytes a minute and the machine slows down. They are for chasing a specific bug, then turning back off." />
                     <TextBlock Margin="0,12,0,0" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap"
                                Text="Gameplay settings (difficulty, fast forward, cheats) live in CoopData\mod-config.json and are owned by the Coop mod; edit that file directly for now." />
                 </StackPanel>

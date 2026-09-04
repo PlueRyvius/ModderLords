@@ -55,13 +55,37 @@ public static class Preflight
         catch { return null; }
     }
 
-    /// <summary>Keeps the newest <paramref name="keep"/> files matching the pattern in a folder.</summary>
-    public static int RotateLogs(string dir, string pattern, int keep)
+    /// <summary>
+    /// Keeps the newest <paramref name="keep"/> files matching the pattern, and then keeps deleting
+    /// oldest-first until what remains fits in <paramref name="maxTotalBytes"/>.
+    ///
+    /// A count alone is not a limit: keeping 20 launch logs let this folder reach 40 GB, because a
+    /// single session with an engine trace switch on wrote 9.5 GB. Size is the limit that matters,
+    /// so the newest file is always kept even if it alone exceeds the budget — deleting the log of
+    /// the session someone is trying to diagnose would defeat the point.
+    /// </summary>
+    public static int RotateLogs(string dir, string pattern, int keep, long maxTotalBytes = 2L * 1024 * 1024 * 1024)
     {
         if (!Directory.Exists(dir)) return 0;
-        var files = new DirectoryInfo(dir).GetFiles(pattern).OrderByDescending(f => f.LastWriteTimeUtc).Skip(keep).ToList();
+        var all = new DirectoryInfo(dir).GetFiles(pattern).OrderByDescending(f => f.LastWriteTimeUtc).ToList();
         var n = 0;
-        foreach (var f in files) { try { f.Delete(); n++; } catch { } }
+
+        var doomed = all.Skip(keep).ToList();
+        foreach (var f in doomed) { try { f.Delete(); n++; } catch { } }
+
+        var survivors = all.Take(keep).ToList();
+        var total = survivors.Sum(f => SafeLength(f));
+        // Oldest first, never the newest.
+        for (var i = survivors.Count - 1; i >= 1 && total > maxTotalBytes; i--)
+        {
+            var len = SafeLength(survivors[i]);
+            try { survivors[i].Delete(); n++; total -= len; } catch { }
+        }
         return n;
+    }
+
+    private static long SafeLength(FileInfo f)
+    {
+        try { return f.Length; } catch { return 0; }
     }
 }
