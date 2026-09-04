@@ -49,6 +49,7 @@ Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.md') -Force
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.txt') -Force
 Copy-Item (Join-Path $root 'docs\ROADMAP.md') $out -Force
 if (Test-Path (Join-Path $root 'LICENSE')) { Copy-Item (Join-Path $root 'LICENSE') $out -Force }
+if (Test-Path (Join-Path $root 'THIRD-PARTY-NOTICES.md')) { Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.md') $out -Force }
 
 $zip = "$out.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
