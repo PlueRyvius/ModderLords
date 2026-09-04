@@ -658,6 +658,7 @@ public partial class MainViewModel : ObservableObject
                 AddLine(LogCategory.Error, "[ModularCoop] Launch client: " + Status);
                 return;
             }
+            if (!SyncLauncherData()) return;   // cancelled at the confirmation
             var p = ClientLauncher.Start(exe);
             Status = $"Client started (pid {p.Id}).";
             AddLine(LogCategory.Tool, $"[ModularCoop] Launch client: started {exe} (pid {p.Id})");
@@ -667,6 +668,54 @@ public partial class MainViewModel : ObservableObject
             Status = "Launch client: " + ex.Message;
             AddLine(LogCategory.Error, "[ModularCoop] Launch client: " + ex);
         }
+    }
+
+    /// <summary>
+    /// Brings this PC's LauncherData.xml in line with the server before the client starts, so the join is not
+    /// refused over a mod list. Returns false only when the player cancels the confirmation; anything the sync
+    /// cannot fix is reported and we launch anyway, since Coop's own rejection message says more than we could.
+    /// </summary>
+    private bool SyncLauncherData()
+    {
+        var path = ClientManifest.DefaultLauncherDataPath();
+        if (_prepared is null) RefreshPreview();
+        if (_prepared is null)
+        {
+            AddLine(LogCategory.Warning, "[ModularCoop] Launch client: no server plan yet, leaving the mod list alone");
+            return true;
+        }
+
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared), _prepared.Order, path);
+        foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModularCoop] mod list: {b.Id} — {b.Detail}");
+        if (!plan.HasChanges)
+        {
+            AddLine(LogCategory.Tool, "[ModularCoop] mod list already matches the server");
+            return true;
+        }
+
+        var backupRoot = LauncherDataSync.DefaultBackupRoot();
+        if (!Profile.AutoSyncLauncherData)
+        {
+            var win = new LauncherSyncWindow(plan, path, backupRoot) { Owner = Application.Current.MainWindow };
+            if (win.ShowDialog() != true)
+            {
+                Status = "Launch client cancelled.";
+                return false;
+            }
+            if (win.DontAskAgain)
+            {
+                Profile.AutoSyncLauncherData = true;
+                ProfileStore.Save(Profile);
+            }
+        }
+
+        var result = LauncherDataSync.Apply(plan, path, backupRoot);
+        if (result is not null)
+        {
+            AddLine(LogCategory.Tool, $"[ModularCoop] mod list synced: {result.Enabled} enabled, {result.Disabled} disabled, {result.Moved} reordered (backup: {result.BackupPath})");
+            Status = $"Mod list synced ({result.Enabled} on, {result.Disabled} off, {result.Moved} moved).";
+        }
+        return true;
     }
 
     [RelayCommand(CanExecute = nameof(IsRunning))]

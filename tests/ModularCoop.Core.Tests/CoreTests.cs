@@ -1,4 +1,5 @@
-using Bannerlord.ModuleManager;
+﻿using Bannerlord.ModuleManager;
+using ModularCoop.Core.Export;
 using ModularCoop.Core.Launch;
 using ModularCoop.Core.Logs;
 using ModularCoop.Core.Modules;
@@ -188,5 +189,32 @@ public class ClientLauncherTests
         var root = MakeGameRoot();
         try { Assert.Null(ClientLauncher.FindExe(root)); }
         finally { Directory.Delete(root, true); }
+    }
+}
+
+public class ClientManifestTests
+{
+    /// <summary>
+    /// The Coop module id is matched exactly, not by prefix: CoopModPatch is an ordinary community mod, and a
+    /// prefix test used to exempt it silently, so a client running it against a server that does not would be
+    /// reported as fine and then rejected at the join screen.
+    /// </summary>
+    [Fact]
+    public void CoopModPatch_on_the_client_only_is_reported_as_an_extra()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "mc-cm-" + Guid.NewGuid().ToString("N") + ".xml");
+        File.WriteAllText(path,
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><UserData><SingleplayerData><ModDatas>" +
+            "<UserModData><Id>CoopNightly</Id><LastKnownVersion>v0.1.4</LastKnownVersion><IsSelected>true</IsSelected></UserModData>" +
+            "<UserModData><Id>CoopModPatch</Id><LastKnownVersion>v1.0</LastKnownVersion><IsSelected>true</IsSelected></UserModData>" +
+            "<UserModData><Id>StoryMode</Id><LastKnownVersion>v1.4.8</LastKnownVersion><IsSelected>true</IsSelected></UserModData>" +
+            "</ModDatas></SingleplayerData></UserData>");
+        try
+        {
+            var checks = ClientManifest.CompareWithLauncherData([], path);
+            Assert.Contains(checks, c => c.Id == "CoopModPatch" && c.Verdict == "enabled on client but not on server");
+            Assert.DoesNotContain(checks, c => c.Id is "CoopNightly" or "StoryMode");
+        }
+        finally { File.Delete(path); }
     }
 }

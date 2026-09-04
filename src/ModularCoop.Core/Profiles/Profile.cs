@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using ModularCoop.Core.Launch;
 using ModularCoop.Core.Overlay;
@@ -57,6 +57,11 @@ public sealed class Profile
     public bool CompatGuards { get; set; } = true;
     /// <summary>Also load the shared ModularCoop.Compat module (settings sync). Players must install it too; it is part of the handshake.</summary>
     public bool SettingsSync { get; set; } = false;
+    /// <summary>
+    /// Skip the confirmation when Launch client brings this PC's LauncherData.xml in line with the server. Set by
+    /// ticking "don't ask again" in that dialog; warnings the sync cannot fix are still reported either way.
+    /// </summary>
+    public bool AutoSyncLauncherData { get; set; }
     public ServerSettings Server { get; set; } = new();
 
     [JsonIgnore] public IEnumerable<ProfileMod> EnabledMods => Mods.Where(m => m.Enabled);

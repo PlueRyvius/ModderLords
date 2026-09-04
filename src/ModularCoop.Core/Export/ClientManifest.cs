@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using System.Xml;
 using ModularCoop.Core.Launch;
@@ -12,6 +12,20 @@ namespace ModularCoop.Core.Export;
 public static class ClientManifest
 {
     public sealed record Entry(string Id, string Version, string? Source);
+
+    /// <summary>TaleWorlds modules the validator ignores: always present on a client, never part of a server's mod list.</summary>
+    public static readonly IReadOnlySet<string> OfficialModuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "Native", "SandBoxCore", "Sandbox", "SandBox", "StoryMode", "CustomBattle", "BirthAndDeath", "Multiplayer", "FastMode" };
+
+    /// <summary>
+    /// Both ids the Coop client module ships under, depending on the build the player installed. Matched exactly and
+    /// never by prefix: CoopModPatch is an ordinary community mod that the server may or may not be running.
+    /// </summary>
+    public static readonly IReadOnlySet<string> CoopClientModuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "Coop", "CoopNightly" };
+
+    /// <summary>Server-side-only modules (the launcher's own compat module, DedicatedServer.Windows): exempt from the validator, never installed on a client.</summary>
+    public static bool IsServerOnly(string id) => id.StartsWith("DedicatedServer.", StringComparison.OrdinalIgnoreCase);
 
     public static IReadOnlyList<Entry> From(LaunchSession.Prepared p) =>
         p.Selections.Select(s => new Entry(s.Module.Id, s.Module.Version, WorkshopUrl(s.Module.FolderPath))).ToList();
@@ -58,7 +72,6 @@ public static class ClientManifest
                 if (id.Length > 0) client[id] = (ver, sel);
             }
         }
-        var official = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Native", "SandBoxCore", "Sandbox", "SandBox", "StoryMode", "CustomBattle", "BirthAndDeath", "Multiplayer", "FastMode" };
         foreach (var e in server)
         {
             if (!client.TryGetValue(e.Id, out var c)) result.Add(new ClientCheck(e.Id, e.Version, null, false, "missing on client"));
@@ -68,8 +81,8 @@ public static class ClientManifest
         }
         foreach (var kv in client)
         {
-            if (!kv.Value.selected || official.Contains(kv.Key)) continue;
-            if (kv.Key.StartsWith("Coop", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!kv.Value.selected || OfficialModuleIds.Contains(kv.Key)) continue;
+            if (CoopClientModuleIds.Contains(kv.Key)) continue;   // the Coop module itself; NOT a prefix test, or CoopModPatch would be exempt too
             if (server.Any(s => s.Id.Equals(kv.Key, StringComparison.OrdinalIgnoreCase))) continue;
             result.Add(new ClientCheck(kv.Key, null, kv.Value.version, true, kv.Key.Equals("NavalDLC", StringComparison.OrdinalIgnoreCase) ? "DLC must be disabled" : "enabled on client but not on server"));
         }
