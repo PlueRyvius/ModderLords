@@ -198,10 +198,18 @@ public static class LauncherDataSync
                          && enabling.Contains(id))
             .ToList();
 
-        // Their current relative order in the file, ignoring everything we are not moving.
-        var current = client.Select(c => c.Id).Where(id => target.Contains(id, StringComparer.OrdinalIgnoreCase)).ToList();
-        current.AddRange(added.Where(id => target.Contains(id, StringComparer.OrdinalIgnoreCase)));   // Apply appends them first
-        if (current.Count != target.Count || current.SequenceEqual(target, StringComparer.OrdinalIgnoreCase)) return moves;
+        // Their current relative order in the file, ignoring everything we are not moving. Deduplicated, because a
+        // mod listed twice used to make the counts disagree and silently skip the whole reorder pass — the feature
+        // looked broken while the real problem was one spare entry. Apply removes the duplicates before reordering.
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var current = client.Select(e => e.Id)
+                            .Where(id => target.Contains(id, StringComparer.OrdinalIgnoreCase) && seen.Add(id))
+                            .ToList();
+        current.AddRange(added.Where(id => target.Contains(id, StringComparer.OrdinalIgnoreCase) && seen.Add(id)));   // Apply appends them first
+
+        // An id we cannot place has no business steering the order; drop it rather than abandoning the pass.
+        target = target.Where(id => current.Contains(id, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (target.Count == 0 || current.SequenceEqual(target, StringComparer.OrdinalIgnoreCase)) return moves;
 
         targetOrder = target;
         for (var i = 0; i < target.Count; i++)

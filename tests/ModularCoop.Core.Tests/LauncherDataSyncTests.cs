@@ -314,6 +314,36 @@ public class LauncherDataSyncTests : IDisposable
     }
 
     [Fact]
+    public void A_duplicate_entry_does_not_silently_disable_reordering()
+    {
+        // The bug this pins: one mod listed twice made the counts disagree, so the whole reorder pass bailed out
+        // without a word. Andy reordered mods in the launcher and the app kept insisting nothing had changed.
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("C", "v1", true), Mod("B", "v1", true),
+                             Mod("A", "v1", true), Mod("C", "v1", false));
+        var plan = LauncherDataSync.ComputePlan([E("A", "v1"), E("B", "v1"), E("C", "v1")], Order("A", "B", "C"), path);
+
+        Assert.Contains(plan.Changes, c => c.Action == LauncherDataSync.SyncAction.RemoveDuplicate);
+        Assert.Contains(plan.Changes, c => c.Action == LauncherDataSync.SyncAction.Move);
+
+        LauncherDataSync.Apply(plan, path, BackupRoot);
+        Assert.Equal(["CoopNightly", "A", "B", "C"], Read(path).Select(x => x.Id));
+    }
+
+    [Fact]
+    public void A_server_mod_the_client_cannot_place_does_not_abandon_the_whole_reorder()
+    {
+        // B is missing on this PC. That is worth reporting, but the mods that ARE here should still be ordered.
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("C", "v1", true), Mod("A", "v1", true));
+        var plan = LauncherDataSync.ComputePlan([E("A", "v1"), E("B", "v1"), E("C", "v1")], Order("A", "B", "C"), path);
+
+        Assert.Contains(plan.Blockers, c => c.Id == "B");
+        Assert.Contains(plan.Changes, c => c.Action == LauncherDataSync.SyncAction.Move);
+        LauncherDataSync.Apply(plan, path, BackupRoot);
+        var ids = Read(path).Select(x => x.Id).ToList();
+        Assert.True(ids.IndexOf("A") < ids.IndexOf("C"));
+    }
+
+    [Fact]
     public void A_missing_file_is_reported_and_never_created()
     {
         var path = Path.Combine(_dir, "nope", "LauncherData.xml");

@@ -215,6 +215,27 @@ public class ClientManifestTests
     /// prefix test used to exempt it silently, so a client running it against a server that does not would be
     /// reported as fine and then rejected at the join screen.
     /// </summary>
+    /// <summary>
+    /// The launcher's own DedicatedServer.* module runs on the server and cannot exist on a client. It used to be
+    /// listed in the manifest players are told to enable, and reported as "missing on client" on every check.
+    /// </summary>
+    [Fact]
+    public void Server_only_modules_are_not_reported_missing_on_the_client()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "mc-cm2-" + Guid.NewGuid().ToString("N") + ".xml");
+        File.WriteAllText(path,
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><UserData><SingleplayerData><ModDatas>" +
+            "<UserModData><Id>CoopNightly</Id><LastKnownVersion>v0.1.4</LastKnownVersion><IsSelected>true</IsSelected></UserModData>" +
+            "</ModDatas></SingleplayerData></UserData>");
+        try
+        {
+            var checks = ClientManifest.CompareWithLauncherData(
+                [new ClientManifest.Entry("DedicatedServer.ModularCoopCompat", "v0.1.0", null)], path);
+            Assert.DoesNotContain(checks, c => c.Id.StartsWith("DedicatedServer."));
+        }
+        finally { File.Delete(path); }
+    }
+
     [Fact]
     public void CoopModPatch_on_the_client_only_is_reported_as_an_extra()
     {
