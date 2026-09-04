@@ -10,6 +10,8 @@
                      after it so its DynamicResource lookups resolve against whichever theme is loaded. -->
                 <ResourceDictionary Source="Themes/Light.xaml" />
                 <ResourceDictionary Source="Themes/Shared.xaml" />
+                <!-- Brand marks: fixed colours, never swapped with the theme. -->
+                <ResourceDictionary Source="Themes/Brand.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

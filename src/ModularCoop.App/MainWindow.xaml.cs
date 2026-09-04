@@ -49,6 +49,14 @@ public partial class MainWindow : Window
         ThemeButton.Content = _theme == AppTheme.Light ? "Dark" : "Light";
     }
 
+    // A WPF Hyperlink raises this instead of navigating; without UseShellExecute nothing opens.
+    private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Could not open the link", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        e.Handled = true;
+    }
+
     private void Profiles_DropDownOpened(object sender, System.EventArgs e) => ViewModel.RefreshProfileList();
 
     private void Command_KeyDown(object sender, KeyEventArgs e)
@@ -66,5 +74,7 @@ public partial class MainWindow : Window
         Close();
     }
 }
+
+
 
 

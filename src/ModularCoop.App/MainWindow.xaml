@@ -50,10 +50,29 @@
 
         <!-- status bar -->
         <Border DockPanel.Dock="Bottom" Padding="8,4" Background="{DynamicResource ChromeBackground}">
-            <StackPanel>
-                <TextBlock><Run Text="Server: " FontWeight="Bold" /><Run Text="{Binding ServerRoot}" /></TextBlock>
-                <TextBlock><Run Text="Game:   " FontWeight="Bold" /><Run Text="{Binding GameRoot}" /></TextBlock>
-            </StackPanel>
+            <DockPanel>
+                <!-- Support link. The mark keeps its brand colours in both themes, so it sits on its own
+                     light chip rather than vanishing into a dark background. -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Border Background="{StaticResource BmcChip}" CornerRadius="4" Padding="4,3" VerticalAlignment="Center">
+                        <Viewbox Width="15" Height="21">
+                            <Canvas Width="27" Height="39">
+                                <Path Data="{StaticResource BmcCupGeometry}" Fill="{StaticResource BmcYellow}" />
+                                <Path Data="{StaticResource BmcOutlineGeometry}" Fill="{StaticResource BmcDark}" />
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+                    <TextBlock VerticalAlignment="Center" Margin="6,0,0,0">
+                        <Hyperlink NavigateUri="https://buymeacoffee.com/ryvius" RequestNavigate="Hyperlink_RequestNavigate"
+                                   Foreground="{DynamicResource LogTool}"
+                                   ToolTip="Opens buymeacoffee.com/ryvius in your browser">Buy me a coffee</Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock><Run Text="Server: " FontWeight="Bold" /><Run Text="{Binding ServerRoot}" /></TextBlock>
+                    <TextBlock><Run Text="Game:   " FontWeight="Bold" /><Run Text="{Binding GameRoot}" /></TextBlock>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <TabControl Margin="8">
