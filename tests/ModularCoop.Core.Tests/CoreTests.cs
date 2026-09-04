@@ -148,3 +148,45 @@ public class ExitCodeTests
         Assert.Contains("0xE0434352", ExitCodeExplainer.Explain(unchecked((int)0xE0434352)));
     }
 }
+
+public class ClientLauncherTests
+{
+    private static string MakeGameRoot(params string[] exeNames)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "mc-client-" + Guid.NewGuid().ToString("N"));
+        var bin = ClientLauncher.ClientBin(root);
+        Directory.CreateDirectory(bin);
+        foreach (var name in exeNames) File.WriteAllText(Path.Combine(bin, name), "");
+        return root;
+    }
+
+    [Fact]
+    public void Prefers_the_taleworlds_launcher_so_the_player_still_picks_modules()
+    {
+        var root = MakeGameRoot(ClientLauncher.LauncherExeName, ClientLauncher.GameExeName);
+        try
+        {
+            Assert.Equal(Path.Combine(ClientLauncher.ClientBin(root), ClientLauncher.LauncherExeName), ClientLauncher.FindExe(root));
+            Assert.Equal(Path.Combine(ClientLauncher.ClientBin(root), ClientLauncher.GameExeName), ClientLauncher.FindExe(root, skipLauncher: true));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void Falls_back_to_whichever_exe_exists()
+    {
+        var root = MakeGameRoot(ClientLauncher.GameExeName);
+        try { Assert.Equal(Path.Combine(ClientLauncher.ClientBin(root), ClientLauncher.GameExeName), ClientLauncher.FindExe(root)); }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void Missing_install_or_exe_resolves_to_null()
+    {
+        Assert.Null(ClientLauncher.FindExe(null));
+        Assert.Null(ClientLauncher.FindExe("   "));
+        var root = MakeGameRoot();
+        try { Assert.Null(ClientLauncher.FindExe(root)); }
+        finally { Directory.Delete(root, true); }
+    }
+}

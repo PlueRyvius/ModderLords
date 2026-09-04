@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.ComponentModel;
@@ -632,6 +632,42 @@ public partial class MainViewModel : ObservableObject
     }
 
     private bool CanLaunch() => !IsRunning;
+
+    /// <summary>
+    /// Starts the Bannerlord client from the game install, so a host running the server on this machine can
+    /// still get into the game: Steam refuses its own Play button while the coop server is logged on as a
+    /// Steam game server, but the exe started directly is signed in by Steam as usual.
+    /// </summary>
+    [RelayCommand]
+    private void LaunchClient()
+    {
+        try
+        {
+            if (ClientLauncher.IsClientRunning())
+            {
+                Status = "Bannerlord is already running.";
+                return;
+            }
+            var gameRoot = ClientLauncher.ResolveGameRoot(Profile);
+            var exe = ClientLauncher.FindExe(gameRoot);
+            if (exe is null)
+            {
+                Status = gameRoot is null
+                    ? "Game install not found. Set the game folder in the profile."
+                    : $"No client exe under {ClientLauncher.ClientBin(gameRoot)}.";
+                AddLine(LogCategory.Error, "[ModularCoop] Launch client: " + Status);
+                return;
+            }
+            var p = ClientLauncher.Start(exe);
+            Status = $"Client started (pid {p.Id}).";
+            AddLine(LogCategory.Tool, $"[ModularCoop] Launch client: started {exe} (pid {p.Id})");
+        }
+        catch (Exception ex)
+        {
+            Status = "Launch client: " + ex.Message;
+            AddLine(LogCategory.Error, "[ModularCoop] Launch client: " + ex);
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private async Task Stop()
