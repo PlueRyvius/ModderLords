@@ -111,6 +111,13 @@ A mod you subscribed to since the Bannerlord launcher last ran is not in that fi
 what it has scanned — so the sync adds the entry itself rather than telling you the mod is missing. It also warns
 when a mod is still ticked in the launcher but its folder has gone from this PC.
 
+Launch client also keeps the shared `ModularCoop.Compat` module installed for you. When a profile uses Settings
+sync, the launcher copies its own bundled build into `<game>\Modules\ModularCoop.Compat`, and replaces it whenever
+the build it carries is newer than the one already there — so you never copy it out of the release zip by hand, and
+it cannot fall behind. It never downgrades a newer copy, never touches any other module, and keeps the copy it
+replaced under `%LOCALAPPDATA%\ModularCoop\module-backups\`. If your game lives somewhere Windows will not let the
+launcher write, it says so instead of failing quietly.
+
 **Players tab → Match server…** shows the same comparison on demand, including when there is nothing to change, so
 you can check what Launch client would do without launching anything.
 

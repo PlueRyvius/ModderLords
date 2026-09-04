@@ -711,9 +711,37 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { Status = ex.Message; }
     }
 
+    /// <summary>
+    /// Installs or updates the client's copy of the shared sync module before we launch, so the player never has to
+    /// copy it out of the release zip and it cannot fall behind the launcher's build. Only when the profile actually
+    /// uses it, or when an older copy is already there and would otherwise drift.
+    /// </summary>
+    private void EnsureClientModule()
+    {
+        var gameRoot = ClientLauncher.ResolveGameRoot(Profile);
+        var alreadyThere = gameRoot is not null && Directory.Exists(ClientModuleInstaller.TargetDir(gameRoot));
+        if (!Profile.SettingsSync && !alreadyThere) return;
+
+        var r = ClientModuleInstaller.Ensure(gameRoot);
+        switch (r.Outcome)
+        {
+            case ClientModuleInstaller.InstallOutcome.Installed:
+            case ClientModuleInstaller.InstallOutcome.Updated:
+                AddLine(LogCategory.Tool, "[ModularCoop] " + r.Message);
+                break;
+            case ClientModuleInstaller.InstallOutcome.Failed:
+                AddLine(LogCategory.Error, "[ModularCoop] " + r.Message);
+                break;
+            case ClientModuleInstaller.InstallOutcome.Unavailable when Profile.SettingsSync:
+                AddLine(LogCategory.Warning, "[ModularCoop] " + r.Message);
+                break;
+        }
+    }
+
     private bool SyncLauncherData()
     {
         var path = ClientManifest.DefaultLauncherDataPath();
+        EnsureClientModule();
         if (_prepared is null) RefreshPreview();
         if (_prepared is null)
         {
