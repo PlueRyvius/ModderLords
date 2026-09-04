@@ -34,9 +34,13 @@ public sealed class ServerSettings
     public int AutosaveMinutes { get; set; } = 5;
     public bool LogFile { get; set; } = true;
     public ServerVisibility Visibility { get; set; } = ServerVisibility.Public;
-    public bool TraceTick { get; set; }
-    public bool TracePublish { get; set; }
-    public bool TraceBandits { get; set; }
+    // Diagnostics only, and deliberately NOT persisted: JsonIgnore means these are always off when the
+    // app opens, whatever a profile file happens to contain. With one of these on the engine prints
+    // hundreds of thousands of lines a second, so a trace switch that survived a restart — silently, in a
+    // file nobody reads — would be a footgun. Tick one, launch, diagnose, and it is gone next session.
+    [JsonIgnore] public bool TraceTick { get; set; }
+    [JsonIgnore] public bool TracePublish { get; set; }
+    [JsonIgnore] public bool TraceBandits { get; set; }
 }
 
 /// <summary>A named mod set + order + server settings. Stored as JSON under %LOCALAPPDATA%\ModularCoop\profiles.</summary>
