@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
@@ -66,3 +66,5 @@ public partial class MainWindow : Window
         Close();
     }
 }
+
+

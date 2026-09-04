@@ -10,14 +10,14 @@
          overrides, leaving the stock chrome and focus rings alone. Button and TabItem are the exception —
          see the note above their styles: for those, colour alone is not enough. -->
 
-    <!-- Text foreground is inherited (TextElement.Foreground), so setting it on Window carries it to every
-         TextBlock and Run in the tree. That is deliberate: it means no implicit TextBlock style, which would
-         otherwise be wholly replaced by any local TextBlock style (as in CompatRecordWindow's Grid.Resources)
-         and silently drop the theme colour there. -->
-    <Style TargetType="Window">
-        <Setter Property="Background" Value="{DynamicResource WindowBackground}" />
-        <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
-    </Style>
+    <!-- Window colours are set on each window element itself, NOT with an implicit Style TargetType="Window".
+         An implicit style keys off the exact runtime type, and every window here is a Window subclass, so such a
+         style silently matches nothing: the windows kept WPF's default white background and black foreground,
+         which showed up as black labels on the dark chrome and a white strip beside the tab headers.
+
+         Foreground is set there rather than via an implicit TextBlock style because TextElement.Foreground is
+         inherited, so one setting on the window reaches every TextBlock and Run — and because a local TextBlock
+         style (as in CompatRecordWindow's Grid.Resources) would wholly replace an implicit one and drop the colour. -->
 
     <!-- Buttons and tabs are templated rather than merely re-coloured. WPF's stock templates draw their own
          light chrome and ignore Background, so setting Foreground alone produced near-white text on a

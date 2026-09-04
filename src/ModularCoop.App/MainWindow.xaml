@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:ModularCoop.App.ViewModels"
         xmlns:logs="clr-namespace:ModularCoop.Core.Logs;assembly=ModularCoop.Core"
         xmlns:compat="clr-namespace:ModularCoop.Core.Compat;assembly=ModularCoop.Core"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
         Title="Modular Bannerlords Coop" Height="820" Width="1280" MinWidth="960" MinHeight="600"
         Closing="Window_Closing">
     <Window.DataContext>
