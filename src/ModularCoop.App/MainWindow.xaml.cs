@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
@@ -38,6 +38,17 @@ public partial class MainWindow : Window
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;
 
+    // The theme lives on the App's merged dictionaries, not on this window; persisting the choice across
+    // runs comes with the UI-state store.
+    private AppTheme _theme = AppTheme.Light;
+
+    private void Theme_Click(object sender, RoutedEventArgs e)
+    {
+        _theme = _theme == AppTheme.Light ? AppTheme.Dark : AppTheme.Light;
+        App.ApplyTheme(_theme);
+        ThemeButton.Content = _theme == AppTheme.Light ? "Dark" : "Light";
+    }
+
     private void Profiles_DropDownOpened(object sender, System.EventArgs e) => ViewModel.RefreshProfileList();
 
     private void Command_KeyDown(object sender, KeyEventArgs e)
@@ -55,3 +66,5 @@ public partial class MainWindow : Window
         Close();
     }
 }
+
+

@@ -13,6 +13,8 @@ public enum LogCategory
     Milestone,     // lines worth pinning: Command Args, SERVING, exit
     Tool,          // our own messages
     Probe,         // engine AssemblyLoader eager-probe misses ("Cannot load: X.dll"); resolved properly right after, not real errors
+    Command,       // a console command the host typed, echoed back
+    CommandReply,  // engine output attributed to the command just sent (see MainViewModel: a time window, not a protocol)
 }
 
 public sealed record ClassifiedLine(string Text, LogCategory Category);

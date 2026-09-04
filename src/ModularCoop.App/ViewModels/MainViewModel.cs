@@ -56,7 +56,7 @@ public partial class ModRow : ObservableObject
 
     /// <summary>Curated verdict from the compat database (bundled + local override); refreshed by Rescan and after Record….</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CompatText), nameof(CompatColor), nameof(CompatTip))]
+    [NotifyPropertyChangedFor(nameof(CompatText), nameof(CompatVerdictValue), nameof(CompatTip))]
     private CompatBadge _compat = CompatBadge.None;
 
     public string CompatText => Compat.Verdict switch
@@ -67,13 +67,11 @@ public partial class ModRow : ObservableObject
         _ => Compat.Source == CompatSource.None ? "" : "Unknown",
     } + (Compat.VersionUntested ? " · untested version" : "");
 
-    public string CompatColor => Compat.Verdict switch
-    {
-        CompatVerdict.Works => "#2E7D32",
-        CompatVerdict.NeedsRecipe => "#B26A00",
-        CompatVerdict.Broken => "#C62828",
-        _ => "#777777",
-    };
+    /// <summary>
+    /// The verdict itself, for the Mods grid to colour by. The colour used to be a hex string built here,
+    /// which meant the Compat column ignored the theme entirely; the view now maps this to a theme brush.
+    /// </summary>
+    public CompatVerdict CompatVerdictValue => Compat.Verdict;
 
     public string CompatTip
     {
@@ -116,6 +114,16 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Raised on the UI thread after a batch of console lines was added (the view scrolls once per batch).</summary>
     public event Action? ConsoleFlushed;
     private LaunchSession.Prepared? _prepared;
+    /// <summary>
+    /// Until when engine output is attributed to the last command the host sent. The engine offers no request/reply
+    /// protocol on stdin, so this is a time window and nothing more: lines that arrive inside it and are not already
+    /// errors, warnings or milestones get tagged CommandReply. Lines the server would have printed anyway can land
+    /// in the window; the tagging is a reading aid, not a guarantee.
+    /// </summary>
+    private DateTime _replyWindowEnds = DateTime.MinValue;
+    private string _lastCommand = "";
+    private int _repliesSeen;
+    private static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(3);
     private StreamWriter? _launchLog;
 
     public ObservableCollection<string> ProfileNames { get; } = new();
@@ -144,6 +152,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _errorsOnly;
     [ObservableProperty] private bool _autoScroll = true;
     [ObservableProperty] private bool _showProbes;
+    /// <summary>Console tab: show the commands the host typed and whatever the server said back.</summary>
+    [ObservableProperty] private bool _showConsoleIo = true;
+    /// <summary>One-line feedback under the command box: what was sent, and whether anything came back.</summary>
+    [ObservableProperty] private string _commandStatus = "";
     [ObservableProperty] private SaveRow? _selectedSave;
     [ObservableProperty] private string _saveDiff = "";
     [ObservableProperty] private string _clientManifestText = "";
@@ -582,6 +594,7 @@ public partial class MainViewModel : ObservableObject
             _engine.LineReceived += line =>
             {
                 var c = LogClassifier.Classify(line.Text);
+                c = AttributeToCommand(c);
                 _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
                 // Never touch the UI per line: the engine prints thousands during load. Queue and flush on a timer.
                 _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
@@ -619,8 +632,40 @@ public partial class MainViewModel : ObservableObject
     private async Task SendCommand()
     {
         if (_engine is null || string.IsNullOrWhiteSpace(CommandText)) return;
-        try { await _engine.SendCommandAsync(CommandText); AddLine(LogCategory.Tool, "> " + CommandText); CommandText = ""; }
-        catch (Exception ex) { AddLine(LogCategory.Error, "[ModularCoop] " + ex.Message); }
+        var sent = CommandText.Trim();
+        try
+        {
+            await _engine.SendCommandAsync(sent);
+            _lastCommand = sent;
+            _repliesSeen = 0;
+            _replyWindowEnds = DateTime.Now + ReplyWindow;
+            AddLine(LogCategory.Command, "> " + sent);
+            CommandText = "";
+            CommandStatus = $"Sent \u201c{sent}\u201d \u2014 waiting for the server\u2026";
+            // Report what came back, so a command that the engine silently ignores is visibly different from one
+            // that answered. The engine does not acknowledge commands, so silence is a real and common outcome.
+            await Task.Delay(ReplyWindow);
+            CommandStatus = _repliesSeen > 0
+                ? $"\u201c{_lastCommand}\u201d \u2014 {_repliesSeen} line(s) back from the server"
+                : $"\u201c{_lastCommand}\u201d \u2014 sent, but the server said nothing (many commands answer in the game log, not here)";
+        }
+        catch (Exception ex)
+        {
+            AddLine(LogCategory.Error, "[ModularCoop] " + ex.Message);
+            CommandStatus = $"\u201c{sent}\u201d could not be sent: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Re-tags a line as CommandReply when it lands inside the window opened by the last command sent. Errors,
+    /// warnings and milestones keep their own category: those matter more than what prompted them.
+    /// </summary>
+    private ClassifiedLine AttributeToCommand(ClassifiedLine c)
+    {
+        if (DateTime.Now > _replyWindowEnds) return c;
+        if (c.Category is LogCategory.Error or LogCategory.Warning or LogCategory.Milestone or LogCategory.Probe) return c;
+        _repliesSeen++;
+        return c with { Category = LogCategory.CommandReply };
     }
 
     partial void OnIsRunningChanged(bool value)
@@ -652,6 +697,9 @@ public partial class MainViewModel : ObservableObject
     private bool FilterLine(object o)
     {
         if (o is not ConsoleLine l) return false;
+        // Console I/O is deliberately checked before ErrorsOnly: when you are driving the server by hand you want
+        // your own commands and their replies visible even while filtered down to errors.
+        if (l.Category is LogCategory.Command or LogCategory.CommandReply) return ShowConsoleIo && MatchesFilter(l);
         if (ErrorsOnly && l.Category is not (LogCategory.Error or LogCategory.Milestone)) return false;
         var visible = l.Category switch
         {
@@ -664,8 +712,12 @@ public partial class MainViewModel : ObservableObject
             _ => true,
         };
         if (!visible) return false;
-        return string.IsNullOrEmpty(ConsoleFilter) || l.Text.Contains(ConsoleFilter, StringComparison.OrdinalIgnoreCase);
+        return MatchesFilter(l);
     }
+
+    /// <summary>The Find box, applied on its own so every category path uses the same rule.</summary>
+    private bool MatchesFilter(ConsoleLine l) =>
+        string.IsNullOrEmpty(ConsoleFilter) || l.Text.Contains(ConsoleFilter, StringComparison.OrdinalIgnoreCase);
 
     partial void OnShowEngineChanged(bool value) => ConsoleView.Refresh();
     partial void OnShowModuleLoadChanged(bool value) => ConsoleView.Refresh();
@@ -673,6 +725,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnShowCoopChanged(bool value) => ConsoleView.Refresh();
     partial void OnShowWarningsChanged(bool value) => ConsoleView.Refresh();
     partial void OnShowProbesChanged(bool value) => ConsoleView.Refresh();
+    partial void OnShowConsoleIoChanged(bool value) => ConsoleView.Refresh();
     partial void OnErrorsOnlyChanged(bool value) => ConsoleView.Refresh();
     partial void OnConsoleFilterChanged(string value) => ConsoleView.Refresh();
 
