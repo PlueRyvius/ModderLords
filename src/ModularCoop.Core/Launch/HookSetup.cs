@@ -13,12 +13,22 @@ public static class HookSetup
     public const string HookFileName = "ModularCoop.Hook.dll";
     public const string SearchDirsVariable = "MODULARCOOP_SEARCH_DIRS";
 
-    /// <summary>Path of the hook DLL shipped next to the running application, or null when it is not there.</summary>
-    public static string? LocateHook()
+    /// <summary>Where the release keeps the parts that cannot live inside the single-file exe.</summary>
+    public const string BinFolder = "bin";
+
+    /// <summary>
+    /// Path of the hook DLL. The release puts it under bin\ to keep the folder people unzip readable; a dev build
+    /// leaves it next to the exe, so both are checked. It has to stay a real file either way: the engine loads it
+    /// through DOTNET_STARTUP_HOOKS, in a different process, so it can never be bundled into our exe.
+    /// </summary>
+    public static string? LocateHook() => LocateHookIn(AppContext.BaseDirectory);
+
+    /// <summary>The same lookup against a given folder, so the order of preference can be tested.</summary>
+    public static string? LocateHookIn(string baseDir)
     {
-        var baseDir = AppContext.BaseDirectory;
-        var p = Path.Combine(baseDir, HookFileName);
-        return File.Exists(p) ? p : null;
+        foreach (var candidate in new[] { Path.Combine(baseDir, BinFolder, HookFileName), Path.Combine(baseDir, HookFileName) })
+            if (File.Exists(candidate)) return candidate;
+        return null;
     }
 
     public static IReadOnlyList<string> SearchDirs(ServerPaths paths, IEnumerable<OverlayEntry> entries, string? gameRoot)

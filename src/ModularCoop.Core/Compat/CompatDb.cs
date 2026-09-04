@@ -93,7 +93,18 @@ public sealed class CompatDb
 
     // ---- locations ---------------------------------------------------------------------------------------------
 
-    public static string BundledPath => Path.Combine(AppContext.BaseDirectory, BundledFileName);
+    /// <summary>Where the release keeps data files, so the unzipped folder is not a wall of loose files.</summary>
+    public const string DataFolder = "data";
+
+    /// <summary>The bundled database: under data\ in a release, next to the exe in a dev build.</summary>
+    public static string BundledPath => BundledPathIn(AppContext.BaseDirectory);
+
+    /// <summary>The same lookup against a given folder, so the order of preference can be tested.</summary>
+    public static string BundledPathIn(string baseDir)
+    {
+        var inData = Path.Combine(baseDir, DataFolder, BundledFileName);
+        return File.Exists(inData) ? inData : Path.Combine(baseDir, BundledFileName);
+    }
     public static string LocalPath => Path.Combine(ProfileStore.RootDir, LocalFileName);
 
     private static CompatDb? _current;

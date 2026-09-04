@@ -68,6 +68,20 @@ not the five stock folders `Native`, `SandBoxCore`, `SandBox`, `Coop`, `Dedicate
 
 ---
 
+## What is in the download
+
+```
+ModularBannerlordsCoop.exe   the launcher (everything it needs is inside it)
+README.txt                   this guide
+LICENSE
+bin\                         the assembly-resolution hook the server loads
+compat\                      the two modules: server guards, and the shared sync module players install
+data\                        the bundled compatibility database
+docs\                        this guide as markdown, the roadmap, third-party notices
+```
+
+Nothing needs unpacking or installing: run the exe from wherever you unzipped it.
+
 ## Quick start
 
 1. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see below). Click **Save**.

@@ -1,4 +1,5 @@
 ﻿using Bannerlord.ModuleManager;
+using ModularCoop.Core.Compat;
 using ModularCoop.Core.Export;
 using ModularCoop.Core.Launch;
 using ModularCoop.Core.Logs;
@@ -431,5 +432,57 @@ public class ModListFileTests : IDisposable
         var empty = Path.Combine(_dir, "empty.json");
         File.WriteAllText(empty, "{\"FormatVersion\":1,\"Mods\":[]}");
         Assert.Contains("lists no mods", Assert.Throws<InvalidOperationException>(() => ModListFile.Read(empty)).Message);
+    }
+}
+
+/// <summary>
+/// The release ships a single-file exe with its odds and ends in folders, so what a player unzips is readable.
+/// A dev build leaves the same files next to the exe. Both layouts have to work, or the launcher silently loses
+/// its assembly-resolution hook (mods stop loading) or its compatibility database (every badge goes blank).
+/// </summary>
+public class ReleaseLayoutTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "mc-layout-" + Guid.NewGuid().ToString("N"));
+
+    public ReleaseLayoutTests() => Directory.CreateDirectory(_dir);
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    private string Write(params string[] parts)
+    {
+        var path = Path.Combine(new[] { _dir }.Concat(parts).ToArray());
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "x");
+        return path;
+    }
+
+    [Fact]
+    public void The_hook_is_found_in_the_release_bin_folder()
+        => Assert.Equal(Write(HookSetup.BinFolder, HookSetup.HookFileName), HookSetup.LocateHookIn(_dir));
+
+    [Fact]
+    public void The_hook_is_still_found_next_to_the_exe_in_a_dev_build()
+        => Assert.Equal(Write(HookSetup.HookFileName), HookSetup.LocateHookIn(_dir));
+
+    [Fact]
+    public void The_release_copy_of_the_hook_wins_when_both_exist()
+    {
+        Write(HookSetup.HookFileName);
+        var inBin = Write(HookSetup.BinFolder, HookSetup.HookFileName);
+        Assert.Equal(inBin, HookSetup.LocateHookIn(_dir));
+    }
+
+    [Fact]
+    public void No_hook_anywhere_is_null_rather_than_a_bogus_path()
+        => Assert.Null(HookSetup.LocateHookIn(_dir));
+
+    [Fact]
+    public void The_compat_database_is_found_in_the_release_data_folder()
+        => Assert.Equal(Write(CompatDb.DataFolder, CompatDb.BundledFileName), CompatDb.BundledPathIn(_dir));
+
+    [Fact]
+    public void The_compat_database_falls_back_to_next_to_the_exe()
+    {
+        var beside = Write(CompatDb.BundledFileName);
+        Assert.Equal(beside, CompatDb.BundledPathIn(_dir));
     }
 }

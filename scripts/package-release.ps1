@@ -21,12 +21,21 @@ dotnet build (Join-Path $root 'src\ModularCoop.Hook\ModularCoop.Hook.csproj') -c
 if ($LASTEXITCODE -ne 0) { throw "hook build failed" }
 
 dotnet publish (Join-Path $root 'src\ModularCoop.App\ModularCoop.App.csproj') -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=false -p:Version=$Version -o $out
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none `
+    -p:Version=$Version -o $out
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 
-Copy-Item (Join-Path $root 'src\ModularCoop.Hook\bin\Release\net6.0\ModularCoop.Hook.dll') $out -Force
+# Anything the exe cannot swallow goes in a folder rather than beside it. The hook must stay a real file:
+# the ENGINE loads it through DOTNET_STARTUP_HOOKS, in its own process, so it can never live inside our exe.
+$binOut = Join-Path $out 'bin'
+New-Item -ItemType Directory -Path $binOut -Force | Out-Null
+Copy-Item (Join-Path $root 'src\ModularCoop.Hook\bin\Release\net6.0\ModularCoop.Hook.dll') $binOut -Force
 # The curated compat database is a Content item of Core; publish carries it next to the exe. Copy as a belt-and-braces.
-Copy-Item (Join-Path $root 'src\ModularCoop.Core\compat-db.json') $out -Force
+$dataOut = Join-Path $out 'data'
+New-Item -ItemType Directory -Path $dataOut -Force | Out-Null
+Copy-Item (Join-Path $root 'src\ModularCoop.Core\compat-db.json') $dataOut -Force
+# Publish also drops it beside the exe as a Core content item; one copy is enough, and data\ is the one we read.
+Remove-Item (Join-Path $out 'compat-db.json') -Force -ErrorAction SilentlyContinue
 
 # The Compat module (net472, loaded by the engine) ships under compat\ next to the exe.
 dotnet build (Join-Path $root 'src\ModularCoop.Compat\ModularCoop.Compat.csproj') -c Release
@@ -53,11 +62,22 @@ foreach ($m in @($compatOut, $syncOut)) {
     Get-ChildItem $m -Recurse -Filter *.json | Where-Object { $_.Name -match 'deps|runtimeconfig' } | Remove-Item -Force -ErrorAction SilentlyContinue
     Get-ChildItem $m -Recurse -Filter recipes.json | Remove-Item -Force -ErrorAction SilentlyContinue
 }
-Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.md') -Force
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.txt') -Force
-Copy-Item (Join-Path $root 'docs\ROADMAP.md') $out -Force
+$docsOut = Join-Path $out 'docs'
+New-Item -ItemType Directory -Path $docsOut -Force | Out-Null
+Copy-Item (Join-Path $root 'README.md') $docsOut -Force
+Copy-Item (Join-Path $root 'docs\ROADMAP.md') $docsOut -Force
 if (Test-Path (Join-Path $root 'LICENSE')) { Copy-Item (Join-Path $root 'LICENSE') $out -Force }
-if (Test-Path (Join-Path $root 'THIRD-PARTY-NOTICES.md')) { Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.md') $out -Force }
+if (Test-Path (Join-Path $root 'THIRD-PARTY-NOTICES.md')) { Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.md') $docsOut -Force }
+
+# Leftovers a self-contained publish drops beside the exe that no player needs.
+Get-ChildItem $out -File | Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' } | Remove-Item -Force
+
+# The point of all the above: if the top level ever fills back up with loose files, fail loudly.
+$loose = @(Get-ChildItem $out -File)
+if ($loose.Count -gt 4) {
+    throw "Release root has $($loose.Count) loose files; it should be the exe plus a couple of documents. Put new files in a folder. ($($loose.Name -join ', '))"
+}
 
 $zip = "$out.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
