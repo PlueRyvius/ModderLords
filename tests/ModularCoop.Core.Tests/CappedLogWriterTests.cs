@@ -1,5 +1,7 @@
+using System.Text.Json;
 using ModularCoop.Core.Launch;
 using ModularCoop.Core.Logs;
+using ModularCoop.Core.Profiles;
 
 namespace ModularCoop.Core.Tests;
 
@@ -142,5 +144,57 @@ public class BoundedQueueTests
 
         Assert.True(q.Count <= 500, $"queue overran its bound: {q.Count}");
         Assert.Equal(40_000 - q.Count, q.Dropped);
+    }
+}
+
+public class TraceDefaultTests
+{
+    [Fact]
+    public void A_new_profile_has_every_trace_switch_off()
+    {
+        var s = new ServerSettings();
+        Assert.False(s.TraceTick);
+        Assert.False(s.TracePublish);
+        Assert.False(s.TraceBandits);
+    }
+
+    [Fact]
+    public void Trace_switches_are_never_persisted_so_they_open_off()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "mctrace-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var p = new Profile { Name = "tracer" };
+            p.Server.TraceTick = true;
+            p.Server.TracePublish = true;
+            p.Server.TraceBandits = true;
+            p.Server.JoinPort = 4321;   // a normal setting, to prove only the trace flags are dropped
+
+            var json = JsonSerializer.Serialize(p, new JsonSerializerOptions { WriteIndented = true });
+            Assert.DoesNotContain("TraceTick", json);
+
+            var back = JsonSerializer.Deserialize<Profile>(json)!;
+            // The engine emits hundreds of thousands of lines a second with these on, so a trace switch
+            // must never survive a restart in a file nobody reads.
+            Assert.False(back.Server.TraceTick);
+            Assert.False(back.Server.TracePublish);
+            Assert.False(back.Server.TraceBandits);
+            Assert.Equal(4321, back.Server.JoinPort);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void An_old_profile_file_with_trace_on_still_opens_with_it_off()
+    {
+        // Profiles written before this change can contain the flags; they must be ignored on read.
+        var json = """
+        { "Name": "legacy", "Server": { "JoinPort": 4200, "TraceTick": true, "TraceBandits": true } }
+        """;
+        var p = JsonSerializer.Deserialize<Profile>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        Assert.False(p.Server.TraceTick);
+        Assert.False(p.Server.TraceBandits);
+        Assert.Equal(4200, p.Server.JoinPort);
     }
 }
