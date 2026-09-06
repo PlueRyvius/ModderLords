@@ -13,9 +13,10 @@ public static class ClientManifest
 {
     public sealed record Entry(string Id, string Version, string? Source);
 
-    /// <summary>TaleWorlds modules the validator ignores: always present on a client, never part of a server's mod list.</summary>
-    public static readonly IReadOnlySet<string> OfficialModuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        { "Native", "SandBoxCore", "Sandbox", "SandBox", "StoryMode", "CustomBattle", "BirthAndDeath", "Multiplayer", "FastMode" };
+    /// <summary>TaleWorlds modules the validator ignores: always present on a client, never part of a server's mod list.
+    /// DLC is deliberately excluded — the validator does NOT ignore it, it rejects the client outright.</summary>
+    public static readonly IReadOnlySet<string> OfficialModuleIds =
+        new HashSet<string>(OfficialModules.Required.Concat(OfficialModules.Optional), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Both ids the Coop client module ships under, depending on the build the player installed. Matched exactly and

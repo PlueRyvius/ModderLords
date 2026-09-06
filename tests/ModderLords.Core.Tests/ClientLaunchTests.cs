@@ -108,4 +108,38 @@ public class ClientLaunchTests
 
         Assert.Equal(["Native", "SandBoxCore", "Sandbox", "MyMod", "CoopNightly", "DedicatedServer.Windows"], r.ModuleIds);
     }
+
+    /// <summary>
+    /// A community mod dropped into the game's Modules folder that declares ModuleType=Official used to vanish:
+    /// the Mods tab filtered on the module's own claim, so the row never appeared and there was no way to enable
+    /// it. Membership of the official set is decided by id, and a mod cannot talk its way in.
+    /// </summary>
+    [Fact]
+    public void AModThatClaimsToBeOfficialIsStillAMod()
+    {
+        Assert.False(OfficialModules.IsGameModule("ZZ_DroppedMod"));
+        Assert.False(OfficialModules.IsGameModule("ImprovedGarrisons"));
+        Assert.True(OfficialModules.IsGameModule("Native"));
+        Assert.True(OfficialModules.IsGameModule("BirthAndDeath"));
+        Assert.True(OfficialModules.IsGameModule("NavalDLC"));
+    }
+
+    [Fact]
+    public void SandBoxIsRecognisedByFolderNameAndById()
+    {
+        // The folder is "SandBox" and the id inside it is "Sandbox"; both have to count as required.
+        Assert.True(OfficialModules.IsRequired("SandBox"));
+        Assert.True(OfficialModules.IsRequired("Sandbox"));
+        Assert.False(OfficialModules.IsRequired("StoryMode"));
+    }
+
+    /// <summary>DLC is not merely ignored by Coop's validator: an enabled DLC rejects the client, so it must never
+    /// be lumped in with the officials the validator exempts.</summary>
+    [Fact]
+    public void DlcIsNotOneOfTheExemptOfficials()
+    {
+        Assert.True(OfficialModules.IsDlc("NavalDLC"));
+        Assert.DoesNotContain("NavalDLC", Export.ClientManifest.OfficialModuleIds);
+        Assert.Contains("BirthAndDeath", Export.ClientManifest.OfficialModuleIds);
+    }
 }

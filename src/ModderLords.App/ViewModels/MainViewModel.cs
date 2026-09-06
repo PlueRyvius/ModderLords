@@ -318,7 +318,7 @@ public partial class MainViewModel : ObservableObject
             // One row per module id (best copy), profile order first, then the rest alphabetically.
             // Coop itself (any build id) and the stock modules are never user-selectable.
             var stockIds = new HashSet<string>(catalog.Modules.Where(m => m.IsStock).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
-            var best = catalog.Modules.Where(m => !m.IsStock && !m.IsOfficial && !stockIds.Contains(m.Id)
+            var best = catalog.Modules.Where(m => !m.IsStock && !OfficialModules.IsGameModule(m.Id) && !stockIds.Contains(m.Id)
                                                   && !m.Id.Equals("Coop", StringComparison.OrdinalIgnoreCase) && !m.Id.Equals("CoopNightly", StringComparison.OrdinalIgnoreCase))
                 .GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g =>
