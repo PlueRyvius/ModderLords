@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Loaded into the engine process (bundled .NET 6 runtime) via DOTNET_STARTUP_HOOKS; keep it dependency-free. -->
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ModderLords.Hook</AssemblyName>
+    <RootNamespace>ModderLords.Hook</RootNamespace>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableDynamicLoading>false</EnableDynamicLoading>
+  </PropertyGroup>
+
+</Project>

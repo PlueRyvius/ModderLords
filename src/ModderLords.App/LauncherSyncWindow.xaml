@@ -1,0 +1,27 @@
+﻿<Window x:Class="ModderLords.App.LauncherSyncWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
+        Title="Match your mod list to the server" Height="560" Width="720" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" Text="Your Bannerlord launcher does not match the server" FontWeight="Bold" Margin="0,0,0,2" />
+        <TextBlock DockPanel.Dock="Top" x:Name="SourceLine" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+            <CheckBox x:Name="DontAskBox" Content="Don't ask again for this profile" VerticalAlignment="Center"
+                      ToolTip="Apply the changes automatically from now on. Problems the sync cannot fix are still reported in the console." />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" FlowDirection="RightToLeft" Width="420">
+                <Button Content="Cancel" IsCancel="True" MinWidth="80" Margin="4,0" />
+                <Button x:Name="ApplyButton" Content="Apply and launch" Click="Apply_Click" MinWidth="130" Margin="4,0" IsDefault="True" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border DockPanel.Dock="Bottom" x:Name="BackupNote" Margin="0,8,0,0">
+            <TextBlock x:Name="BackupLine" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" />
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Sections" />
+        </ScrollViewer>
+    </DockPanel>
+</Window>

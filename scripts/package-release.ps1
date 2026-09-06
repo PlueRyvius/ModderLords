@@ -12,15 +12,15 @@ $declared = ([xml](Get-Content $propsPath)).Project.PropertyGroup.VersionPrefix
 if ($declared -ne $Version) {
     throw "Directory.Build.props says $declared but you asked to package $Version. Bump VersionPrefix first (one line, then commit it)."
 }
-$out = Join-Path $root "artifacts\ModularBannerlordsCoop-$Version"
+$out = Join-Path $root "artifacts\ModderLords-$Version"
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null
 
 # The hook is loaded into the engine (net6.0); build it first so the app's CopyHook target finds it.
-dotnet build (Join-Path $root 'src\ModularCoop.Hook\ModularCoop.Hook.csproj') -c Release
+dotnet build (Join-Path $root 'src\ModderLords.Hook\ModderLords.Hook.csproj') -c Release
 if ($LASTEXITCODE -ne 0) { throw "hook build failed" }
 
-dotnet publish (Join-Path $root 'src\ModularCoop.App\ModularCoop.App.csproj') -c Release -r win-x64 --self-contained true `
+dotnet publish (Join-Path $root 'src\ModderLords.App\ModderLords.App.csproj') -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none `
     -p:Version=$Version -o $out
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
@@ -29,30 +29,30 @@ if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 # the ENGINE loads it through DOTNET_STARTUP_HOOKS, in its own process, so it can never live inside our exe.
 $binOut = Join-Path $out 'bin'
 New-Item -ItemType Directory -Path $binOut -Force | Out-Null
-Copy-Item (Join-Path $root 'src\ModularCoop.Hook\bin\Release\net6.0\ModularCoop.Hook.dll') $binOut -Force
+Copy-Item (Join-Path $root 'src\ModderLords.Hook\bin\Release\net6.0\ModderLords.Hook.dll') $binOut -Force
 # The curated compat database is a Content item of Core; publish carries it next to the exe. Copy as a belt-and-braces.
 $dataOut = Join-Path $out 'data'
 New-Item -ItemType Directory -Path $dataOut -Force | Out-Null
-Copy-Item (Join-Path $root 'src\ModularCoop.Core\compat-db.json') $dataOut -Force
+Copy-Item (Join-Path $root 'src\ModderLords.Core\compat-db.json') $dataOut -Force
 # Publish also drops it beside the exe as a Core content item; one copy is enough, and data\ is the one we read.
 Remove-Item (Join-Path $out 'compat-db.json') -Force -ErrorAction SilentlyContinue
 
 # The Compat module (net472, loaded by the engine) ships under compat\ next to the exe.
-dotnet build (Join-Path $root 'src\ModularCoop.Compat\ModularCoop.Compat.csproj') -c Release
+dotnet build (Join-Path $root 'src\ModderLords.Compat\ModderLords.Compat.csproj') -c Release
 if ($LASTEXITCODE -ne 0) { throw "compat build failed" }
-$compatOut = Join-Path $out 'compat\DedicatedServer.ModularCoopCompat'
+$compatOut = Join-Path $out 'compat\DedicatedServer.ModderLordsCompat'
 New-Item -ItemType Directory -Path $compatOut -Force | Out-Null
-Copy-Item (Join-Path $root 'src\ModularCoop.Compat\_Module\*') $compatOut -Recurse -Force
+Copy-Item (Join-Path $root 'src\ModderLords.Compat\_Module\*') $compatOut -Recurse -Force
 Get-ChildItem $compatOut -Recurse -Filter *.pdb | Remove-Item -Force
 
 # The shared client+server sync module (players copy this one into their game's Modules folder).
-dotnet build (Join-Path $root 'src\ModularCoop.CompatSync\ModularCoop.CompatSync.csproj') -c Release
+dotnet build (Join-Path $root 'src\ModderLords.CompatSync\ModderLords.CompatSync.csproj') -c Release
 if ($LASTEXITCODE -ne 0) { throw "compat sync build failed" }
-dotnet build (Join-Path $root 'src\ModularCoop.CompatSync.Coop\ModularCoop.CompatSync.Coop.csproj') -c Release
+dotnet build (Join-Path $root 'src\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj') -c Release
 if ($LASTEXITCODE -ne 0) { throw "compat sync adapter build failed" }
-$syncOut = Join-Path $out 'compat\ModularCoop.Compat'
+$syncOut = Join-Path $out 'compat\ModderLords.Compat'
 New-Item -ItemType Directory -Path $syncOut -Force | Out-Null
-Copy-Item (Join-Path $root 'src\ModularCoop.CompatSync\_Module\*') $syncOut -Recurse -Force
+Copy-Item (Join-Path $root 'src\ModderLords.CompatSync\_Module\*') $syncOut -Recurse -Force
 Get-ChildItem $syncOut -Recurse -Filter *.pdb | Remove-Item -Force
 
 # The _Module output dirs are source-tree build outputs that accumulate leftovers (e.g. a win-x64 RID subfolder

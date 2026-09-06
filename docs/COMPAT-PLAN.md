@@ -41,7 +41,7 @@ junction overlay and the resolver hook that class is unnecessary.
    `IPlayerManager`, `ModInformation.IsServer/IsClient/BuildVersion`. ModularSmithing2's adapter already probes 15 of
    these by name and degrades gracefully when one is missing; that probe pattern is the template.
 
-## Design: `ModularCoop.Compat`
+## Design: `ModderLords.Compat`
 
 One module, one assembly, enabled on server and on every client (version-matched by Coop's validator like any mod).
 Loaded on the server through the overlay like anything else. Contains no Coop code; binds to the seams above by name
@@ -78,7 +78,7 @@ heroes, item rosters) needs nothing beyond the prefix. The IL scan can find thos
 ### Layer 2: mod-owned state through Coop's sync (both sides)
 
 - **Settings (Layer 2a, shipped v0.6/v0.7)**: one generic bridge with two sources behind `ISettingsSource`
-  (`src/ModularCoop.CompatSync`): `McmSettingsSource` (MCM v5 `SettingsDefinitions` by reflection, MCM's own
+  (`src/ModderLords.CompatSync`): `McmSettingsSource` (MCM v5 `SettingsDefinitions` by reflection, MCM's own
   SettingsIds) and `StaticSettingsSource` (plain settings classes in community mod assemblies, ids
   `static:<Assembly>:<Type>`). Discovery rule for the static source, mirrored by the launcher's IL scan
   (`AssemblyScan.SettingsClasses`): a non-generic class whose name ends in Settings/Setting/Config/Configs/
@@ -114,9 +114,9 @@ Shipped (v0.6): one file, `compat-db.json` next to the launcher, `{ SchemaVersio
 `Verdict` (Works / NeedsRecipe / Broken / Unknown), `TestedVersions`, `TestedCoopVersion`, the launcher defaults for a
 mod new to a profile (`DefaultRole`, `ServerAuthoritative`, `ClientSideBehaviors`), `KeepSubModules` (submodule classes
 that survive DependencyOnly; MCM's settings core), `Notes`, `Url`, `UpdatedAt`. The user's own records live in
-`%LOCALAPPDATA%\ModularCoop\compat-db.local.json` with the same shape; a local record replaces the bundled one whole, by
+`%LOCALAPPDATA%\ModderLords\compat-db.local.json` with the same shape; a local record replaces the bundled one whole, by
 id. `Record…` on the Mods tab writes a local record; `Export…` / `Import…` share them (import keeps whichever record has
-the newer `UpdatedAt`). `ModularCoop.Core.Compat.CompatDb` replaced the hardcoded role and keep-submodule tables. The
+the newer `UpdatedAt`). `ModderLords.Core.Compat.CompatDb` replaced the hardcoded role and keep-submodule tables. The
 recipe itself (guards, synced fields, settings classes from Layer 2) is not in the record yet; the behaviours list is.
 
 ## Order of work

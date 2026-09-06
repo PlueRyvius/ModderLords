@@ -1,6 +1,6 @@
 # Build and test what a runner can build without a local Bannerlord install.
 #
-# ModularCoop.CompatSync.Coop references Coop's own assemblies from a Steam workshop path
+# ModderLords.CompatSync.Coop references Coop's own assemblies from a Steam workshop path
 # (CoopRefDir, defaulted to a local machine in its csproj), so it — and everything that
 # project-references it, which is App and Cli — cannot build here. Core holds the logic the
 # tests cover; the two net472 module projects build from NuGet reference assemblies alone.
@@ -22,14 +22,14 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Build ModularCoop.Core
-        run: dotnet build src/ModularCoop.Core/ModularCoop.Core.csproj -c Release --nologo
+      - name: Build ModderLords.Core
+        run: dotnet build src/ModderLords.Core/ModderLords.Core.csproj -c Release --nologo
 
-      - name: Build DedicatedServer.ModularCoopCompat (net472 server guards)
-        run: dotnet build src/ModularCoop.Compat/ModularCoop.Compat.csproj -c Release --nologo
+      - name: Build DedicatedServer.ModderLordsCompat (net472 server guards)
+        run: dotnet build src/ModderLords.Compat/ModderLords.Compat.csproj -c Release --nologo
 
-      - name: Build ModularCoop.CompatSync (net472 shared module)
-        run: dotnet build src/ModularCoop.CompatSync/ModularCoop.CompatSync.csproj -c Release --nologo
+      - name: Build ModderLords.CompatSync (net472 shared module)
+        run: dotnet build src/ModderLords.CompatSync/ModderLords.CompatSync.csproj -c Release --nologo
 
       - name: Test
-        run: dotnet test tests/ModularCoop.Core.Tests/ModularCoop.Core.Tests.csproj -c Release --nologo --logger "console;verbosity=normal"
+        run: dotnet test tests/ModderLords.Core.Tests/ModderLords.Core.Tests.csproj -c Release --nologo --logger "console;verbosity=normal"

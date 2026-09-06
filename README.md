@@ -1,10 +1,18 @@
-﻿# Modular Bannerlords Coop
+﻿# ModderLords
 
 Run the **Bannerlord Coop dedicated server with your mods**, using the untouched official server from the Steam
 Workshop and the mods exactly where they already live for single player. No copying mods around, no patched server
 files, no third-party launcher inside your Steam folder.
 
 Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
+
+> **Upgrading from Modular Bannerlords Coop?** This is the same project under a new name. Your profiles, local
+> compatibility records and settings caches are copied automatically on first run from `%LOCALAPPDATA%\ModularCoop`
+> to `%LOCALAPPDATA%\ModderLords`; the old folder is left untouched and can be deleted once you are happy. The
+> launcher's own in-game modules were renamed too, so delete the leftover `ModularCoop.Compat` and
+> `DedicatedServer.ModularCoopCompat` folders from your game's `Modules` directory — the Mods tab reminds you if
+> they are still there. From v0.9.0 the licence is [PolyForm Noncommercial](LICENSE): you may now share and modify
+> this, noncommercially.
 
 ---
 
@@ -32,7 +40,7 @@ Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
   needs a restart.
 - **Safety**: the server is tied to the launcher, so it can never linger headless if the launcher closes; errors are
   logged instead of crashing the app.
-- **Server guards** (the bundled `DedicatedServer.ModularCoopCompat` module): single-player mods that open inquiries or
+- **Server guards** (the bundled `DedicatedServer.ModderLordsCompat` module): single-player mods that open inquiries or
   screens on the headless server get their pop-ups answered and their screen pushes swallowed instead of crashing.
   Server-only; players need nothing extra. The Mods tab shows a **Server verdict** per mod (server-safe / guarded /
   needs review) from a scan of what the mod's DLLs reference; nothing is executed to compute it.
@@ -55,14 +63,14 @@ The release zip is self-contained; no separate .NET install is needed.
 
 ## Install
 
-1. Unzip the release anywhere (for example `C:\Games\ModularBannerlordsCoop`). Keep all files together; the launcher
-   needs `ModularCoop.Hook.dll` next to it.
-2. Run `ModularBannerlordsCoop.exe`.
+1. Unzip the release anywhere (for example `C:\Games\ModderLords`). Keep all files together; the launcher
+   needs `ModderLords.Hook.dll` next to it.
+2. Run `ModderLords.exe`.
 3. If Windows SmartScreen warns about an unknown publisher, choose "More info" then "Run anyway". The tool makes no
    network connections and changes nothing outside the folders listed under "Where things live".
 
 To uninstall: delete the folder. To remove the links it created inside the server, first click **Delete** on each
-profile (that removes its junctions), or delete `%LOCALAPPDATA%\ModularCoop` and the junctions under
+profile (that removes its junctions), or delete `%LOCALAPPDATA%\ModderLords` and the junctions under
 `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\engine\Modules` (they are the entries that are links,
 not the five stock folders `Native`, `SandBoxCore`, `SandBox`, `Coop`, `DedicatedServer.Windows`).
 
@@ -71,7 +79,7 @@ not the five stock folders `Native`, `SandBoxCore`, `SandBox`, `Coop`, `Dedicate
 ## What is in the download
 
 ```
-ModularBannerlordsCoop.exe   the launcher (everything it needs is inside it)
+ModderLords.exe   the launcher (everything it needs is inside it)
 README.txt                   this guide
 LICENSE
 bin\                         the assembly-resolution hook the server loads
@@ -117,7 +125,7 @@ from then on.
 
 It is deliberately narrow about what it touches. The official TaleWorlds modules, the Coop mod itself, your
 multiplayer mod list and the launcher's DLL list are never modified, and the previous file is copied to
-`%LOCALAPPDATA%\ModularCoop\launcher-backups\<timestamp>\` before every change. What it cannot do is install a
+`%LOCALAPPDATA%\ModderLords\launcher-backups\<timestamp>\` before every change. What it cannot do is install a
 missing mod or change a version already on disk: those are reported in the console, and the client still starts, so
 you will see Coop's own message if the join is refused.
 
@@ -125,11 +133,11 @@ A mod you subscribed to since the Bannerlord launcher last ran is not in that fi
 what it has scanned — so the sync adds the entry itself rather than telling you the mod is missing. It also warns
 when a mod is still ticked in the launcher but its folder has gone from this PC.
 
-Launch client also keeps the shared `ModularCoop.Compat` module installed for you. When a profile uses Settings
-sync, the launcher copies its own bundled build into `<game>\Modules\ModularCoop.Compat`, and replaces it whenever
+Launch client also keeps the shared `ModderLords.Compat` module installed for you. When a profile uses Settings
+sync, the launcher copies its own bundled build into `<game>\Modules\ModderLords.Compat`, and replaces it whenever
 the build it carries is newer than the one already there — so you never copy it out of the release zip by hand, and
 it cannot fall behind. It never downgrades a newer copy, never touches any other module, and keeps the copy it
-replaced under `%LOCALAPPDATA%\ModularCoop\module-backups\`. If your game lives somewhere Windows will not let the
+replaced under `%LOCALAPPDATA%\ModderLords\module-backups\`. If your game lives somewhere Windows will not let the
 launcher write, it says so instead of failing quietly.
 
 **Players tab → Match server…** shows the same comparison on demand, including when there is nothing to change, so
@@ -153,7 +161,7 @@ CPU and memory are read by the launcher watching the process, which costs the se
 the numbers that would have shown v0.8.3's runaway long before the stutter was noticeable. Tick rate needs the
 compat guards module (on by default); the player count needs Settings sync, and the tab says so when it is missing.
 
-Each session's summary is written to `%LOCALAPPDATA%\ModularCoop\perf\` so real thresholds can be worked out later
+Each session's summary is written to `%LOCALAPPDATA%\ModderLords\perf\` so real thresholds can be worked out later
 from real data.
 
 ---
@@ -256,11 +264,11 @@ differs, extra mod enabled, DLC enabled).
 
 | What | Where |
 |---|---|
-| Profiles | `%LOCALAPPDATA%\ModularCoop\profiles\<name>.json` |
-| Compatibility database | `compat-db.json` next to the launcher (bundled); your records in `%LOCALAPPDATA%\ModularCoop\compat-db.local.json` |
-| Mod settings overrides / cache | `%LOCALAPPDATA%\ModularCoop\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModularCoop\cache\<profile>.settings-cache.json` |
-| Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModularCoop\overlay\<profile>\` |
-| Launcher logs | `%LOCALAPPDATA%\ModularCoop\logs\launch-*.log`, `app-errors.log` |
+| Profiles | `%LOCALAPPDATA%\ModderLords\profiles\<name>.json` |
+| Compatibility database | `compat-db.json` next to the launcher (bundled); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
+| Mod settings overrides / cache | `%LOCALAPPDATA%\ModderLords\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModderLords\cache\<profile>.settings-cache.json` |
+| Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModderLords\overlay\<profile>\` |
+| Launcher logs | `%LOCALAPPDATA%\ModderLords\logs\launch-*.log`, `app-errors.log` |
 | Server data (saves, server-config.json, server logs, config backups) | `Documents\Mount and Blade II Bannerlord\CoopData\DedicatedServer\` |
 | Gameplay config | `Documents\Mount and Blade II Bannerlord\CoopData\mod-config.json` |
 | The server itself (untouched except for links under `engine\Modules`) | `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\` |
@@ -305,21 +313,21 @@ the official `BannerlordCoopServer.exe`, or an older launcher) is still up. Stop
   and relies only on their public interfaces; it contains none of their code.
 - Mods loaded with the **Run** role on a server were mostly written for single player. Many work, some need fixes like
   those CoopModPatch provides. See `ROADMAP.md` for where this is heading.
-- Report problems with the launcher log from `%LOCALAPPDATA%\ModularCoop\logs` attached.
+- Report problems with the launcher log from `%LOCALAPPDATA%\ModderLords\logs` attached.
 
 ## Settings sync (optional, players install one extra mod)
 
-With **Settings sync** ticked on the Server tab, the launcher also loads the shared `ModularCoop.Compat` module on the
+With **Settings sync** ticked on the Server tab, the launcher also loads the shared `ModderLords.Compat` module on the
 server. It is a normal community mod, so it appears in the Players tab list and **every player must install and
-enable it**: copy the folder `compat\ModularCoop.Compat` from the launcher folder into the game's `Modules` folder
-(`...\Mount & Blade II Bannerlord\Modules\ModularCoop.Compat`) and enable it in the Bannerlord launcher, anywhere after
+enable it**: copy the folder `compat\ModderLords.Compat` from the launcher folder into the game's `Modules` folder
+(`...\Mount & Blade II Bannerlord\Modules\ModderLords.Compat`) and enable it in the Bannerlord launcher, anywhere after
 the frameworks.
 
 What it does: when a player joins, the server sends the values of every MCM settings page it has (toggles, numbers,
 text, enum choices) and the client applies them in memory for the session, so mod settings match the host instead of
 each player's local file. When the host changes a setting during the session, the new values are broadcast. Nothing is
 written to the players' own settings files. Mods without MCM settings are unaffected. The console shows
-`[ModularCoop.Compat] settings sync: '<settings id>' from server: N changed` on the client.
+`[ModderLords.Compat] settings sync: '<settings id>' from server: N changed` on the client.
 
 Both bundled modules only ever load code from the launcher folder; nothing of Coop's is included.
 
@@ -327,10 +335,10 @@ Both bundled modules only ever load code from the launcher folder; nothing of Co
 
 On the Mods tab, tick **Server-only logic** for a mod whose gameplay should be decided by the host: garrison managers,
 economy tweaks, battle effects. The launcher scans the mod's DLL for its campaign behaviours and mission behaviours and
-writes a recipe into the shared `ModularCoop.Compat` module. On the server everything runs as before. Joining players
+writes a recipe into the shared `ModderLords.Compat` module. On the server everything runs as before. Joining players
 receive the recipe before their campaign loads and their copy of the mod stops registering those behaviours, so only
 the host's copy acts and the results reach players through Coop's normal sync. The **Behaviours** column shows what a
-mod has to gate. Players need `ModularCoop.Compat` installed for this (see the section above).
+mod has to gate. Players need `ModderLords.Compat` installed for this (see the section above).
 
 When a mod also has a client-side screen (ImprovedGarrisons' management UI, for example), that screen is one of the
 gated behaviours and will not appear on players' clients; that is the trade-off until per-behaviour recipes are editable.
@@ -339,9 +347,9 @@ gated behaviours and will not appear on players' clients; that is the trade-off 
 
 After a session, open the two logs in `Documents\Mount and Blade II Bannerlord\Configs\ModLogs`:
 
-- `ModularCoop.Compat-server.log` should show `verification (server): ...=N` with counts above zero for the gated
+- `ModderLords.Compat-server.log` should show `verification (server): ...=N` with counts above zero for the gated
   behaviours once players have been on and time has advanced.
-- `ModularCoop.Compat-client.log` should show `verification (client): gated behaviours ran 0 times` plus
+- `ModderLords.Compat-client.log` should show `verification (client): gated behaviours ran 0 times` plus
   `RegisterEvents skipped on client: ...` lines. Zero on the client is the proof: those behaviours ran only on the host.
 
 (An empty server shows 0 because the campaign clock is paused until a player joins.)
@@ -361,7 +369,7 @@ them without a restart. It covers two kinds of mod:
 The **Settings** column on the Mods tab tells you in advance what the scan expects: `MCM`, `own settings (N values)`,
 both, or `none found` (hover for the class names). If a mod's settings class is missed or a data class is picked up by
 mistake, add its full type name to `SettingsTypes` or `IgnoreSettingsTypes` in your compat record
-(`%LOCALAPPDATA%\ModularCoop\compat-db.local.json`); the hint travels to the module through `recipes.json`.
+(`%LOCALAPPDATA%\ModderLords\compat-db.local.json`); the hint travels to the module through `recipes.json`.
 
 **Live** (server running):
 
@@ -372,8 +380,8 @@ mistake, add its full type name to `SettingsTypes` or `IgnoreSettingsTypes` in y
    **Apply**.
 3. The server applies the values on its next tick (up to 3 s), saves them through MCM or the mod's own save method
    when one can be found, and the existing settings sync pushes them to connected players on the following tick.
-   The result line under the editor and a `[ModularCoop.Compat] live apply …` line in the Console say what changed;
-   the same appears in `Documents\Mount and Blade II Bannerlord\Configs\ModLogs\ModularCoop.Compat-server.log`.
+   The result line under the editor and a `[ModderLords.Compat] live apply …` line in the Console say what changed;
+   the same appears in `Documents\Mount and Blade II Bannerlord\Configs\ModLogs\ModderLords.Compat-server.log`.
 
 **Offline** (server stopped): the tab stays enabled with the last values the server reported. Edits you Apply become
 **host overrides** for the profile, staged at the next launch and applied once the mod has created its settings
@@ -389,7 +397,7 @@ unsent edits are kept).
 What is not editable here: dropdowns, colours, buttons and other custom types are listed greyed with their type name
 (the sync module only carries booleans, numbers, text and enums); a mod's `Version` string is shown but locked. A
 setting the mod marks *restart required* is applied and saved, but the mod may not act on it until the next start.
-Files: `%LOCALAPPDATA%\ModularCoop\live\<profile>\` (recreated at each launch), `profiles\<profile>.settings.json`
+Files: `%LOCALAPPDATA%\ModderLords\live\<profile>\` (recreated at each launch), `profiles\<profile>.settings.json`
 (overrides) and `cache\<profile>.settings-cache.json` (last description).
 
 ## Compatibility database
@@ -402,7 +410,7 @@ changed.
 
 - **Bundled**: `compat-db.json` next to the launcher, updated with each release. Starts with the frameworks (Harmony,
   ButterLib, UIExtenderEx, MCM), ModularSmithing2 and ImprovedGarrisons.
-- **Yours**: `%LOCALAPPDATA%\ModularCoop\compat-db.local.json`. Select a mod and press **Record…** after testing it:
+- **Yours**: `%LOCALAPPDATA%\ModderLords\compat-db.local.json`. Select a mod and press **Record…** after testing it:
   pick the verdict, tick *Tested with this version* (records the mod and Coop versions), add notes, and press *Use
   current row as defaults* to store the Role / Server-only logic / behaviours you settled on. A local record replaces the
   bundled one for that mod; *Remove local record* brings the bundled one back.
@@ -417,16 +425,18 @@ the record; the mod may still work.
 
 ## Licence
 
-Modular Bannerlords Coop is released under the [PolyForm Strict License 1.0.0](LICENSE).
+ModderLords is released under the [PolyForm Noncommercial License 1.0.0](LICENSE).
 
 In plain terms:
 
-- **Run it all you like** for anything noncommercial — host servers, play, stream, mod your own game with it.
-- **Do not re-upload it, distribute it, or publish modified versions.**
+- **Use it all you like** for anything noncommercial — play, host servers, stream, mod your own game with it.
+- **Share it and publish changed versions**, noncommercially, as long as the licence and copyright notice
+  travel with them.
 - **Do not use it commercially.**
 
-Those last two are available by asking rather than being a flat no. If you want to modify, bundle, fork,
-translate, or commercialise it, open an issue and ask; I would rather say yes to someone who asked.
+Up to v0.8.x this project used the stricter PolyForm Strict licence, which allowed neither sharing nor
+modification. That was the wrong fit for a community mod loader, so from v0.9.0 both are allowed. If you fix
+something, a pull request helps everyone more than a private fork does. For commercial use, open an issue and ask.
 
 This is a source-available licence, not an open-source one, and that is deliberate.
 

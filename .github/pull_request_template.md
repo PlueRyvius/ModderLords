@@ -7,7 +7,7 @@
 <!-- Be specific. `dotnet test` alone is not enough for anything that touches the WPF app:
      say what you clicked, on what screen size, and what you saw. -->
 
-- [ ] `dotnet test tests/ModularCoop.Core.Tests/ModularCoop.Core.Tests.csproj`
+- [ ] `dotnet test tests/ModderLords.Core.Tests/ModderLords.Core.Tests.csproj`
 - [ ] Ran the launcher and exercised the changed screen
 - [ ] Full launch → join → stop cycle (for anything touching launch, overlay, or the hook)
 
