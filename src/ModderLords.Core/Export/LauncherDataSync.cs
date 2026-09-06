@@ -1,4 +1,4 @@
-using System.Xml;
+﻿using System.Xml;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
@@ -84,8 +84,16 @@ public static class LauncherDataSync
     /// tell "the launcher has not seen it yet", which we can fix by writing the entry, from "not installed", which we
     /// cannot. Pass null to skip the distinction and report every absent entry as not installed.
     /// </param>
+    /// <param name="officialSelection">
+    /// Which of the game's own modules the profile wants switched on. When given, the plan brings the optional
+    /// officials and the DLC in line with it: Birth and Aging or Fast Mode can be turned off for a coop session,
+    /// and a DLC can be turned back on for ordinary play. Native, SandBoxCore and SandBox are never touched at
+    /// all - a plan that could leave the game unable to start is not worth the convenience. Pass null to leave
+    /// every official alone except a DLC, which is switched off because Coop's validator rejects a client that
+    /// has one enabled.
+    /// </param>
     public static SyncPlan ComputePlan(IReadOnlyList<ClientManifest.Entry> serverMods, LoadOrder.Result order, string launcherDataPath,
-                                       IReadOnlySet<string>? installedClientSide = null)
+                                       IReadOnlySet<string>? installedClientSide = null, IReadOnlySet<string>? officialSelection = null)
     {
         var changes = new List<PlannedChange>();
         if (!File.Exists(launcherDataPath))
@@ -152,10 +160,27 @@ public static class LauncherDataSync
         foreach (var c in client)
         {
             if (!c.Selected) continue;
+            // Officials are the profile's business, handled below; without a profile only a DLC is forced off.
+            if (officialSelection is not null && OfficialModules.IsGameModule(c.Id)) continue;
             if (ClientManifest.OfficialModuleIds.Contains(c.Id) || ClientManifest.CoopClientModuleIds.Contains(c.Id)) continue;
             if (wantedIds.Contains(c.Id)) continue;
             changes.Add(new PlannedChange(c.Id, SyncAction.Disable,
-                c.Id.Equals("NavalDLC", StringComparison.OrdinalIgnoreCase) ? "DLC must be off to join" : "the server does not run it"));
+                OfficialModules.IsDlc(c.Id) ? "DLC must be off to join" : "the server does not run it"));
+        }
+
+        // The game's own modules, brought in line with the profile. Required ones are skipped outright: the value of
+        // being able to untick Native does not come close to the cost of writing a launcher list that will not boot.
+        if (officialSelection is not null)
+        {
+            foreach (var c in client)
+            {
+                if (!OfficialModules.IsGameModule(c.Id) || OfficialModules.IsRequired(c.Id)) continue;
+                var wantOn = officialSelection.Contains(c.Id);
+                if (wantOn == c.Selected) continue;
+                changes.Add(wantOn
+                    ? new PlannedChange(c.Id, SyncAction.Enable, OfficialModules.IsDlc(c.Id) ? "this profile uses the DLC" : "this profile uses this game module")
+                    : new PlannedChange(c.Id, SyncAction.Disable, OfficialModules.IsDlc(c.Id) ? "this profile does not use the DLC" : "this profile turns this game module off"));
+            }
         }
 
         // A ticked entry whose module is no longer on disk: the launcher keeps the entry until it rescans, and the
@@ -262,6 +287,9 @@ public static class LauncherDataSync
         foreach (var change in plan.Changes)
         {
             if (change.Action is not (SyncAction.Enable or SyncAction.Disable)) continue;
+            // ComputePlan never plans this, but Apply is the last thing between a plan and the player's launcher
+            // list: unticking Native or SandBox produces a game that will not start, so refuse it here too.
+            if (change.Action == SyncAction.Disable && OfficialModules.IsRequired(change.Id)) continue;
             if (!byId.TryGetValue(change.Id, out var entry)) continue;
             if (entry.Element.SelectSingleNode("IsSelected") is not XmlElement sel) continue;
             sel.InnerText = change.Action == SyncAction.Enable ? "true" : "false";
