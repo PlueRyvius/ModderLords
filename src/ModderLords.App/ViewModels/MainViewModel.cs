@@ -41,6 +41,26 @@ public partial class ModRow : ObservableObject
     /// <summary>True for a module TaleWorlds ship. Decided by id, never by the module's own ModuleType claim.</summary>
     public bool IsGameModule => OfficialModules.IsGameModule(Module.Id);
 
+    /// <summary>
+    /// A framework that the game's own modules load AFTER - Harmony, ButterLib, UIExtenderEx, MCM. Its manifest
+    /// says so, and both the engine order and this list read the same fact, so they cannot disagree.
+    /// </summary>
+    public bool LoadsBeforeGame => !IsGameModule && LoadOrder.LoadsBeforeNative(Module);
+
+    /// <summary>
+    /// The three bands of the load order: frameworks, then the game's own modules, then everything else. A row can
+    /// be dragged freely inside its band and never out of it, because which band it is in is decided by the
+    /// manifests, not by preference - moving a mod across would simply be undone by the next sort.
+    /// </summary>
+    public int Band => LoadsBeforeGame ? 0 : IsGameModule ? 1 : 2;
+
+    public string BandName => Band switch
+    {
+        0 => "loads before the game's own modules (its manifest asks for it)",
+        1 => "part of the game; the engine places it",
+        _ => "loads after the game's own modules",
+    };
+
     /// <summary>The game will not start without Native, SandBoxCore or SandBox, so their checkbox is read-only.</summary>
     public bool IsLocked => OfficialModules.IsRequired(Module.Id);
     public bool CanToggle => !IsLocked;
@@ -48,9 +68,11 @@ public partial class ModRow : ObservableObject
     /// <summary>Shown in its own column so a game module is never mistaken for a mod you installed.</summary>
     // Deliberately short: the column sits between Module and Version, and "required" is already obvious from the
     // checkbox being greyed out. The tooltip carries the explanation.
-    public string Kind => !IsGameModule ? "Mod" : OfficialModules.IsDlc(Module.Id) ? "DLC" : "Game";
+    public string Kind => IsGameModule ? (OfficialModules.IsDlc(Module.Id) ? "DLC" : "Game") : LoadsBeforeGame ? "Framework" : "Mod";
 
-    public string KindTip => !IsGameModule ? "A mod. Enable it and drag it to place it in the load order."
+    public string KindTip => LoadsBeforeGame
+        ? "A framework. Its own manifest says the game's modules load after it, so it sits above them - the TaleWorlds launcher does the same. Drag it among the other frameworks."
+        : !IsGameModule ? "A mod. Enable it and drag it to place it in the load order."
         : IsLocked ? "Part of the base game. It cannot be turned off - the game will not start without it."
         : OfficialModules.IsDlc(Module.Id) ? "A paid expansion. Coop refuses to let a client join with a DLC enabled, so leave it off for coop sessions."
         : HostMode
@@ -379,6 +401,32 @@ public partial class MainViewModel : ObservableObject
             // The game's own modules come first and are shown as what they are. They were invisible before, which
             // meant a coop host had no way to turn off Birth and Aging or Fast Mode - both of which break coop -
             // without leaving the launcher for the TaleWorlds one.
+            // Build every mod row first, in the profile's order, then place them. Which band a row belongs to is a
+            // fact about its manifest, so the rows do not need to know about it while they are being made.
+            var modRows = new List<ModRow>();
+            foreach (var pm in Profile.Mods)
+                if (best.TryGetValue(pm.Id, out var m)) { modRows.Add(new ModRow { Module = m, Enabled = pm.Enabled, Role = pm.Role, ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList() }); best.Remove(pm.Id); }
+                else Messages.Add($"{pm.Id}: in the profile but not installed anywhere");
+            // Mods new to this profile take their defaults from the compat database; existing entries are never rewritten.
+            foreach (var m in best.Values.OrderBy(m => m.Id))
+            {
+                var rec = db.Find(m.Id);
+                modRows.Add(new ModRow
+                {
+                    Module = m, Enabled = false, Role = db.DefaultRoleFor(m.Id),
+                    ServerAuthoritative = rec?.ServerAuthoritative ?? false,
+                    ClientSideBehaviors = rec?.ClientSideBehaviors.ToList() ?? new List<string>(),
+                });
+            }
+
+            // Band 0: frameworks. The list used to open with the game's own modules and say mods load after them,
+            // which is not true of Harmony, ButterLib, UIExtenderEx or MCM - and the engine order panel next to it
+            // said so. Same rule as LoadOrder.Compute, read from the same manifests.
+            foreach (var row in modRows.Where(r => r.LoadsBeforeGame)) Mods.Add(row);
+
+            // Band 1: the game's own modules. They were invisible before v0.8, which meant a coop host had no way to
+            // turn off Birth and Aging or Fast Mode - both of which break coop - without leaving for the TaleWorlds
+            // launcher.
             var wantedOfficials = new HashSet<string>(Profile.ClientOfficialModules, StringComparer.OrdinalIgnoreCase);
             foreach (var g in catalog.Modules
                          .Where(m => m.Source == ModuleSourceKind.GameModules && OfficialModules.IsGameModule(m.Id))
@@ -392,27 +440,15 @@ public partial class MainViewModel : ObservableObject
                 Mods.Add(new ModRow { Module = m, Enabled = on, Role = ServerRole.AsShipped, HostMode = Host is not null });
             }
 
-            foreach (var pm in Profile.Mods)
-                if (best.TryGetValue(pm.Id, out var m)) { Mods.Add(new ModRow { Module = m, Enabled = pm.Enabled, Role = pm.Role, ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList() }); best.Remove(pm.Id); }
-                else Messages.Add($"{pm.Id}: in the profile but not installed anywhere");
-            // Mods new to this profile take their defaults from the compat database; existing entries are never rewritten.
-            foreach (var m in best.Values.OrderBy(m => m.Id))
-            {
-                var rec = db.Find(m.Id);
-                Mods.Add(new ModRow
-                {
-                    Module = m, Enabled = false, Role = db.DefaultRoleFor(m.Id),
-                    ServerAuthoritative = rec?.ServerAuthoritative ?? false,
-                    ClientSideBehaviors = rec?.ClientSideBehaviors.ToList() ?? new List<string>(),
-                });
-            }
+            // Band 2: everything else.
+            foreach (var row in modRows.Where(r => !r.LoadsBeforeGame)) Mods.Add(row);
+
             foreach (var row in Mods) row.Compat = db.For(row.Id, row.Version);
 
             if (Host is not null && paths is not null) Host.RefreshSaves(paths);
             RefreshPreview();
             Host?.RefreshDrift();
             Host?.LoadGameplay();
-            var modRows = Mods.Where(r => !r.IsGameModule).ToList();
             Status = $"{modRows.Count(r => r.Enabled)} of {modRows.Count} mods enabled, "
                    + $"{Mods.Count(r => r.IsGameModule && r.Enabled)} game modules";
         }
@@ -522,13 +558,35 @@ public partial class MainViewModel : ObservableObject
     private void Move(int delta)
     {
         if (SelectedMod is null) return;
-        if (SelectedMod.IsGameModule) { Status = $"{SelectedMod.Id} is part of the game; the engine places it, not you."; return; }
         var i = Mods.IndexOf(SelectedMod);
         var j = i + delta;
         if (i < 0 || j < 0 || j >= Mods.Count) return;
-        if (Mods[j].IsGameModule) { Status = "Mods load after the game's own modules."; return; }
-        Mods.Move(i, j);
+        if (!TryMove(i, j)) return;
         RefreshPreview();
+    }
+
+    /// <summary>
+    /// Moves a row, refusing any move that would take it out of its band. Shared by the buttons and by dragging.
+    /// Returns false (having said why) when the move is not one the engine would honour.
+    /// </summary>
+    public bool TryMove(int from, int to)
+    {
+        if (from < 0 || from >= Mods.Count || to < 0 || to >= Mods.Count || from == to) return false;
+        var row = Mods[from];
+        if (row.IsGameModule)
+        {
+            Status = $"{row.Id} is part of the game; the engine places it, not you.";
+            return false;
+        }
+        if (Mods[to].Band != row.Band)
+        {
+            Status = row.LoadsBeforeGame
+                ? $"{row.Id} is a framework: the game's own modules load after it because its manifest says so, so it stays above them."
+                : $"{row.Id} loads after the game's own modules. Only frameworks that ask for it (Harmony, ButterLib, UIExtenderEx, MCM) sit above them.";
+            return false;
+        }
+        Mods.Move(from, to);
+        return true;
     }
 
     /// <summary>
@@ -546,7 +604,11 @@ public partial class MainViewModel : ObservableObject
         var position = _preview.Order.ModuleIds
             .Select((id, i) => (id, i))
             .ToDictionary(x => x.id, x => x.i, StringComparer.OrdinalIgnoreCase);
-        var sorted = Mods.OrderBy(m => position.TryGetValue(m.Id, out var i) ? i : int.MaxValue).ToList();
+        // Band first: a disabled mod is in no engine order at all, so sorting on position alone dropped every
+        // disabled row to the bottom - including disabled frameworks, which would then sit below the game.
+        var sorted = Mods.OrderBy(m => m.Band)
+                         .ThenBy(m => position.TryGetValue(m.Id, out var i) ? i : int.MaxValue)
+                         .ThenBy(m => m.Id, StringComparer.OrdinalIgnoreCase).ToList();
         for (var target = 0; target < sorted.Count; target++)
         {
             var from = Mods.IndexOf(sorted[target]);

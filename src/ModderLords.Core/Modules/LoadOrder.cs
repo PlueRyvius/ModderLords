@@ -34,6 +34,18 @@ public static class LoadOrder
         public static readonly Profile Client = new(["Native", "SandBoxCore", "SandBox"], [], []);
     }
 
+    /// <summary>
+    /// Whether a community module loads BEFORE the game's own modules, because its manifest says Native must load
+    /// after it (<c>ModulesToLoadAfterThis</c>, or a <c>LoadAfterThis</c> metadata entry). Harmony, ButterLib,
+    /// UIExtenderEx and MCM all do; the game launcher places them the same way.
+    ///
+    /// This is a fact about the mod, not a preference: <see cref="Compute"/> reads it, and the mod list in the app
+    /// shows it, so the two can never disagree about where a framework sits.
+    /// </summary>
+    public static bool LoadsBeforeNative(DiscoveredModule module) =>
+        module.Info.ModulesToLoadAfterThis.Any(d => d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase))
+        || module.Info.DependentModuleMetadatas.Any(d => d.LoadType == LoadType.LoadAfterThis && d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase));
+
     public sealed record Result(IReadOnlyList<string> ModuleIds, IReadOnlyList<string> Issues);
 
     public static Result Compute(IReadOnlyList<DiscoveredModule> stock, IReadOnlyList<DiscoveredModule> community, IReadOnlyList<string>? preferredOrder = null, Profile? profile = null)
@@ -91,9 +103,7 @@ public static class LoadOrder
         bool WantsToPrecedeNative(string id)
         {
             var m = community.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
-            if (m is null) return false;
-            return m.Info.ModulesToLoadAfterThis.Any(d => d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase))
-                || m.Info.DependentModuleMetadatas.Any(d => d.LoadType == LoadType.LoadAfterThis && d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase));
+            return m is not null && LoadsBeforeNative(m);
         }
         var ordered = new List<string>();
         ordered.AddRange(communitySorted.Where(WantsToPrecedeNative));

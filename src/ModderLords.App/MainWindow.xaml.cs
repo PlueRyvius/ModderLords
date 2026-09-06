@@ -137,6 +137,81 @@ public partial class MainWindow : Window
         };
     }
 
+    // ---- dragging the mod order -------------------------------------------------------------------------
+
+    private Point _dragStart;
+    private ModRow? _dragRow;
+
+    /// <summary>
+    /// Remembers where a press landed, so a click that turns into a drag can be told from one that does not. The
+    /// row is captured here rather than on move because by then the grid may have changed the selection.
+    /// </summary>
+    private void ModsGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragStart = e.GetPosition(null);
+        _dragRow = RowUnder(e.OriginalSource as DependencyObject)?.Item as ModRow;
+        // A press on the enabled tick or the role dropdown is an edit, not a drag; those handle themselves.
+        if (e.OriginalSource is DependencyObject d && (FindAncestor<System.Windows.Controls.Primitives.ToggleButton>(d) is not null
+                                                       || FindAncestor<System.Windows.Controls.ComboBox>(d) is not null))
+            _dragRow = null;
+    }
+
+    private void ModsGrid_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dragRow is null) return;
+        var delta = e.GetPosition(null) - _dragStart;
+        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        var row = _dragRow;
+        _dragRow = null;
+        DragDrop.DoDragDrop(ModsGrid, row, DragDropEffects.Move);
+    }
+
+    /// <summary>Refuses the drop before it happens when it would cross a band, so the cursor says no rather than
+    /// the status bar explaining afterwards.</summary>
+    private void ModsGrid_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = DropTarget(e) is not null ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void ModsGrid_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(ModRow)) is not ModRow dragged) return;
+        var target = DropTarget(e);
+        if (target is null) return;
+        var vm = ViewModel;
+        if (vm.TryMove(vm.Mods.IndexOf(dragged), vm.Mods.IndexOf(target)))
+        {
+            vm.SelectedMod = dragged;
+            vm.RefreshPreview();
+        }
+    }
+
+    /// <summary>The row a drop would land on, or null when there is none or it is in another band.</summary>
+    private ModRow? DropTarget(DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(ModRow)) is not ModRow dragged) return null;
+        if (RowUnder(e.OriginalSource as DependencyObject)?.Item is not ModRow target) return null;
+        if (ReferenceEquals(target, dragged) || target.Band != dragged.Band) return null;
+        return target;
+    }
+
+    private static System.Windows.Controls.DataGridRow? RowUnder(DependencyObject? d) =>
+        d is null ? null : FindAncestor<System.Windows.Controls.DataGridRow>(d);
+
+    private static T? FindAncestor<T>(DependencyObject d) where T : DependencyObject
+    {
+        while (d is not null)
+        {
+            if (d is T t) return t;
+            d = d is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                ? System.Windows.Media.VisualTreeHelper.GetParent(d)
+                : LogicalTreeHelper.GetParent(d);
+        }
+        return null;
+    }
+
     // ---- remembered UI state ----------------------------------------------------------------------------
 
     /// <summary>

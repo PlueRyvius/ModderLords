@@ -134,8 +134,17 @@
                                        Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
                                        Text="Run = load its code on the server. DependencyOnly = listed for the handshake, no code (UI frameworks). AsShipped = let the engine decide." />
                         </StackPanel>
-                        <DataGrid ItemsSource="{Binding Mods}" SelectedItem="{Binding SelectedMod}" AutoGenerateColumns="False" CanUserAddRows="False"
-                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeaderWidth="0">
+                        <DataGrid x:Name="ModsGrid" ItemsSource="{Binding Mods}" SelectedItem="{Binding SelectedMod}" AutoGenerateColumns="False" CanUserAddRows="False"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeaderWidth="0"
+                                  PreviewMouseLeftButtonDown="ModsGrid_PreviewMouseLeftButtonDown"
+                                  PreviewMouseMove="ModsGrid_PreviewMouseMove" Drop="ModsGrid_Drop" DragOver="ModsGrid_DragOver"
+                                  AllowDrop="True">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                    <!-- The band a row is in is why it can only be dragged so far, so say it on hover. -->
+                                    <Setter Property="ToolTip" Value="{Binding BandName}" />
+                                </Style>
+                            </DataGrid.RowStyle>
                             <DataGrid.Columns>
                                 <DataGridTemplateColumn Header="On" Width="40">
                                     <DataGridTemplateColumn.CellTemplate>
