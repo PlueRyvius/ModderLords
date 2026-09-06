@@ -37,6 +37,24 @@ public partial class ModRow : ObservableObject
         : "";
     public string Id => Module.Id;
     public string Version => Module.Version;
+
+    /// <summary>True for a module TaleWorlds ship. Decided by id, never by the module's own ModuleType claim.</summary>
+    public bool IsGameModule => OfficialModules.IsGameModule(Module.Id);
+
+    /// <summary>The game will not start without Native, SandBoxCore or SandBox, so their checkbox is read-only.</summary>
+    public bool IsLocked => OfficialModules.IsRequired(Module.Id);
+    public bool CanToggle => !IsLocked;
+
+    /// <summary>Shown in its own column so a game module is never mistaken for a mod you installed.</summary>
+    // Deliberately short: the column sits between Module and Version, and "required" is already obvious from the
+    // checkbox being greyed out. The tooltip carries the explanation.
+    public string Kind => !IsGameModule ? "Mod" : OfficialModules.IsDlc(Module.Id) ? "DLC" : "Game";
+
+    public string KindTip => !IsGameModule ? "A mod. Enable it and drag it to place it in the load order."
+        : IsLocked ? "Part of the base game. It cannot be turned off - the game will not start without it."
+        : OfficialModules.IsDlc(Module.Id) ? "A paid expansion. Coop refuses to let a client join with a DLC enabled, so leave it off for coop sessions."
+        : "Part of the base game, and safe to turn off. Coop does not work with Birth and Aging or Fast Mode enabled.";
+
     public string Source => Module.Source.ToString();
     public string Folder => Module.FolderPath;
     public string Bins => (Module.HasServerBin ? "server" : "") + (Module.HasServerBin && Module.HasClientBin ? " + " : "") + (Module.HasClientBin ? "client" : "");
@@ -280,12 +298,26 @@ public partial class MainViewModel : ObservableObject
         LoadProfile(ProfileNames.First());
     }
 
+    /// <summary>The game modules this profile wants switched on, for reconciling the player's launcher list.</summary>
+    private IReadOnlySet<string> OfficialSelection()
+    {
+        CollectProfileFromRows();
+        return new HashSet<string>(Profile.ClientOfficialModules, StringComparer.OrdinalIgnoreCase);
+    }
+
     private void CollectProfileFromRows()
     {
+        // Game modules are a separate list on the profile: they have no role, no source path and no place in the
+        // mod order, and writing them into Profile.Mods would make every exported mod list mention Native.
+        var officialRows = Mods.Where(r => r.IsGameModule).ToList();
+        if (officialRows.Count > 0)
+            Profile.ClientOfficialModules = officialRows.Where(r => r.Enabled || r.IsLocked).Select(r => r.Id).ToList();
+
         var byId = Profile.Mods.ToDictionary(m => m.Id, StringComparer.OrdinalIgnoreCase);
         var ordered = new List<ProfileMod>();
         foreach (var row in Mods)
         {
+            if (row.IsGameModule) continue;
             if (!byId.TryGetValue(row.Id, out var pm)) pm = new ProfileMod { Id = row.Id };
             pm.Enabled = row.Enabled;
             pm.Role = row.Role;
@@ -330,6 +362,23 @@ public partial class MainViewModel : ObservableObject
                 }, StringComparer.OrdinalIgnoreCase);
 
             Mods.Clear();
+
+            // The game's own modules come first and are shown as what they are. They were invisible before, which
+            // meant a coop host had no way to turn off Birth and Aging or Fast Mode - both of which break coop -
+            // without leaving the launcher for the TaleWorlds one.
+            var wantedOfficials = new HashSet<string>(Profile.ClientOfficialModules, StringComparer.OrdinalIgnoreCase);
+            foreach (var g in catalog.Modules
+                         .Where(m => m.Source == ModuleSourceKind.GameModules && OfficialModules.IsGameModule(m.Id))
+                         .GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
+                         .OrderBy(g => OfficialModules.IsRequired(g.Key) ? 0 : OfficialModules.IsDlc(g.Key) ? 2 : 1)
+                         .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var m = g.First();
+                var on = OfficialModules.IsRequired(m.Id)
+                         || wantedOfficials.Contains(m.Id) || wantedOfficials.Contains(m.FolderName);
+                Mods.Add(new ModRow { Module = m, Enabled = on, Role = ServerRole.AsShipped });
+            }
+
             foreach (var pm in Profile.Mods)
                 if (best.TryGetValue(pm.Id, out var m)) { Mods.Add(new ModRow { Module = m, Enabled = pm.Enabled, Role = pm.Role, ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList() }); best.Remove(pm.Id); }
                 else Messages.Add($"{pm.Id}: in the profile but not installed anywhere");
@@ -350,7 +399,9 @@ public partial class MainViewModel : ObservableObject
             RefreshPreview();
             RefreshDrift();
             LoadGameplay();
-            Status = $"{Mods.Count(r => r.Enabled)} of {Mods.Count} mods enabled";
+            var modRows = Mods.Where(r => !r.IsGameModule).ToList();
+            Status = $"{modRows.Count(r => r.Enabled)} of {modRows.Count} mods enabled, "
+                   + $"{Mods.Count(r => r.IsGameModule && r.Enabled)} game modules";
         }
         catch (Exception ex)
         {
@@ -458,9 +509,11 @@ public partial class MainViewModel : ObservableObject
     private void Move(int delta)
     {
         if (SelectedMod is null) return;
+        if (SelectedMod.IsGameModule) { Status = $"{SelectedMod.Id} is part of the game; the engine places it, not you."; return; }
         var i = Mods.IndexOf(SelectedMod);
         var j = i + delta;
         if (i < 0 || j < 0 || j >= Mods.Count) return;
+        if (Mods[j].IsGameModule) { Status = "Mods load after the game's own modules."; return; }
         Mods.Move(i, j);
         RefreshPreview();
     }
@@ -656,7 +709,7 @@ public partial class MainViewModel : ObservableObject
             if (win.ApplyToLauncher)
             {
                 var path = ClientManifest.DefaultLauncherDataPath();
-                var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide());
+                var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide());   // an imported list says nothing about game modules
                 foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModderLords] shared list: {b.Id} — {b.Detail}");
                 var confirm = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
                 if (confirm.ShowDialog() == true)
@@ -837,7 +890,7 @@ public partial class MainViewModel : ObservableObject
         if (_prepared is null) RefreshPreview();
         if (_prepared is null) { Status = "Nothing to compare yet: rescan the mods first."; return; }
         var path = ClientManifest.DefaultLauncherDataPath();
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared.Modules), _prepared.Order, path, InstalledClientSide());
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared.Modules), _prepared.Order, path, InstalledClientSide(), OfficialSelection());
         var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot(), launching: false) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         try
@@ -889,7 +942,7 @@ public partial class MainViewModel : ObservableObject
             return true;
         }
 
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared.Modules), _prepared.Order, path, InstalledClientSide());
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared.Modules), _prepared.Order, path, InstalledClientSide(), OfficialSelection());
         foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModderLords] mod list: {b.Id} — {b.Detail}");
         if (!plan.HasChanges)
         {
