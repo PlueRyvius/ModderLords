@@ -1,4 +1,5 @@
-using ModderLords.Core.Compat;
+﻿using ModderLords.Core.Compat;
+using ModderLords.Coop.Compat;
 using ModderLords.Core.Overlay;
 using ModderLords.Core.Profiles;
 

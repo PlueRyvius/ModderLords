@@ -1,10 +1,14 @@
 ﻿using Bannerlord.ModuleManager;
 using ModderLords.Core.Compat;
+using ModderLords.Coop.Compat;
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
+using ModderLords.Core.Profiles;
+using ModderLords.Coop.Launch;
 using ModderLords.Core.Logs;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Saves;
+using ModderLords.Coop.Saves;
 using ModderLords.Core.Overlay;
 using Xunit;
 

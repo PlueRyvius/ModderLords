@@ -1,4 +1,5 @@
-using Bannerlord.ModuleManager;
+﻿using Bannerlord.ModuleManager;
+using ModderLords.Core.Launch;
 using ModderLords.Core.Modules;
 using Xunit;
 using Xunit.Abstractions;
@@ -14,7 +15,7 @@ public class ManifestValidationProbe
     [Fact]
     public void Compat_manifest_validates_against_local_game_modules()
     {
-        var game = ModuleCatalog.FindGameRoot(Launch.ServerPaths.SteamLibraries());
+        var game = ModuleCatalog.FindGameRoot(GamePaths.SteamLibraries());
         if (game is null) { _out.WriteLine("no game install; skipped"); return; }
         var mods = new List<ModuleInfoExtended>();
         foreach (var dir in Directory.EnumerateDirectories(Path.Combine(game, "Modules")))

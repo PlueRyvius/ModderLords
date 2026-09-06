@@ -1,8 +1,23 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using ModderLords.Core.Profiles;
 
-namespace ModderLords.Core.Live;
+using ModderLords.Core.Compat;
+using ModderLords.Core.Config;
+using ModderLords.Core.Export;
+using ModderLords.Core.Launch;
+using ModderLords.Core.Logs;
+using ModderLords.Core.Modules;
+using ModderLords.Core.Overlay;
+using ModderLords.Core.Perf;
+using ModderLords.Core.Profiles;
+using ModderLords.Core.Saves;
+using ModderLords.Coop.Compat;
+using ModderLords.Coop.Config;
+using ModderLords.Coop.Launch;
+using ModderLords.Coop.Live;
+using ModderLords.Coop.Saves;
+
+namespace ModderLords.Coop.Live;
 
 // The launcher's half of the live-settings channel. File shapes are produced by ModderLords.CompatSync.LiveSettings
 // (MiniJson) on the engine side; keep the property names in step.

@@ -1,5 +1,6 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using ModderLords.Core.Launch;
+using ModderLords.Coop.Launch;
 using ModderLords.Core.Logs;
 using ModderLords.Core.Profiles;
 

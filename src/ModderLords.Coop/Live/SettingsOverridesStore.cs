@@ -1,8 +1,10 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+
+
 using ModderLords.Core.Profiles;
 
-namespace ModderLords.Core.Live;
+namespace ModderLords.Coop.Live;
 
 /// <summary>Host overrides for one profile: values the launcher re-applies at every launch (and shows while the server is off).</summary>
 public sealed class SettingsOverrides
@@ -61,8 +63,8 @@ public static class SettingsOverridesStore
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
-    public static string OverridesPath(string profileName) => Path.Combine(ProfileStore.ProfilesDir, ProfileStore.Safe(profileName) + ".settings.json");
-    public static string CachePath(string profileName) => Path.Combine(ProfileStore.RootDir, "cache", ProfileStore.Safe(profileName) + ".settings-cache.json");
+    public static string OverridesPath(string profileName) => ProfileStore.SettingsOverridesPath(profileName);
+    public static string CachePath(string profileName) => ProfileStore.SettingsCachePath(profileName);
 
     public static SettingsOverrides Load(string profileName) => LoadFrom(OverridesPath(profileName));
 

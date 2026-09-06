@@ -1,5 +1,6 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using ModderLords.Core.Config;
+using ModderLords.Coop.Config;
 using Xunit;
 
 namespace ModderLords.Core.Tests;

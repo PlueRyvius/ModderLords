@@ -1,4 +1,6 @@
-using ModderLords.Core.Compat;
+﻿using ModderLords.Core.Compat;
+using ModderLords.Coop.Compat;
+using ModderLords.Core.Launch;
 using ModderLords.Core.Modules;
 using Xunit;
 using Xunit.Abstractions;
@@ -14,7 +16,7 @@ public class ScanProbe
     [Fact]
     public void Scan_local_mods()
     {
-        var game = ModuleCatalog.FindGameRoot(Launch.ServerPaths.SteamLibraries());
+        var game = ModuleCatalog.FindGameRoot(GamePaths.SteamLibraries());
         if (game is null) { _out.WriteLine("no game; skipped"); return; }
         foreach (var dir in Directory.EnumerateDirectories(Path.Combine(game, "Modules")))
         {

@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.Xml;
-using ModderLords.Core.Launch;
+using ModderLords.Core.Modules;
 
 namespace ModderLords.Core.Export;
 
@@ -32,7 +32,7 @@ public static class ClientManifest
     /// they are exempt from the validator, cannot be installed on a client, and telling a player to enable one sends
     /// them looking for a mod that does not exist.
     /// </summary>
-    public static IReadOnlyList<Entry> From(LaunchSession.Prepared p) =>
+    public static IReadOnlyList<Entry> From(ModuleSelectionResult p) =>
         p.Selections.Where(s => !IsServerOnly(s.Module.Id))
                     .Select(s => new Entry(s.Module.Id, s.Module.Version, WorkshopUrl(s.Module.FolderPath))).ToList();
 

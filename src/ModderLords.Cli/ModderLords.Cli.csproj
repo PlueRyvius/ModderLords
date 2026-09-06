@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -9,11 +9,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ModderLords.Core\ModderLords.Core.csproj" />
+    <ProjectReference Include="..\ModderLords.Coop\ModderLords.Coop.csproj" />
     <!-- Built, not referenced: the hook (net6.0) is loaded into the engine; the two Compat modules (net472) by the engine's module loader. -->
     <ProjectReference Include="..\ModderLords.Hook\ModderLords.Hook.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\ModderLords.Compat\ModderLords.Compat.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\ModderLords.CompatSync\ModderLords.CompatSync.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
-    <ProjectReference Include="..\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <!-- Needs Coop's own assemblies; absent on a machine without the workshop item, and on CI. -->
+    <ProjectReference Include="..\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(HasCoopAssemblies)' == 'true'" />
   </ItemGroup>
 
   <Target Name="CopyHelpers" AfterTargets="Build">

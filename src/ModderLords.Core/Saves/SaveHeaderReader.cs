@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 
 namespace ModderLords.Core.Saves;
@@ -65,13 +65,17 @@ public static class SaveHeaderReader
         }
     }
 
+    /// <summary>The empty world the official host copies to seed a new game. It is not somebody's save, so it is
+    /// never offered as one.</summary>
+    public const string TemplateSaveName = "default_new_game";
+
     public static IEnumerable<SaveHeader> ReadAll(string savesDir)
     {
         if (!Directory.Exists(savesDir)) yield break;
         foreach (var f in Directory.EnumerateFiles(savesDir, "*.sav").OrderByDescending(File.GetLastWriteTimeUtc))
         {
             var name = Path.GetFileNameWithoutExtension(f);
-            if (name.Equals(SavePreparer.TemplateFileName[..^4], StringComparison.OrdinalIgnoreCase)) continue;
+            if (name.Equals(TemplateSaveName, StringComparison.OrdinalIgnoreCase)) continue;
             var h = TryRead(f, out _);
             if (h is not null) yield return h;
         }

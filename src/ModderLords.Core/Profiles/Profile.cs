@@ -5,6 +5,10 @@ using ModderLords.Core.Overlay;
 
 namespace ModderLords.Core.Profiles;
 
+/// <summary>Who may see a hosted server in the Steam listing. Stored in the profile, so it lives here rather
+/// than with the launch code that consumes it.</summary>
+public enum ServerVisibility { Public, FriendsOnly, None }
+
 /// <summary>One community mod in a profile. SourcePath pins a specific copy; null = pick the best match by id.</summary>
 public sealed class ProfileMod
 {
@@ -114,11 +118,17 @@ public static class ProfileStore
         File.Move(tmp, p, overwrite: true);
     }
 
+    /// <summary>Host overrides for this profile's mod settings. Written by the coop side, but the profile folder's
+    /// layout is owned here, so deleting a profile can take its sidecars with it without reaching across.</summary>
+    public static string SettingsOverridesPath(string profileName) => Path.Combine(ProfilesDir, Safe(profileName) + ".settings.json");
+
+    /// <summary>Cached descriptions of a profile's mod settings, so the editor can open offline.</summary>
+    public static string SettingsCachePath(string profileName) => Path.Combine(RootDir, "cache", Safe(profileName) + ".settings-cache.json");
+
     public static void Delete(string name)
     {
-        var p = PathFor(name);
-        if (File.Exists(p)) File.Delete(p);
-        Live.SettingsOverridesStore.Delete(name);
+        foreach (var p in new[] { PathFor(name), SettingsOverridesPath(name), SettingsCachePath(name) })
+            if (File.Exists(p)) File.Delete(p);
     }
 
     public static string Safe(string name)

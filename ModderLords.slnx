@@ -5,6 +5,7 @@
     <Project Path="src/ModderLords.Compat/ModderLords.Compat.csproj" />
     <Project Path="src/ModderLords.CompatSync.Coop/ModderLords.CompatSync.Coop.csproj" />
     <Project Path="src/ModderLords.CompatSync/ModderLords.CompatSync.csproj" />
+    <Project Path="src/ModderLords.Coop/ModderLords.Coop.csproj" />
     <Project Path="src/ModderLords.Core/ModderLords.Core.csproj" />
     <Project Path="src/ModderLords.Hook/ModderLords.Hook.csproj" />
   </Folder>

@@ -1,10 +1,12 @@
 ﻿using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
+using ModderLords.Coop.Launch;
 using ModderLords.Core.Logs;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Overlay;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
+using ModderLords.Coop.Saves;
 
 // Command-line driver (Phase 0/1). Commands:
 //   catalog  [--root <DedicatedServer>] [--source <dir>]...
@@ -113,9 +115,9 @@ switch (cmd)
         Console.WriteLine("launcher data : " + launcherData);
         Console.WriteLine("server order  : " + string.Join(", ", prepared.Order.ModuleIds));
         foreach (var issue in prepared.Order.Issues) Console.WriteLine("order issue   : " + issue);
-        Console.WriteLine("server mods   : " + string.Join(", ", ClientManifest.From(prepared).Select(e => $"{e.Id} {e.Version}")));
+        Console.WriteLine("server mods   : " + string.Join(", ", ClientManifest.From(prepared.Modules).Select(e => $"{e.Id} {e.Version}")));
         Console.WriteLine("client-visible: " + string.Join(", ", installed.OrderBy(x => x)));
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(prepared), prepared.Order, launcherData, installed);
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(prepared.Modules), prepared.Order, launcherData, installed);
         Console.WriteLine("target order  : " + string.Join(", ", plan.TargetOrder));
         Console.WriteLine(plan.Changes.Count == 0 ? "no changes" : "changes:");
         foreach (var ch in plan.Changes) Console.WriteLine("  " + ch);

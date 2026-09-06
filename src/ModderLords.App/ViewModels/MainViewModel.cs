@@ -7,15 +7,18 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using ModderLords.Core.Compat;
+using ModderLords.Coop.Compat;
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
-using ModderLords.Core.Live;
+using ModderLords.Coop.Launch;
+using ModderLords.Coop.Live;
 using ModderLords.Core.Logs;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Overlay;
 using ModderLords.Core.Perf;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
+using ModderLords.Coop.Saves;
 
 namespace ModderLords.App.ViewModels;
 
@@ -498,7 +501,7 @@ public partial class MainViewModel : ObservableObject
             LoadOrderPreview.Clear();
             foreach (var id in p.Order.ModuleIds) LoadOrderPreview.Add(id);
             foreach (var m in p.Messages.Where(m => m.StartsWith("order:"))) Messages.Add(m);
-            var entries = ClientManifest.From(p);
+            var entries = ClientManifest.From(p.Modules);
             var coop = p.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
             ClientManifestText = ClientManifest.ToText(entries, coop?.Id ?? "Coop", coop?.Version ?? "");
             UpdateSaveDiff();
@@ -571,9 +574,9 @@ public partial class MainViewModel : ObservableObject
         {
             var paths = LaunchSession.ResolvePaths(Profile);
             Gameplay.Clear();
-            foreach (var s in Core.Config.ModConfig.Read(paths))
+            foreach (var s in Coop.Config.ModConfig.Read(paths))
                 Gameplay.Add(new GameplayRow { Path = s.Path, Kind = s.Kind, Original = s.RawValue, Value = s.Display,
-                    Choices = Core.Config.ModConfig.Choices.TryGetValue(s.Path, out var c) ? c : (s.Kind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False ? ["true", "false"] : null) });
+                    Choices = Coop.Config.ModConfig.Choices.TryGetValue(s.Path, out var c) ? c : (s.Kind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False ? ["true", "false"] : null) });
         }
         catch (Exception ex) { Status = "mod-config.json: " + ex.Message; }
     }
@@ -587,10 +590,10 @@ public partial class MainViewModel : ObservableObject
             var changes = new List<(string, string)>();
             foreach (var row in Gameplay)
             {
-                var raw = Core.Config.ModConfig.Encode(row.Kind, row.Value);
+                var raw = Coop.Config.ModConfig.Encode(row.Kind, row.Value);
                 if (raw != row.Original) changes.Add((row.Path, raw));
             }
-            var n = Core.Config.ModConfig.Apply(paths, changes);
+            var n = Coop.Config.ModConfig.Apply(paths, changes);
             Status = n == 0 ? "Gameplay settings unchanged" : $"Saved {n} gameplay setting(s) to mod-config.json" + (IsRunning ? " (applies on next server start)" : "");
             LoadGameplay();
         }
@@ -617,7 +620,7 @@ public partial class MainViewModel : ObservableObject
         if (dlg.ShowDialog() != true) return;
         try
         {
-            var file = ModListFile.From(_prepared, Profile, "ModderLords");
+            var file = ModListFile.From(_prepared.Modules, Profile, "ModderLords");
             ModListFile.Write(dlg.FileName, file);
             Status = $"Exported {file.Mods.Count} mods to {dlg.FileName}";
         }
@@ -673,7 +676,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_prepared is null) RefreshPreview();
         if (_prepared is null) return;
-        var checks = ClientManifest.CompareWithLauncherData(ClientManifest.From(_prepared), ClientManifest.DefaultLauncherDataPath());
+        var checks = ClientManifest.CompareWithLauncherData(ClientManifest.From(_prepared.Modules), ClientManifest.DefaultLauncherDataPath());
         ClientCheckText = checks.Count == 0 ? "No community modules to compare." :
             string.Join("\n", checks.Select(c => $"{(c.Verdict == "ok" ? "  ok " : "  !! ")}{c.Id,-30} server {c.ServerVersion ?? "-",-12} client {c.ClientVersion ?? "-",-12} {c.Verdict}"));
     }
@@ -834,7 +837,7 @@ public partial class MainViewModel : ObservableObject
         if (_prepared is null) RefreshPreview();
         if (_prepared is null) { Status = "Nothing to compare yet: rescan the mods first."; return; }
         var path = ClientManifest.DefaultLauncherDataPath();
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared), _prepared.Order, path, InstalledClientSide());
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared.Modules), _prepared.Order, path, InstalledClientSide());
         var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot(), launching: false) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         try
@@ -886,7 +889,7 @@ public partial class MainViewModel : ObservableObject
             return true;
         }
 
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared), _prepared.Order, path, InstalledClientSide());
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared.Modules), _prepared.Order, path, InstalledClientSide());
         foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModderLords] mod list: {b.Id} — {b.Detail}");
         if (!plan.HasChanges)
         {

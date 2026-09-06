@@ -1,7 +1,9 @@
-using System.Windows;
+﻿using System.Windows;
 using ModderLords.App.ViewModels;
 using ModderLords.Core.Compat;
+using ModderLords.Coop.Compat;
 using ModderLords.Core.Saves;
+using ModderLords.Coop.Saves;
 
 namespace ModderLords.App;
 

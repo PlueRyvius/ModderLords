@@ -1,7 +1,23 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ModderLords.Core.Compat;
+using ModderLords.Core.Compat;
+using ModderLords.Core.Config;
+using ModderLords.Core.Export;
+using ModderLords.Core.Launch;
+using ModderLords.Core.Logs;
+using ModderLords.Core.Modules;
+using ModderLords.Core.Overlay;
+using ModderLords.Core.Perf;
+using ModderLords.Core.Profiles;
+using ModderLords.Core.Saves;
+using ModderLords.Coop.Compat;
+using ModderLords.Coop.Config;
+using ModderLords.Coop.Launch;
+using ModderLords.Coop.Live;
+using ModderLords.Coop.Saves;
+
+namespace ModderLords.Coop.Compat;
 
 /// <summary>
 /// Layer 1 recipe: which of a mod's behaviours run on the server only. The launcher writes one recipes.json into

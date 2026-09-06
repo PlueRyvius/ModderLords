@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ModderLords.Core\ModderLords.Core.csproj" />
+    <ProjectReference Include="..\..\src\ModderLords.Coop\ModderLords.Coop.csproj" />
   </ItemGroup>
 
   <ItemGroup>

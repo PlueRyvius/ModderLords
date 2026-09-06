@@ -1,10 +1,9 @@
-# Build and test what a runner can build without a local Bannerlord install.
+# Builds and tests everything a runner can build.
 #
-# ModderLords.CompatSync.Coop references Coop's own assemblies from a Steam workshop path
-# (CoopRefDir, defaulted to a local machine in its csproj), so it — and everything that
-# project-references it, which is App and Cli — cannot build here. Core holds the logic the
-# tests cover; the two net472 module projects build from NuGet reference assemblies alone.
-# Building App/Cli stays a local step, covered by scripts/package-release.ps1.
+# The one project a runner cannot build is ModderLords.CompatSync.Coop, which compiles against Coop's own
+# assemblies from inside the Coop workshop item. Directory.Build.props resolves that location and sets
+# HasCoopAssemblies; App and Cli reference the project only when it is true, so here they build without it and the
+# release script (which does need it) refuses to package a build that is missing it.
 name: CI
 
 on:
@@ -22,8 +21,17 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Build ModderLords.Core
+      - name: Build ModderLords.Core (the mod loader)
         run: dotnet build src/ModderLords.Core/ModderLords.Core.csproj -c Release --nologo
+
+      - name: Build ModderLords.Coop (dedicated server hosting)
+        run: dotnet build src/ModderLords.Coop/ModderLords.Coop.csproj -c Release --nologo
+
+      - name: Build ModderLords (the app)
+        run: dotnet build src/ModderLords.App/ModderLords.App.csproj -c Release --nologo
+
+      - name: Build ModderLords.Cli
+        run: dotnet build src/ModderLords.Cli/ModderLords.Cli.csproj -c Release --nologo
 
       - name: Build DedicatedServer.ModderLordsCompat (net472 server guards)
         run: dotnet build src/ModderLords.Compat/ModderLords.Compat.csproj -c Release --nologo
@@ -33,3 +41,11 @@ jobs:
 
       - name: Test
         run: dotnet test tests/ModderLords.Core.Tests/ModderLords.Core.Tests.csproj -c Release --nologo --logger "console;verbosity=normal"
+
+      # A runner has no Coop workshop item, so this must be exactly what a player-only build looks like.
+      - name: Assert the app built without Coop's assemblies
+        shell: pwsh
+        run: |
+          $adapter = "src/ModderLords.CompatSync/_Module/bin/Win64_Shipping_Client/ModderLords.CompatSync.Coop.dll"
+          if (Test-Path $adapter) { throw "Built the Coop adapter on a runner that has no Coop install; the HasCoopAssemblies condition is not working." }
+          Write-Host "OK: App and Cli built with HasCoopAssemblies=false."

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
@@ -31,6 +31,11 @@
 
   <Target Name="CopyServerBin" AfterTargets="Build">
     <Copy SourceFiles="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb" DestinationFolder="..\ModderLords.CompatSync\_Module\bin\Win64_Shipping_Server\" SkipUnchangedFiles="true" ContinueOnError="true" />
+  </Target>
+
+
+  <Target Name="RequireCoopAssemblies" BeforeTargets="ResolveReferences" Condition="'$(HasCoopAssemblies)' != 'true'">
+    <Error Text="Coop's assemblies were not found. This project builds the coop settings-sync adapter and needs the Bannerlord Coop workshop item (3770450698). Subscribe to it, or pass -p:CoopRefDir=&lt;path to its bin\Win64_Shipping_Client&gt;. The mod loader itself does not need this project." />
   </Target>
 
 </Project>
