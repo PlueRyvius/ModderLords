@@ -107,19 +107,65 @@
                                 <DataGridTemplateColumn Header="On" Width="40">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0" />
+                                            <!-- IsEnabled, not hidden: a greyed tick shows Native IS on and explains why it cannot be changed. -->
+                                            <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanToggle}"
+                                                      HorizontalAlignment="Center" Margin="0" ToolTip="{Binding KindTip}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="Module" Binding="{Binding Id}" IsReadOnly="True" Width="200" />
+                                <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" IsReadOnly="True" Width="60">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="ToolTip" Value="{Binding KindTip}" />
+                                            <!-- The game's own modules read as quieter than the mods you chose to install. -->
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsGameModule}" Value="True">
+                                                    <Setter Property="Opacity" Value="0.75" />
+                                                    <Setter Property="FontStyle" Value="Italic" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
                                 <DataGridTextColumn Header="Version" Binding="{Binding Version}" IsReadOnly="True" Width="90" />
                                 <DataGridComboBoxColumn Header="Role" SelectedItemBinding="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
-                                                        ItemsSource="{x:Static vm:ModRow.Roles}" Width="130" />
+                                                        ItemsSource="{x:Static vm:ModRow.Roles}" Width="130">
+                                    <DataGridComboBoxColumn.ElementStyle>
+                                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsGameModule}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DataGridComboBoxColumn.ElementStyle>
+                                    <DataGridComboBoxColumn.EditingElementStyle>
+                                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsGameModule}" Value="True">
+                                                    <Setter Property="IsEnabled" Value="False" />
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DataGridComboBoxColumn.EditingElementStyle>
+                                </DataGridComboBoxColumn>
                                 <DataGridTemplateColumn Header="Server-only logic" Width="110">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <CheckBox IsChecked="{Binding ServerAuthoritative, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0"
-                                                      ToolTip="Run this mod's campaign/mission behaviours on the server only; players' copies skip them and receive the results through Coop. Needs Settings sync (the shared module) on." />
+                                                      ToolTip="Run this mod's campaign/mission behaviours on the server only; players' copies skip them and receive the results through Coop. Needs Settings sync (the shared module) on.">
+                                                <CheckBox.Style>
+                                                    <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsGameModule}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </CheckBox.Style>
+                                            </CheckBox>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>

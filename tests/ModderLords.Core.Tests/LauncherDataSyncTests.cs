@@ -1,4 +1,4 @@
-using System.Xml;
+﻿using System.Xml;
 using ModderLords.Core.Export;
 using ModderLords.Core.Modules;
 using Xunit;
@@ -353,5 +353,89 @@ public class LauncherDataSyncTests : IDisposable
         Assert.False(plan.HasChanges);
         Assert.Null(LauncherDataSync.Apply(plan, path, BackupRoot));
         Assert.False(File.Exists(path));
+    }
+
+    // ---- the game's own modules ------------------------------------------------------------------------------
+    // Coop does not work with Birth and Aging, Fast Mode or a DLC enabled, so a profile has to be able to turn
+    // those off on the player's side; and a Player-mode profile has to be able to turn a DLC back on.
+
+    private static IReadOnlySet<string> Officials(params string[] ids) =>
+        new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+
+    [Fact]
+    public void Turns_off_an_optional_game_module_the_profile_does_not_use()
+    {
+        var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("Sandbox", "v1.4.8", true),
+                             Mod("BirthAndDeath", "v1.4.8", true), Mod("FastMode", "v1.4.8", true),
+                             Mod("CoopNightly", "v0.1.4", true));
+
+        var plan = LauncherDataSync.ComputePlan([], Order(), path, null,
+            Officials("Native", "SandBoxCore", "Sandbox", "StoryMode"));
+
+        Assert.Contains(plan.Changes, c => c.Id == "BirthAndDeath" && c.Action == LauncherDataSync.SyncAction.Disable);
+        Assert.Contains(plan.Changes, c => c.Id == "FastMode" && c.Action == LauncherDataSync.SyncAction.Disable);
+
+        LauncherDataSync.Apply(plan, path, BackupRoot);
+        var after = Read(path).ToDictionary(x => x.Id, x => x.Selected);
+        Assert.False(after["BirthAndDeath"]);
+        Assert.False(after["FastMode"]);
+        Assert.True(after["Native"]);
+        Assert.True(after["Sandbox"]);
+    }
+
+    [Fact]
+    public void Turns_on_an_optional_game_module_the_profile_does_use()
+    {
+        var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("StoryMode", "v1.4.8", false));
+
+        var plan = LauncherDataSync.ComputePlan([], Order(), path, null, Officials("Native", "StoryMode"));
+
+        Assert.Contains(plan.Changes, c => c.Id == "StoryMode" && c.Action == LauncherDataSync.SyncAction.Enable);
+        LauncherDataSync.Apply(plan, path, BackupRoot);
+        Assert.True(Read(path).Single(x => x.Id == "StoryMode").Selected);
+    }
+
+    /// <summary>A profile can ask for the DLC. Without a profile's say-so it is still switched off, because Coop's
+    /// validator rejects a client that has one enabled.</summary>
+    [Fact]
+    public void Dlc_follows_the_profile_but_defaults_to_off()
+    {
+        var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("NavalDLC", "v1.4.8", true));
+        var keep = LauncherDataSync.ComputePlan([], Order(), path, null, Officials("Native", "NavalDLC"));
+        Assert.DoesNotContain(keep.Changes, c => c.Id == "NavalDLC" && c.Action == LauncherDataSync.SyncAction.Disable);
+
+        var noProfile = LauncherDataSync.ComputePlan([], Order(), path);
+        Assert.Contains(noProfile.Changes, c => c.Id == "NavalDLC" && c.Action == LauncherDataSync.SyncAction.Disable);
+
+        var drop = LauncherDataSync.ComputePlan([], Order(), path, null, Officials("Native"));
+        Assert.Contains(drop.Changes, c => c.Id == "NavalDLC" && c.Action == LauncherDataSync.SyncAction.Disable);
+    }
+
+    /// <summary>The game will not start without these, so no profile and no plan may untick them.</summary>
+    [Fact]
+    public void Never_unticks_a_module_the_game_needs_to_start()
+    {
+        var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("SandBoxCore", "v1.4.8", true), Mod("Sandbox", "v1.4.8", true));
+
+        var plan = LauncherDataSync.ComputePlan([], Order(), path, null, Officials("StoryMode"));
+        Assert.DoesNotContain(plan.Changes, c => c.Action == LauncherDataSync.SyncAction.Disable && OfficialModules.IsRequired(c.Id));
+
+        // ...and Apply refuses even if something upstream ever plans it anyway.
+        var forced = new LauncherDataSync.SyncPlan(
+            [new LauncherDataSync.PlannedChange("Native", LauncherDataSync.SyncAction.Disable, "should never happen")], []);
+        LauncherDataSync.Apply(forced, path, BackupRoot);
+        Assert.True(Read(path).Single(x => x.Id == "Native").Selected);
+    }
+
+    /// <summary>Without an official selection the old behaviour stands: officials are left exactly as they are.</summary>
+    [Fact]
+    public void Leaves_game_modules_alone_when_no_profile_selection_is_given()
+    {
+        var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("BirthAndDeath", "v1.4.8", true), Mod("FastMode", "v1.4.8", false));
+
+        var plan = LauncherDataSync.ComputePlan([], Order(), path);
+
+        Assert.DoesNotContain(plan.Changes, c => c.Id == "BirthAndDeath");
+        Assert.DoesNotContain(plan.Changes, c => c.Id == "FastMode");
     }
 }
