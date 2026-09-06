@@ -14,6 +14,7 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <vm:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
+        <vm:HostColumnWidthConverter x:Key="HostColumnWidth" />
     </Window.Resources>
 
     <DockPanel>
@@ -26,14 +27,38 @@
                 <Button Content="Save" Command="{Binding SaveProfileCommand}" />
                 <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />
                 <Button Content="Rescan mods" Command="{Binding RescanCommand}" />
-                <Button Content="Re-sync junctions" Command="{Binding ResyncCommand}" ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
+                <Button Content="Re-sync junctions" Command="{Binding Host.ResyncCommand}" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
+                        ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <!-- One click, no restart. Which half of the app you get is the first thing you chose and the
+                         easiest thing to change; see FirstRunWindow. -->
+                    <Button x:Name="ModeButton" Content="Player mode" Click="Mode_Click" MinWidth="92" Margin="4,0,4,0" />
                     <Button x:Name="ThemeButton" Content="Dark" Click="Theme_Click" MinWidth="52" Margin="4,0,12,0"
                             ToolTip="Switch between the light and dark theme" />
-                    <Button Content="Launch client" Command="{Binding LaunchClientCommand}" Margin="4,0,20,0"
-                            ToolTip="Start Bannerlord from the game folder. Steam's Play button is blocked while the coop server is running, because the Coop mod logs the server on to Steam as a game server; starting the exe here is not blocked." />
-                    <Button Content="Launch server" Command="{Binding LaunchCommand}" FontWeight="Bold" Background="{DynamicResource SuccessBackground}" />
-                    <Button Content="Stop" Command="{Binding StopCommand}" Background="{DynamicResource DangerBackground}" />
+                    <!-- Player mode launches the mods you picked; Host mode launches the game that joins the server
+                         you are running, which is why the wording and the tooltip change with the mode. -->
+                    <Button Command="{Binding LaunchClientCommand}" Margin="4,0,20,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                <Setter Property="Content" Value="Play" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                                <Setter Property="Background" Value="{DynamicResource SuccessBackground}" />
+                                <Setter Property="ToolTip" Value="Start Bannerlord with exactly the mods this profile enables, in this order. Your TaleWorlds launcher mod list is not touched." />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsHost}" Value="True">
+                                        <Setter Property="Content" Value="Launch client" />
+                                        <Setter Property="FontWeight" Value="Normal" />
+                                        <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
+                                        <Setter Property="ToolTip" Value="Start Bannerlord from the game folder, with its mod list matched to the server. Steam's Play button is blocked while the coop server is running, because the Coop mod logs the server on to Steam as a game server; starting the exe here is not blocked." />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="Launch server" Command="{Binding Host.LaunchCommand}" FontWeight="Bold" Background="{DynamicResource SuccessBackground}"
+                            Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                    <Button Content="Stop" Command="{Binding Host.StopCommand}" Background="{DynamicResource DangerBackground}"
+                            Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
                 <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" FontStyle="Italic" />
             </DockPanel>
@@ -44,11 +69,11 @@
             <Border.Style>
                 <Style TargetType="Border">
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding DriftText}" Value=""><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                        <DataTrigger Binding="{Binding Host.DriftText}" Value=""><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <TextBlock Text="{Binding DriftText}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Host.DriftText}" TextWrapping="Wrap" />
         </Border>
 
         <!-- status bar -->
@@ -72,13 +97,13 @@
                     </TextBlock>
                 </StackPanel>
                 <StackPanel>
-                    <TextBlock><Run Text="Server: " FontWeight="Bold" /><Run Text="{Binding ServerRoot}" /></TextBlock>
+                    <TextBlock Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"><Run Text="Server: " FontWeight="Bold" /><Run Text="{Binding ServerRoot}" /></TextBlock>
                     <TextBlock><Run Text="Game:   " FontWeight="Bold" /><Run Text="{Binding GameRoot}" /></TextBlock>
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <TabControl Margin="8">
+        <TabControl x:Name="Tabs" Margin="8" SelectionChanged="Tabs_SelectionChanged">
             <!-- MODS -->
             <TabItem Header="Mods">
                 <Grid>
@@ -224,7 +249,7 @@
             </TabItem>
 
             <!-- SAVES -->
-            <TabItem Header="Saves">
+            <TabItem Header="Saves" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <TextBlock Text="Save to host:" VerticalAlignment="Center" />
@@ -254,7 +279,7 @@
             </TabItem>
 
             <!-- SERVER -->
-            <TabItem Header="Server">
+            <TabItem Header="Server" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
                     <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,10" />
                     <UniformGrid Columns="2" Rows="14">
@@ -295,7 +320,7 @@
             </TabItem>
 
             <!-- GAMEPLAY (mod-config.json) -->
-            <TabItem Header="Gameplay">
+            <TabItem Header="Gameplay" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <Button Content="Reload" Command="{Binding LoadGameplayCommand}" />
@@ -324,7 +349,8 @@
             </TabItem>
 
             <!-- MOD SETTINGS (live MCM edits on the running server) -->
-            <TabItem Header="Mod settings" IsEnabled="{Binding LiveSettings.IsEnabled}" ToolTip="{Binding LiveSettings.GateHint}" ToolTipService.ShowOnDisabled="True">
+            <TabItem Header="Mod settings" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
+                     IsEnabled="{Binding LiveSettings.IsEnabled}" ToolTip="{Binding LiveSettings.GateHint}" ToolTipService.ShowOnDisabled="True">
                 <DockPanel DataContext="{Binding LiveSettings}">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <Button Content="Apply" Command="{Binding ApplyCommand}" FontWeight="Bold" ToolTip="Send the changed values to the running server; players get them on the next sync tick" />
@@ -425,7 +451,7 @@
             </TabItem>
 
             <!-- CONSOLE -->
-            <TabItem Header="Console">
+            <TabItem Header="Console" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <CheckBox Content="Engine" IsChecked="{Binding ShowEngine}" />
@@ -484,16 +510,18 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- PLAYERS / EXPORT -->
-            <TabItem Header="Players">
+            <!-- SHARE: hand your mod list to somebody, or take theirs. That half is the whole point of a mod
+                 loader, so it is in both modes; the right-hand column compares this PC's launcher with the server
+                 you are hosting, so that half is Host mode only. -->
+            <TabItem Header="Share">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="{Binding IsHost, Converter={StaticResource HostColumnWidth}}" />
                     </Grid.ColumnDefinitions>
                     <DockPanel Grid.Column="0" Margin="0,0,6,0">
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                            <TextBlock Text="Mod list for players" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Text="Mod list" FontWeight="Bold" VerticalAlignment="Center" />
                             <Button Content="Copy" Command="{Binding CopyManifestCommand}" />
                 <Button Content="Export…" Command="{Binding ExportListCommand}"
                         ToolTip="Save this mod list, versions and load order to a file you can send to a player or another host" />
@@ -503,7 +531,8 @@
                         <TextBox Text="{Binding ClientManifestText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="NoWrap"
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
                     </DockPanel>
-                    <DockPanel Grid.Column="1" Margin="6,0,0,0">
+                    <DockPanel Grid.Column="1" Margin="6,0,0,0" DataContext="{Binding Host}"
+                               Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="This PC's Bannerlord launcher vs the server" FontWeight="Bold" VerticalAlignment="Center" />
                             <Button Content="Check my client" Command="{Binding CheckMyClientCommand}" />
@@ -517,7 +546,7 @@
             </TabItem>
 
             <!-- PERFORMANCE -->
-            <TabItem Header="Performance">
+            <TabItem Header="Performance" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <DockPanel Margin="8">
                     <TextBlock DockPanel.Dock="Top" Text="{Binding Performance.SessionState}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,4" />
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
