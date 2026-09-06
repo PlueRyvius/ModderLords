@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="ModderLords Compat" />
+  <!-- Community module: must be enabled on the server AND on every client (Coop's validator matches it like any mod). -->
+  <Id value="ModderLords.Compat" />
+  <Version value="v0.1.0" />
+  <SingleplayerModule value="true" />
+  <MultiplayerModule value="false" />
+  <ModuleCategory value="Singleplayer" />
+  <ModuleType value="Community" />
+  <!-- Hard dependencies only here: the game launcher treats every DependedModule as required (it ignores Optional). -->
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+    <DependedModule Id="Sandbox" />
+  </DependedModules>
+  <!-- Community metadata (BUTR launcher / Vortex): MCM is optional and, when present, must load before us. -->
+  <DependedModuleMetadatas>
+    <DependedModuleMetadata id="Native" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="SandBoxCore" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="Sandbox" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="Bannerlord.MBOptionScreen" order="LoadBeforeThis" optional="true" />
+  </DependedModuleMetadatas>
+  <SubModules>
+    <SubModule>
+      <Name value="ModderLords.Compat" />
+      <DLLName value="ModderLords.CompatSync.dll" />
+      <SubModuleClassType value="ModderLords.CompatSync.SyncSubModule" />
+      <Tags />
+    </SubModule>
+  </SubModules>
+  <Xmls />
+</Module>

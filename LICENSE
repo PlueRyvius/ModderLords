@@ -1,19 +1,20 @@
-Required Notice: Copyright Andy Hemphill (https://github.com/PlueRyvius/Modular-Bannerlords-Coop)
+Required Notice: Copyright Andy Hemphill (https://github.com/PlueRyvius/ModderLords)
 
-Modular Bannerlords Coop is licensed under the PolyForm Strict License 1.0.0,
+ModderLords is licensed under the PolyForm Noncommercial License 1.0.0,
 reproduced in full below.
 
 In short, and without replacing anything the licence itself says:
 
-  - You may run this software for any noncommercial purpose. Host servers with it,
-    play with it, stream it, use it as much as you like.
-  - You may NOT distribute it, re-upload it, or publish changed versions of it.
+  - You may use this software for any noncommercial purpose. Play with it, host
+    servers with it, stream it, use it as much as you like.
+  - You may share it and publish changed versions of it, for noncommercial purposes,
+    as long as the licence and the notice above travel with it.
   - You may NOT use it commercially.
 
-Everything in those last two lines is available by asking. If you want to modify it,
-bundle it, fork it, translate it, or use it commercially, open an issue on the project
-or contact me through GitHub. I am not unreasonable, and I would rather say yes to
-someone who asked than find out afterwards.
+Fixes and forks are welcome — that is the point of the change from the stricter licence
+this project shipped under before v0.9.0. If a change is useful to other people, please
+open a pull request rather than only shipping a fork; and if you want to use any of this
+commercially, open an issue and ask.
 
 This licence covers only the code in this repository. It grants no rights over Mount &
 Blade II: Bannerlord, over the Bannerlord Coop mod, or over any third-party components
@@ -22,9 +23,9 @@ THIRD-PARTY-NOTICES.md.
 
 --------------------------------------------------------------------------------
 
-# PolyForm Strict License 1.0.0
+# PolyForm Noncommercial License 1.0.0
 
-<https://polyformproject.org/licenses/strict/1.0.0>
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
 
 ## Acceptance
 
@@ -32,7 +33,21 @@ In order to get any license under these terms, you must agree to them as both st
 
 ## Copyright License
 
-The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose, other than distributing the software or making changes or new works based on the software.
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose.  However, you may only distribute the software according to [Distribution License](#distribution-license) and make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license).
+
+## Distribution License
+
+The licensor grants you an additional copyright license to distribute copies of the software.  Your license to distribute covers distributing the software with changes and new works permitted by [Changes and New Works License](#changes-and-new-works-license).
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
+
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to make changes and new works based on the software for any permitted purpose.
 
 ## Patent License
 

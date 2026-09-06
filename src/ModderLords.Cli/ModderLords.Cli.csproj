@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ModderLords.Core\ModderLords.Core.csproj" />
+    <!-- Built, not referenced: the hook (net6.0) is loaded into the engine; the two Compat modules (net472) by the engine's module loader. -->
+    <ProjectReference Include="..\ModderLords.Hook\ModderLords.Hook.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\ModderLords.Compat\ModderLords.Compat.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\ModderLords.CompatSync\ModderLords.CompatSync.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <Target Name="CopyHelpers" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModderLords.Hook\bin\$(Configuration)\net6.0\ModderLords.Hook.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <CompatModuleFiles Include="$(MSBuildThisFileDirectory)..\ModderLords.Compat\_Module\**\*" />
+      <CompatSyncFiles Include="$(MSBuildThisFileDirectory)..\ModderLords.CompatSync\_Module\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CompatModuleFiles)" DestinationFiles="@(CompatModuleFiles->'$(OutDir)compat\DedicatedServer.ModderLordsCompat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CompatSyncFiles)" DestinationFiles="@(CompatSyncFiles->'$(OutDir)compat\ModderLords.Compat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
