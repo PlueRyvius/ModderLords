@@ -24,8 +24,7 @@ public sealed record SaveHeader(
     public IEnumerable<string> CommunityModuleIds =>
         ModuleIds.Where(id => !OfficialIds.Contains(id) && !id.StartsWith("DedicatedServer.", StringComparison.OrdinalIgnoreCase));
 
-    private static readonly HashSet<string> OfficialIds = new(StringComparer.OrdinalIgnoreCase)
-        { "Native", "SandBoxCore", "Sandbox", "SandBox", "StoryMode", "CustomBattle", "BirthAndDeath", "Multiplayer", "FastMode", "NavalDLC" };
+    private static readonly IReadOnlySet<string> OfficialIds = Modules.OfficialModules.All;
 }
 
 public static class SaveHeaderReader

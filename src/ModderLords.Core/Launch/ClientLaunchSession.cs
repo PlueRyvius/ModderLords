@@ -49,7 +49,7 @@ public static class ClientLaunchSession
         // Officials come from the game folder only: a Workshop item is never an official module, and matching by
         // FOLDER name is what the sorter's head/tail lookups use (SandBox the folder carries the id "Sandbox").
         var installedOfficials = catalog.Modules
-            .Where(m => m.Source == ModuleSourceKind.GameModules && m.IsOfficial)
+            .Where(m => m.Source == ModuleSourceKind.GameModules && OfficialModules.IsGameModule(m.Id))
             .ToList();
         var officials = profile.ClientOfficialModules
             .Select(want => installedOfficials.FirstOrDefault(m => m.FolderName.Equals(want, StringComparison.OrdinalIgnoreCase)
