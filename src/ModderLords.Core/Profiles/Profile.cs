@@ -64,6 +64,13 @@ public sealed class Profile
     public bool AutoSyncLauncherData { get; set; }
     public ServerSettings Server { get; set; } = new();
 
+    /// <summary>
+    /// Official modules to load when this profile launches the player's own game. The default is the set the game
+    /// ships selected for single player; BirthAndDeath, FastMode and Multiplayer are off, as they are in a stock
+    /// LauncherData.xml. Ordering is not taken from here — the sorter places them.
+    /// </summary>
+    public List<string> ClientOfficialModules { get; set; } = new() { "Native", "SandBoxCore", "Sandbox", "StoryMode", "CustomBattle" };
+
     [JsonIgnore] public IEnumerable<ProfileMod> EnabledMods => Mods.Where(m => m.Enabled);
 
     /// <summary>Role for a mod not yet in a profile: from the compat database, falling back to the pre-DB table (frameworks = DependencyOnly).</summary>
