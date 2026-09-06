@@ -1,4 +1,4 @@
-using Bannerlord.ModuleManager;
+﻿using Bannerlord.ModuleManager;
 
 namespace ModderLords.Core.Modules;
 
@@ -18,16 +18,33 @@ public static class LoadOrder
     /// </summary>
     public static readonly string[] SoftOfficialDependencies = ["StoryMode", "CustomBattle", "BirthAndDeath", "Multiplayer", "FastMode"];
 
+    /// <summary>
+    /// The parts of the order that differ between the two engines we launch. The dedicated server pins Coop and
+    /// DedicatedServer.Windows at the end and has to invent the client-only official modules, because they are not
+    /// installed there at all. On the player's own machine every official module is real and nothing is pinned
+    /// after the mods, so both of those lists are empty.
+    /// </summary>
+    public sealed record Profile(IReadOnlyList<string> HeadFolders, IReadOnlyList<string> TailFolders, IReadOnlyList<string> PhantomDependencies)
+    {
+        /// <summary>The official host's order: Native, SandBoxCore, SandBox, community, Coop, DedicatedServer.Windows.</summary>
+        public static readonly Profile DedicatedServer = new(["Native", "SandBoxCore", "SandBox"], ["Coop", "DedicatedServer.Windows"], SoftOfficialDependencies);
+
+        /// <summary>The player's game: officials first, then mods. StoryMode and friends are installed, so they are
+        /// ordered like any other module rather than faked.</summary>
+        public static readonly Profile Client = new(["Native", "SandBoxCore", "SandBox"], [], []);
+    }
+
     public sealed record Result(IReadOnlyList<string> ModuleIds, IReadOnlyList<string> Issues);
 
-    public static Result Compute(IReadOnlyList<DiscoveredModule> stock, IReadOnlyList<DiscoveredModule> community, IReadOnlyList<string>? preferredOrder = null)
+    public static Result Compute(IReadOnlyList<DiscoveredModule> stock, IReadOnlyList<DiscoveredModule> community, IReadOnlyList<string>? preferredOrder = null, Profile? profile = null)
     {
+        profile ??= Profile.DedicatedServer;
         var issues = new List<string>();
         var real = stock.Concat(community).Select(m => m.Info).ToList();
 
         // Phantom entries make the soft official dependencies "present" for the sorter and the validator.
         var present = new HashSet<string>(real.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
-        var phantoms = SoftOfficialDependencies.Where(id => !present.Contains(id))
+        var phantoms = profile.PhantomDependencies.Where(id => !present.Contains(id))
             .Select(id => new ModuleInfoExtended { Id = id, Name = id, IsOfficial = true, Version = stock.FirstOrDefault(s => s.Id == "Native")?.Info.Version ?? ApplicationVersion.Empty })
             .ToList();
         var all = real.Concat(phantoms).ToList();
@@ -67,8 +84,8 @@ public static class LoadOrder
         // official host pins: <Coop id> after everything else, DedicatedServer.Windows last. Stock modules are matched by
         // FOLDER name because the workshop build's Coop folder carries the id "CoopNightly"; the token needs the id.
         string? StockId(string folder) => stock.FirstOrDefault(m => m.FolderName.Equals(folder, StringComparison.OrdinalIgnoreCase))?.Id;
-        var coopId = StockId("Coop");
-        var dsId = StockId("DedicatedServer.Windows");
+        var tailIds = profile.TailFolders.Select(StockId).Where(id => id is not null).Select(id => id!).ToList();
+        var dsId = tailIds.Count > 0 ? tailIds[^1] : null;
         // A community module that declares "load Native after me" (ModulesToLoadAfterThis / LoadAfterThis metadata) belongs
         // in front of Native, as the game launcher places Harmony, ButterLib, UIExtenderEx and MCM. Everything else follows Sandbox.
         bool WantsToPrecedeNative(string id)
@@ -80,10 +97,16 @@ public static class LoadOrder
         }
         var ordered = new List<string>();
         ordered.AddRange(communitySorted.Where(WantsToPrecedeNative));
-        foreach (var f in new[] { "Native", "SandBoxCore", "SandBox" }) if (StockId(f) is { } id) ordered.Add(id);
+        var headIds = profile.HeadFolders.Select(StockId).Where(id => id is not null).Select(id => id!).ToList();
+        ordered.AddRange(headIds);
+        // Officials that are neither pinned at the front nor at the end -- StoryMode, CustomBattle and the rest on
+        // the player's machine. They go straight after the head, in the sorter's order, because mods depend on them
+        // and never the other way round. On the dedicated server there are none: those modules are phantoms there.
+        var pinned = new HashSet<string>(headIds.Concat(tailIds), StringComparer.OrdinalIgnoreCase);
+        var stockIds = new HashSet<string>(stock.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+        ordered.AddRange(sorted.Select(m => m.Id).Where(id => stockIds.Contains(id) && !pinned.Contains(id) && !phantomIds.Contains(id)));
         ordered.AddRange(communitySorted.Where(id => !WantsToPrecedeNative(id)));
-        if (coopId is not null) ordered.Add(coopId);
-        if (dsId is not null) ordered.Add(dsId);
+        ordered.AddRange(tailIds);
 
         // Validate the FINAL order (phantoms appended last so they count as present without affecting the token).
         var byId = all.GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);

@@ -1,4 +1,4 @@
-# ModderLords: developer notes
+﻿# ModderLords: developer notes
 
 A launcher for the **Bannerlord Coop dedicated server** that lets you run it with community mods,
 using the pristine official server package and the mods where they already live on disk.
@@ -43,6 +43,34 @@ Status: Phase 1 complete (community mods load on the pristine server through jun
 - Engine module discovery only scans `engine\Modules\*`; a module must appear there (a junction works).
 - Submodule DLLs are looked up in `<module>\bin\Win64_Shipping_Server\`, then `engine\bin\Win64_Shipping_Server\`.
 - Submodule tags `DedicatedServerType=none` / `IsNoRenderModeElement=false` make the engine skip that submodule on the server.
+
+## Verified facts about the player's own game (2026-09-06, Bannerlord 1.4.8.119303)
+
+Measured on a real install, twice, before any of the client-launch code was written.
+
+- `bin\Win64_Shipping_Client\Bannerlord.exe` accepts the same `_MODULES_*A*B*_MODULES_` token the TaleWorlds
+  launcher builds, as its only argument.
+- **That token completely replaces `Configs\LauncherData.xml`.** Modules with `IsSelected=false` there loaded
+  because the token named them (ButterLib, UIExtenderEx, MCM, ImprovedGarrisons); modules with `IsSelected=true`
+  did not load because the token omitted them (ModularSmithing2, CustomBattle). The file was byte-identical
+  (same MD5, same mtime) before and after both launches — the game never writes it, so neither do we.
+- **Workshop ids resolve without help.** Every community mod on the test machine lives in
+  `steamapps\workshop\content±550\<item id>` and none of them are in the game's `Modules` folder, yet naming
+  them by id in the token was enough. This is the opposite of the dedicated server, which is a separate Steam app
+  (1863440) with no Steam integration and genuinely can only see `$BASE\Modules` — hence the junction overlay
+  there, and hence no overlay here.
+- **Order is passed through exactly and it matters.** A first run deliberately placed the frameworks after the
+  official modules; ButterLib opened a modal "Bannerlord.ButterLib is loaded after the Native! ... It's strongly
+  recommended to terminate the game now" and the game stopped there. Re-running with the frameworks ahead of
+  Native — which is what `LoadOrder` already computes, from `ModulesToLoadAfterThis` — reached the main menu with
+  no complaint. `LoadOrder.Profile.Client` exists for exactly this: same sorter, no phantom modules (StoryMode and
+  friends are really installed), nothing pinned after the mods.
+- A module id may contain spaces ("Heal on Kill"); only `*` is special, so `ClientLaunchPlan.Validate` rejects
+  that character and nothing else.
+
+Consequence for the code: `ClientLaunchSession` reuses `ModuleCatalog`, `LoadOrder` and `LaunchSession.Select`,
+and uses none of the overlay, the resolver hook, the compat modules or the server config. Those exist to make mods
+survive a headless engine, which is not a problem the player's game has.
 
 ## Licensing note
 

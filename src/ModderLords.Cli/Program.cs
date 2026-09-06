@@ -17,7 +17,37 @@ var opts = ParseArgs(args);
 if (!opts.TryGetValue("cmd", out var cmd))
 {
     Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
+    Console.WriteLine("          play --profile NAME [--dry-run]   (start the player's own game with a profile's mods)");
     return 1;
+}
+
+// The player-side launch needs no dedicated server at all, so it runs before the server package is resolved.
+if (cmd == "play")
+{
+    var profileName = opts.GetValueOrDefault("profile") ?? "default";
+    var playProfile = ProfileStore.Load(profileName);
+    if (playProfile is null) { Console.Error.WriteLine($"No profile named '{profileName}'. Try: profiles"); return 2; }
+
+    ClientLaunchSession.Prepared prepared;
+    try { prepared = ClientLaunchSession.Prepare(playProfile); }
+    catch (Exception ex) { Console.Error.WriteLine(ex.Message); return 2; }
+
+    foreach (var m in prepared.Messages) Console.WriteLine("[ModderLords] " + m);
+    Console.WriteLine($"game   : {prepared.GameRoot}");
+    Console.WriteLine($"mods   : {prepared.Mods.Count} enabled, {prepared.Officials.Count} official");
+    foreach (var id in prepared.Plan.ModuleIds)
+    {
+        var origin = prepared.Officials.FirstOrDefault(m => m.Id == id)?.Source
+                  ?? prepared.Mods.FirstOrDefault(m => m.Id == id)?.Source;
+        Console.WriteLine($"  {id,-32} {origin}");
+    }
+    Console.WriteLine("command: " + prepared.Plan.Describe());
+    if (opts.ContainsKey("dry-run")) return 0;
+
+    if (ClientLauncher.IsClientRunning()) { Console.Error.WriteLine("Bannerlord (or its launcher) is already running."); return 2; }
+    var started = ClientLaunchSession.Start(prepared.Plan);
+    Console.WriteLine($"started pid {started.Id}");
+    return 0;
 }
 
 var root = opts.GetValueOrDefault("root") ?? ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault();

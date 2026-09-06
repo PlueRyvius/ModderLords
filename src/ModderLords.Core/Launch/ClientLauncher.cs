@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Profiles;
 
@@ -22,9 +22,10 @@ public static class ClientLauncher
     public const string LauncherExeName = "TaleWorlds.MountAndBlade.Launcher.exe";
 
     /// <summary>
-    /// The game starter ("BannerlordStarter"). Started bare it loads the default module set: the game takes its
-    /// list from the _MODULES_*...*_MODULES_ argument the launcher builds, NOT from LauncherData.xml, so running
-    /// this instead of the launcher silently drops every mod, Coop included. Only a fallback.
+    /// The game starter ("BannerlordStarter"). It takes its module list from the _MODULES_*...*_MODULES_ argument
+    /// the launcher builds and NOT from LauncherData.xml, so started bare it drops every mod, Coop included.
+    /// Given that argument it is the direct path to a chosen module set: see <see cref="ClientLaunchPlan"/>, which
+    /// builds it. Here it stays a fallback for when the TaleWorlds launcher is missing.
     /// </summary>
     public const string GameExeName = "Bannerlord.exe";
 
