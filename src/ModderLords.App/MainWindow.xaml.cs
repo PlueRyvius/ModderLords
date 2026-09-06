@@ -2,7 +2,9 @@ using System.Linq;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using ModderLords.App.ViewModels;
 using ModderLords.Core.Profiles;
 
@@ -141,6 +143,7 @@ public partial class MainWindow : Window
 
     private Point _dragStart;
     private ModRow? _dragRow;
+    private InsertionAdorner? _insertion;
 
     /// <summary>
     /// Remembers where a press landed, so a click that turns into a drag can be told from one that does not. The
@@ -150,6 +153,8 @@ public partial class MainWindow : Window
     {
         _dragStart = e.GetPosition(null);
         _dragRow = RowUnder(e.OriginalSource as DependencyObject)?.Item as ModRow;
+        // The game's own modules are placed by the engine, so there is nothing to drag.
+        if (_dragRow is { IsGameModule: true }) _dragRow = null;
         // A press on the enabled tick or the role dropdown is an edit, not a drag; those handle themselves.
         if (e.OriginalSource is DependencyObject d && (FindAncestor<System.Windows.Controls.Primitives.ToggleButton>(d) is not null
                                                        || FindAncestor<System.Windows.Controls.ComboBox>(d) is not null))
@@ -164,37 +169,87 @@ public partial class MainWindow : Window
             && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         var row = _dragRow;
         _dragRow = null;
-        DragDrop.DoDragDrop(ModsGrid, row, DragDropEffects.Move);
+        try { DragDrop.DoDragDrop(ModsGrid, row, DragDropEffects.Move); }
+        finally { HideInsertion(); }
     }
 
-    /// <summary>Refuses the drop before it happens when it would cross a band, so the cursor says no rather than
-    /// the status bar explaining afterwards.</summary>
+    /// <summary>
+    /// Shows where the drop will land. The line is clamped to the dragged row's band, so dragging a mod up past
+    /// the game's modules parks the line at the top of the mods rather than refusing - you can see the limit
+    /// instead of guessing at it.
+    /// </summary>
     private void ModsGrid_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = DropTarget(e) is not null ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
+        if (e.Data.GetData(typeof(ModRow)) is not ModRow dragged) { e.Effects = DragDropEffects.None; HideInsertion(); return; }
+        e.Effects = DragDropEffects.Move;
+        var at = InsertionIndex(dragged, e);
+        ShowInsertionAt(at);
     }
 
     private void ModsGrid_Drop(object sender, DragEventArgs e)
     {
+        HideInsertion();
         if (e.Data.GetData(typeof(ModRow)) is not ModRow dragged) return;
-        var target = DropTarget(e);
-        if (target is null) return;
         var vm = ViewModel;
-        if (vm.TryMove(vm.Mods.IndexOf(dragged), vm.Mods.IndexOf(target)))
-        {
-            vm.SelectedMod = dragged;
-            vm.RefreshPreview();
-        }
+        if (vm.TryMoveTo(dragged, InsertionIndex(dragged, e))) vm.SelectedMod = dragged;
     }
 
-    /// <summary>The row a drop would land on, or null when there is none or it is in another band.</summary>
-    private ModRow? DropTarget(DragEventArgs e)
+    private void ModsGrid_DragLeave(object sender, DragEventArgs e) => HideInsertion();
+
+    /// <summary>
+    /// The gap the row would be inserted into, clamped to its band. Which gap depends on whether the pointer is in
+    /// the upper or lower half of the row under it, so the line lands where the eye expects; past the last row it
+    /// is the end of the list.
+    /// </summary>
+    private int InsertionIndex(ModRow dragged, DragEventArgs e)
     {
-        if (e.Data.GetData(typeof(ModRow)) is not ModRow dragged) return null;
-        if (RowUnder(e.OriginalSource as DependencyObject)?.Item is not ModRow target) return null;
-        if (ReferenceEquals(target, dragged) || target.Band != dragged.Band) return null;
-        return target;
+        var vm = ViewModel;
+        var (bandStart, bandEnd) = vm.BandRange(dragged.Band);
+        int at;
+        if (RowUnder(e.OriginalSource as DependencyObject) is { Item: ModRow target } row)
+        {
+            var p = e.GetPosition(row);
+            at = vm.Mods.IndexOf(target) + (p.Y > row.ActualHeight / 2 ? 1 : 0);
+        }
+        else
+        {
+            // Not over a row: below the last one means the end of the list, above the first means the start.
+            var p = e.GetPosition(ModsGrid);
+            at = p.Y <= 0 ? 0 : vm.Mods.Count;
+        }
+        return Math.Clamp(at, bandStart, bandEnd);
+    }
+
+    private void ShowInsertionAt(int index)
+    {
+        var layer = AdornerLayer.GetAdornerLayer(ModsGrid);
+        if (layer is null) return;
+        if (_insertion is null)
+        {
+            var brush = TryFindResource("LogTool") as Brush ?? SystemColors.HighlightBrush;
+            _insertion = new InsertionAdorner(ModsGrid, brush);
+            layer.Add(_insertion);
+        }
+        // The gap sits at the top of the row at `index`, or the bottom of the last row when it is past the end.
+        double y;
+        if (RowAt(index) is { } r) y = r.TranslatePoint(new Point(0, 0), ModsGrid).Y;
+        else if (RowAt(index - 1) is { } prev) y = prev.TranslatePoint(new Point(0, prev.ActualHeight), ModsGrid).Y;
+        else return;
+        _insertion.MoveTo(y, ModsGrid.ActualWidth);
+    }
+
+    private void HideInsertion()
+    {
+        if (_insertion is null) return;
+        AdornerLayer.GetAdornerLayer(ModsGrid)?.Remove(_insertion);
+        _insertion = null;
+    }
+
+    private System.Windows.Controls.DataGridRow? RowAt(int index)
+    {
+        if (index < 0 || index >= ModsGrid.Items.Count) return null;
+        return ModsGrid.ItemContainerGenerator.ContainerFromIndex(index) as System.Windows.Controls.DataGridRow;
     }
 
     private static System.Windows.Controls.DataGridRow? RowUnder(DependencyObject? d) =>

@@ -549,11 +549,37 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { Status = ex.Message; Messages.Add("compat import: " + ex.Message); }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanMoveUp))]
     private void MoveUp() => Move(-1);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanMoveDown))]
     private void MoveDown() => Move(1);
+
+    private bool CanMoveUp() => CanMove(-1);
+    private bool CanMoveDown() => CanMove(1);
+
+    /// <summary>
+    /// Whether the selected row can move that way at all. The buttons are bound to this, so a row at the top or
+    /// bottom of its band shows two greyed buttons instead of two that quietly do nothing - which is how the old
+    /// ones behaved, and the reason the rules felt arbitrary.
+    /// </summary>
+    private bool CanMove(int delta)
+    {
+        if (SelectedMod is null || SelectedMod.IsGameModule) return false;
+        var i = Mods.IndexOf(SelectedMod);
+        var j = i + delta;
+        return i >= 0 && j >= 0 && j < Mods.Count && Mods[j].Band == SelectedMod.Band;
+    }
+
+    partial void OnSelectedModChanged(ModRow? value) => NotifyMoveability();
+
+    /// <summary>Re-asks both buttons whether they are still available. Needed after a move as well as after a
+    /// selection change: moving a row to the end of its band is what disables the button you just pressed.</summary>
+    public void NotifyMoveability()
+    {
+        MoveUpCommand.NotifyCanExecuteChanged();
+        MoveDownCommand.NotifyCanExecuteChanged();
+    }
 
     private void Move(int delta)
     {
@@ -563,6 +589,38 @@ public partial class MainViewModel : ObservableObject
         if (i < 0 || j < 0 || j >= Mods.Count) return;
         if (!TryMove(i, j)) return;
         RefreshPreview();
+    }
+
+    /// <summary>
+    /// The half-open range of rows sharing a band, so a drag can be clamped to it. Bands are contiguous by
+    /// construction (Rescan builds them in order and no move can cross one), so a scan outwards is enough.
+    /// </summary>
+    public (int Start, int End) BandRange(int band)
+    {
+        var start = 0;
+        while (start < Mods.Count && Mods[start].Band < band) start++;
+        var end = start;
+        while (end < Mods.Count && Mods[end].Band == band) end++;
+        return (start, end);
+    }
+
+    /// <summary>
+    /// Moves a row to an insertion point - the gap BEFORE index <paramref name="insertAt"/> - clamped into its own
+    /// band. Clamping rather than refusing is deliberate: dragging past the end of a band parks the row at the end
+    /// of the band, which is what the insertion line was showing, instead of silently doing nothing.
+    /// </summary>
+    public bool TryMoveTo(ModRow row, int insertAt)
+    {
+        var from = Mods.IndexOf(row);
+        if (from < 0 || row.IsGameModule) return false;
+        var (start, end) = BandRange(row.Band);
+        insertAt = Math.Clamp(insertAt, start, end);
+        var to = from < insertAt ? insertAt - 1 : insertAt;
+        if (to == from) return false;
+        Mods.Move(from, to);
+        NotifyMoveability();
+        RefreshPreview();
+        return true;
     }
 
     /// <summary>
@@ -586,6 +644,7 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
         Mods.Move(from, to);
+        NotifyMoveability();
         return true;
     }
 
