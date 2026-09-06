@@ -110,3 +110,33 @@ public class UiStateTests
     public void Loading_a_file_that_is_not_there_is_a_first_run()
         => Assert.Null(UiStateStore.LoadFrom(Path.Combine(Path.GetTempPath(), "ml-absent-" + Guid.NewGuid().ToString("N"), "ui-state.json")).Mode);
 }
+
+public class PlayerManifestTests
+{
+    private static readonly ModderLords.Core.Export.ClientManifest.Entry[] Two =
+    [
+        new("Bannerlord.Harmony", "v2.4.2", null),
+        new("ModularSmithing2", "v0.9.30", "https://example/1"),
+    ];
+
+    /// <summary>Player mode is a mod loader: no Coop entry, and no instruction to disable DLC.</summary>
+    [Fact]
+    public void Player_text_has_no_coop_vocabulary()
+    {
+        var text = ModderLords.Core.Export.ClientManifest.ToPlayerText(Two);
+        Assert.DoesNotContain("Coop", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DLC", text);
+        Assert.Contains("Bannerlord.Harmony", text);
+        Assert.Contains("ModularSmithing2", text);
+        Assert.Contains("https://example/1", text);
+    }
+
+    /// <summary>The host text is unchanged: it still leads with Coop, which is what a joining player needs.</summary>
+    [Fact]
+    public void Host_text_still_leads_with_coop()
+    {
+        var text = ModderLords.Core.Export.ClientManifest.ToText(Two, "CoopNightly", "v0.1.4");
+        Assert.Contains("CoopNightly", text);
+        Assert.Contains("DLC", text);
+    }
+}

@@ -47,6 +47,19 @@ public static class ClientManifest
         return sb.ToString();
     }
 
+    /// <summary>
+    /// The same list without the coop framing: no Coop entry prepended, and no instruction to disable DLC (which
+    /// is a coop restriction, not a mod-loader one). This is what somebody sharing a modpack hands out.
+    /// </summary>
+    public static string ToPlayerText(IReadOnlyList<Entry> entries)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Enable exactly these mods in the Bannerlord launcher, in this order (same versions).");
+        sb.AppendLine();
+        foreach (var e in entries) sb.AppendLine($"  {e.Id,-30} {e.Version}" + (e.Source is null ? "" : $"   {e.Source}"));
+        return sb.ToString();
+    }
+
     public static string ToJson(IReadOnlyList<Entry> entries, string coopId, string coopVersion) =>
         JsonSerializer.Serialize(new { coop = new { id = coopId, version = coopVersion }, modules = entries }, new JsonSerializerOptions { WriteIndented = true });
 

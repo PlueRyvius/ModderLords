@@ -53,7 +53,13 @@ public partial class ModRow : ObservableObject
     public string KindTip => !IsGameModule ? "A mod. Enable it and drag it to place it in the load order."
         : IsLocked ? "Part of the base game. It cannot be turned off - the game will not start without it."
         : OfficialModules.IsDlc(Module.Id) ? "A paid expansion. Coop refuses to let a client join with a DLC enabled, so leave it off for coop sessions."
-        : "Part of the base game, and safe to turn off. Coop does not work with Birth and Aging or Fast Mode enabled.";
+        : HostMode
+            ? "Part of the base game, and safe to turn off. Coop does not work with Birth and Aging or Fast Mode enabled."
+            : "Part of the base game, and safe to turn off.";
+
+    /// <summary>Whether the row is being shown in Host mode. Only the wording depends on it: a player should not be
+    /// told which game modules break coop.</summary>
+    public bool HostMode { get; init; }
 
     public string Source => Module.Source.ToString();
     public string Folder => Module.FolderPath;
@@ -383,7 +389,7 @@ public partial class MainViewModel : ObservableObject
                 var m = g.First();
                 var on = OfficialModules.IsRequired(m.Id)
                          || wantedOfficials.Contains(m.Id) || wantedOfficials.Contains(m.FolderName);
-                Mods.Add(new ModRow { Module = m, Enabled = on, Role = ServerRole.AsShipped });
+                Mods.Add(new ModRow { Module = m, Enabled = on, Role = ServerRole.AsShipped, HostMode = Host is not null });
             }
 
             foreach (var pm in Profile.Mods)
@@ -571,8 +577,16 @@ public partial class MainViewModel : ObservableObject
             foreach (var id in p.Order.ModuleIds) LoadOrderPreview.Add(id);
             foreach (var m in p.Messages.Where(m => m.StartsWith("order:"))) Messages.Add(m);
             var entries = ClientManifest.From(p.Modules);
-            var coop = p.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
-            ClientManifestText = ClientManifest.ToText(entries, coop?.Id ?? "Coop", coop?.Version ?? "");
+            if (Host is null)
+            {
+                ClientManifestText = ClientManifest.ToPlayerText(entries);
+            }
+            else
+            {
+                var coop = p.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
+                ClientManifestText = ClientManifest.ToText(entries, coop?.Id ?? "Coop", coop?.Version ?? "");
+            }
+            OnPropertyChanged(nameof(ClientManifestText));
             Host?.UpdateSaveDiff();
         }
         catch (Exception ex) { Messages.Add("preview: " + ex.Message); }

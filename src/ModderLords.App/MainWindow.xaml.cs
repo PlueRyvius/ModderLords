@@ -33,14 +33,7 @@ public partial class MainWindow : Window
         // The mode decides which half of the app is even constructed, so it is settled before the first scan.
         // A state file with no mode is a first run (or a fresh data dir): ask, once, and remember the answer.
         var mode = _ui.Mode;
-        if (mode is null)
-        {
-            var dlg = new FirstRunWindow { Owner = null };
-            dlg.ShowDialog();
-            mode = dlg.ChosenMode;
-            _ui.Mode = mode;
-            UiStateStore.Save(_ui);
-        }
+        if (mode is null) mode = AskForMode();
         ViewModel.ApplyMode(mode.Value);
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         AttachHost();
@@ -49,6 +42,28 @@ public partial class MainWindow : Window
     }
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;
+
+    /// <summary>
+    /// The first-run choice, shown from this window's constructor - which is before the window is shown, so it is
+    /// the application's only window while it is up. Under the default ShutdownMode that makes closing it the last
+    /// window closing, and WPF ends the process before ModderLords has drawn a frame; hence the explicit shutdown
+    /// mode across the dialog.
+    /// </summary>
+    private AppMode AskForMode()
+    {
+        var app = Application.Current;
+        var previous = app?.ShutdownMode ?? ShutdownMode.OnLastWindowClose;
+        if (app is not null) app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        try
+        {
+            var dlg = new FirstRunWindow();
+            dlg.ShowDialog();
+            _ui.Mode = dlg.ChosenMode;
+            UiStateStore.Save(_ui);
+            return dlg.ChosenMode;
+        }
+        finally { if (app is not null) app.ShutdownMode = previous; }
+    }
 
     // ---- mode ------------------------------------------------------------------------------------------
 
@@ -80,9 +95,23 @@ public partial class MainWindow : Window
         ViewModel.Mode = ViewModel.Mode == AppMode.Player ? AppMode.Host : AppMode.Player;
     }
 
+    /// <summary>
+    /// Hides the dedicated-server columns of the mod grid in Player mode. DataGrid columns are not part of the
+    /// visual tree, so they inherit no DataContext and Visibility cannot simply be bound the way it is on the
+    /// buttons beside them; they are toggled by name instead.
+    /// </summary>
+    private void ApplyModeToColumns(bool host)
+    {
+        var v = host ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var c in new System.Windows.Controls.DataGridColumn[]
+                 { RoleColumn, ServerOnlyColumn, BehavioursColumn, CompatColumn, ServerVerdictColumn, BinsColumn, NotesColumn })
+            c.Visibility = v;
+    }
+
     private void UpdateModeButton()
     {
         var host = ViewModel.Mode == AppMode.Host;
+        ApplyModeToColumns(host);
         ModeButton.Content = host ? "Host mode" : "Player mode";
         ModeButton.ToolTip = host
             ? "Hosting a dedicated coop server. Click to go back to Player mode, which is just the mod loader."
