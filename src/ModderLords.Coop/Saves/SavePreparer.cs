@@ -1,6 +1,21 @@
+﻿
+using ModderLords.Core.Compat;
+using ModderLords.Core.Config;
+using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
+using ModderLords.Core.Logs;
+using ModderLords.Core.Modules;
+using ModderLords.Core.Overlay;
+using ModderLords.Core.Perf;
+using ModderLords.Core.Profiles;
+using ModderLords.Core.Saves;
+using ModderLords.Coop.Compat;
+using ModderLords.Coop.Config;
+using ModderLords.Coop.Launch;
+using ModderLords.Coop.Live;
+using ModderLords.Coop.Saves;
 
-namespace ModderLords.Core.Saves;
+namespace ModderLords.Coop.Saves;
 
 /// <summary>
 /// The pristine engine core only loads a save that already exists; bootstrapping a fresh world from
@@ -9,7 +24,7 @@ namespace ModderLords.Core.Saves;
 /// </summary>
 public static class SavePreparer
 {
-    public const string TemplateFileName = "default_new_game.sav";
+    public const string TemplateFileName = SaveHeaderReader.TemplateSaveName + ".sav";
 
     public sealed record Result(string SavePath, bool CreatedFromTemplate, string? TemplateUsed);
 

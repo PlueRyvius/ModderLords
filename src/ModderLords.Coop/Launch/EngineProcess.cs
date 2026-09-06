@@ -1,6 +1,22 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
-namespace ModderLords.Core.Launch;
+using ModderLords.Core.Compat;
+using ModderLords.Core.Config;
+using ModderLords.Core.Export;
+using ModderLords.Core.Launch;
+using ModderLords.Core.Logs;
+using ModderLords.Core.Modules;
+using ModderLords.Core.Overlay;
+using ModderLords.Core.Perf;
+using ModderLords.Core.Profiles;
+using ModderLords.Core.Saves;
+using ModderLords.Coop.Compat;
+using ModderLords.Coop.Config;
+using ModderLords.Coop.Launch;
+using ModderLords.Coop.Live;
+using ModderLords.Coop.Saves;
+
+namespace ModderLords.Coop.Launch;
 
 public enum OutputStream { Stdout, Stderr }
 

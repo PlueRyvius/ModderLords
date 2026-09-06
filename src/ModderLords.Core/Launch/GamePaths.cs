@@ -1,4 +1,4 @@
-namespace ModderLords.Core.Launch;
+﻿namespace ModderLords.Core.Launch;
 
 /// <summary>
 /// Locations that belong to the player's own Bannerlord install, with no dedicated server anywhere in sight.
@@ -13,8 +13,40 @@ public static class GamePaths
     public static string ModulesDir(string gameRoot) => Path.Combine(gameRoot, "Modules");
     public static string WorkshopRoot(string steamLibrary) => Path.Combine(steamLibrary, "steamapps", "workshop", "content", BannerlordAppId.ToString());
 
-    /// <summary>Every Steam library folder on this machine.</summary>
-    public static IEnumerable<string> SteamLibraries() => ServerPaths.SteamLibraries();
+    /// <summary>Every Steam library folder on this machine: the default install locations on each fixed drive,
+    /// plus whatever libraryfolders.vdf lists.</summary>
+    public static IEnumerable<string> SteamLibraries()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var roots = new List<string>();
+        foreach (var pf in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) })
+            if (!string.IsNullOrEmpty(pf)) roots.Add(Path.Combine(pf, "Steam"));
+        foreach (var drive in DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed))
+        {
+            var r = drive.RootDirectory.FullName;
+            roots.Add(Path.Combine(r, "Program Files (x86)", "Steam"));
+            roots.Add(Path.Combine(r, "Program Files", "Steam"));
+            roots.Add(Path.Combine(r, "SteamLibrary"));
+            roots.Add(Path.Combine(r, "Steam"));
+        }
+        foreach (var root in roots)
+        {
+            if (!Directory.Exists(Path.Combine(root, "steamapps"))) continue;
+            if (seen.Add(root)) yield return root;
+            var vdf = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+            if (!File.Exists(vdf)) continue;
+            foreach (var line in File.ReadLines(vdf))
+            {
+                var t = line.Trim();
+                if (!t.StartsWith("\"path\"", StringComparison.OrdinalIgnoreCase)) continue;
+                var q = t.IndexOf('"', 6);
+                var q2 = t.LastIndexOf('"');
+                if (q < 0 || q2 <= q) continue;
+                var p = t.Substring(q + 1, q2 - q - 1).Replace("\\\\", "\\");
+                if (Directory.Exists(Path.Combine(p, "steamapps")) && seen.Add(p)) yield return p;
+            }
+        }
+    }
 
     /// <summary>The Bannerlord install, or null when no Steam library has one.</summary>
     public static string? FindGameRoot() => Modules.ModuleCatalog.FindGameRoot(SteamLibraries());

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ModderLords.Core.Launch;
@@ -41,8 +41,8 @@ public sealed record ModListFile
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    /// <summary>Builds the file from a prepared launch: the selections give the mods and roles, the plan gives the order.</summary>
-    public static ModListFile From(LaunchSession.Prepared prepared, Profile profile, string? exportedBy = null)
+    /// <summary>Builds the file from a chosen mod set: the selections give the mods and roles, the order gives the order.</summary>
+    public static ModListFile From(ModuleSelectionResult prepared, Profile profile, string? exportedBy = null)
     {
         var position = prepared.Order.ModuleIds
             .Select((id, i) => (id, i))

@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
   <!--
     The one place the version lives. Without it every build reported 1.0.0, which made a dev build and a release
     indistinguishable in the title bar — and left no way to tell which build someone was reporting a bug from.
@@ -9,4 +9,29 @@
   <PropertyGroup>
     <VersionPrefix>0.9.0</VersionPrefix>
   </PropertyGroup>
+
+  <!--
+    ModderLords.CompatSync.Coop compiles against Coop's own assemblies, which ship inside the Coop workshop item
+    rather than on NuGet. Anyone building the mod loader without a Coop subscription - CI included - has no copy of
+    them, and that one project used to take the whole app down with it: it is project-referenced by App and Cli, so
+    CI could only ever build Core.
+
+    So the location is resolved here, once, and HasCoopAssemblies says whether it was found. The projects that need
+    those assemblies are conditioned on it and simply drop out when they cannot be built; the release script refuses
+    to package a build that is missing them. Override with -p:CoopRefDir=... for a Steam library somewhere else.
+  -->
+  <PropertyGroup>
+    <CoopWorkshopBin>steamapps\workshop\content\261550\3770450698\bin\Win64_Shipping_Client</CoopWorkshopBin>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(CoopRefDir)' == ''">
+    <CoopRefDir Condition="Exists('C:\Program Files (x86)\Steam\$(CoopWorkshopBin)')">C:\Program Files (x86)\Steam\$(CoopWorkshopBin)</CoopRefDir>
+    <CoopRefDir Condition="'$(CoopRefDir)' == '' And Exists('D:\Program Files (x86)\Steam\$(CoopWorkshopBin)')">D:\Program Files (x86)\Steam\$(CoopWorkshopBin)</CoopRefDir>
+    <CoopRefDir Condition="'$(CoopRefDir)' == '' And Exists('D:\SteamLibrary\$(CoopWorkshopBin)')">D:\SteamLibrary\$(CoopWorkshopBin)</CoopRefDir>
+    <CoopRefDir Condition="'$(CoopRefDir)' == '' And Exists('E:\SteamLibrary\$(CoopWorkshopBin)')">E:\SteamLibrary\$(CoopWorkshopBin)</CoopRefDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <HasCoopAssemblies Condition="'$(CoopRefDir)' != '' And Exists('$(CoopRefDir)')">true</HasCoopAssemblies>
+    <HasCoopAssemblies Condition="'$(HasCoopAssemblies)' == ''">false</HasCoopAssemblies>
+  </PropertyGroup>
+
 </Project>

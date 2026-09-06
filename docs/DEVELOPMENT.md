@@ -20,11 +20,28 @@ Status: Phase 1 complete (community mods load on the pristine server through jun
 
 | Project | Purpose |
 |---|---|
-| `src/ModderLords.Core` | Pure logic: paths, launch plan, engine process, save prep, log classifier |
-| `src/ModderLords.Cli` | Command-line driver (used for spikes and headless operation) |
-| `src/ModderLords.App` | WPF desktop app (Phase 2) |
-| `src/ModderLords.Hook` | Optional `DOTNET_STARTUP_HOOKS` assembly, only if Phase 1 shows the engine cannot resolve mod dependencies on its own |
-| `tests/ModderLords.Core.Tests` | xUnit tests |
+| `src/ModderLords.Core` | The mod loader: module catalogue, load order, profiles, the overlay, the compat database, mod-list export, `LauncherData.xml`, launching the player's own game |
+| `src/ModderLords.Coop` | Hosting the dedicated server: finding the workshop package, the headless engine and its process, server and gameplay config, save prep, the live-settings channel |
+| `src/ModderLords.Cli` | Command-line driver (spikes, headless operation, and `play`) |
+| `src/ModderLords.App` | WPF desktop app |
+| `src/ModderLords.Hook` | `DOTNET_STARTUP_HOOKS` assembly that resolves mod assemblies for the headless engine |
+| `src/ModderLords.Compat` | net472 in-game module: headless guards (server only) |
+| `src/ModderLords.CompatSync` | net472 in-game module: the shared settings-sync module, with no reference to Coop |
+| `src/ModderLords.CompatSync.Coop` | net472 adapter that does touch Coop's assemblies, loaded by hand at runtime |
+| `tests/ModderLords.Core.Tests` | xUnit tests (covers both libraries) |
+
+**Core must not reference Coop.** That is the whole point of the split: the mod loader has to build, test and
+ship on a machine that has never installed Coop, and Player mode must have no accidental path into server code.
+The compiler enforces the direction. Where the dependency naturally wanted to point the wrong way it was
+inverted rather than allowed: `GamePaths` owns the Steam library scan and `ServerPaths` forwards to it,
+`SaveHeaderReader` owns the name of the template save that `SavePreparer` copies, and `ProfileStore` owns the
+paths of the sidecar files it deletes. `ModuleSelectionResult` is the shared shape both launch paths produce, so
+the mod-list export and the `LauncherData.xml` reconciliation no longer derive from a *server* plan.
+
+`ModderLords.CompatSync.Coop` compiles against Coop's own assemblies, which ship inside the workshop item rather
+than on NuGet. `Directory.Build.props` resolves that folder and sets `HasCoopAssemblies`; App and Cli reference
+the project only when it is true. So CI builds the whole app without a Coop install, and
+`scripts\package-release.ps1` refuses to package a build that is missing the adapter.
 
 ## Verified facts about the official server (2026-09-02, Coop v0.1.4, Bannerlord 1.4.8)
 

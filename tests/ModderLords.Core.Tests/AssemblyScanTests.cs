@@ -1,4 +1,5 @@
-using ModderLords.Core.Compat;
+﻿using ModderLords.Core.Compat;
+using ModderLords.Coop.Compat;
 
 namespace ModderLords.Core.Tests;
 

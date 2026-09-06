@@ -1,10 +1,21 @@
+﻿
+using ModderLords.Core.Compat;
 using ModderLords.Core.Config;
+using ModderLords.Core.Export;
+using ModderLords.Core.Launch;
+using ModderLords.Core.Logs;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Overlay;
+using ModderLords.Core.Perf;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
+using ModderLords.Coop.Compat;
+using ModderLords.Coop.Config;
+using ModderLords.Coop.Launch;
+using ModderLords.Coop.Live;
+using ModderLords.Coop.Saves;
 
-namespace ModderLords.Core.Launch;
+namespace ModderLords.Coop.Launch;
 
 /// <summary>
 /// The one place that turns a Profile into a running engine: resolve paths, discover modules, pick sources, compute
@@ -20,10 +31,14 @@ public sealed class LaunchSession
         LoadOrder.Result Order,
         OverlayPlan OverlayPlan,
         LaunchPlan Plan,
-        IReadOnlyList<string> Messages);
+        IReadOnlyList<string> Messages)
+    {
+        /// <summary>The engine-agnostic half of this launch, for the code shared with the client path.</summary>
+        public ModuleSelectionResult Modules => new(Catalog, Selections, Order);
+    }
 
     /// <summary>Submodule class types that survive DependencyOnly, from the compat database (MCM's settings core when no DB ships).</summary>
-    public static IReadOnlyCollection<string> KeepForDependencyOnly => Compat.CompatDb.Current.KeepForDependencyOnly();
+    public static IReadOnlyCollection<string> KeepForDependencyOnly => CompatDb.Current.KeepForDependencyOnly();
 
     public static ServerPaths ResolvePaths(Profile profile)
     {
@@ -39,26 +54,9 @@ public sealed class LaunchSession
         return ModuleCatalog.Scan(paths.ModulesRoot, gameRoot, libraries, profile.CustomModRoots);
     }
 
-    /// <summary>Picks a concrete folder for each enabled profile mod.</summary>
+    /// <summary>Picks a concrete folder for each enabled profile mod. Shared with the client launch path.</summary>
     public static IReadOnlyList<ModSelection> Select(Profile profile, ModuleCatalog catalog, List<string> messages)
-    {
-        var list = new List<ModSelection>();
-        foreach (var pm in profile.EnabledMods)
-        {
-            var candidates = catalog.Candidates(pm.Id).ToList();
-            DiscoveredModule? pick = null;
-            if (pm.SourcePath is not null)
-                pick = candidates.FirstOrDefault(c => Junction.PathsEqual(c.FolderPath, pm.SourcePath))
-                       ?? (Directory.Exists(pm.SourcePath) ? ModuleCatalog.TryParse(pm.SourcePath, ModuleSourceKind.Custom, out _) : null);
-            pick ??= candidates.OrderByDescending(c => c.FolderName.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)).ThenByDescending(c => c.Version).FirstOrDefault();
-            if (pick is null) { messages.Add($"{pm.Id}: not installed anywhere the tool looks; skipped"); continue; }
-            if (candidates.Count > 1 && pm.SourcePath is null) messages.Add($"{pm.Id}: {candidates.Count} copies found, using {pick.FolderPath}");
-            if (pm.LastVersion is not null && !SaveHeaderReader.VersionsEqual(pm.LastVersion, pick.Version))
-                messages.Add($"{pm.Id}: version changed since last launch ({pm.LastVersion} -> {pick.Version}); players must update too");
-            list.Add(new ModSelection(pick, pm.Role));
-        }
-        return list;
-    }
+        => ModuleSelector.Select(profile, catalog, messages);
 
     public const string CompatModuleId = "DedicatedServer.ModderLordsCompat";
     public const string SyncModuleId = "ModderLords.Compat";
@@ -214,9 +212,9 @@ public sealed class LaunchSession
         var entries = selections.Where(s => flagged.Contains(s.Module.Id)).Select(s =>
         {
             var pm = profile.Mods.First(m => m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase));
-            return (s.Module.Id, Compat.AssemblyScan.Scan(s.Module), (IReadOnlyCollection<string>)pm.ClientSideBehaviors);
+            return (s.Module.Id, AssemblyScan.Scan(s.Module), (IReadOnlyCollection<string>)pm.ClientSideBehaviors);
         }).ToList();
-        var db = Compat.CompatDb.Current;
+        var db = CompatDb.Current;
         var hints = selections.Select(s => db.Find(s.Module.Id)).Where(r => r is not null)
             .Select(r => (r!.Id, (IReadOnlyList<string>)r.SettingsTypes, (IReadOnlyList<string>)r.IgnoreSettingsTypes)).ToList();
         var set = Compat.RecipeSet.Build(entries, "ModderLords", hints);
@@ -230,6 +228,5 @@ public sealed class LaunchSession
     }
 
     /// <summary>Planned community modules with the versions the server will advertise (for save diffs and client export).</summary>
-    public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(Prepared p) =>
-        p.Selections.ToDictionary(s => s.Module.Id, s => s.Module.Version, StringComparer.OrdinalIgnoreCase);
+    public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(Prepared p) => p.Modules.Versions;
 }

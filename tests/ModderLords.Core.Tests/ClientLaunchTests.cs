@@ -1,7 +1,8 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Bannerlord.ModuleManager;
 using ModderLords.Core.Launch;
+using ModderLords.Coop.Launch;
 using ModderLords.Core.Modules;
 using Xunit;
 

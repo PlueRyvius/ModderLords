@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -15,10 +15,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ModderLords.Core\ModderLords.Core.csproj" />
+    <ProjectReference Include="..\ModderLords.Coop\ModderLords.Coop.csproj" />
     <ProjectReference Include="..\ModderLords.Hook\ModderLords.Hook.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\ModderLords.Compat\ModderLords.Compat.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\ModderLords.CompatSync\ModderLords.CompatSync.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
-    <ProjectReference Include="..\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <!-- Needs Coop's own assemblies; absent on a machine without the workshop item, and on CI. -->
+    <ProjectReference Include="..\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(HasCoopAssemblies)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,7 +1,8 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ModderLords.Core.Compat;
+using ModderLords.Coop.Compat;
 
 namespace ModderLords.App;
 

@@ -1,4 +1,4 @@
-using ModderLords.Core.Modules;
+﻿using ModderLords.Core.Modules;
 using ModderLords.Core.Profiles;
 
 namespace ModderLords.Core.Launch;
@@ -21,7 +21,13 @@ public static class ClientLaunchSession
         IReadOnlyList<DiscoveredModule> Mods,
         LoadOrder.Result Order,
         ClientLaunchPlan Plan,
-        IReadOnlyList<string> Messages);
+        IReadOnlyList<string> Messages)
+    {
+        /// <summary>The engine-agnostic half of this launch. Roles are meaningless on the client, so every mod is
+        /// reported as it ships; the ids, versions and order are what the shared export code reads.</summary>
+        public ModuleSelectionResult Modules =>
+            new(Catalog, Mods.Select(m => new Overlay.ModSelection(m, Overlay.ServerRole.AsShipped)).ToList(), Order);
+    }
 
     /// <summary>Discovers modules for a client launch: the game's own Modules folder, every Steam Workshop item,
     /// and any extra folders the profile names. No dedicated server is involved, so no server root is scanned.</summary>
@@ -57,7 +63,7 @@ public static class ClientLaunchSession
 
         // Roles are a dedicated-server concept (they decide what the overlay strips out of a manifest). On the
         // player's own machine every enabled mod simply loads, so the selection is used for its module list only.
-        var mods = LaunchSession.Select(profile, catalog, messages).Select(s => s.Module).ToList();
+        var mods = ModuleSelector.Select(profile, catalog, messages).Select(s => s.Module).ToList();
 
         var order = LoadOrder.Compute(officials, mods, profile.Mods.Select(m => m.Id).ToList(), LoadOrder.Profile.Client);
         messages.AddRange(order.Issues.Select(i => "order: " + i));

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Everything that only matters when you are HOSTING the Bannerlord Coop dedicated server: finding the workshop
+    package, launching and talking to the headless engine, rendering its configs, preparing its saves, and the
+    live-settings channel to the compat module.
+
+    It is a separate assembly so that ModderLords.Core - the mod loader - can be built, tested and shipped by
+    someone who has never installed Coop, and so that Player mode has no path into any of this by accident.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ModderLords.Coop</RootNamespace>
+    <AssemblyName>ModderLords.Coop</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ModderLords.Core\ModderLords.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,5 +1,5 @@
-using ModderLords.CompatSync;
-using ModderLords.Core.Live;
+﻿using ModderLords.CompatSync;
+using ModderLords.Coop.Live;
 
 namespace ModderLords.Core.Tests;
 

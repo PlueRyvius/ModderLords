@@ -1,9 +1,12 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using ModderLords.Core.Config;
+using ModderLords.Coop.Config;
 using ModderLords.Core.Launch;
+using ModderLords.Coop.Launch;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
+using ModderLords.Coop.Saves;
 using Xunit;
 
 namespace ModderLords.Core.Tests;

@@ -1,4 +1,20 @@
-namespace ModderLords.Core.Launch;
+﻿using ModderLords.Core.Compat;
+using ModderLords.Core.Config;
+using ModderLords.Core.Export;
+using ModderLords.Core.Launch;
+using ModderLords.Core.Logs;
+using ModderLords.Core.Modules;
+using ModderLords.Core.Overlay;
+using ModderLords.Core.Perf;
+using ModderLords.Core.Profiles;
+using ModderLords.Core.Saves;
+using ModderLords.Coop.Compat;
+using ModderLords.Coop.Config;
+using ModderLords.Coop.Launch;
+using ModderLords.Coop.Live;
+using ModderLords.Coop.Saves;
+
+namespace ModderLords.Coop.Launch;
 
 /// <summary>
 /// Locations of the official Bannerlord Coop dedicated server package and the data directories the server owns.
@@ -46,38 +62,8 @@ public sealed record ServerPaths(string DedicatedServerRoot, string DataDir, str
         }
     }
 
-    public static IEnumerable<string> SteamLibraries()
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var roots = new List<string>();
-        foreach (var pf in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) })
-            if (!string.IsNullOrEmpty(pf)) roots.Add(Path.Combine(pf, "Steam"));
-        foreach (var drive in DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed))
-        {
-            var r = drive.RootDirectory.FullName;
-            roots.Add(Path.Combine(r, "Program Files (x86)", "Steam"));
-            roots.Add(Path.Combine(r, "Program Files", "Steam"));
-            roots.Add(Path.Combine(r, "SteamLibrary"));
-            roots.Add(Path.Combine(r, "Steam"));
-        }
-        foreach (var root in roots)
-        {
-            if (!Directory.Exists(Path.Combine(root, "steamapps"))) continue;
-            if (seen.Add(root)) yield return root;
-            var vdf = Path.Combine(root, "steamapps", "libraryfolders.vdf");
-            if (!File.Exists(vdf)) continue;
-            foreach (var line in File.ReadLines(vdf))
-            {
-                var t = line.Trim();
-                if (!t.StartsWith("\"path\"", StringComparison.OrdinalIgnoreCase)) continue;
-                var q = t.IndexOf('"', 6);
-                var q2 = t.LastIndexOf('"');
-                if (q < 0 || q2 <= q) continue;
-                var p = t.Substring(q + 1, q2 - q - 1).Replace("\\\\", "\\");
-                if (Directory.Exists(Path.Combine(p, "steamapps")) && seen.Add(p)) yield return p;
-            }
-        }
-    }
+    /// <summary>Kept as a forwarder so existing callers on the server side read the same as they did.</summary>
+    public static IEnumerable<string> SteamLibraries() => GamePaths.SteamLibraries();
 
     public IEnumerable<string> Validate()
     {

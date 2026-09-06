@@ -33,7 +33,7 @@ public static class ClientLauncher
 
     /// <summary>Game install for this profile: the pinned one, else the first Steam library that has it.</summary>
     public static string? ResolveGameRoot(Profile profile)
-        => profile.GameRoot ?? ModuleCatalog.FindGameRoot(ServerPaths.SteamLibraries());
+        => profile.GameRoot ?? ModuleCatalog.FindGameRoot(GamePaths.SteamLibraries());
 
     /// <summary>
     /// The exe to run. Defaults to the TaleWorlds launcher so the player still chooses modules;
