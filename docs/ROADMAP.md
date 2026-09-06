@@ -1,17 +1,43 @@
 # Roadmap
 
 ## Done
-- Phase 0: direct launch of the pristine Coop dedicated server engine.
-- Phase 1: junction overlay + resolver hook; community mods load from where they live.
-- Phase 2: profiles, rendered server-config.json, save headers, player mod list, WPF app.
 
-## Phase 3 (in progress)
-- Version-drift banner: a mod's SubModule.xml version changed since the last launch (players must update; a running server needs a restart).
-- Re-sync junctions on demand and before every launch (survives Steam re-downloads of the workshop item).
-- mod-config.json editor (difficulty, fast forward, auto pause, cheats, looter multiplier) with the same render-from-template approach as server-config.json.
+**As Modular Bannerlords Coop (v0.1 - v0.8.7)** — a launcher for the Bannerlord Coop dedicated server:
 
-## Phase 4
-- Hardening: crash-safe overlay apply, log rotation, more tests, README walkthrough with screenshots.
+- Direct launch of the pristine Coop dedicated server engine; no patched server files.
+- Junction overlay plus a resolver hook, so community mods load from where they already live.
+- Profiles, rendered `server-config.json`, save headers, the player mod list, and the WPF app.
+- The version-drift banner, on-demand junction re-sync, and the `mod-config.json` editor.
+- Hardening: crash-safe overlay apply, log rotation, preflight checks, integration tests.
+- Arbitrary-mod compatibility work: server guards, the compatibility database, server-only logic
+  (Layer 1), and host-side mod settings, live or offline.
+
+**The ModderLords pivot (v0.9.0)** — the same project generalised into a mod loader, because what people
+actually praised was the mod ordering and loading, not the coop:
+
+- **Phase 0** — renamed throughout, including both in-game module ids. Licence relaxed from PolyForm Strict to
+  PolyForm Noncommercial. Profiles migrate from `%LOCALAPPDATA%\ModularCoop` on first run.
+- **Phase 1** — `ClientLaunchPlan` / `ClientLaunchSession`: launching the player's own game with a profile's mods,
+  via the module token on the command line. No overlay, no hook, no compat module on the player path.
+- **Phase 2** — `ModderLords.Coop` split out of `ModderLords.Core`, with the compiler enforcing that Core cannot
+  reach the server code. CI now builds the whole app.
+- **Phase 3** — Player and Host mode, chosen on first run and switched from the toolbar. Player mode is the mod
+  loader and shows nothing about dedicated servers. The host-only commands moved to `HostViewModel`, built only in
+  Host mode. Mod-order editing reworked: three bands (frameworks, the game's modules, everything else),
+  drag-to-reorder, and one row per installed version so you choose which copy loads.
+- **Phase 4** — this document and the README reframed around the mod loader; v0.9.0 released.
+
+## Next
+
+Nothing is committed to. The most likely candidates, roughly in order of how often they have come up:
+
+- **Mods tab niceties**: a right-click column chooser, and an About window.
+- **A diagnostics zip** for bug reports (redacting `ServerSettings.Password`).
+- **Templated scrollbars.** They are still the WPF default, so they read as light chrome in the dark theme.
+- **The CoopNightly ordering asymmetry.** The client sorts it early by dependency while the server pins it last;
+  `LauncherDataSync` deliberately never moves the Coop entry.
+- **Generalized mod compatibility** — the long-standing idea below, still the most interesting direction for the
+  hosting half.
 
 ## Future: generalized mod compatibility (idea from Andy, 2026-09-02)
 
