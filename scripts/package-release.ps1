@@ -54,7 +54,7 @@ if ($LASTEXITCODE -ne 0) { throw "compat sync build failed" }
 # RELEASE must never ship without it: settings sync would silently do nothing on every server it reached.
 dotnet build (Join-Path $root 'src\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj') -c Release
 if ($LASTEXITCODE -ne 0) { throw "compat sync adapter build failed (needs the Bannerlord Coop workshop item, or -p:CoopRefDir=...)" }
-$adapter = Join-Path $root 'src\ModderLords.CompatSync\_Modulein\Win64_Shipping_Client\ModderLords.CompatSync.Coop.dll'
+$adapter = Join-Path $root 'src\ModderLords.CompatSync\_Module\bin\Win64_Shipping_Client\ModderLords.CompatSync.Coop.dll'
 if (-not (Test-Path $adapter)) { throw "ModderLords.CompatSync.Coop.dll was not produced; a release cannot ship without the settings-sync adapter." }
 $syncOut = Join-Path $out 'compat\ModderLords.Compat'
 New-Item -ItemType Directory -Path $syncOut -Force | Out-Null
@@ -62,6 +62,9 @@ Copy-Item (Join-Path $root 'src\ModderLords.CompatSync\_Module\*') $syncOut -Rec
 Get-ChildItem $syncOut -Recurse -Filter *.pdb | Remove-Item -Force
 
 # The _Module output dirs are source-tree build outputs that accumulate leftovers (e.g. a win-x64 RID subfolder
+# from a self-contained build, or DLLs under the pre-rename names). The stale-name check below matches ModularCoop
+# ANYWHERE in the file name, not just at the start: the old server module was DedicatedServer.ModularCoopCompat.dll,
+# which a prefix match sailed straight past and shipped in the v0.9.0 zip on the first attempt.
 # from a self-contained build). A Bannerlord module only wants the flat Win64_Shipping_* bins, so strip the rest.
 foreach ($m in @($compatOut, $syncOut)) {
     Get-ChildItem $m -Recurse -Directory | Where-Object { $_.Name -eq 'win-x64' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -69,7 +72,7 @@ foreach ($m in @($compatOut, $syncOut)) {
     Get-ChildItem $m -Recurse -Filter recipes.json | Remove-Item -Force -ErrorAction SilentlyContinue
     # These are source-tree outputs, so a rename leaves the old assemblies sitting next to the new ones and they
     # get packaged. A module folder holding a DLL its SubModule.xml never mentions is at best confusing.
-    $stale = Get-ChildItem $m -Recurse -File | Where-Object { $_.Name -like 'ModularCoop.*' }
+    $stale = Get-ChildItem $m -Recurse -File | Where-Object { $_.Name -like '*ModularCoop*' }
     if ($stale) { throw "Stale pre-rename build output in $m ($($stale.Name -join ', ')). Delete the _Module bin folders and rebuild." }
 }
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.txt') -Force
