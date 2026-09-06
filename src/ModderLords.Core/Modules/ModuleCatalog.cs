@@ -19,6 +19,16 @@ public sealed record DiscoveredModule(
     public bool HasServerBin => Directory.Exists(ServerBin);
     public bool HasClientBin => Directory.Exists(ClientBin);
     public bool IsOfficial => Info.IsOfficial;
+
+    /// <summary>
+    /// The manifest names a version the game cannot parse. Bannerlord versions are a prefix letter and then
+    /// numbers only - <c>v1.2.3</c>, <c>e1.4.6</c> - so something like <c>v0.9.30a</c> is rejected and read as
+    /// alpha 0.0.0 by everything that reads it, including Coop's ModuleValidator, which matches community
+    /// modules on id AND version in both directions. Worth saying out loud rather than displaying a version the
+    /// mod does not have.
+    /// </summary>
+    public bool HasUnparsableVersion => Info.Version == ApplicationVersion.Empty
+                                        && !string.Equals(Version, ApplicationVersion.Empty.ToString(), StringComparison.OrdinalIgnoreCase);
     public bool IsStock => Source == ModuleSourceKind.ServerStock;
 
     /// <summary>True when at least one submodule carries a tag the dedicated server rejects (DedicatedServerType=none / IsNoRenderModeElement=false).</summary>
@@ -77,6 +87,24 @@ public sealed class ModuleCatalog
         }
     }
 
+    /// <summary>
+    /// The version to show for a module. Normally that is the parsed one, but BUTR's parser accepts only
+    /// <c>&lt;prefix&gt;&lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;[.&lt;revision&gt;]</c> and silently yields
+    /// alpha 0.0.0 for anything else - so a manifest reading <c>v0.9.30a</c> was displayed as <c>a0.0.0</c>, a
+    /// version the mod does not have and which sorts as older than everything.
+    ///
+    /// When the parse produced nothing and the manifest does say something, the manifest wins: it is what the
+    /// author wrote and what the TaleWorlds launcher shows. <see cref="DiscoveredModule.Info"/> keeps the parsed
+    /// value, so dependency resolution is unaffected.
+    /// </summary>
+    private static string DisplayVersion(XmlDocument doc, ModuleInfoExtended info)
+    {
+        var parsed = info.Version.ToString();
+        if (info.Version != ApplicationVersion.Empty) return parsed;
+        var raw = doc.SelectSingleNode("//Version")?.Attributes?["value"]?.Value?.Trim();
+        return string.IsNullOrWhiteSpace(raw) ? parsed : raw!;
+    }
+
     public static DiscoveredModule? TryParse(string folder, ModuleSourceKind kind, out string? problem)
     {
         problem = null;
@@ -87,7 +115,7 @@ public sealed class ModuleCatalog
             doc.Load(manifest);
             var info = ModuleInfoExtended.FromXml(doc);
             if (info is null || string.IsNullOrWhiteSpace(info.Id)) { problem = $"{manifest}: no module Id"; return null; }
-            return new DiscoveredModule(info.Id, info.Version.ToString(), Path.GetFullPath(folder), kind, info);
+            return new DiscoveredModule(info.Id, DisplayVersion(doc, info), Path.GetFullPath(folder), kind, info);
         }
         catch (Exception ex)
         {

@@ -54,12 +54,21 @@ public partial class ModRow : ObservableObject
     /// </summary>
     public int Band => LoadsBeforeGame ? 0 : IsGameModule ? 1 : 2;
 
-    public string BandName => Band switch
+    public string BandName
     {
-        0 => "loads before the game's own modules (its manifest asks for it)",
-        1 => "part of the game; the engine places it",
-        _ => "loads after the game's own modules",
-    };
+        get
+        {
+            var band = Band switch
+            {
+                0 => "loads before the game's own modules (its manifest asks for it)",
+                1 => "part of the game; the engine places it",
+                _ => "loads after the game's own modules",
+            };
+            return HasVersionSiblings
+                ? band + $"\n\n{VersionCount} copies of {Id} are installed at different versions. Only one can be on: ticking this one unticks the others.\nThis copy: {Folder}"
+                : band;
+        }
+    }
 
     /// <summary>The game will not start without Native, SandBoxCore or SandBox, so their checkbox is read-only.</summary>
     public bool IsLocked => OfficialModules.IsRequired(Module.Id);
@@ -83,11 +92,20 @@ public partial class ModRow : ObservableObject
     /// told which game modules break coop.</summary>
     public bool HostMode { get; init; }
 
+    /// <summary>
+    /// How many copies of this module id are installed at different versions. More than one means this row is one
+    /// of several and only one of them can be ticked, because the engine loads a module id once.
+    /// </summary>
+    public int VersionCount { get; set; } = 1;
+
+    public bool HasVersionSiblings => VersionCount > 1;
+
     public string Source => Module.Source.ToString();
     public string Folder => Module.FolderPath;
     public string Bins => (Module.HasServerBin ? "server" : "") + (Module.HasServerBin && Module.HasClientBin ? " + " : "") + (Module.HasClientBin ? "client" : "");
     public string Notes => string.Join(", ", new[]
     {
+        Module.HasUnparsableVersion ? "version the game cannot read" : null,
         Module.HasHeadlessExclusions ? "client-only tags" : null,
         Module.HasCode ? null : "data only",
         Module.HasServerBin ? null : "no server bin",
@@ -327,6 +345,44 @@ public partial class MainViewModel : ObservableObject
         return new HashSet<string>(Profile.ClientOfficialModules, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Copies of one mod id, in the order they should be listed: the pinned one first, then the folder actually
+    /// named after the mod, then newest version first. Same tie-breakers ModuleSelector uses when nothing is
+    /// pinned, so the top row is the copy that would load if you never chose.
+    /// </summary>
+    private static List<DiscoveredModule> OrderCopies(List<DiscoveredModule> copies, string id, DiscoveredModule? pinned) =>
+        copies.OrderByDescending(c => pinned is not null && ReferenceEquals(c, pinned))
+              .ThenByDescending(c => c.FolderName.Equals(id, StringComparison.OrdinalIgnoreCase))
+              .ThenByDescending(c => c.Version, StringComparer.OrdinalIgnoreCase)
+              .ToList();
+
+    /// <summary>Guards the untick cascade below against re-entering itself.</summary>
+    private bool _syncingVersions;
+
+    /// <summary>
+    /// The engine loads a module id once, so ticking one copy unticks the others. Without this you could tick two
+    /// versions of the same mod, and the launch would silently pick one of them - the list would be saying
+    /// something the engine cannot do.
+    /// </summary>
+    private void ModRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_syncingVersions || e.PropertyName != nameof(ModRow.Enabled)) return;
+        if (sender is not ModRow row || !row.Enabled || row.IsGameModule || !row.HasVersionSiblings) return;
+        _syncingVersions = true;
+        try
+        {
+            foreach (var other in Mods)
+                if (!ReferenceEquals(other, row) && !other.IsGameModule
+                    && other.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase) && other.Enabled)
+                {
+                    other.Enabled = false;
+                    Status = $"{row.Id}: using {row.Version} ({row.Source}); the other copy was switched off.";
+                }
+        }
+        finally { _syncingVersions = false; }
+        RefreshPreview();
+    }
+
     internal void CollectProfileFromRows()
     {
         // Game modules are a separate list on the profile: they have no role, no source path and no place in the
@@ -335,12 +391,15 @@ public partial class MainViewModel : ObservableObject
         if (officialRows.Count > 0)
             Profile.ClientOfficialModules = officialRows.Where(r => r.Enabled || r.IsLocked).Select(r => r.Id).ToList();
 
+        // A profile names each mod once, so the rows for one id collapse back to a single entry: the ticked copy
+        // if there is one, otherwise the first. SourcePath is what carries the choice of copy to the launch.
+        // GroupBy keeps first-appearance order, so the profile keeps the order shown in the list.
         var byId = Profile.Mods.ToDictionary(m => m.Id, StringComparer.OrdinalIgnoreCase);
         var ordered = new List<ProfileMod>();
-        foreach (var row in Mods)
+        foreach (var g in Mods.Where(r => !r.IsGameModule).GroupBy(r => r.Id, StringComparer.OrdinalIgnoreCase))
         {
-            if (row.IsGameModule) continue;
-            if (!byId.TryGetValue(row.Id, out var pm)) pm = new ProfileMod { Id = row.Id };
+            var row = g.FirstOrDefault(r => r.Enabled) ?? g.First();
+            if (!byId.TryGetValue(g.Key, out var pm)) pm = new ProfileMod { Id = g.Key };
             pm.Enabled = row.Enabled;
             pm.Role = row.Role;
             pm.ServerAuthoritative = row.ServerAuthoritative;
@@ -382,19 +441,19 @@ public partial class MainViewModel : ObservableObject
             foreach (var m in LegacyModuleNotice(gameRoot)) Messages.Add(m);
             CoopVersion = catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop")?.Version;
 
-            // One row per module id (best copy), profile order first, then the rest alphabetically.
+            // One row per module id AND version. The same mod routinely exists in the game's Modules folder and in
+            // the workshop at different versions, and which one loads changes what you are playing - so both are
+            // shown and you pick. Two copies at the SAME version are still one row: there is nothing to choose
+            // between them, and ModuleSelector would pick either.
             // Coop itself (any build id) and the stock modules are never user-selectable.
             var stockIds = new HashSet<string>(catalog.Modules.Where(m => m.IsStock).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
-            var best = catalog.Modules.Where(m => !m.IsStock && !OfficialModules.IsGameModule(m.Id) && !stockIds.Contains(m.Id)
+            var byId = catalog.Modules.Where(m => !m.IsStock && !OfficialModules.IsGameModule(m.Id) && !stockIds.Contains(m.Id)
                                                   && !m.Id.Equals("Coop", StringComparison.OrdinalIgnoreCase) && !m.Id.Equals("CoopNightly", StringComparison.OrdinalIgnoreCase))
                 .GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g =>
-                {
-                    var pinned = Profile.Mods.FirstOrDefault(pm => pm.Id.Equals(g.Key, StringComparison.OrdinalIgnoreCase))?.SourcePath;
-                    return g.OrderByDescending(m => pinned is not null && Junction.PathsEqual(m.FolderPath, pinned))
-                            .ThenByDescending(m => m.FolderName.Equals(g.Key, StringComparison.OrdinalIgnoreCase))
-                            .ThenByDescending(m => m.Version).First();
-                }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(g => g.Key, g => g
+                    .GroupBy(m => m.Version ?? "", StringComparer.OrdinalIgnoreCase)
+                    .Select(vg => vg.OrderByDescending(m => m.FolderName.Equals(g.Key, StringComparison.OrdinalIgnoreCase)).First())
+                    .ToList(), StringComparer.OrdinalIgnoreCase);
 
             Mods.Clear();
 
@@ -405,18 +464,44 @@ public partial class MainViewModel : ObservableObject
             // fact about its manifest, so the rows do not need to know about it while they are being made.
             var modRows = new List<ModRow>();
             foreach (var pm in Profile.Mods)
-                if (best.TryGetValue(pm.Id, out var m)) { modRows.Add(new ModRow { Module = m, Enabled = pm.Enabled, Role = pm.Role, ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList() }); best.Remove(pm.Id); }
-                else Messages.Add($"{pm.Id}: in the profile but not installed anywhere");
-            // Mods new to this profile take their defaults from the compat database; existing entries are never rewritten.
-            foreach (var m in best.Values.OrderBy(m => m.Id))
             {
-                var rec = db.Find(m.Id);
-                modRows.Add(new ModRow
-                {
-                    Module = m, Enabled = false, Role = db.DefaultRoleFor(m.Id),
-                    ServerAuthoritative = rec?.ServerAuthoritative ?? false,
-                    ClientSideBehaviors = rec?.ClientSideBehaviors.ToList() ?? new List<string>(),
-                });
+                if (!byId.TryGetValue(pm.Id, out var copies)) { Messages.Add($"{pm.Id}: in the profile but not installed anywhere"); continue; }
+                // The profile pins a folder, so that copy is the one that is on; the rest are shown alongside it,
+                // newest first, and are off. This is the same choice ModuleSelector makes at launch.
+                var pinned = pm.SourcePath is null ? null : copies.FirstOrDefault(c => Junction.PathsEqual(c.FolderPath, pm.SourcePath));
+                var ordered = OrderCopies(copies, pm.Id, pinned);
+                var chosen = pinned ?? ordered[0];
+                foreach (var c in ordered)
+                    modRows.Add(new ModRow
+                    {
+                        Module = c, Enabled = pm.Enabled && ReferenceEquals(c, chosen), Role = pm.Role,
+                        ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList(),
+                    });
+                byId.Remove(pm.Id);
+            }
+            // Mods new to this profile take their defaults from the compat database; existing entries are never rewritten.
+            foreach (var kv in byId.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var rec = db.Find(kv.Key);
+                foreach (var c in OrderCopies(kv.Value, kv.Key, null))
+                    modRows.Add(new ModRow
+                    {
+                        Module = c, Enabled = false, Role = db.DefaultRoleFor(kv.Key),
+                        ServerAuthoritative = rec?.ServerAuthoritative ?? false,
+                        ClientSideBehaviors = rec?.ClientSideBehaviors.ToList() ?? new List<string>(),
+                    });
+            }
+
+            // Tell each row how many siblings it has, and say so once in Messages - a mod installed twice at two
+            // versions is worth noticing even if you never open the tooltip.
+            foreach (var g in modRows.GroupBy(r => r.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                var n = g.Count();
+                foreach (var r in g) r.VersionCount = n;
+                if (n > 1) Messages.Add($"{g.Key}: {n} versions installed ({string.Join(", ", g.Select(r => r.Version))}); only the ticked one loads");
+                foreach (var r in g.Where(r => r.Module.HasUnparsableVersion))
+                    Messages.Add($"{r.Id}: SubModule.xml says version “{r.Version}”, which Bannerlord cannot parse "
+                               + "(a prefix letter then numbers only, e.g. v0.9.30). Everything that reads it, Coop's module check included, sees a0.0.0.");
             }
 
             // Band 0: frameworks. The list used to open with the game's own modules and say mods load after them,
@@ -442,6 +527,9 @@ public partial class MainViewModel : ObservableObject
 
             // Band 2: everything else.
             foreach (var row in modRows.Where(r => !r.LoadsBeforeGame)) Mods.Add(row);
+
+            // Rows are rebuilt on every scan, so the old ones (and their handlers) go with them.
+            foreach (var row in modRows) row.PropertyChanged += ModRowChanged;
 
             foreach (var row in Mods) row.Compat = db.For(row.Id, row.Version);
 
