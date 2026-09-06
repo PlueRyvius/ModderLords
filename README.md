@@ -1,10 +1,14 @@
 ﻿# ModderLords
 
-Run the **Bannerlord Coop dedicated server with your mods**, using the untouched official server from the Steam
-Workshop and the mods exactly where they already live for single player. No copying mods around, no patched server
-files, no third-party launcher inside your Steam folder.
+**A mod loader for Mount & Blade II: Bannerlord.** Pick a set of mods, put them in the order you want, and launch
+the game — without the TaleWorlds launcher. Mods load from wherever they already live, whether that is your game's
+`Modules` folder or a Steam Workshop subscription. Nothing is copied, nothing is patched, and your launcher's own
+mod list is left alone.
 
-Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
+It also **hosts the Bannerlord Coop dedicated server**, using the untouched official server from the Steam Workshop.
+That half is kept out of the way unless you ask for it: see [Player mode and Host mode](#player-mode-and-host-mode).
+
+Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop v0.1.4.
 
 > **Upgrading from Modular Bannerlords Coop?** This is the same project under a new name. Your profiles, local
 > compatibility records and settings caches are copied automatically on first run from `%LOCALAPPDATA%\ModularCoop`
@@ -18,6 +22,23 @@ Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
 
 ## What it does
 
+### As a mod loader
+
+- **Launches your game directly** with exactly the mods you ticked, in the order you chose. The module list is passed
+  on the command line, which *replaces* `LauncherData.xml` — so your TaleWorlds launcher selection is never read and
+  never rewritten.
+- **Finds mods wherever they are**: the game's `Modules` folder and every Steam Workshop subscription. Workshop ids
+  resolve on their own, so nothing is copied or linked for playing.
+- **Gets the load order right.** Frameworks whose manifest says the game's own modules load after them — Harmony,
+  ButterLib, UIExtenderEx, MCM — are placed ahead of `Native`, exactly as the TaleWorlds launcher does. Get this
+  wrong and ButterLib opens a pop-up recommending you close the game.
+- **Shows every installed copy.** If a mod exists twice at different versions (a local build in `Modules` and the
+  Workshop release, say), both are listed and you choose which one loads. Ticking one unticks the other, because the
+  engine loads a module id once.
+- **Profiles**: named mod sets with order, saved and switched freely. Share one as a file; import somebody else's.
+
+### As a coop host
+
 - **Launches the official server engine directly** with the module list and load order you choose.
 - **Uses mods where they are.** Your game `Modules` folder and Steam Workshop items are linked into the server with
   NTFS junctions (no admin rights). Removing a mod removes only the link. Workshop updates flow through automatically.
@@ -25,7 +46,6 @@ Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
   a small shadow copy of their `SubModule.xml` so the headless server accepts them; the mod folder itself is never edited.
 - **Resolves mod DLLs the engine cannot find.** A tiny helper is loaded into the engine that finds each mod's own
   libraries and the client-only UI assemblies mods reference. It patches nothing.
-- **Profiles**: named mod sets with order, roles, save, and server settings. Switch between them freely.
 - **Saves**: reads every save's header (character, level, day, mods it was written with) and shows how it differs from
   your profile. Never blocks a launch and never rewrites a save; the engine loads mismatched saves with a warning.
 - **Server settings** rendered into `server-config.json` (port, password, Steam discoverability, autosave, log file),
@@ -49,13 +69,18 @@ Works with Bannerlord Coop v0.1.4 on Mount & Blade II: Bannerlord v1.4.8.
 
 ## Requirements
 
+To play with mods:
+
 - Windows 10/11, 64-bit.
-- Mount & Blade II: Bannerlord v1.4.8 installed through Steam (the launcher finds it in any Steam library).
-- **Bannerlord Coop** subscribed on the Steam Workshop (item 3770450698). Its dedicated server lives inside that
-  workshop item; the launcher finds it automatically.
+- Mount & Blade II: Bannerlord v1.4.8 installed through Steam (ModderLords finds it in any Steam library).
 - Your mods installed the normal way: under the game's `Modules` folder or subscribed on the Workshop.
+
+To host a coop server, additionally:
+
+- **Bannerlord Coop** subscribed on the Steam Workshop (item 3770450698). Its dedicated server lives inside that
+  workshop item; ModderLords finds it automatically.
 - Everyone who joins needs the same community mods and versions enabled in their own Bannerlord launcher, and the War
-  Sails DLC disabled. Use the Players tab to hand them the list.
+  Sails DLC disabled. Use the Share tab to hand them the list.
 
 The release zip is self-contained; no separate .NET install is needed.
 
@@ -63,13 +88,15 @@ The release zip is self-contained; no separate .NET install is needed.
 
 ## Install
 
-1. Unzip the release anywhere (for example `C:\Games\ModderLords`). Keep all files together; the launcher
-   needs `ModderLords.Hook.dll` next to it.
-2. Run `ModderLords.exe`.
+1. Unzip the release anywhere (for example `C:\Games\ModderLords`). Keep all files together — hosting needs
+   `ModderLords.Hook.dll` and the `compat` folder next to the exe; playing needs neither, but there is no reason to
+   split them up.
+2. Run `ModderLords.exe`. It asks once whether you are here to play with mods or to host a coop server.
 3. If Windows SmartScreen warns about an unknown publisher, choose "More info" then "Run anyway". The tool makes no
    network connections and changes nothing outside the folders listed under "Where things live".
 
-To uninstall: delete the folder. To remove the links it created inside the server, first click **Delete** on each
+To uninstall: delete the folder. Playing with mods creates nothing inside your game install, so there is nothing
+else to clean up. If you hosted, remove the links it created inside the server: first click **Delete** on each
 profile (that removes its junctions), or delete `%LOCALAPPDATA%\ModderLords` and the junctions under
 `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\engine\Modules` (they are the entries that are links,
 not the five stock folders `Native`, `SandBoxCore`, `SandBox`, `Coop`, `DedicatedServer.Windows`).
@@ -90,22 +117,54 @@ docs\                        this guide as markdown, the roadmap, third-party no
 
 Nothing needs unpacking or installing: run the exe from wherever you unzipped it.
 
-## Quick start
+## Quick start: playing with mods
 
-1. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see below). Click **Save**.
+1. Pick **Play with mods** the first time you run it (you can change this any time — see below).
+2. **Mods tab**: tick the mods you want. Drag rows, or use **Move up** / **Move down**, to set the order; the panel on
+   the right shows the order the engine will actually use.
+3. Click **Save** to keep the selection in the current profile.
+4. Click **Play**. Bannerlord starts with exactly those mods.
+
+That is the whole loop. Your TaleWorlds launcher mod list is not touched, so switching back to it later changes
+nothing about how ModderLords behaves.
+
+---
+
+## Player mode and Host mode
+
+ModderLords asks once, on first run, which one you want, and remembers it.
+
+- **Player mode** is the mod loader: the **Mods** and **Share** tabs, and the **Play** button. Nothing about
+  dedicated servers appears anywhere.
+- **Host mode** is all of that plus running the Bannerlord Coop dedicated server: the Saves, Server, Gameplay, Mod
+  settings, Console and Performance tabs, the server buttons, and the server half of the Share tab.
+
+Switch whenever you like with the mode button in the toolbar — one click, no restart. Stop the server first if one is
+running. Your window size, theme and selected tab are remembered between runs too.
+
+---
+
+## Quick start: hosting a coop server
+
+1. Switch to **Host mode** if you are not already in it.
+2. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see below). Click **Save**.
 2. **Saves tab**: pick the save to host, or type a new name to start a fresh world.
 3. **Server tab**: set a password if you want one, leave the join port at 4200 (forward UDP 4200 on your router for
    direct connections; Steam joins need no forwarding).
 4. Click **Launch server**. The Console tab shows progress; the status line reads *SERVING, waiting for clients* when
    the server is ready. First load takes about a minute.
-5. **Players tab**: click **Copy** and send the list to your players. They enable exactly those mods and join through
+5. **Share tab**: click **Copy** and send the list to your players. They enable exactly those mods and join through
    the Coop mod's server browser (Steam) or by direct IP.
 6. Hosting and playing on the same PC? Use **Launch client** rather than Steam's Play button — see below.
 7. When you are done, click **Stop**. The server shuts down cleanly and autosaves.
 
 ---
 
-## Playing on the machine that runs the server
+## Playing on the machine that runs the server *(Host mode)*
+
+> In Player mode the same button reads **Play** and does something simpler: it passes your mod list to the game on
+> the command line and writes nothing to disk. Everything below is about Host mode, where the point is to join the
+> server you are running, so the *server's* mod list is the one that has to be matched.
 
 While the coop server is up, Steam's **Play** button for Bannerlord is unavailable: the Coop mod logs the server on
 to Steam as a game server for Bannerlord, so Steam treats the game as already running. This is part of the official
@@ -140,7 +199,7 @@ it cannot fall behind. It never downgrades a newer copy, never touches any other
 replaced under `%LOCALAPPDATA%\ModderLords\module-backups\`. If your game lives somewhere Windows will not let the
 launcher write, it says so instead of failing quietly.
 
-**Players tab → Match server…** shows the same comparison on demand, including when there is nothing to change, so
+**Share tab → Match server…** shows the same comparison on demand, including when there is nothing to change, so
 you can check what Launch client would do without launching anything.
 
 ---
@@ -168,16 +227,19 @@ from real data.
 
 ## Sharing a mod list
 
-**Players tab → Export…** writes the mod list to a `.json` file: every mod with its version and workshop link, the
+Available in both modes: handing somebody your modpack is what a mod loader is for.
+
+**Share tab → Export…** writes the mod list to a `.json` file: every mod with its version and workshop link, the
 Coop build you are running, the server-side roles, and — as the order of the list itself — the load order. Send that
 file to whoever needs it.
 
 **Import…** reads one back and offers the two things it is good for, either or both:
 
-- **Set up my Bannerlord launcher to match.** For a player joining your server: it ticks the right mods, unticks the
-  rest and puts them in your order, showing you the changes first, exactly as Launch client does.
-- **Create a server profile.** For another host: same mods, same roles, same order, ready to launch. Copies are found
-  by id on their PC, so your folder layout does not have to be reproduced.
+- **Create a profile.** Same mods, same order — and, for another host, the same roles — ready to launch. Copies are
+  found by id on their PC, so your folder layout does not have to be reproduced.
+- **Set up my Bannerlord launcher to match.** For somebody who still plays through the TaleWorlds launcher, or is
+  joining a server: it ticks the right mods, unticks the rest and puts them in your order, showing you the changes
+  first.
 
 The file cannot install mods. Anything the importer does not have is listed as missing, with the workshop link where
 one is known.
@@ -186,22 +248,42 @@ one is known.
 
 ## The tabs
 
+**Mods** and **Share** are always there. **Saves**, **Server**, **Gameplay**, **Mod settings**, **Console** and
+**Performance** appear in Host mode only, and so do the coop-only columns of the Mods tab described below.
+
 ### Mods
 
-One row per community mod found on this PC. Stock modules and Coop itself are always included and never listed.
+Every module found on this PC, in three bands:
+
+1. **Frameworks** — mods whose manifest says the game's own modules load *after* them (Harmony, ButterLib,
+   UIExtenderEx, MCM). They sit above the game, as the TaleWorlds launcher also places them.
+2. **Game** — the game's own modules and DLC. You can turn these on and off; the engine decides their order.
+3. **Mods** — everything else, loading after the game.
+
+A row is dragged, or moved with **Move up** / **Move down**, freely inside its band and never out of it: which band a
+mod is in comes from its manifest, not from preference, so a move across would simply be undone by the next sort. The
+buttons grey out at the ends of a band, and a drag shows a line where the row will land.
+
+A mod installed more than once at **different versions** gets one row per version, with the folder shown, so you can
+pick the copy that loads. Ticking one unticks the others; the engine loads a module id once. Two copies at the same
+version are one row.
+
+Stock server modules and Coop itself are never listed.
 
 | Column | Meaning |
 |---|---|
-| On | Include this mod on the server (single click). |
-| Role | See below. |
-| Bins | Which builds the mod ships: `server` (made for dedicated servers), `client`, or both. |
-| Compat | The curated verdict from the compatibility database (see below): green **Works**, amber **Needs recipe** (works with Server-only logic and the recorded behaviours), red **Broken**, grey **Unknown**. `· untested version` means your copy is not one of the versions the record was checked with. Hover for notes, tested versions and where the record came from. Empty = no record yet. |
+| On | Load this mod (single click). |
+| Kind | `Framework`, `Game`, `DLC` or `Mod` — which band the row is in, and why it sits where it does. |
+| Version | What the mod's `SubModule.xml` says. Bannerlord versions are a prefix letter then numbers only (`v1.2.3`, `e1.4.6`); anything else is read as `a0.0.0` by the game and everything else, so a version that cannot be parsed is shown as written and flagged in Notes. |
+| Role | Host mode only. See below. |
+| Bins | Host mode only. Which builds the mod ships: `server` (made for dedicated servers), `client`, or both. |
+| Compat | Host mode only. The curated verdict from the compatibility database (see below): green **Works**, amber **Needs recipe** (works with Server-only logic and the recorded behaviours), red **Broken**, grey **Unknown**. `· untested version` means your copy is not one of the versions the record was checked with. Hover for notes, tested versions and where the record came from. Empty = no record yet. |
 | Settings | What the Mod settings tab will find for this mod: `MCM`, `own settings (N values)` (a plain settings class found by the scan), both, or `none found`. Hover for the class names. |
-| Server verdict | `server-safe`: no UI or client-only references. `guarded`: uses inquiries or screens that the server guards handle. `needs review`: constructs UI objects or references StoryMode; may still work (hover for details), test it. |
-| Notes | `client-only tags`: its manifest asks servers to skip it (handled by the Run role). `data only`: XML content, no code. |
+| Server verdict | Host mode only. `server-safe`: no UI or client-only references. `guarded`: uses inquiries or screens that the server guards handle. `needs review`: constructs UI objects or references StoryMode; may still work (hover for details), test it. |
+| Notes | Host mode only. `version the game cannot read`: the manifest's version is not a form Bannerlord parses. `client-only tags`: its manifest asks servers to skip it (handled by the Run role). `data only`: XML content, no code. |
 | Folder | Where the mod lives. A number as the folder name means a Steam Workshop item. |
 
-**Roles**
+**Roles** (Host mode only)
 
 - **Run**: load the mod's code on the server. The default for gameplay mods.
 - **DependencyOnly**: keep the mod in the list so the Coop handshake matches players, but load none of its code. The
@@ -209,14 +291,14 @@ One row per community mod found on this PC. Stock modules and Coop itself are al
   mods that read settings work).
 - **AsShipped**: hand the manifest to the engine unchanged and let it decide. Only for mods built for dedicated servers.
 
-**Order**: Move up / Move down changes the order among community mods. The right-hand panel shows the full engine
-order. Mods that declare "load before Native" (the frameworks above) are placed in front automatically, exactly as the
-game launcher does. Messages about missing dependencies appear under the order list.
+**Order**: the right-hand panel shows the full engine order — what will actually be loaded, after dependencies are
+resolved. **Use engine order** sorts the list to match it. Messages about missing dependencies, duplicate versions and
+unreadable version numbers appear under it.
 
-**Rescan mods** re-reads the disk. **Re-sync junctions** recreates the links inside the server after a Workshop update
-or after Steam re-downloaded the server.
+**Rescan mods** re-reads the disk. **Re-sync junctions** (Host mode) recreates the links inside the server after a
+Workshop update or after Steam re-downloaded the server.
 
-### Saves
+### Saves *(Host mode)*
 
 Every `.sav` in the server's save folder with the character, level, day and the community mods it was written with.
 Selecting one sets it as the save to host. The box below lists differences between that save and your current mod set.
@@ -224,7 +306,7 @@ The engine loads such a save anyway and logs *module mismatch ... Forcing load a
 
 Typing a name that does not exist starts a **new world** from the official `default_new_game.sav`.
 
-### Server
+### Server *(Host mode)*
 
 | Setting | Effect |
 |---|---|
@@ -239,24 +321,27 @@ Typing a name that does not exist starts a **new world** from the official `defa
 
 Written to `server-config.json` at launch; the previous file is backed up under `config-backups`.
 
-### Gameplay
+### Gameplay *(Host mode)*
 
 The Coop mod's `mod-config.json`: campaign difficulty (VeryEasy / Easy / Realistic per category), births and deaths,
 fast forward, auto pause, client cheats, gold and food rules, wanderer limit, kingdom clan tier, smithing stamina,
 looter multipliers, executions, nameplates. Edit, then **Save to mod-config.json**. Applies on the next server start.
 
-### Console
+### Console *(Host mode)*
 
 Filters: **Engine** (the engine's own chatter, off by default), **Module load**, **Server**, **Coop**, **Warnings**,
 **DLL probes** (see Troubleshooting), **Errors + milestones only**, **Auto-scroll** (follow the end; scrolling up
 pins the view). **Find** filters by text. Type a server command in the box and press Enter (`help` lists them; `stop`
 shuts down). **Logs folder** opens the launcher's own per-launch logs.
 
-### Players
+### Share
 
-Left: the exact mod list players must enable, with Workshop links where known. Right: **Check my client** reads this
-PC's Bannerlord launcher selection and reports what the Coop validator would say (missing, not enabled, version
-differs, extra mod enabled, DLC enabled).
+Left, in both modes: the exact mod list to hand somebody, with Workshop links where known, plus **Copy**, **Export…**
+and **Import…**.
+
+Right, in Host mode only: **Check my client** reads this PC's Bannerlord launcher selection and reports what the Coop
+validator would say (missing, not enabled, version differs, extra mod enabled, DLC enabled), and **Match server…**
+shows what would change and offers to apply it.
 
 ---
 
@@ -265,6 +350,7 @@ differs, extra mod enabled, DLC enabled).
 | What | Where |
 |---|---|
 | Profiles | `%LOCALAPPDATA%\ModderLords\profiles\<name>.json` |
+| Mode, theme, window size, selected tab | `%LOCALAPPDATA%\ModderLords\ui-state.json` |
 | Compatibility database | `compat-db.json` next to the launcher (bundled); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
 | Mod settings overrides / cache | `%LOCALAPPDATA%\ModderLords\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModderLords\cache\<profile>.settings-cache.json` |
 | Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModderLords\overlay\<profile>\` |
@@ -282,7 +368,7 @@ bare name first, logs a miss, then the helper resolves it. They are hidden unles
 failure shows in red right after.
 
 **A player is rejected with "module X is required" or "wrong version".** Community mods must match exactly, both ways.
-Send the Players tab list again and have them run **Check my client** on their PC with this tool, or compare versions by hand.
+Send the Share tab list again and have them run **Check my client** on their PC with this tool, or compare versions by hand.
 
 **"DLC is not supported".** Coop does not work with War Sails; players must disable it.
 
@@ -318,7 +404,7 @@ the official `BannerlordCoopServer.exe`, or an older launcher) is still up. Stop
 ## Settings sync (optional, players install one extra mod)
 
 With **Settings sync** ticked on the Server tab, the launcher also loads the shared `ModderLords.Compat` module on the
-server. It is a normal community mod, so it appears in the Players tab list and **every player must install and
+server. It is a normal community mod, so it appears in the Share tab list and **every player must install and
 enable it**: copy the folder `compat\ModderLords.Compat` from the launcher folder into the game's `Modules` folder
 (`...\Mount & Blade II Bannerlord\Modules\ModderLords.Compat`) and enable it in the Bannerlord launcher, anywhere after
 the frameworks.
