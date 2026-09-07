@@ -390,8 +390,11 @@ public partial class HostViewModel : ObservableObject
                     _pendingPerf.Enqueue(sample);
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
                     Application.Current.Dispatcher.BeginInvoke(() => Status = "SERVING, waiting for clients");
+                // LineReceived runs on the stream-reader thread, so this has to hop to the dispatcher like the
+                // SERVING line above; AddLine touches an ObservableCollection a CollectionView is bound to. Fires at
+                // most once per launch, so BeginInvoke here costs nothing and does not need the batched queue.
                 if (stall.Observe(line.Text, line.At) is { } warning)
-                    AddLine(LogCategory.Warning, "[ModderLords] " + warning);
+                    Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Warning, "[ModderLords] " + warning));
             };
             var code = await _engine.Exited;
             IsRunning = false;
