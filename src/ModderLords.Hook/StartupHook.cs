@@ -27,6 +27,16 @@ internal static class StartupHook
 
     // Breadcrumbs. The engine can die without unwinding (a native abort inside the UI stack leaves no managed
     // exception), and stdout is then lost with it. These are the last things we saw, written out on the way down.
+    /// <summary>
+    /// Runtime plumbing shared by the server and by mods that bundle their own copy. For these, the server's own
+    /// build wins over whatever a mod shipped: HookSetup puts the stock server bins at the front of the search list
+    /// for exactly this reason, and honouring the requesting assembly's folder first would undo it. Two builds of the
+    /// same nominal version are not interchangeable - TAOM.Dependencies ships a 0Harmony 2.4.2 whose ILMerged MonoMod
+    /// calls ILGenerator.MarkSequencePoint, which does not exist on the server's .NET 6, so every Harmony patch made
+    /// through it dies with a MissingMethodException.
+    /// </summary>
+    private static readonly string[] ServerOwnedPrefixes = { "0Harmony", "MonoMod", "Serilog", "Newtonsoft.Json" };
+
     private static string _lastRequested = "(none)";
     private static string _lastRequester = "(none)";
     private static string _lastResolved = "(none)";
@@ -45,7 +55,7 @@ internal static class StartupHook
             try
             {
                 Write("UNHANDLED EXCEPTION (engine is about to exit):");
-                Write(e.ExceptionObject?.ToString() ?? "(no exception object)");
+                Write(e.ExceptionObject is Exception ex ? Describe(ex) : e.ExceptionObject?.ToString() ?? "(no exception object)");
                 Write(Breadcrumbs());
             }
             catch { }
@@ -65,9 +75,7 @@ internal static class StartupHook
                 try
                 {
                     var ex = e.Exception;
-                    var frames = (ex.StackTrace ?? "").Split('\n');
-                    Write("first-chance " + ex.GetType().Name + ": " + ex.Message.Replace('\n', ' '));
-                    for (int i = 0; i < Math.Min(4, frames.Length); i++) Write("    " + frames[i].Trim());
+                    Write("first-chance " + Describe(e.Exception));
                 }
                 catch { }
             };
@@ -93,7 +101,10 @@ internal static class StartupHook
         if (loaded != null) return loaded;
 
         var candidates = new List<string>();
-        var requesterDir = SafeDirectory(requestingAssembly);
+        // Requester's own folder first, so a mod's private helper DLLs win - except for the shared runtime plumbing
+        // above, where the server's own copy has to win instead.
+        var serverOwned = ServerOwnedPrefixes.Any(p => requested.Name!.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        var requesterDir = serverOwned ? null : SafeDirectory(requestingAssembly);
         if (requesterDir != null) candidates.Add(requesterDir);
         candidates.AddRange(_dirs);
 
@@ -156,6 +167,29 @@ internal static class StartupHook
             lock (Gate) File.AppendAllText(_sidecar, DateTime.Now.ToString("HH:mm:ss.fff") + " " + text + System.Environment.NewLine);
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Type, message, a few frames, and every inner exception. A Harmony patch failure or a failed type initializer
+    /// says nothing useful at the top level - the reason is always two or three InnerExceptions down.
+    /// </summary>
+    private static string Describe(Exception ex, int depth = 0)
+    {
+        var sb = new System.Text.StringBuilder();
+        var pad = new string(' ', depth * 2);
+        sb.Append(pad).Append(ex.GetType().FullName).Append(": ").Append(ex.Message.Replace((char)10, ' ').Replace((char)13, ' '));
+        var frames = (ex.StackTrace ?? "").Split((char)10);
+        for (int i = 0; i < Math.Min(6, frames.Length); i++)
+        {
+            var f = frames[i].Trim();
+            if (f.Length > 0) sb.Append(System.Environment.NewLine).Append(pad).Append("    ").Append(f);
+        }
+        if (ex is ReflectionTypeLoadException rtle && rtle.LoaderExceptions != null)
+            foreach (var le in rtle.LoaderExceptions)
+                if (le != null) sb.Append(System.Environment.NewLine).Append(pad).Append("  loader-> ").Append(Describe(le, depth + 1));
+        if (ex.InnerException != null && depth < 6)
+            sb.Append(System.Environment.NewLine).Append(pad).Append("  inner-> ").Append(Describe(ex.InnerException, depth + 1));
+        return sb.ToString();
     }
 
     private static string Breadcrumbs() =>
