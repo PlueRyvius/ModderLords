@@ -197,7 +197,10 @@ switch (cmd)
         }
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
-        var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList());
+        // The order the mods were typed in is the user's stated intent; it used to be discarded, so --mods could not
+        // express an order at all. --manual-order makes it authoritative over what the manifests declare.
+        var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), selections.Select(s => s.Module.Id).ToList(),
+            policy: opts.ContainsKey("manual-order") ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);
         foreach (var i in order.Issues) Console.WriteLine("[ModderLords] order: " + i);
 
         // Overlay first (it decides the junction paths the hook's search dirs point at), then the plan.

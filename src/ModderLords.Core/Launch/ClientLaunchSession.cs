@@ -1,4 +1,4 @@
-﻿using ModderLords.Core.Modules;
+using ModderLords.Core.Modules;
 using ModderLords.Core.Profiles;
 
 namespace ModderLords.Core.Launch;
@@ -64,7 +64,8 @@ public static class ClientLaunchSession
         // player's own machine every enabled mod simply loads, so the selection is used for its module list only.
         var mods = ModuleSelector.Select(profile, catalog, messages).Select(s => s.Module).ToList();
 
-        var order = LoadOrder.Compute(officials, mods, profile.Mods.Select(m => m.Id).ToList(), LoadOrder.Profile.Client);
+        var order = LoadOrder.Compute(officials, mods, profile.Mods.Select(m => m.Id).ToList(), LoadOrder.Profile.Client,
+            profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);
         messages.AddRange(order.Issues.Select(i => "order: " + i));
 
         var plan = new ClientLaunchPlan

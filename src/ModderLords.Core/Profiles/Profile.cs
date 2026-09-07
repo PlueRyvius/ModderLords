@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using ModderLords.Core.Launch;
 using ModderLords.Core.Overlay;
@@ -67,6 +67,16 @@ public sealed class Profile
     /// ticking "don't ask again" in that dialog; warnings the sync cannot fix are still reported either way.
     /// </summary>
     public bool AutoSyncLauncherData { get; set; }
+    /// <summary>
+    /// Take the mod order in <see cref="Mods"/> exactly as written, instead of moving mods to satisfy the ordering
+    /// their manifests declare.
+    ///
+    /// The computed order is a suggestion built from metadata, and metadata is sometimes wrong: TAOM_Map ships
+    /// <c>&lt;DependedModuleMetadata id="TAOM" order="LoadBeforeThis"/&gt;</c>, which contradicts the load order
+    /// TAOM's own authors publish. No amount of dependency logic covers every such case, so the user has to be able
+    /// to win. Conflicts are still computed and still reported — this changes who decides, not what is said.
+    /// </summary>
+    public bool ManualLoadOrder { get; set; }
     public ServerSettings Server { get; set; } = new();
 
     /// <summary>

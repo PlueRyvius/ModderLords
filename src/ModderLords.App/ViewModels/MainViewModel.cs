@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.ComponentModel;
@@ -819,6 +819,26 @@ public partial class MainViewModel : ObservableObject
     public sealed record PreviewResult(ModuleCatalog Catalog, LoadOrder.Result Order, ModuleSelectionResult Modules, IReadOnlyList<string> Messages);
 
     private PreviewResult? _preview;
+
+    /// <summary>
+    /// Whether this list is the load order or merely a request. Wraps the profile flag so toggling it re-runs the
+    /// preview immediately — the whole point is to see the order change.
+    /// </summary>
+    public bool ManualLoadOrder
+    {
+        get => Profile.ManualLoadOrder;
+        set
+        {
+            if (Profile.ManualLoadOrder == value) return;
+            Profile.ManualLoadOrder = value;
+            OnPropertyChanged();
+            Host?.InvalidatePreview();
+            RefreshPreview();
+        }
+    }
+
+    /// <summary>Switching profile changes the flag without anything assigning to it.</summary>
+    partial void OnProfileChanged(Profile value) => OnPropertyChanged(nameof(ManualLoadOrder));
 
     [RelayCommand]
     public void RefreshPreview()

@@ -11,6 +11,16 @@ public class SaveImportBindingTests
 {
     private static readonly Type Vm = typeof(HostViewModel);
 
+    /// <summary>The Mods tab's "My order wins" checkbox binds to MainViewModel, not HostViewModel.</summary>
+    [Fact]
+    public void The_manual_order_checkbox_binds_to_a_settable_bool()
+    {
+        var p = typeof(MainViewModel).GetProperty("ManualLoadOrder");
+        Assert.NotNull(p);
+        Assert.Equal(typeof(bool), p!.PropertyType);
+        Assert.True(p.CanRead && p.CanWrite);
+    }
+
     [Theory]
     [InlineData("ClientSaves")]           // <DataGrid ItemsSource="{Binding ClientSaves}">
     [InlineData("SelectedClientSave")]    //           SelectedItem="{Binding SelectedClientSave}"
