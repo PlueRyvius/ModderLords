@@ -126,34 +126,126 @@ It still does not reach `SERVING`. It ends up in a loop:
 [DedicatedServer] settlement distance cache: ..\..\Modules\SandBox/ModuleData\DistanceCaches\settlements_distance_cache_Default.bin
 ```
 
-repeated until the run was stopped. `Main_map` reads successfully every time, so this is not an
-asset failure. TAOM_Map replaces the campaign map, and the settlement distance cache being read is
-**SandBox's** `settlements_distance_cache_Default.bin`, not one belonging to TAOM_Map -- worth
-checking whether the map and the cache disagree, and whether the loop is Coop retrying campaign
-initialisation.
+repeated until the run was stopped. `Main_map` reads successfully every time with a constant
+`navmesh CRC=1465536726`, and the scene comes from `DedicatedServer.Windows`, not TAOM_Map, so this
+is not an asset failure and not a map failure.
 
-This is the next thing to investigate, and it is unrelated to the asset packages.
+**Resolved 2026-09-07: it is a save/module mismatch.** The chain, from
+`Logs	aom_debug_2026-09-07_04-53-48.log`:
 
-## Open lead
+1. Coop logs `Save "saveauto1" module mismatch` for **7 removed** modules and **3 added**, then
+   `Forcing load anyway`. `saveauto1` was built by the *non-TAOM* server.
+2. Its ObjectManager then cannot register hundreds of `MobileParty` objects, and the engine reports
+   ~37 `Null object reference found with ID: <settlement>_comp_*`.
+3. At tick 1629 the state machine enters `LoadVisualsThirdState` and the tick counter never advances.
+4. `GameStateManager.OnTick_Patch2` throws `NullReferenceException`; TAOM's crash handler catches it,
+   auto-accepts its own inquiry and lets the tick return, so the state is re-entered forever.
+5. After ~30 s it becomes `IOException 0x80070020` on `settlements_distance_cache_Default.bin`,
+   because each failed iteration leaks the handle. From there it cannot recover.
 
-Make the engine's asset-failure modal non-fatal so missing client-only assets degrade instead of
-aborting. Not yet attempted.
+So a TAOM server needs a world **created with TAOM loaded**. `SavePreparer.EnsureExists` only ever
+copies `default_new_game.sav`, which is a pre-baked *vanilla* world
+(`Modules = Native;SandBoxCore;Sandbox;Coop`). Nothing in the repo or the server package generates a
+world.
 
-Evidence that this is safer than it first sounds:
+## Can the server create its own world? No.
 
-- The failure happens during **save load**, not in a battle. The engine is resolving TAOM's
-  monster/skeleton animation references while initialising the world. The server never needs to
-  *play* those animations to reach `SERVING`.
-- Coop's `Missions.dll` defines `MissionBehavior`, `MissionNetwork` and `BattleMission` types but
-  contains **no `AgentApplyDamageModel`**, which suggests it does not run authoritative combat damage
-  server-side. In a campaign coop of this shape, battles run on the joining players' clients, and
-  those clients have TAOM's full client `AssetPackages`, so the animations exist where they are
-  actually rendered and simulated.
+Answered from assembly metadata alone, no test launch (`WorldGenerationProbe`):
 
-This has not been proven end to end. Confirm it by reaching `SERVING` and then fighting a battle
-involving Mumakil.
+| | |
+|---|---|
+| `DedicatedServer.Core.dll` | no world-creation surface at all — zero matches for character creation, new-game or save-manager names |
+| `SandBox.SandBoxGameManager` | public, but `LaunchSandboxCharacterCreation`, the only method that starts a campaign, is **private instance** |
+| `SkipCharacterCreationInternal` | instance method on an **internal**, Autofac-registered type, and gated on `InCharacterCreationIntro` — it dismisses a creation already in progress, it does not make a world |
+
+Driving any of that means Harmony-patching the official host from outside, which this project does
+not do. GameInterface also ships `StartCharacterCreation`, `CharacterCreationHandler` and
+`ClientCharacterCreationState`: in Coop's design character creation arrives as a message **from a
+client**. Seeding the server from a client-built world is with the grain, not a workaround.
+
+Hence `SavePreparer.ImportFrom`, reachable as `saves` / `import-save` in the CLI and as an expander
+on the Saves tab. Note that a client save legitimately lacks the server-side modules, but it must
+list a Coop module or the world was not built for coop; the import warns when it does not. (The only
+client save on this machine lists `[ModularSmithing2]` and nothing else, so this is not hypothetical.)
+
+## Measured: the asset modals cannot be suppressed, and would not help
+
+`Debug.DebugManager` is a settable property, so `HeadlessDebugManager` decorates the manager the host
+installed and swallows `ShowMessageBox`. Two things came out of testing it.
+
+**It has to be re-installed.** The wrapper goes on during `OnSubModuleLoad`; about four thousand log
+lines later the host prints `managed DebugManager installed` and assigns its own, discarding it long
+before the campaign loads. Last writer wins, so it is re-asserted on tick. Measured in sequence:
+ours at 1774, the host's `A.e` at 5955, ours again at 6001, then `SERVING`.
+
+**It does not reach these modals.** With LOTRLOME_Armory enabled the run produces 137
+"Could not find animation" warnings and 68 `Always Ignore?` prompts — the counts vary between runs,
+the first recorded 104 and 52 — and **none** arrive at `ShowMessageBox`. They are raised by the native rgl layer and printed straight to stdout, in the same
+`Messagebox [...] message:` shape as the loader's `Cannot load:` probes.
+
+So the engine-side toggles are wired instead —
+`Utilities.SetAssertionsAndWarningsSetExitCode(false)` and `SetCrashOnAsserts(false)`, applied at
+install and again once the host has finished its own debug setup. They apply successfully, and the
+run then **stops exiting through the assertion path and dies in native code instead**, with an
+`Rgl.pdb` / `FairyTale.Library.pdb` stack, before the loading steps begin.
+
+**The modal was a symptom.** LOTRLOME_Armory is not recoverable by suppressing it, which is
+consistent with the access violation from mapping its `AssetPackages`. Leave it off the server. The
+earlier hope — that battles run client-side, so missing server animations are survivable — remains
+untested, because the server cannot get far enough to test it.
+
+Both toggles change engine behaviour globally, so they are applied only on a dedicated server, where
+the prompt is unanswerable by construction. The known-good stack was re-run with every guard active:
+`SERVING`, exit 0.
+
+## Diagnostics added, and what they now say
+
+The whole investigation cost two blind five-minute runs, so the failures were made legible first:
+
+- **Pre-flight save/module check** (`SaveModuleCheck`) — warns, never blocks. Two things it had to
+  get right: `Coop` is a community module by `CommunityModuleIds`' definition but is stock in the
+  server package, so an unfiltered check reports "Coop is missing" on *every* launch; and the
+  documented repro command names no save at all, so Coop falls back to its autosave `saveauto1`.
+  Without resolving that implicit case the check would have missed its own motivating bug.
+- **Stall detector** (`LoadStallDetector`) — keys on the `loading step @tick` *state names*, not the
+  tick number, because the tick advancing while the state does not is exactly the loop.
+- **`LogClassifier`** — `RGL WARNING` missed because the `Warning` test is case-sensitive, nothing
+  matched `Messagebox [Always Ignore?]` or Coop's `module mismatch`, and a swallowed crash changed
+  category with whichever exception it named because the exception regex did not allow a dotted
+  namespace (`System.IO.IOException`).
+
+Run against the real failure, the same command that previously produced 5m35s of silence now says:
+
+```
+WARNING save 'saveauto1' does not match this module set: 7 module(s) it was built with are not in
+this launch (...); 3 module(s) in this launch are not in the save (TAOM.Dependencies, TAOM, TAOM_Map).
+  (no save was named, so Coop will load its autosave 'saveauto1')
+WARNING no loading progress for 90s: stuck at
+  'manager=FinishLoadingFifthStep gameType=LoadVisualsThirdState'.
+```
+
+The first line appears before the engine starts.
+
+## What is still unproven
+
+Reaching `SERVING` with TAOM needs a world built by a client running TAOM, and creating one means
+playing through character creation. Until that exists:
+
+- no TAOM server has reached `SERVING`, so `TAOM:Run` is only known to **load**, not to serve;
+- the client handshake and `ModuleValidator` pass are untested;
+- whether TAOM battles work without server-side animations is untestable.
 
 ## Reproducing
+
+See which worlds exist on each side, and seed the server from one the game built:
+
+```bash
+dotnet src/ModderLords.Cli/bin/Release/net10.0/ModderLords.Cli.dll saves
+```
+
+```bash
+dotnet src/ModderLords.Cli/bin/Release/net10.0/ModderLords.Cli.dll import-save --from "My TAOM Campaign"
+```
 
 Dry-run a profile without touching anything:
 
