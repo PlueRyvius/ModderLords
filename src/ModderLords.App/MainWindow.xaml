@@ -281,8 +281,29 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <TextBlock Text="Save to host:" VerticalAlignment="Center" />
                         <TextBox Width="260" Margin="6,0" Text="{Binding Profile.SaveName, UpdateSourceTrigger=PropertyChanged}" />
-                        <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource MutedForeground}" Text="Pick one below or type a new name; a new name starts a fresh world from default_new_game.sav." />
+                        <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource MutedForeground}" Text="Pick one below, or type a new name to start from default_new_game.sav — which is a vanilla world, with none of this profile's mods in it." />
                     </StackPanel>
+                    <!-- Seeding from the game: the server can only ever create a vanilla world, so a world containing
+                         this profile's mods has to be started in Bannerlord itself and brought across. -->
+                    <Expander DockPanel.Dock="Bottom" Header="Import a world from the game" Margin="0,6,0,0">
+                        <DockPanel Margin="0,6,0,0">
+                            <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}"
+                                       Text="The server cannot build a world with mods in it. Start a campaign in Bannerlord with this profile's mods (Play), then import that save here to host it." />
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Content="Refresh" Command="{Binding RefreshClientSavesCommand}" Padding="10,3" />
+                                <Button Content="Import selected" Command="{Binding ImportClientSaveCommand}" Margin="6,0,0,0" Padding="10,3" />
+                            </StackPanel>
+                            <DataGrid Height="120" ItemsSource="{Binding ClientSaves}" SelectedItem="{Binding SelectedClientSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Save" Binding="{Binding Name}" Width="200" />
+                                    <DataGridTextColumn Header="Character" Binding="{Binding Character}" Width="120" />
+                                    <DataGridTextColumn Header="Day" Binding="{Binding Day}" Width="60" />
+                                    <DataGridTextColumn Header="Written" Binding="{Binding Written}" Width="130" />
+                                    <DataGridTextColumn Header="Community modules in save" Binding="{Binding Mods}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Expander>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" MinHeight="80" />
@@ -290,7 +311,7 @@
                             <RowDefinition x:Name="SaveDiffRow" Height="110" MinHeight="60" />
                         </Grid.RowDefinitions>
                         <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,2" />
-                        <TextBox Grid.Row="2" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" />
+                        <TextBox Grid.Row="2" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
                     <DataGrid Grid.Row="0" ItemsSource="{Binding Saves}" SelectedItem="{Binding SelectedSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Save" Binding="{Binding Name}" Width="200" />

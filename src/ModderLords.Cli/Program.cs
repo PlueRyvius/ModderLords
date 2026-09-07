@@ -12,6 +12,8 @@ using ModderLords.Coop.Saves;
 //   catalog  [--root <DedicatedServer>] [--source <dir>]...
 //   sync     --mods Id[:Run|DependencyOnly|AsShipped],...  [--remove-all]
 //   launch   [--mods ...] [--save NAME] [--port 7210] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
+//   saves
+//   import-save --from NAME|PATH [--as NAME] [--overwrite]
 
 DataDirMigration.RunIfNeeded();
 
@@ -20,6 +22,7 @@ if (!opts.TryGetValue("cmd", out var cmd))
 {
     Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
     Console.WriteLine("          play --profile NAME [--dry-run]   (start the player's own game with a profile's mods)");
+    Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
     return 1;
 }
 
@@ -74,6 +77,37 @@ switch (cmd)
         Console.WriteLine("profiles dir: " + ProfileStore.ProfilesDir);
         foreach (var n in ProfileStore.List()) Console.WriteLine("  " + n + (ProfileStore.Load(n) is null ? "  (FAILS TO LOAD)" : ""));
         return 0;
+
+    // The server cannot build a world with its own modules; the real game can. This carries one across.
+    case "saves":
+    {
+        Console.WriteLine("client saves: " + ServerPaths.ClientSavesDir());
+        foreach (var h in SavePreparer.ClientSaves())
+            Console.WriteLine($"  {h.Name,-28} {h.ApplicationVersion,-16} day {h.DayLong,-10:F0} {h.LastWriteUtc.ToLocalTime():yyyy-MM-dd HH:mm}  [{string.Join(", ", h.CommunityModuleIds)}]");
+        Console.WriteLine("server saves: " + paths.SavesDir);
+        foreach (var h in SaveHeaderReader.ReadAll(paths.SavesDir))
+            Console.WriteLine($"  {h.Name,-28} {h.ApplicationVersion,-16} day {h.DayLong,-10:F0} {h.LastWriteUtc.ToLocalTime():yyyy-MM-dd HH:mm}  [{string.Join(", ", h.CommunityModuleIds)}]");
+        return 0;
+    }
+
+    case "import-save":
+    {
+        var from = opts.GetValueOrDefault("from");
+        if (from is null) { Console.Error.WriteLine("import-save --from NAME|PATH [--as NAME] [--overwrite]   (NAME is a client save; see: saves)"); return 2; }
+        // A bare name means one of the player's own saves; anything path-like is taken as given.
+        var source = File.Exists(from) ? from : Path.Combine(ServerPaths.ClientSavesDir(), from + ".sav");
+        var target = opts.GetValueOrDefault("as") ?? Path.GetFileNameWithoutExtension(source);
+        try
+        {
+            var r = SavePreparer.ImportFrom(source, paths, target, opts.ContainsKey("overwrite"));
+            foreach (var w in r.Warnings) Console.WriteLine("[ModderLords] WARNING " + w);
+            Console.WriteLine($"[ModderLords] imported {r.SourcePath}");
+            Console.WriteLine($"[ModderLords]       -> {r.SavePath}");
+            Console.WriteLine($"[ModderLords] host it with: launch --mods ... --save {target}");
+        }
+        catch (Exception ex) { Console.Error.WriteLine("[ModderLords] import failed: " + ex.Message); return 2; }
+        return 0;
+    }
 
     case "catalog":
         Console.WriteLine($"game root : {gameRoot ?? "(not found)"}");

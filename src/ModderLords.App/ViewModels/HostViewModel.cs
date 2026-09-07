@@ -162,6 +162,7 @@ public partial class HostViewModel : ObservableObject
         Saves.Clear();
         foreach (var h in SaveHeaderReader.ReadAll(paths.SavesDir)) Saves.Add(new SaveRow { Header = h });
         SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(Profile.SaveName, StringComparison.OrdinalIgnoreCase));
+        RefreshClientSaves();
     }
 
     partial void OnSelectedSaveChanged(SaveRow? value)
@@ -174,10 +175,63 @@ public partial class HostViewModel : ObservableObject
     internal void UpdateSaveDiff()
     {
         if (SelectedSave is null || _prepared is null) { SaveDiff = SelectedSave is null ? "Pick a save, or type a new name to start a fresh world." : ""; return; }
-        var diffs = SaveHeaderReader.Compare(SelectedSave.Header, LaunchSession.PlannedCommunityVersions(_prepared));
-        SaveDiff = diffs.Count == 0
-            ? "Save and profile agree on every community module."
-            : "The engine will load this save anyway, with a warning:\n" + string.Join("\n", diffs.Select(d => $"  {d.ModuleId}: {d.Kind} (save {d.SaveVersion ?? "-"}, now {d.CurrentVersion ?? "-"})"));
+        // Added/removed modules and a version bump are not the same thing, and saying "with a warning" for both
+        // understates the case that actually stalls a load. Same severity split the CLI reports.
+        var r = SaveModuleCheck.Compare(SelectedSave.Header, LaunchSession.PlannedCommunityVersions(_prepared));
+        if (r.IsClean) { SaveDiff = "Save and profile agree on every community module."; return; }
+
+        var lines = new List<string>();
+        if (r.IsSevere)
+        {
+            lines.Add("This world was not built with this module set. The engine will force the load and the campaign may stall while the world initialises.");
+            if (r.Removed.Count > 0) lines.Add("  missing now: " + string.Join(", ", r.Removed));
+            if (r.Added.Count > 0) lines.Add("  new in this profile: " + string.Join(", ", r.Added));
+            lines.Add("  To host these mods, start a campaign in the game with them and import that save.");
+        }
+        foreach (var d in r.VersionChanges) lines.Add($"  {d.ModuleId}: version changed (save {d.SaveVersion ?? "-"}, now {d.CurrentVersion ?? "-"})");
+        SaveDiff = string.Join("\n", lines);
+    }
+
+    /// <summary>The player's own saves, for seeding the server with a world built by the real game (see SavePreparer.ImportFrom).</summary>
+    public ObservableCollection<SaveRow> ClientSaves { get; } = new();
+
+    [ObservableProperty] private SaveRow? _selectedClientSave;
+
+    [RelayCommand]
+    internal void RefreshClientSaves()
+    {
+        ClientSaves.Clear();
+        try { foreach (var h in SavePreparer.ClientSaves()) ClientSaves.Add(new SaveRow { Header = h }); }
+        catch (Exception ex) { AddLine(LogCategory.Tool, "[ModderLords] could not read the game's saves: " + ex.Message); }
+    }
+
+    [RelayCommand]
+    private void ImportClientSave()
+    {
+        if (SelectedClientSave is null) { Status = "Pick one of the game's saves to import."; return; }
+        try
+        {
+            var paths = LaunchSession.ResolvePaths(Profile);
+            var name = SelectedClientSave.Name;
+            var exists = SavePreparer.Exists(paths, name);
+            // Replacing a hosted world is not something to do on a single click without saying so.
+            if (exists && MessageBox.Show(
+                    $"The server already has a save called '{name}'. Replace it?\n\nThe existing one is kept alongside it, not deleted.",
+                    "Import save", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            var r = SavePreparer.ImportFrom(SelectedClientSave.Header.Path, paths, name, overwrite: exists);
+            foreach (var w in r.Warnings) AddLine(LogCategory.Warning, "[ModderLords] " + w);
+            AddLine(LogCategory.Tool, $"[ModderLords] imported '{name}' into {paths.SavesDir}");
+            RefreshSaves(paths);
+            SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            Status = $"Imported save '{name}'";
+        }
+        catch (Exception ex)
+        {
+            AddLine(LogCategory.Error, "[ModderLords] import failed: " + ex.Message);
+            Status = "Import failed: " + ex.Message;
+        }
     }
 
     // ---- drift / resync / gameplay --------------------------------------------------------------------

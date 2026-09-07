@@ -1,4 +1,4 @@
-﻿using ModderLords.Core.Compat;
+using ModderLords.Core.Compat;
 using ModderLords.Core.Config;
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
@@ -34,6 +34,19 @@ public sealed record ServerPaths(string DedicatedServerRoot, string DataDir, str
     public string ModConfigPath => Path.Combine(CoopDataDir, "mod-config.json");
     public string SavesDir => Path.Combine(DataDir, "Game Saves");
     public string LogsDir => Path.Combine(DataDir, "logs");
+
+    /// <summary>
+    /// Where the real game keeps a player's saves: Documents\Mount and Blade II Bannerlord\Game Saves. The server
+    /// writes to <see cref="SavesDir"/> under CoopData instead, and nothing copies between the two, which is why a
+    /// world made by a modded client cannot be hosted without an explicit import.
+    /// </summary>
+    public static string ClientSavesDir()
+    {
+        var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        if (string.IsNullOrWhiteSpace(docs))
+            docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Documents");
+        return Path.Combine(docs, "Mount and Blade II Bannerlord", "Game Saves");
+    }
 
     /// <summary>Default data dir used by the official host: Documents\Mount and Blade II Bannerlord\CoopData.</summary>
     public static string DefaultCoopDataDir()
