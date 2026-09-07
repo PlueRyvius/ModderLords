@@ -42,6 +42,23 @@ internal static class Guards
         // pass objects the server never builds (null visuals). Swallow them.
         Try("ShowTooltip", () => Prefix(harmony, "TaleWorlds.Library.InformationManager", "ShowTooltip", nameof(SkipWithLogPrefix)));
 
+        // Not a patch: Debug.DebugManager is a settable property, so the engine's own message boxes are handled by
+        // decorating the manager DedicatedServer.Core installed rather than by rewriting anything. See
+        // HeadlessDebugManager for why exactly one member is intercepted.
+        Try("Debug.DebugManager", () =>
+        {
+            var wrapped = HeadlessDebugManager.Install();
+            if (wrapped is not null) Log.Info("decorating the installed IDebugManager (" + wrapped + ")");
+            return wrapped is not null;
+        });
+
+        // The asset-failure modals do not come through the managed manager at all; these do reach them.
+        Try("NativeAssertions", () =>
+        {
+            Log.Info("native assertions: " + HeadlessDebugManager.ReleaseNativeAssertions());
+            return true;
+        });
+
         return $"{ok.Count} active [{string.Join(", ", ok)}]" + (missing.Count > 0 ? $"; not installed [{string.Join(", ", missing)}]" : "");
     }
 
@@ -121,6 +138,9 @@ internal static class Guards
         var info = Harmony.GetPatchInfo(target);
         return info != null && info.Prefixes.Count > 0;
     }
+
+    /// <summary>The same once-per-(entry point, mod) logging, for guards that are not Harmony patches.</summary>
+    internal static void AnnounceExternal(string entryPoint) => Announce(entryPoint);
 
     /// <summary>Logs the first time each (entry point, calling mod assembly) pair is hit.</summary>
     private static void Announce(string entryPoint)

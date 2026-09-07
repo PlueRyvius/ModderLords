@@ -45,6 +45,19 @@ public sealed class CompatSubModule : MBSubModuleBase
     protected override void OnApplicationTick(float dt)
     {
         base.OnApplicationTick(dt);
+        // The host installs its own IDebugManager well after OnSubModuleLoad, discarding our decorator. Last writer
+        // wins, so take it back. Costs a type check per frame on every frame but the one where it actually happens.
+        try
+        {
+            if (HeadlessDebugManager.Reassert() is { } retaken)
+            {
+                Log.Info("re-decorating the IDebugManager the host replaced ours with (" + retaken + ")");
+                // The host has just finished its own debug setup, so this is the point at which re-applying the
+                // native toggles sticks. Two calls per run, not per frame.
+                Log.Info("native assertions: " + HeadlessDebugManager.ReleaseNativeAssertions());
+            }
+        }
+        catch { }
         if (_perf is null) return;
         try { _perf.Tick(dt); }
         catch { _perf = null; }   // never let a meter break the server it is measuring
@@ -75,5 +88,7 @@ internal static class Log
 {
     private const string Prefix = "[ModderLords.Compat] ";
     public static void Info(string msg) => Console.WriteLine(Prefix + msg);
+    /// <summary>Says "Warning" deliberately: that is what LogClassifier matches to colour the line in the console.</summary>
+    public static void Warn(string msg) => Console.WriteLine(Prefix + "Warning: " + msg);
     public static void Error(string msg) => Console.Error.WriteLine(Prefix + msg);
 }
