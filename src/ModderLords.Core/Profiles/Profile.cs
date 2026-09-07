@@ -16,6 +16,7 @@ public sealed class ProfileMod
     public ServerRole Role { get; set; } = ServerRole.Run;
     public bool Enabled { get; set; } = true;
     public string? SourcePath { get; set; }
+    public string? DownloadUrl { get; set; }
     /// <summary>Version seen when the profile was last synced/launched; used for drift warnings.</summary>
     public string? LastVersion { get; set; }
     /// <summary>Layer 1: run this mod's behaviours on the server only; clients skip them (needs ModderLords.Compat on both sides).</summary>
@@ -83,6 +84,25 @@ public sealed class Profile
 
 public static class ProfileStore
 {
+    public static Profile Snapshot(Profile profile)
+    {
+        var copy = JsonSerializer.Deserialize<Profile>(JsonSerializer.Serialize(profile, Json), Json)!;
+        copy.Server.TraceTick = profile.Server.TraceTick;
+        copy.Server.TracePublish = profile.Server.TracePublish;
+        copy.Server.TraceBandits = profile.Server.TraceBandits;
+        return copy;
+    }
+
+    /// <summary>Merge observed versions without reverting edits made while a launch was preparing.</summary>
+    public static void MergeLastVersions(Profile destination, Profile launched)
+    {
+        foreach (var mod in destination.Mods)
+        {
+            var observed = launched.Mods.FirstOrDefault(m => m.Id.Equals(mod.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(m.SourcePath, mod.SourcePath, StringComparison.OrdinalIgnoreCase));
+            if (observed is not null) mod.LastVersion = observed.LastVersion;
+        }
+    }
     public static string RootDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ModderLords");
     public static string ProfilesDir => Path.Combine(RootDir, "profiles");
     public static string OverlayDirFor(string profileName) => Path.Combine(RootDir, "overlay", Safe(profileName));
@@ -99,8 +119,12 @@ public static class ProfileStore
     public static IReadOnlyList<string> List()
     {
         if (!Directory.Exists(ProfilesDir)) return Array.Empty<string>();
-        return Directory.EnumerateFiles(ProfilesDir, "*.json").Select(Path.GetFileNameWithoutExtension).Where(n => n is not null).Cast<string>().OrderBy(n => n).ToList();
+        return ListIn(ProfilesDir);
     }
+
+    public static IReadOnlyList<string> ListIn(string directory) => Directory.EnumerateFiles(directory, "*.json")
+        .Where(p => !p.EndsWith(".settings.json", StringComparison.OrdinalIgnoreCase))
+        .Select(p => Path.GetFileNameWithoutExtension(p)).OrderBy(n => n).ToList();
 
     public static Profile? Load(string name)
     {

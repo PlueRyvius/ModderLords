@@ -22,6 +22,7 @@ public static class ModuleSelector
             if (pm.SourcePath is not null)
                 pick = candidates.FirstOrDefault(c => Junction.PathsEqual(c.FolderPath, pm.SourcePath))
                        ?? (Directory.Exists(pm.SourcePath) ? ModuleCatalog.TryParse(pm.SourcePath, ModuleSourceKind.Custom, out _) : null);
+            pick ??= pm.LastVersion is null ? null : candidates.FirstOrDefault(c => SaveHeaderReader.VersionsEqual(c.Version, pm.LastVersion));
             pick ??= candidates.OrderByDescending(c => c.FolderName.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)).ThenByDescending(c => c.Version).FirstOrDefault();
             if (pick is null) { messages.Add($"{pm.Id}: not installed anywhere the tool looks; skipped"); continue; }
             if (candidates.Count > 1 && pm.SourcePath is null) messages.Add($"{pm.Id}: {candidates.Count} copies found, using {pick.FolderPath}");

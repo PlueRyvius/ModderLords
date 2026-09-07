@@ -403,7 +403,7 @@ public class ModListFileTests : IDisposable
     {
         var p = ModListFile.Read(Round(Sample())).ToProfile("shared");
         Assert.Equal("shared", p.Name);
-        Assert.Equal(["Bannerlord.Harmony", "ModularSmithing2", "ImprovedGarrisons"], p.Mods.Select(m => m.Id));
+        Assert.Equal(["Bannerlord.Harmony", "ModularSmithing2", "ImprovedGarrisons", "CoopNightly"], p.Mods.Select(m => m.Id));
         Assert.All(p.Mods, m => Assert.True(m.Enabled));
         Assert.Equal(ServerRole.DependencyOnly, p.Mods[0].Role);
         Assert.True(p.Mods[1].ServerAuthoritative);

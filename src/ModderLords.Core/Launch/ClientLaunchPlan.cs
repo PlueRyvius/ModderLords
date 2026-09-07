@@ -6,10 +6,8 @@ namespace ModderLords.Core.Launch;
 /// VERIFIED 2026-09-06 against Bannerlord v1.4.8.119303: Bannerlord.exe takes the same
 /// _MODULES_*A*B*_MODULES_ token the TaleWorlds launcher builds, the ids in it are resolved against BOTH the
 /// game's Modules folder and the Steam Workshop content folder, and the token completely replaces whatever
-/// Configs\LauncherData.xml says — modules deselected there loaded, modules selected there did not, and the file
-/// was left byte-for-byte unchanged. That is why nothing here writes to LauncherData.xml and why Workshop mods
-/// need no junction: unlike the headless dedicated server (a separate Steam app with no Steam integration, which
-/// really can only see $BASE\Modules), the client resolves Workshop ids itself.
+/// Configs\LauncherData.xml says. Unique Workshop IDs resolve directly; ambiguous copies use a private view
+/// with physical module links because the engine chooses the first matching ID, ahead of Workshop copies.
 /// </summary>
 public sealed record ClientLaunchPlan
 {
@@ -17,6 +15,9 @@ public sealed record ClientLaunchPlan
 
     /// <summary>Module ids in load order. Order is significant and is passed through exactly as given.</summary>
     public required IReadOnlyList<string> ModuleIds { get; init; }
+    public IReadOnlyList<Modules.DiscoveredModule> SelectedModules { get; init; } = [];
+    public IReadOnlyList<string> MissingModules { get; init; } = [];
+    public bool RequiresIsolatedView { get; init; }
 
     public string WorkingDirectory => GamePaths.ClientBin(GameRoot);
     public string Exe => Path.Combine(WorkingDirectory, ClientLauncher.GameExeName);

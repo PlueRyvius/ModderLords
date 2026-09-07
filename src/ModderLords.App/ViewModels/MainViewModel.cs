@@ -25,6 +25,7 @@ namespace ModderLords.App.ViewModels;
 public partial class ModRow : ObservableObject
 {
     public required DiscoveredModule Module { get; init; }
+    public bool IsMissing { get; init; }
     [ObservableProperty] private bool _enabled;
     [ObservableProperty] private ServerRole _role;
     /// <summary>Layer 1: behaviours run on the server only; clients skip them (needs the shared module on both sides).</summary>
@@ -58,6 +59,7 @@ public partial class ModRow : ObservableObject
     {
         get
         {
+            if (IsMissing) return "Not installed. This entry is kept from the profile. Download it and Rescan, or untick it to launch without it.";
             var band = Band switch
             {
                 0 => "loads before the game's own modules (its manifest asks for it)",
@@ -77,7 +79,7 @@ public partial class ModRow : ObservableObject
     /// <summary>Shown in its own column so a game module is never mistaken for a mod you installed.</summary>
     // Deliberately short: the column sits between Module and Version, and "required" is already obvious from the
     // checkbox being greyed out. The tooltip carries the explanation.
-    public string Kind => IsGameModule ? (OfficialModules.IsDlc(Module.Id) ? "DLC" : "Game") : LoadsBeforeGame ? "Framework" : "Mod";
+    public string Kind => IsMissing ? "Missing" : IsGameModule ? (OfficialModules.IsDlc(Module.Id) ? "DLC" : "Game") : LoadsBeforeGame ? "Framework" : "Mod";
 
     public string KindTip => LoadsBeforeGame
         ? "A framework. Its own manifest says the game's modules load after it, so it sits above them - the TaleWorlds launcher does the same. Drag it among the other frameworks."
@@ -100,10 +102,10 @@ public partial class ModRow : ObservableObject
 
     public bool HasVersionSiblings => VersionCount > 1;
 
-    public string Source => Module.Source.ToString();
+    public string Source => IsMissing ? "MISSING — download then Rescan" : Module.Source.ToString();
     public string Folder => Module.FolderPath;
     public string Bins => (Module.HasServerBin ? "server" : "") + (Module.HasServerBin && Module.HasClientBin ? " + " : "") + (Module.HasClientBin ? "client" : "");
-    public string Notes => string.Join(", ", new[]
+    public string Notes => IsMissing ? "Download then Rescan" : string.Join(", ", new[]
     {
         Module.HasUnparsableVersion ? "version the game cannot read" : null,
         Module.HasHeadlessExclusions ? "client-only tags" : null,
@@ -114,7 +116,7 @@ public partial class ModRow : ObservableObject
 
     private ModderLords.Core.Compat.ScanResult? _scan;
     /// <summary>IL-metadata verdict: server-safe / guarded / needs review. Computed lazily, never executes mod code.</summary>
-    public string ServerVerdict => (_scan ??= ModderLords.Core.Compat.AssemblyScan.Scan(Module)).Summary;
+    public string ServerVerdict => IsMissing ? "not installed" : (_scan ??= ModderLords.Core.Compat.AssemblyScan.Scan(Module)).Summary;
     public string ServerVerdictDetail => _scan is null ? "" : string.Join("\n", _scan.UiAssemblies.Concat(_scan.StoryModeAssemblies).Concat(_scan.GuardedCalls).Concat(_scan.Notes));
     /// <summary>What the Mod settings tab will find for this mod (metadata scan): MCM, its own settings classes, or nothing.</summary>
     public string Settings => Scan.SettingsSummary;
@@ -230,7 +232,7 @@ public partial class MainViewModel : ObservableObject
         if (value == AppMode.Host) Host ??= new HostViewModel(this);
         OnPropertyChanged(nameof(IsHost));
         Rescan();
-        Host?.OnProfileSelected();
+        if (IsHost) Host?.OnProfileSelected();
     }
 
     /// <summary>
@@ -239,12 +241,15 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     public void Log(LogCategory category, string text)
     {
-        if (Host is not null) Host.AddLine(category, text);
+        if (IsHost && Host is not null) Host.AddLine(category, text);
         else if (category is LogCategory.Warning or LogCategory.Error or LogCategory.Tool) Messages.Add(text);
     }
 
-    public MainViewModel()
+    public MainViewModel() : this(true) { }
+
+    internal MainViewModel(bool initialize)
     {
+        if (!initialize) return;
         LoadProfileList();
         LoadProfile(ProfileNames.FirstOrDefault() ?? "default");
     }
@@ -260,7 +265,7 @@ public partial class MainViewModel : ObservableObject
         if (!changed)
         {
             Rescan();               // OnModeChanged did not fire, but the first scan still has to happen
-            Host?.OnProfileSelected();
+            if (IsHost) Host?.OnProfileSelected();
         }
     }
 
@@ -291,7 +296,7 @@ public partial class MainViewModel : ObservableObject
         Profile = ProfileStore.Load(name) ?? new Profile { Name = name };
         SelectedProfileName = Profile.Name;
         Rescan();
-        Host?.OnProfileSelected();
+        if (IsHost) Host?.OnProfileSelected();
     }
 
     [RelayCommand]
@@ -300,6 +305,9 @@ public partial class MainViewModel : ObservableObject
         CollectProfileFromRows();
         ProfileStore.Save(Profile);
         LoadProfileList();
+        // Clearing ItemsSource clears ComboBox.SelectedItem through its two-way binding.
+        // Re-select the saved profile once its item exists again; do not reload its contents.
+        SelectedProfileName = Profile.Name;
         Status = $"Profile '{Profile.Name}' saved";
     }
 
@@ -366,8 +374,13 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     private void ModRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_syncingVersions || e.PropertyName != nameof(ModRow.Enabled)) return;
-        if (sender is not ModRow row || !row.Enabled || row.IsGameModule || !row.HasVersionSiblings) return;
+        if (_syncingVersions || e.PropertyName is not (nameof(ModRow.Enabled) or nameof(ModRow.Role) or nameof(ModRow.ServerAuthoritative))) return;
+        if (sender is not ModRow row) return;
+        if (e.PropertyName != nameof(ModRow.Enabled) || !row.Enabled || row.IsGameModule || !row.HasVersionSiblings)
+        {
+            RefreshPreview();
+            return;
+        }
         _syncingVersions = true;
         try
         {
@@ -404,9 +417,12 @@ public partial class MainViewModel : ObservableObject
             pm.Role = row.Role;
             pm.ServerAuthoritative = row.ServerAuthoritative;
             pm.ClientSideBehaviors = row.ClientSideBehaviors.ToList();
-            pm.SourcePath = row.Folder;
+            if (!row.IsMissing) pm.SourcePath = row.Folder;
             ordered.Add(pm);
         }
+        // Host mode hides its stock Coop module. Missing or temporarily hidden entries are requirements,
+        // not a request to delete them from the profile.
+        ordered.AddRange(Profile.Mods.Where(pm => !ordered.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase))));
         Profile.Mods = ordered;
     }
 
@@ -415,6 +431,10 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     public void Rescan()
     {
+        Mods.Clear();
+        _preview = null;
+        Host?.InvalidatePreview();
+        LoadOrderPreview.Clear();
         try
         {
             // Player mode has no dedicated server to resolve, and asking for one throws when it is not installed —
@@ -422,7 +442,7 @@ public partial class MainViewModel : ObservableObject
             ServerPaths? paths = null;
             ModuleCatalog catalog;
             string? gameRoot;
-            if (Host is not null)
+            if (IsHost && Host is not null)
             {
                 paths = LaunchSession.ResolvePaths(Profile);
                 ServerRoot = paths.DedicatedServerRoot;
@@ -445,10 +465,10 @@ public partial class MainViewModel : ObservableObject
             // the workshop at different versions, and which one loads changes what you are playing - so both are
             // shown and you pick. Two copies at the SAME version are still one row: there is nothing to choose
             // between them, and ModuleSelector would pick either.
-            // Coop itself (any build id) and the stock modules are never user-selectable.
+            // The server supplies Coop in Host mode; in Player mode it is an ordinary selectable client mod.
             var stockIds = new HashSet<string>(catalog.Modules.Where(m => m.IsStock).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
             var byId = catalog.Modules.Where(m => !m.IsStock && !OfficialModules.IsGameModule(m.Id) && !stockIds.Contains(m.Id)
-                                                  && !m.Id.Equals("Coop", StringComparison.OrdinalIgnoreCase) && !m.Id.Equals("CoopNightly", StringComparison.OrdinalIgnoreCase))
+                                                  && (!IsHost || !ClientManifest.CoopClientModuleIds.Contains(m.Id)))
                 .GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g
                     .GroupBy(m => m.Version ?? "", StringComparer.OrdinalIgnoreCase)
@@ -465,10 +485,23 @@ public partial class MainViewModel : ObservableObject
             var modRows = new List<ModRow>();
             foreach (var pm in Profile.Mods)
             {
-                if (!byId.TryGetValue(pm.Id, out var copies)) { Messages.Add($"{pm.Id}: in the profile but not installed anywhere"); continue; }
+                if (!byId.TryGetValue(pm.Id, out var copies))
+                {
+                    if (IsHost && (stockIds.Contains(pm.Id) || ClientManifest.CoopClientModuleIds.Contains(pm.Id))) continue;
+                    Messages.Add($"MISSING: {pm.Id} — download it, then Rescan. {pm.DownloadUrl}");
+                    modRows.Add(new ModRow
+                    {
+                        Module = new DiscoveredModule(pm.Id, pm.LastVersion ?? "unknown", "", ModuleSourceKind.Custom,
+                            new Bannerlord.ModuleManager.ModuleInfoExtended { Id = pm.Id, Name = pm.Id }),
+                        IsMissing = true, Enabled = pm.Enabled, Role = pm.Role,
+                        ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList(),
+                    });
+                    continue;
+                }
                 // The profile pins a folder, so that copy is the one that is on; the rest are shown alongside it,
                 // newest first, and are off. This is the same choice ModuleSelector makes at launch.
                 var pinned = pm.SourcePath is null ? null : copies.FirstOrDefault(c => Junction.PathsEqual(c.FolderPath, pm.SourcePath));
+                pinned ??= pm.LastVersion is null ? null : copies.FirstOrDefault(c => SaveHeaderReader.VersionsEqual(c.Version, pm.LastVersion));
                 var ordered = OrderCopies(copies, pm.Id, pinned);
                 var chosen = pinned ?? ordered[0];
                 foreach (var c in ordered)
@@ -499,7 +532,7 @@ public partial class MainViewModel : ObservableObject
                 var n = g.Count();
                 foreach (var r in g) r.VersionCount = n;
                 if (n > 1) Messages.Add($"{g.Key}: {n} versions installed ({string.Join(", ", g.Select(r => r.Version))}); only the ticked one loads");
-                foreach (var r in g.Where(r => r.Module.HasUnparsableVersion))
+                foreach (var r in g.Where(r => !r.IsMissing && r.Module.HasUnparsableVersion))
                     Messages.Add($"{r.Id}: SubModule.xml says version “{r.Version}”, which Bannerlord cannot parse "
                                + "(a prefix letter then numbers only, e.g. v0.9.30). Everything that reads it, Coop's module check included, sees a0.0.0.");
             }
@@ -522,27 +555,40 @@ public partial class MainViewModel : ObservableObject
                 var m = g.First();
                 var on = OfficialModules.IsRequired(m.Id)
                          || wantedOfficials.Contains(m.Id) || wantedOfficials.Contains(m.FolderName);
-                Mods.Add(new ModRow { Module = m, Enabled = on, Role = ServerRole.AsShipped, HostMode = Host is not null });
+                Mods.Add(new ModRow { Module = m, Enabled = on, Role = ServerRole.AsShipped, HostMode = IsHost });
             }
+            foreach (var id in Profile.ClientOfficialModules.Where(id => !Mods.Any(r => r.Id.Equals(id, StringComparison.OrdinalIgnoreCase))))
+                Mods.Add(new ModRow
+                {
+                    Module = new DiscoveredModule(id, "not installed", "", ModuleSourceKind.GameModules,
+                        new Bannerlord.ModuleManager.ModuleInfoExtended { Id = id, Name = id }),
+                    IsMissing = true, Enabled = true, Role = ServerRole.AsShipped, HostMode = IsHost,
+                });
 
             // Band 2: everything else.
             foreach (var row in modRows.Where(r => !r.LoadsBeforeGame)) Mods.Add(row);
 
             // Rows are rebuilt on every scan, so the old ones (and their handlers) go with them.
-            foreach (var row in modRows) row.PropertyChanged += ModRowChanged;
+            foreach (var row in Mods) row.PropertyChanged += ModRowChanged;
 
             foreach (var row in Mods) row.Compat = db.For(row.Id, row.Version);
 
-            if (Host is not null && paths is not null) Host.RefreshSaves(paths);
+            if (IsHost && Host is not null && paths is not null) Host.RefreshSaves(paths);
             RefreshPreview();
-            Host?.RefreshDrift();
-            Host?.LoadGameplay();
-            Status = $"{modRows.Count(r => r.Enabled)} of {modRows.Count} mods enabled, "
-                   + $"{Mods.Count(r => r.IsGameModule && r.Enabled)} game modules";
+            if (IsHost)
+            {
+                Host?.RefreshDrift();
+                Host?.LoadGameplay();
+            }
+            Status = $"{modRows.Count(r => r.Enabled && !r.IsMissing)} installed mods enabled, "
+                   + $"{Mods.Count(r => r.IsMissing && r.Enabled)} selected modules missing, "
+                   + $"{Mods.Count(r => r.IsGameModule && r.Enabled && !r.IsMissing)} game modules";
         }
         catch (Exception ex)
         {
             Status = ex.Message;
+            ClientManifestText = "Cannot scan this selection: " + ex.Message;
+            if (IsHost && Host?.ClientTarget is not null) UpdateShareText();
             Messages.Add(ex.Message);
         }
     }
@@ -780,25 +826,22 @@ public partial class MainViewModel : ObservableObject
         try
         {
             CollectProfileFromRows();
-            _preview = Host is not null ? Host.PrepareServerPreview() : PrepareClientPreview();
+            _preview = IsHost && Host is not null ? Host.PrepareServerPreview() : PrepareClientPreview();
             var p = _preview;
             LoadOrderPreview.Clear();
             foreach (var id in p.Order.ModuleIds) LoadOrderPreview.Add(id);
             foreach (var m in p.Messages.Where(m => m.StartsWith("order:"))) Messages.Add(m);
-            var entries = ClientManifest.From(p.Modules);
-            if (Host is null)
-            {
-                ClientManifestText = ClientManifest.ToPlayerText(entries);
-            }
-            else
-            {
-                var coop = p.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
-                ClientManifestText = ClientManifest.ToText(entries, coop?.Id ?? "Coop", coop?.Version ?? "");
-            }
-            OnPropertyChanged(nameof(ClientManifestText));
-            Host?.UpdateSaveDiff();
+            UpdateShareText();
+            if (IsHost) Host?.UpdateSaveDiff();
         }
-        catch (Exception ex) { Messages.Add("preview: " + ex.Message); }
+        catch (Exception ex)
+        {
+            _preview = null;
+            LoadOrderPreview.Clear();
+            ClientManifestText = "Cannot prepare this selection: " + ex.Message;
+            if (IsHost && Host?.ClientTarget is not null) UpdateShareText();
+            Messages.Add("preview: " + ex.Message);
+        }
     }
 
     private PreviewResult PrepareClientPreview()
@@ -807,27 +850,58 @@ public partial class MainViewModel : ObservableObject
         return new PreviewResult(c.Catalog, c.Order, c.Modules, c.Messages);
     }
 
+    internal void UpdateShareText()
+    {
+        var shared = IsHost ? Host?.ClientTarget : null;
+        var modules = shared?.Modules ?? _preview?.Modules;
+        if (modules is null) return;
+        var entries = ClientManifest.From(modules);
+        if (!IsHost) ClientManifestText = ClientManifest.ToPlayerText(entries);
+        else
+        {
+            var coop = modules.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
+            ClientManifestText = ClientManifest.ToText(entries, coop?.Id ?? "Coop", coop?.Version ?? "");
+            if (Host?.IsRunning == true) ClientManifestText = "Running server — " + Host.ClientProfile.Name + "\n" + ClientManifestText;
+        }
+        if (Host?.IsRunning != true || !IsHost)
+        {
+            var missing = Mods.Where(m => m.Enabled && m.IsMissing).Select(m => m.Id).ToList();
+            if (missing.Count > 0) ClientManifestText = "INCOMPLETE — download these selected mods before launching: " + string.Join(", ", missing) + "\n\n" + ClientManifestText;
+        }
+    }
+
+    internal ModListFile? CurrentExport()
+    {
+        RefreshPreview();
+        var shared = IsHost ? Host?.ClientTarget : null;
+        var modules = shared?.Modules ?? _preview?.Modules;
+        return modules is null ? null : ModListFile.From(modules, IsHost ? Host?.ClientProfile ?? Profile : Profile, "ModderLords");
+    }
+
     // ---- export ------------------------------------------------------------------------------------
 
     [RelayCommand]
-    private void CopyManifest() => Clipboard.SetText(ClientManifestText);
+    private void CopyManifest()
+    {
+        RefreshPreview();
+        if (_preview is not null || (IsHost && Host?.ClientTarget is not null)) Clipboard.SetText(ClientManifestText);
+    }
 
     /// <summary>Writes the current mod list, versions and load order to a file another player or host can import.</summary>
     [RelayCommand]
     private void ExportList()
     {
-        if (_preview is null) RefreshPreview();
-        if (_preview is null) { Status = "Nothing to export yet: rescan the mods first."; return; }
+        var file = CurrentExport();
+        if (file is null) { Status = "Nothing to export yet: rescan the mods first."; return; }
         var dlg = new SaveFileDialog
         {
             Title = "Export this mod list",
             Filter = "Mod list (*.json)|*.json",
-            FileName = $"modlist-{ProfileStore.Safe(Profile.Name)}.json",
+            FileName = $"modlist-{ProfileStore.Safe(file.Name ?? Profile.Name)}.json",
         };
         if (dlg.ShowDialog() != true) return;
         try
         {
-            var file = ModListFile.From(_preview.Modules, Profile, "ModderLords");
             ModListFile.Write(dlg.FileName, file);
             Status = $"Exported {file.Mods.Count} mods to {dlg.FileName}";
         }
@@ -863,7 +937,8 @@ public partial class MainViewModel : ObservableObject
             if (win.ApplyToLauncher)
             {
                 var path = ClientManifest.DefaultLauncherDataPath();
-                var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide());   // an imported list says nothing about game modules
+                var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide(),
+                    file.ClientOfficialModules?.ToHashSet(StringComparer.OrdinalIgnoreCase));
                 foreach (var b in plan.Blockers) Log(LogCategory.Warning, $"[ModderLords] shared list: {b.Id} — {b.Detail}");
                 var confirm = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
                 if (confirm.ShowDialog() == true)
@@ -881,13 +956,9 @@ public partial class MainViewModel : ObservableObject
     /// <summary>
     /// Starts the player's own Bannerlord with exactly the mods this profile enables.
     ///
-    /// The module token on the command line completely replaces LauncherData.xml, and the client resolves Workshop
-    /// ids unaided, so the normal path touches nothing on disk: no overlay, no compat module, no rewritten mod list.
-    /// That is <see cref="ClientLaunchSession"/>.
-    ///
-    /// The old route through <see cref="ClientLauncher"/> — start the exe bare and make LauncherData.xml match the
-    /// SERVER's plan first — is kept as a fallback for Host mode, where the point is to join the server you are
-    /// running and the server's plan is the authority. It is also what runs if the client plan cannot be built.
+    /// Player mode uses the editable profile; Host mode uses the running server snapshot when available.
+    /// Both launch an explicit module token. Ambiguous copies use a private launch view; invalid selections
+    /// report an error instead of silently falling back to an unrelated launcher selection.
     /// </summary>
     [RelayCommand]
     private void LaunchClient()
@@ -902,21 +973,17 @@ public partial class MainViewModel : ObservableObject
 
             // Host mode joins the server this app is running, so the server's mod list is the one that must be
             // matched; the client plan would happily launch a set the server rejects.
-            if (Host is not null)
+            if (IsHost && Host is not null)
             {
-                LaunchClientViaLauncherData();
+                if (!Host.SyncLauncherData()) return;
+                var client = Host.PrepareClientLaunch();
+                var process = ClientLaunchSession.Start(client.Plan);
+                Status = $"Client started for server profile '{Host.ClientProfile.Name}' (pid {process.Id}).";
                 return;
             }
 
             CollectProfileFromRows();
-            ClientLaunchSession.Prepared prepared;
-            try { prepared = ClientLaunchSession.Prepare(Profile); }
-            catch (Exception ex)
-            {
-                Log(LogCategory.Warning, "[ModderLords] Play: " + ex.Message + " — falling back to starting the game as it is configured");
-                LaunchClientViaLauncherData();
-                return;
-            }
+            var prepared = ClientLaunchSession.Prepare(Profile);
 
             foreach (var m in prepared.Messages) Log(LogCategory.Tool, "[ModderLords] " + m);
             var p = ClientLaunchSession.Start(prepared.Plan);
@@ -930,25 +997,6 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>The pre-0.9 route: start the exe with no arguments, having first written the mod list the game will
-    /// read. Only reachable in Host mode or when the client plan could not be built.</summary>
-    private void LaunchClientViaLauncherData()
-    {
-        var gameRoot = ClientLauncher.ResolveGameRoot(Profile);
-        var exe = ClientLauncher.FindExe(gameRoot);
-        if (exe is null)
-        {
-            Status = gameRoot is null
-                ? "Game install not found. Set the game folder in the profile."
-                : $"No client exe under {ClientLauncher.ClientBin(gameRoot)}.";
-            Log(LogCategory.Error, "[ModderLords] Launch client: " + Status);
-            return;
-        }
-        if (Host is not null && !Host.SyncLauncherData()) return;   // cancelled at the confirmation
-        var p = ClientLauncher.Start(exe);
-        Status = $"Client started (pid {p.Id}).";
-        Log(LogCategory.Tool, $"[ModderLords] Launch client: started {exe} (pid {p.Id})");
-    }
 }
 
 public partial class GameplayRow : ObservableObject

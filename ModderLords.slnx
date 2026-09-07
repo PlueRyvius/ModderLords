@@ -10,6 +10,7 @@
     <Project Path="src/ModderLords.Hook/ModderLords.Hook.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ModderLords.App.Tests/ModderLords.App.Tests.csproj" />
     <Project Path="tests/ModderLords.Core.Tests/ModderLords.Core.Tests.csproj" />
   </Folder>
 </Solution>

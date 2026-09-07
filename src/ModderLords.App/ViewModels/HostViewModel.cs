@@ -79,6 +79,19 @@ public partial class HostViewModel : ObservableObject
     /// <summary>Raised on the UI thread after a batch of console lines was added (the view scrolls once per batch).</summary>
     public event Action? ConsoleFlushed;
     private LaunchSession.Prepared? _prepared;
+    private LaunchSession.Prepared? _runningPrepared;
+    private Profile? _runningProfile;
+    internal LaunchSession.Prepared? ClientTarget => _runningPrepared ?? _prepared;
+    internal Profile ClientProfile => _runningProfile ?? Profile;
+    internal void InvalidatePreview() => _prepared = null;
+
+    internal void RecordRunningSession(LaunchSession.Prepared prepared, Profile profile)
+    {
+        _runningPrepared = prepared;
+        _runningProfile = ProfileStore.Snapshot(profile);
+        IsRunning = true;
+        Main.UpdateShareText();
+    }
     /// <summary>
     /// Until when engine output is attributed to the last command the host sent. The engine offers no request/reply
     /// protocol on stdin, so this is a time window and nothing more: lines that arrive inside it and are not already
@@ -128,6 +141,7 @@ public partial class HostViewModel : ObservableObject
     /// dedicated server, so there is nothing for a player to be connected to.</summary>
     internal void OnProfileSelected()
     {
+        OnPropertyChanged(nameof(Profile));
         LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModderLords] " + s));
         try { LiveSettings.OnProfileSelected(Profile.Name); }
         catch (Exception ex) { Messages.Add("mod settings: " + ex.Message); }
@@ -135,6 +149,7 @@ public partial class HostViewModel : ObservableObject
 
     internal MainViewModel.PreviewResult PrepareServerPreview()
     {
+        _prepared = null;
         var p = LaunchSession.Prepare(Profile, applySideEffects: false);
         _prepared = p;
         return new MainViewModel.PreviewResult(p.Catalog, p.Order, p.Modules, p.Messages);
@@ -234,9 +249,9 @@ public partial class HostViewModel : ObservableObject
     [RelayCommand]
     private void CheckMyClient()
     {
-        if (_prepared is null) Main.RefreshPreview();
-        if (_prepared is null) return;
-        var checks = ClientManifest.CompareWithLauncherData(ClientManifest.From(_prepared.Modules), ClientManifest.DefaultLauncherDataPath());
+        Main.RefreshPreview();
+        if (ClientTarget is not { } target) return;
+        var checks = ClientManifest.CompareWithLauncherData(ClientManifest.From(target.Modules), ClientManifest.DefaultLauncherDataPath());
         ClientCheckText = checks.Count == 0 ? "No community modules to compare." :
             string.Join("\n", checks.Select(c => $"{(c.Verdict == "ok" ? "  ok " : "  !! ")}{c.Id,-30} server {c.ServerVersion ?? "-",-12} client {c.ClientVersion ?? "-",-12} {c.Verdict}"));
     }
@@ -248,14 +263,15 @@ public partial class HostViewModel : ObservableObject
     {
         Main.CollectProfileFromRows();
         ProfileStore.Save(Profile);
+        var launchProfile = ProfileStore.Snapshot(Profile);
         Console.Clear();
         Status = "Checking…";
         try
         {
             var pre = await Task.Run(() =>
             {
-                var paths = LaunchSession.ResolvePaths(Profile);
-                return Preflight.Run(paths, Profile.Server.JoinPort, Profile.Server.EnginePort, Profile.EnabledMods.Any());
+                var paths = LaunchSession.ResolvePaths(launchProfile);
+                return Preflight.Run(paths, launchProfile.Server.JoinPort, launchProfile.Server.EnginePort, launchProfile.EnabledMods.Any());
             });
             foreach (var p in pre) AddLine(p.Blocking ? LogCategory.Error : LogCategory.Warning, "[ModderLords] " + p.Message);
             if (pre.Any(p => p.Blocking))
@@ -266,9 +282,17 @@ public partial class HostViewModel : ObservableObject
             }
 
             Status = "Preparing…";
-            var prepared = await Task.Run(() => LaunchSession.Prepare(Profile));
+            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile));
             _prepared = prepared;
-            ProfileStore.Save(Profile); // LastVersion updated by Prepare
+            // Preparing can take long enough for the user to save more edits. Merge observations into
+            // the latest saved document instead of overwriting it with the launch snapshot.
+            var saved = ProfileStore.Load(launchProfile.Name);
+            if (saved is not null)
+            {
+                ProfileStore.MergeLastVersions(saved, launchProfile);
+                ProfileStore.Save(saved);
+            }
+            if (Profile.Name == launchProfile.Name) ProfileStore.MergeLastVersions(Profile, launchProfile);
             DriftText = "";
             foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
             foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
@@ -282,7 +306,7 @@ public partial class HostViewModel : ObservableObject
             _totalDropped = 0;
 
             _engine = EngineProcess.Start(prepared.Plan);
-            IsRunning = true;
+            RecordRunningSession(prepared, launchProfile);
             Performance.SessionStarted();
             // CPU and working set come from the launcher watching the process, so they cost the server nothing and
             // work even when the compat module is not loaded. Its own timer; never the dispatcher.
@@ -294,7 +318,7 @@ public partial class HostViewModel : ObservableObject
             }
             Status = $"Engine pid {_engine.ProcessId}, loading…";
             LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModderLords] " + s));
-            LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, Profile.SettingsSync, Profile.Name);
+            LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, launchProfile.SettingsSync, launchProfile.Name);
             _engine.LineReceived += line =>
             {
                 var c = LogClassifier.Classify(line.Text);
@@ -314,7 +338,7 @@ public partial class HostViewModel : ObservableObject
             var code = await _engine.Exited;
             IsRunning = false;
             _resources?.Dispose(); _resources = null;
-            if (Performance.WriteSessionSummary(Profile.Name) is { } summary)
+            if (Performance.WriteSessionSummary(launchProfile.Name) is { } summary)
                 AddLine(LogCategory.Tool, "[ModderLords] performance summary written to " + summary);
             Status = $"Engine exited with {code}: {ExitCodeExplainer.Explain(code)}";
             AddLine(LogCategory.Milestone, "[ModderLords] " + Status);
@@ -333,6 +357,26 @@ public partial class HostViewModel : ObservableObject
 
     private bool CanLaunch() => !IsRunning;
 
+    internal ClientLaunchSession.Prepared PrepareClientLaunch()
+    {
+        var target = ClientTarget ?? throw new InvalidOperationException("No valid server selection is available.");
+        var client = ProfileStore.Snapshot(ClientProfile);
+        client.Mods = target.Selections.Where(s => !ClientManifest.IsServerOnly(s.Module.Id)).Select(s => new ProfileMod
+        {
+            Id = s.Module.Id, Enabled = true, SourcePath = s.Module.FolderPath, LastVersion = s.Module.Version,
+        }).ToList();
+        var coop = target.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
+        if (coop is not null) client.Mods.Add(new ProfileMod { Id = coop.Id, LastVersion = coop.Version });
+        foreach (var missing in ClientProfile.EnabledMods.Where(pm => !client.Mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
+                     !ClientManifest.IsServerOnly(pm.Id) && !ClientManifest.CoopClientModuleIds.Contains(pm.Id)))
+            client.Mods.Add(missing);
+        var result = ClientLaunchSession.Prepare(client);
+        var mismatched = client.Mods.Where(pm => pm.LastVersion is not null && result.Mods.Any(m =>
+            m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase) && !SaveHeaderReader.VersionsEqual(m.Version, pm.LastVersion))).Select(pm => pm.Id).ToList();
+        if (mismatched.Count > 0) throw new InvalidOperationException("Client versions differ from the server: " + string.Join(", ", mismatched) + ". Update matching copies or restart the server.");
+        return result;
+    }
+
     /// <summary>
     /// Brings this PC's LauncherData.xml in line with the server before the client starts, so the join is not
     /// refused over a mod list. Returns false only when the player cancels the confirmation; anything the sync
@@ -345,10 +389,10 @@ public partial class HostViewModel : ObservableObject
     [RelayCommand]
     private void MatchServer()
     {
-        if (_prepared is null) Main.RefreshPreview();
-        if (_prepared is null) { Status = "Nothing to compare yet: rescan the mods first."; return; }
+        Main.RefreshPreview();
+        if (ClientTarget is not { } target) { Status = "Nothing to compare yet: rescan the mods first."; return; }
         var path = ClientManifest.DefaultLauncherDataPath();
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared.Modules), _prepared.Order, path, Main.InstalledClientSide(), Main.OfficialSelection());
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase));
         var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot(), launching: false) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         try
@@ -369,9 +413,9 @@ public partial class HostViewModel : ObservableObject
     /// </summary>
     private void EnsureClientModule()
     {
-        var gameRoot = ClientLauncher.ResolveGameRoot(Profile);
+        var gameRoot = ClientLauncher.ResolveGameRoot(ClientProfile);
         var alreadyThere = gameRoot is not null && Directory.Exists(ClientModuleInstaller.TargetDir(gameRoot));
-        if (!Profile.SettingsSync && !alreadyThere) return;
+        if (!ClientProfile.SettingsSync && !alreadyThere) return;
 
         var r = ClientModuleInstaller.Ensure(gameRoot);
         switch (r.Outcome)
@@ -383,7 +427,7 @@ public partial class HostViewModel : ObservableObject
             case ClientModuleInstaller.InstallOutcome.Failed:
                 AddLine(LogCategory.Error, "[ModderLords] " + r.Message);
                 break;
-            case ClientModuleInstaller.InstallOutcome.Unavailable when Profile.SettingsSync:
+            case ClientModuleInstaller.InstallOutcome.Unavailable when ClientProfile.SettingsSync:
                 AddLine(LogCategory.Warning, "[ModderLords] " + r.Message);
                 break;
         }
@@ -391,16 +435,16 @@ public partial class HostViewModel : ObservableObject
 
     internal bool SyncLauncherData()
     {
+        Main.RefreshPreview();
         var path = ClientManifest.DefaultLauncherDataPath();
         EnsureClientModule();
-        if (_prepared is null) Main.RefreshPreview();
-        if (_prepared is null)
+        if (ClientTarget is not { } target)
         {
-            AddLine(LogCategory.Warning, "[ModderLords] Launch client: no server plan yet, leaving the mod list alone");
-            return true;
+            AddLine(LogCategory.Warning, "[ModderLords] Launch client: no valid server plan. Rescan before launching.");
+            return false;
         }
 
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(_prepared.Modules), _prepared.Order, path, Main.InstalledClientSide(), Main.OfficialSelection());
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase));
         foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModderLords] mod list: {b.Id} — {b.Detail}");
         if (!plan.HasChanges)
         {
@@ -409,7 +453,7 @@ public partial class HostViewModel : ObservableObject
         }
 
         var backupRoot = LauncherDataSync.DefaultBackupRoot();
-        if (!Profile.AutoSyncLauncherData)
+        if (!ClientProfile.AutoSyncLauncherData)
         {
             var win = new LauncherSyncWindow(plan, path, backupRoot) { Owner = Application.Current.MainWindow };
             if (win.ShowDialog() != true)
@@ -419,8 +463,10 @@ public partial class HostViewModel : ObservableObject
             }
             if (win.DontAskAgain)
             {
-                Profile.AutoSyncLauncherData = true;
-                ProfileStore.Save(Profile);
+                ClientProfile.AutoSyncLauncherData = true;
+                var saved = ProfileStore.Load(ClientProfile.Name);
+                if (saved is not null) { saved.AutoSyncLauncherData = true; ProfileStore.Save(saved); }
+                if (Profile.Name == ClientProfile.Name) Profile.AutoSyncLauncherData = true;
             }
         }
 
@@ -483,7 +529,13 @@ public partial class HostViewModel : ObservableObject
 
     partial void OnIsRunningChanged(bool value)
     {
-        if (!value) LiveSettings.OnStopped();
+        if (!value)
+        {
+            _runningPrepared = null;
+            _runningProfile = null;
+            LiveSettings.OnStopped();
+            Main.RefreshPreview();
+        }
         LaunchCommand.NotifyCanExecuteChanged();
         StopCommand.NotifyCanExecuteChanged();
     }
@@ -534,7 +586,7 @@ public partial class HostViewModel : ObservableObject
         if (IsRunning && DateTime.Now - _lastPerfSave > TimeSpan.FromMinutes(5))
         {
             _lastPerfSave = DateTime.Now;
-            Performance.WriteSessionSummary(Profile.Name);
+            Performance.WriteSessionSummary(ClientProfile.Name);
         }
     }
 

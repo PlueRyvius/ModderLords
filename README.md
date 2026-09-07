@@ -2,8 +2,8 @@
 
 **A mod loader for Mount & Blade II: Bannerlord.** Pick a set of mods, put them in the order you want, and launch
 the game — without the TaleWorlds launcher. Mods load from wherever they already live, whether that is your game's
-`Modules` folder or a Steam Workshop subscription. Nothing is copied, nothing is patched, and your launcher's own
-mod list is left alone.
+`Modules` folder or a Steam Workshop subscription. Installed mods are never rewritten or moved, and Player mode
+leaves your launcher's own mod list alone. Ambiguous copies and custom mod folders use a private launch view.
 
 It also **hosts the Bannerlord Coop dedicated server**, using the untouched official server from the Steam Workshop.
 That half is kept out of the way unless you ask for it: see [Player mode and Host mode](#player-mode-and-host-mode).
@@ -34,7 +34,8 @@ Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop
   wrong and ButterLib opens a pop-up recommending you close the game.
 - **Shows every installed copy.** If a mod exists twice at different versions (a local build in `Modules` and the
   Workshop release, say), both are listed and you choose which one loads. Ticking one unticks the other, because the
-  engine loads a module id once.
+  engine loads a module id once. When necessary, a private launch folder links the selected copies into its own
+  `Modules` directory so the game resolves the requested version. The original installations stay in place.
 - **Profiles**: named mod sets with order, saved and switched freely. Share one as a file; import somebody else's.
 
 ### As a coop host
@@ -171,10 +172,9 @@ to Steam as a game server for Bannerlord, so Steam treats the game as already ru
 Coop dedicated server package (its assemblies are hash-verified at boot, so it cannot be turned off) and not
 something this launcher does.
 
-**Launch client** in the top bar starts the Bannerlord launcher straight from the game folder
-(`bin\Win64_Shipping_Client\TaleWorlds.MountAndBlade.Launcher.exe`), which Steam does not block. Steam still sees the client and signs it
-in as usual, and the TaleWorlds launcher opens as normal. The client is independent of
-this app — closing the launcher does not close your game.
+**Launch client** in the top bar starts Bannerlord directly with an explicit module selection matching the server,
+including its Coop client module. If the server is running, its captured launch selection is used even while you
+edit another profile. The client is independent of this app — closing ModderLords does not close your game.
 
 Before it starts the game it also brings your module list in line with the server, so the join is not refused over
 a mismatched mod list. It shows you exactly what it will change first — which mods it turns on, which it turns off
@@ -182,11 +182,11 @@ a mismatched mod list. It shows you exactly what it will change first — which 
 order — and nothing is written until you accept. Tick **Don't ask again for this profile** to have it apply silently
 from then on.
 
-It is deliberately narrow about what it touches. The official TaleWorlds modules, the Coop mod itself, your
-multiplayer mod list and the launcher's DLL list are never modified, and the previous file is copied to
+The official module selection is reconciled with the profile; your multiplayer mod list and the launcher's DLL
+list are left alone. The previous file is copied to
 `%LOCALAPPDATA%\ModderLords\launcher-backups\<timestamp>\` before every change. What it cannot do is install a
-missing mod or change a version already on disk: those are reported in the console, and the client still starts, so
-you will see Coop's own message if the join is refused.
+missing mod or change a version already on disk. Missing selected modules and versions that do not match the server
+stop the launch with an explanation, so an incomplete set is not started accidentally.
 
 A mod you subscribed to since the Bannerlord launcher last ran is not in that file at all — the launcher only lists
 what it has scanned — so the sync adds the entry itself rather than telling you the mod is missing. It also warns
@@ -231,7 +231,20 @@ Available in both modes: handing somebody your modpack is what a mod loader is f
 
 **Share tab → Export…** writes the mod list to a `.json` file: every mod with its version and workshop link, the
 Coop build you are running, the server-side roles, and — as the order of the list itself — the load order. Send that
-file to whoever needs it.
+file to whoever needs it. Optional official modules and DLC selections are included too; older lists that do not
+specify them retain the default behavior. Sharing and export refresh the current selection automatically.
+
+Imported modules that are not installed remain visible as **Missing**, with their requested versions and download
+links retained. They are not passed to the engine. Download them and click **Rescan** to resolve them, or untick them
+to launch an intentionally reduced set. Exporting again preserves the missing requirements.
+
+In Host mode, the shared list is labeled with the running server's profile and stays tied to its launch snapshot.
+Edits to another profile take effect on a later server launch. Player mode always uses the selected player profile,
+so you can test a mod set alone and then switch to Host mode without losing it. Coop is selectable in Player mode.
+
+Private client launch views live under `%LOCALAPPDATA%\ModderLords\client-launches`. They contain directory links
+and copies of the game root's small top-level files, not copies of installed mods. They remain after ModderLords
+closes so a detached game can keep using them. Do not remove a view while its game is running.
 
 **Import…** reads one back and offers the two things it is good for, either or both:
 

@@ -88,7 +88,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void Mode_Click(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.Mode == AppMode.Host && ViewModel.Host is { IsRunning: true })
+        if (ViewModel.Mode == AppMode.Host && ViewModel.Host is { } host && (host.IsRunning || host.LaunchCommand.IsRunning))
         {
             MessageBox.Show("Stop the server before switching to Player mode.", "ModderLords",
                 MessageBoxButton.OK, MessageBoxImage.Information);

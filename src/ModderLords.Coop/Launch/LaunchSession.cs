@@ -56,7 +56,9 @@ public sealed class LaunchSession
 
     /// <summary>Picks a concrete folder for each enabled profile mod. Shared with the client launch path.</summary>
     public static IReadOnlyList<ModSelection> Select(Profile profile, ModuleCatalog catalog, List<string> messages)
-        => ModuleSelector.Select(profile, catalog, messages);
+        => ModuleSelector.Select(profile, catalog, messages)
+            .Where(s => !ClientManifest.CoopClientModuleIds.Contains(s.Module.Id) &&
+                !catalog.Modules.Any(m => m.IsStock && m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase))).ToList();
 
     public const string CompatModuleId = "DedicatedServer.ModderLordsCompat";
     public const string SyncModuleId = "ModderLords.Compat";
@@ -104,6 +106,15 @@ public sealed class LaunchSession
         var catalog = Scan(profile, paths, out var gameRoot);
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));
         var selections = WithCompat(profile, Select(profile, catalog, messages), messages);
+        if (applySideEffects)
+        {
+            var missing = profile.EnabledMods.Where(pm => !ClientManifest.CoopClientModuleIds.Contains(pm.Id) &&
+                !selections.Any(s => s.Module.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
+                !catalog.Modules.Any(m => m.IsStock && m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)))
+                .Select(pm => pm.Id).ToList();
+            if (missing.Count > 0) throw new InvalidOperationException("Missing selected mods: " + string.Join(", ", missing) +
+                ". Download them and Rescan, or untick them. The imported list has been kept.");
+        }
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList());

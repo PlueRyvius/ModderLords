@@ -28,6 +28,8 @@ public sealed record ModListFile
     /// <summary>The Coop build the host is running, so an importer can see at a glance whether theirs matches.</summary>
     public CoopRef? Coop { get; init; }
     public IReadOnlyList<ModEntry> Mods { get; init; } = [];
+    // Null means an older export did not specify the official selection.
+    public IReadOnlyList<string>? ClientOfficialModules { get; init; }
 
     public sealed record CoopRef(string Id, string Version);
 
@@ -61,12 +63,26 @@ public sealed record ModListFile
             .ToList();
 
         var coop = prepared.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
+        var installedCount = mods.Count;
+        foreach (var missing in profile.EnabledMods.Where(pm => !mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
+                     !ClientManifest.IsServerOnly(pm.Id) && !OfficialModules.IsGameModule(pm.Id) &&
+                     !(coop is not null && ClientManifest.CoopClientModuleIds.Contains(pm.Id))))
+            mods.Add(new ModEntry(missing.Id, missing.LastVersion ?? "", missing.DownloadUrl, missing.Role, missing.ServerAuthoritative));
+        // Until every requested module is installed there is no complete engine order to export.
+        // Preserve the requested order, rather than moving missing requirements to the end on every round-trip.
+        if (mods.Count != installedCount)
+            mods = mods.OrderBy(m =>
+            {
+                var index = profile.Mods.FindIndex(pm => pm.Id.Equals(m.Id, StringComparison.OrdinalIgnoreCase));
+                return index < 0 ? int.MaxValue : index;
+            }).ToList();
         return new ModListFile
         {
             ExportedBy = exportedBy,
             Name = profile.Name,
             Coop = coop is null ? null : new CoopRef(coop.Id, coop.Version),
             Mods = mods,
+            ClientOfficialModules = profile.ClientOfficialModules.ToList(),
         };
     }
 
@@ -89,7 +105,7 @@ public sealed record ModListFile
         if (file is null) throw new InvalidOperationException($"{Path.GetFileName(path)} is empty");
         if (file.FormatVersion > CurrentFormatVersion)
             throw new InvalidOperationException($"{Path.GetFileName(path)} was written by a newer launcher (format {file.FormatVersion}); update this one to read it");
-        if (file.Mods.Count == 0) throw new InvalidOperationException($"{Path.GetFileName(path)} lists no mods");
+        if (file.Mods.Count == 0 && file.ClientOfficialModules is null) throw new InvalidOperationException($"{Path.GetFileName(path)} lists no mods");
         return file;
     }
 
@@ -107,6 +123,7 @@ public sealed record ModListFile
     public Profile ToProfile(string name) => new()
     {
         Name = name,
+        ClientOfficialModules = ClientOfficialModules?.ToList() ?? new Profile().ClientOfficialModules,
         Mods = Mods.Select(m => new ProfileMod
         {
             Id = m.Id,
@@ -114,6 +131,9 @@ public sealed record ModListFile
             Enabled = true,
             ServerAuthoritative = m.ServerAuthoritative,
             LastVersion = m.Version,
-        }).ToList(),
+            DownloadUrl = m.Source,
+        }).Concat(Coop is not null && !Mods.Any(m => ClientManifest.CoopClientModuleIds.Contains(m.Id))
+            ? new[] { new ProfileMod { Id = Coop.Id, LastVersion = Coop.Version, Enabled = true } }
+            : Array.Empty<ProfileMod>()).ToList(),
     };
 }
