@@ -195,6 +195,19 @@ switch (cmd)
             SaveName = opts.GetValueOrDefault("save"),
             ExtraEnvironment = extraEnv,
         };
+        // Pre-flight: the world about to be loaded vs the modules about to load it. This ad-hoc --mods path is the one
+        // used for diagnostic runs, so it needs the check as much as LaunchSession.Prepare does. Warn, never block.
+        {
+            foreach (var m in SaveModuleCheck.MessagesForLaunch(paths.SavesDir, plan.SaveName,
+                         selections.ToDictionary(x => x.Module.Id, x => x.Module.Version, StringComparer.OrdinalIgnoreCase)))
+            {
+                var c0 = Console.ForegroundColor;
+                Console.ForegroundColor = m.StartsWith("WARNING", StringComparison.Ordinal) ? ConsoleColor.Yellow : ConsoleColor.Gray;
+                Console.WriteLine("[ModderLords] " + m);
+                Console.ForegroundColor = c0;
+            }
+        }
+
         Console.WriteLine("[ModderLords] launch plan");
         Console.Write(plan.Describe());
         if (opts.ContainsKey("dry-run")) return 0;
@@ -270,11 +283,23 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
     using var engine = EngineProcess.Start(plan);
     Console.WriteLine($"[ModderLords] engine pid {engine.ProcessId}. Type a command and Enter to send it; 'quit' stops the server.");
     var serving = new TaskCompletionSource();
+    // A campaign load that repeats one state forever exits with nothing and logs nothing fatal. Call it out rather
+    // than running for minutes looking healthy.
+    var stall = new LoadStallDetector(engine.StartedAt);
+    void Warn(string message)
+    {
+        log.WriteLine(message);
+        var c0 = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("[ModderLords] " + message);
+        Console.ForegroundColor = c0;
+    }
     engine.LineReceived += line =>
     {
         var c = LogClassifier.Classify(line.Text);
         log.WriteLine($"{line.At:HH:mm:ss.fff} {line.Stream,-6} {c.Category,-10} {line.Text}");
         if (line.Text.Contains("SERVING", StringComparison.Ordinal)) serving.TrySetResult();
+        if (stall.Observe(line.Text, line.At) is { } warning) Warn(warning);
         if (quietEngine && c.Category is LogCategory.Engine) return;
         var prev = Console.ForegroundColor;
         Console.ForegroundColor = c.Category switch
@@ -293,6 +318,9 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
     };
 
     Console.CancelKeyPress += (_, e) => { e.Cancel = true; _ = engine.StopAsync(TimeSpan.FromSeconds(15)); };
+
+    // Observe() only fires on a line; a run that has gone entirely silent needs the clock polled as well.
+    using var stallPoll = new Timer(_ => { if (stall.Check(DateTimeOffset.Now) is { } w) Warn(w); }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
 
     if (stopAfter > 0)
     {

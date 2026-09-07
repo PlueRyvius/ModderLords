@@ -175,6 +175,10 @@ public sealed class LaunchSession
             }
         }
 
+        // Pre-flight: does the world we are about to load actually match the modules we are about to run? Warn only —
+        // outside applySideEffects too, so --dry-run reports it without the save having to be created first.
+        messages.AddRange(SaveModuleCheck.MessagesForLaunch(paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections)));
+
         var plan = new LaunchPlan
         {
             Paths = paths,
@@ -244,5 +248,13 @@ public sealed class LaunchSession
     }
 
     /// <summary>Planned community modules with the versions the server will advertise (for save diffs and client export).</summary>
-    public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(Prepared p) => p.Modules.Versions;
+    public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(Prepared p) => PlannedCommunityVersions(p.Selections);
+
+    /// <summary>The launcher's own bundled modules are added to every launch and are not part of anyone's world.</summary>
+    private static readonly IReadOnlySet<string> BundledIds =
+        new HashSet<string>(new[] { CompatModuleId, SyncModuleId }, StringComparer.OrdinalIgnoreCase);
+
+    public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(IReadOnlyList<ModSelection> selections) =>
+        selections.Where(s => !BundledIds.Contains(s.Module.Id))
+            .ToDictionary(s => s.Module.Id, s => s.Module.Version, StringComparer.OrdinalIgnoreCase);
 }

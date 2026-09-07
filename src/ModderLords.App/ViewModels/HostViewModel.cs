@@ -317,6 +317,8 @@ public partial class HostViewModel : ObservableObject
                 _resources.Start();
             }
             Status = $"Engine pid {_engine.ProcessId}, loading…";
+            // A load that repeats one state forever produces no error and no exit. Say so instead of looking healthy.
+            var stall = new LoadStallDetector(_engine.StartedAt);
             LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModderLords] " + s));
             LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, launchProfile.SettingsSync, launchProfile.Name);
             _engine.LineReceived += line =>
@@ -334,6 +336,8 @@ public partial class HostViewModel : ObservableObject
                     _pendingPerf.Enqueue(sample);
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
                     Application.Current.Dispatcher.BeginInvoke(() => Status = "SERVING, waiting for clients");
+                if (stall.Observe(line.Text, line.At) is { } warning)
+                    AddLine(LogCategory.Warning, "[ModderLords] " + warning);
             };
             var code = await _engine.Exited;
             IsRunning = false;
