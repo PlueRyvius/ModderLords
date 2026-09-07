@@ -1,0 +1,3 @@
+# Binary artwork must never undergo line-ending conversion.
+*.ico binary
+*.png binary

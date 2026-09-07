@@ -7,6 +7,7 @@
         xmlns:controls="clr-namespace:ModderLords.App.Controls"
         Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
         Title="ModderLords" Height="820" Width="1280" MinWidth="960" MinHeight="600"
+        Icon="pack://application:,,,/ModderLords;component/appicon.ico"
         Closing="Window_Closing">
     <Window.DataContext>
         <vm:MainViewModel />

@@ -1,4 +1,4 @@
-﻿<Project>
+<Project>
   <!--
     The one place the version lives. Without it every build reported 1.0.0, which made a dev build and a release
     indistinguishable in the title bar — and left no way to tell which build someone was reporting a bug from.
@@ -7,7 +7,7 @@
     cannot drift apart.
   -->
   <PropertyGroup>
-    <VersionPrefix>0.9.0</VersionPrefix>
+    <VersionPrefix>0.9.1</VersionPrefix>
   </PropertyGroup>
 
   <!--

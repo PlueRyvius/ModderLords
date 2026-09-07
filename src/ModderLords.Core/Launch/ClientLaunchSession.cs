@@ -7,10 +7,9 @@ namespace ModderLords.Core.Launch;
 /// Turns a profile into a running copy of the player's own game: find the install, discover mods wherever they
 /// live, order them, and hand back the command line. The player-facing sibling of <see cref="LaunchSession"/>.
 ///
-/// It shares the catalogue and the sorter with the server path and deliberately shares nothing else. There is no
-/// overlay (the client resolves Workshop ids itself), no resolver hook (the game finds its own mods' assemblies),
-/// no server config, no save preparation, and none of the compat modules — those exist to make mods survive a
-/// headless engine, which is not a problem the player's game has.
+/// It shares the catalogue and sorter with the server path. Ambiguous IDs and custom roots use a private client
+/// view so the requested copy wins over the game's normal discovery order. No manifests are rewritten and no
+/// server config, save preparation, or resolver hook is involved.
 /// </summary>
 public static class ClientLaunchSession
 {
@@ -68,7 +67,16 @@ public static class ClientLaunchSession
         var order = LoadOrder.Compute(officials, mods, profile.Mods.Select(m => m.Id).ToList(), LoadOrder.Profile.Client);
         messages.AddRange(order.Issues.Select(i => "order: " + i));
 
-        var plan = new ClientLaunchPlan { GameRoot = gameRoot, ModuleIds = order.ModuleIds };
+        var plan = new ClientLaunchPlan
+        {
+            GameRoot = gameRoot, ModuleIds = order.ModuleIds,
+            SelectedModules = officials.Concat(mods).ToList(),
+            MissingModules = profile.EnabledMods.Where(pm => !mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)))
+                .Select(pm => pm.Id).Concat(profile.ClientOfficialModules.Where(id => !officials.Any(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            RequiresIsolatedView = mods.Any(m => m.Source == ModuleSourceKind.Custom ||
+                catalog.Candidates(m.Id).Select(c => Path.GetFullPath(c.FolderPath)).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1),
+        };
         var problems = plan.Validate().ToList();
         if (problems.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, problems));
 
@@ -81,6 +89,13 @@ public static class ClientLaunchSession
     /// </summary>
     public static System.Diagnostics.Process Start(ClientLaunchPlan plan)
     {
+        if (plan.MissingModules.Count > 0)
+            throw new InvalidOperationException("Missing selected mods: " + string.Join(", ", plan.MissingModules) +
+                ". Download them and Rescan, or untick them to launch without them. The imported list has been kept.");
+        var errors = plan.Validate().ToList();
+        if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+        if (plan.RequiresIsolatedView && OperatingSystem.IsWindows())
+            plan = plan with { GameRoot = ClientModuleView.Create(plan, Path.Combine(Profiles.ProfileStore.RootDir, "client-launches")) };
         var psi = new System.Diagnostics.ProcessStartInfo
         {
             FileName = plan.Exe,
