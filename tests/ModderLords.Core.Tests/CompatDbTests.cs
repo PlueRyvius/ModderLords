@@ -168,6 +168,33 @@ public sealed class CompatDbTests : IDisposable
     }
 
     /// <summary>
+    /// Regression guard for the loadout that already reaches SERVING (the BUTR stack + ImprovedGarrisons +
+    /// ModularSmithing2). Adding mods to the database must never move one of these, so a future record cannot quietly
+    /// change a working server.
+    /// </summary>
+    [Fact]
+    public void BundledSeedFile_LeavesTheKnownGoodStackAlone()
+    {
+        var db = CompatDb.Load(CompatDb.BundledPath, null);
+        Assert.Empty(db.Problems);
+
+        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("Bannerlord.Harmony"));
+        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("Bannerlord.ButterLib"));
+        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("Bannerlord.UIExtenderEx"));
+        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("Bannerlord.MBOptionScreen"));
+        Assert.Equal(ServerRole.Run, db.DefaultRoleFor("ImprovedGarrisons"));
+        Assert.Equal(ServerRole.Run, db.DefaultRoleFor("ModularSmithing2"));
+        // An unrecorded mod still defaults to Run.
+        Assert.Equal(ServerRole.Run, db.DefaultRoleFor("SomethingNobodyHasTested"));
+
+        // Those four stacks load no code, so nothing new may sneak into the keep-list on their behalf.
+        var keep = db.KeepForDependencyOnly();
+        Assert.DoesNotContain("Bannerlord.UIExtenderEx.SubModule", keep);
+        Assert.DoesNotContain("Bannerlord.ButterLib.ButterLibSubModule", keep);
+        Assert.DoesNotContain("Bannerlord.ButterLib.ImplementationLoaderSubModule", keep);
+    }
+
+    /// <summary>
     /// The TAOM recipe. TAOM.Dependencies bundles UIExtenderEx/ButterLib/MCM and lists UIExtenderEx first with no
     /// DedicatedServerType tag, so it must run DependencyOnly - but its own bootstrap has to survive that, or TAOM
     /// loses the dependency wiring it expects. TAOM itself is view-bound and its data lives in &lt;Xmls&gt;.

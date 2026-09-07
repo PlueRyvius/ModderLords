@@ -111,10 +111,35 @@ public sealed class OverlayTests : IDisposable
     {
         var mod = MakeMod("ViewBound", serverBin: true, clientOnlyTags: true);
         var plan = OverlayPlanner.Plan(_overlay, _engineModules, [new ModSelection(mod, ServerRole.Run)],
-            _ => Scanned(ServerVerdict.NeedsReview, "SandBox.View", "SandBox.GauntletUI"));
+            _ => Scanned(ServerVerdict.NeedsReview, "SandBox.View", "SandBox.GauntletUI"), _ => null);
         var notes = plan.Entries.Single().Notes;
         Assert.Contains(notes, n => n.StartsWith("WARNING:") && n.Contains("SandBox.View") && n.Contains("DependencyOnly"));
         Assert.Contains(notes, n => n.Contains("GauntletLayer"));
+    }
+
+    /// <summary>
+    /// ImprovedGarrisons' shape: client-only tag, view references all over its IL, and it still reaches SERVING behind
+    /// the bundled guards. A curated Run record is a tested result, so the static scan must not second-guess it.
+    /// </summary>
+    [Fact]
+    public void A_compat_record_that_says_Run_suppresses_the_warning()
+    {
+        var mod = MakeMod("Vouched", serverBin: true, clientOnlyTags: true);
+        var vouched = new CompatRecord { Id = "Vouched", DefaultRole = ServerRole.Run, Verdict = CompatVerdict.NeedsRecipe };
+        var plan = OverlayPlanner.Plan(_overlay, _engineModules, [new ModSelection(mod, ServerRole.Run)],
+            _ => Scanned(ServerVerdict.NeedsReview, "SandBox.View"), _ => vouched);
+        Assert.DoesNotContain(plan.Entries.Single().Notes, n => n.StartsWith("WARNING:"));
+    }
+
+    /// <summary>A record that does not endorse running it (DependencyOnly) leaves the warning in place.</summary>
+    [Fact]
+    public void A_DependencyOnly_record_does_not_suppress_the_warning()
+    {
+        var mod = MakeMod("NotVouched", serverBin: true, clientOnlyTags: true);
+        var rec = new CompatRecord { Id = "NotVouched", DefaultRole = ServerRole.DependencyOnly, Verdict = CompatVerdict.NeedsRecipe };
+        var plan = OverlayPlanner.Plan(_overlay, _engineModules, [new ModSelection(mod, ServerRole.Run)],
+            _ => Scanned(ServerVerdict.NeedsReview, "SandBox.View"), _ => rec);
+        Assert.Contains(plan.Entries.Single().Notes, n => n.StartsWith("WARNING:"));
     }
 
     [Fact]
@@ -122,7 +147,7 @@ public sealed class OverlayTests : IDisposable
     {
         var mod = MakeMod("Harmless", serverBin: true, clientOnlyTags: true);
         var plan = OverlayPlanner.Plan(_overlay, _engineModules, [new ModSelection(mod, ServerRole.Run)],
-            _ => Scanned(ServerVerdict.ServerSafe));
+            _ => Scanned(ServerVerdict.ServerSafe), _ => null);
         Assert.DoesNotContain(plan.Entries.Single().Notes, n => n.StartsWith("WARNING:"));
     }
 
@@ -132,7 +157,7 @@ public sealed class OverlayTests : IDisposable
     {
         var mod = MakeMod("Plain", serverBin: true, clientOnlyTags: false);
         OverlayPlanner.Plan(_overlay, _engineModules, [new ModSelection(mod, ServerRole.Run)],
-            _ => throw new Exception("should not be scanned"));
+            _ => throw new Exception("should not be scanned"), _ => null);
     }
 
     /// <summary>DependencyOnly on a mod with code always shadows, so the manifest can actually be rewritten.</summary>
