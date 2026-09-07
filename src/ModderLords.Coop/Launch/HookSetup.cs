@@ -1,4 +1,4 @@
-﻿
+
 using ModderLords.Core.Compat;
 using ModderLords.Core.Config;
 using ModderLords.Core.Export;
@@ -27,6 +27,13 @@ public static class HookSetup
 {
     public const string HookFileName = "ModderLords.Hook.dll";
     public const string SearchDirsVariable = "MODDERLORDS_SEARCH_DIRS";
+
+    /// <summary>Where the hook mirrors its own output. Survives a crash that takes the redirected stdout pipe with it.</summary>
+    public const string SidecarVariable = "MODDERLORDS_HOOK_LOG";
+
+    /// <summary>Sidecar path for one launch, alongside the launcher's own logs.</summary>
+    public static string SidecarPathFor(DateTime startedAt) =>
+        Path.Combine(ProfileStore.RootDir, "logs", $"hook-{startedAt:yyyyMMdd-HHmmss}.log");
 
     /// <summary>Where the release keeps the parts that cannot live inside the single-file exe.</summary>
     public const string BinFolder = "bin";
@@ -73,7 +80,7 @@ public static class HookSetup
         return dirs.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    public static IReadOnlyDictionary<string, string> Environment(string hookDllPath, IEnumerable<string> searchDirs, bool verbose = false)
+    public static IReadOnlyDictionary<string, string> Environment(string hookDllPath, IEnumerable<string> searchDirs, bool verbose = false, string? sidecarPath = null)
     {
         var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -81,6 +88,7 @@ public static class HookSetup
             [SearchDirsVariable] = string.Join(";", searchDirs),
         };
         if (verbose) env["MODDERLORDS_HOOK_VERBOSE"] = "1";
+        if (!string.IsNullOrWhiteSpace(sidecarPath)) env[SidecarVariable] = sidecarPath!;
         return env;
     }
 }

@@ -1,4 +1,4 @@
-﻿using ModderLords.Core.Compat;
+using ModderLords.Core.Compat;
 using ModderLords.Coop.Compat;
 using ModderLords.Core.Overlay;
 using ModderLords.Core.Profiles;
@@ -162,7 +162,37 @@ public sealed class CompatDbTests : IDisposable
         Assert.True(ig.ServerAuthoritative);
         Assert.Contains("ImprovedGarrisons.SaveSystem.UiBehavior", ig.ClientSideBehaviors);
         Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("Bannerlord.MBOptionScreen"));
-        Assert.Equal(CompatDb.FallbackKeepSubModules.OrderBy(s => s), db.KeepForDependencyOnly().OrderBy(s => s));
+        // MCM's settings core is kept by its own record now, so the fallback pair must still be in the union.
+        Assert.All(CompatDb.FallbackKeepSubModules, k => Assert.Contains(k, db.KeepForDependencyOnly()));
         Assert.Equal(ServerRole.DependencyOnly, Profile.DefaultRoleFor("Bannerlord.Harmony"));
+    }
+
+    /// <summary>
+    /// The TAOM recipe. TAOM.Dependencies bundles UIExtenderEx/ButterLib/MCM and lists UIExtenderEx first with no
+    /// DedicatedServerType tag, so it must run DependencyOnly - but its own bootstrap has to survive that, or TAOM
+    /// loses the dependency wiring it expects. TAOM itself is view-bound and its data lives in &lt;Xmls&gt;.
+    /// </summary>
+    [Fact]
+    public void BundledSeedFile_CarriesTheTaomRecipe()
+    {
+        var db = CompatDb.Load(CompatDb.BundledPath, null);
+        Assert.Empty(db.Problems);
+
+        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("TAOM.Dependencies"));
+        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("TAOM"));
+        Assert.Equal(ServerRole.Run, db.DefaultRoleFor("TAOM_Map"));
+        Assert.Equal(ServerRole.Run, db.DefaultRoleFor("LOTRLOME_Armory"));
+
+        var keep = db.KeepForDependencyOnly();
+        Assert.Contains("TAOM.Dependencies.SubModule", keep);
+        Assert.Contains("MCM.MCMSubModule", keep);
+        Assert.Contains("MCM.Internal.MCMImplementationSubModule", keep);
+        // The bundled UI frameworks are the ones that must NOT come back.
+        Assert.DoesNotContain("Bannerlord.UIExtenderEx.SubModule", keep);
+        Assert.DoesNotContain("Bannerlord.ButterLib.ButterLibSubModule", keep);
+
+        // The divergence caveat is the point of the record; losing it would make the verdict misleading.
+        Assert.Equal(CompatVerdict.NeedsRecipe, db.Find("TAOM")!.Verdict);
+        Assert.Contains("campaign behaviours", db.Find("TAOM")!.Notes);
     }
 }

@@ -1,4 +1,4 @@
-﻿
+
 using ModderLords.Core.Compat;
 using ModderLords.Core.Config;
 using ModderLords.Core.Export;
@@ -122,13 +122,18 @@ public sealed class LaunchSession
 
         var overlayRoot = ProfileStore.OverlayDirFor(profile.Name);
         var overlayPlan = OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections);
+        // The planner's warnings (a Run mod that declares itself client-only and reaches for the render stack) have to
+        // reach the launch messages: the CLI prints plan notes itself, the app only ever sees this list.
+        foreach (var e in overlayPlan.Entries)
+            foreach (var n in e.Notes.Where(n => n.StartsWith("WARNING", StringComparison.Ordinal)))
+                messages.Add($"{e.Selection.Module.Id}: {n}");
 
         var extraEnv = new Dictionary<string, string>();
         if (selections.Count > 0)
         {
             var hook = HookSetup.LocateHook();
             if (hook is null) messages.Add("ModderLords.Hook.dll is missing next to the launcher; mods with helper DLLs will fail to load");
-            else foreach (var kv in HookSetup.Environment(hook, HookSetup.SearchDirs(paths, overlayPlan.Entries, gameRoot))) extraEnv[kv.Key] = kv.Value;
+            else foreach (var kv in HookSetup.Environment(hook, HookSetup.SearchDirs(paths, overlayPlan.Entries, gameRoot), sidecarPath: HookSetup.SidecarPathFor(DateTime.Now))) extraEnv[kv.Key] = kv.Value;
         }
         // Host-side live MCM edits: the sync module polls this directory (see Live/LiveSettingsClient). Only meaningful
         // when the module is loaded, so it is tied to SettingsSync; a fresh dir per launch so nothing stale is shown.

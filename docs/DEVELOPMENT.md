@@ -111,7 +111,10 @@ How it works:
   `DependencyOnly` removes the submodules (MCM's headless settings core is allow-listed), `AsShipped` changes nothing.
 - **Hook** (`ModderLords.Hook`, loaded via `DOTNET_STARTUP_HOOKS`): the engine only probes its own bin for referenced
   assemblies, so a last-resort `AssemblyResolve` handler searches `MODDERLORDS_SEARCH_DIRS` (Coop's server bin first,
-  then each mod's bins, then the game client bin). No game code is patched.
+  then each mod's bins, then the game client bin). No game code is patched. Everything it prints is flushed and
+  mirrored to the sidecar file named by `MODDERLORDS_HOOK_LOG` (`%LOCALAPPDATA%\ModderLords\logs\hook-<stamp>.log`),
+  and unhandled exceptions plus `ProcessExit` report the last assembly requested and the last one actually loaded.
+  That pair is the only breadcrumb left when the engine dies inside the UI stack without unwinding.
 - **Load order** (`LoadOrder`): official host sequence `Native, SandBoxCore, Sandbox, <community>, <Coop id>, DedicatedServer.Windows`,
   community block sorted by BUTR's `ModuleSorter`, Harmony first, StoryMode/CustomBattle/BirthAndDeath treated as
   satisfied (they never exist on a server).
@@ -122,6 +125,11 @@ Gotchas found on the way:
   Coop itself). The token must use the id from `SubModule.xml`, not the folder name.
 - The engine's `AssemblyLoader` eagerly tries every referenced assembly by bare file name and logs
   `Messagebox [ERROR] ... Cannot load:` for each miss before resolving it properly. The console classifies those as warnings.
+- A mod can declare itself client-only (`DedicatedServerType=none`) and mean it. `Run` strips that tag, and if the mod's
+  code constructs `GauntletLayer`/`MissionView`/`ScreenBase` the engine pulls the render stack into a headless process
+  and dies with **no managed exception and no `SERVING`** - the log just stops. `OverlayPlanner` now scans such a mod
+  (`AssemblyScan`) and warns before launch; `DependencyOnly` is the way out, since `ManifestRewriter` only ever removes
+  `<SubModule>` elements and leaves `<Xmls>` alone, so a content mod keeps serving its data with none of its code.
 - A `Resolving` handler on the default load context runs before every other resolver and would hand Coop an older Serilog
   bundled by ButterLib. The hook uses `AppDomain.AssemblyResolve` only, with the requester's folder and Coop's bin first.
 

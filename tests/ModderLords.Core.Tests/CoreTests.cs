@@ -1,4 +1,4 @@
-﻿using Bannerlord.ModuleManager;
+using Bannerlord.ModuleManager;
 using ModderLords.Core.Compat;
 using ModderLords.Coop.Compat;
 using ModderLords.Core.Export;
@@ -60,12 +60,74 @@ public class ManifestRewriterTests
         Assert.DoesNotContain("DedicatedServerType", kept.Xml);
     }
 
+    /// <summary>
+    /// The whole point of DependencyOnly for a content mod (TAOM and friends): the C# submodule goes, the module's
+    /// data stays. The engine loads &lt;Xmls&gt; from the manifest whether or not a SubModule loads, so a mod that
+    /// cannot run headless can still serve its world data.
+    /// </summary>
+    [Fact]
+    public void DependencyOnly_drops_code_but_keeps_Xmls_and_identity()
+    {
+        const string contentMod = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Module>
+              <Id value="TAOM"/>
+              <Version value="v2.0.27"/>
+              <SubModules>
+                <SubModule>
+                  <Name value="TAOM"/>
+                  <DLLName value="TAOM.dll"/>
+                  <SubModuleClassType value="TAOM.SubModule"/>
+                  <Tags><Tag key="DedicatedServerType" value="none"/></Tags>
+                </SubModule>
+              </SubModules>
+              <Xmls>
+                <XmlNode><XmlName id="Kingdoms" path="spkingdoms"/></XmlNode>
+                <XmlNode><XmlName id="SPCultures" path="spcultures"/></XmlNode>
+              </Xmls>
+            </Module>
+            """;
+        var r = ManifestRewriter.Rewrite(contentMod, ServerRole.DependencyOnly, ["Something.Else"]);
+        Assert.DoesNotContain("TAOM.dll", r.Xml);
+        Assert.DoesNotContain("TAOM.SubModule", r.Xml);
+        // Identity survives for Coop's ModuleValidator handshake, and so does every data entry.
+        Assert.Contains("<Id value=\"TAOM\"", r.Xml);
+        Assert.Contains("<Version value=\"v2.0.27\"", r.Xml);
+        Assert.Contains("spkingdoms", r.Xml);
+        Assert.Contains("spcultures", r.Xml);
+    }
+
     [Fact]
     public void AsShipped_returns_original_text()
     {
         var r = ManifestRewriter.Rewrite(ClientOnlyMod, ServerRole.AsShipped);
         Assert.Equal(ClientOnlyMod, r.Xml);
         Assert.Empty(r.Changes);
+    }
+}
+
+public class HookSetupTests
+{
+    [Fact]
+    public void Environment_carries_the_sidecar_path_only_when_one_is_given()
+    {
+        var hook = Path.Combine(Path.GetTempPath(), "ModderLords.Hook.dll");
+        var withOut = HookSetup.Environment(hook, [Path.GetTempPath()]);
+        Assert.False(withOut.ContainsKey(HookSetup.SidecarVariable));
+
+        var sidecar = Path.Combine(Path.GetTempPath(), "logs", "hook.log");
+        var with_ = HookSetup.Environment(hook, [Path.GetTempPath()], sidecarPath: sidecar);
+        Assert.Equal(sidecar, with_[HookSetup.SidecarVariable]);
+        Assert.Equal(Path.GetFullPath(hook), with_["DOTNET_STARTUP_HOOKS"]);
+    }
+
+    /// <summary>One sidecar per launch, named like the launcher log next to it so the pair is obvious.</summary>
+    [Fact]
+    public void Sidecar_path_is_timestamped_next_to_the_launcher_logs()
+    {
+        var path = HookSetup.SidecarPathFor(new DateTime(2026, 9, 7, 3, 51, 27));
+        Assert.Equal("hook-20260907-035127.log", Path.GetFileName(path));
+        Assert.Equal("logs", Path.GetFileName(Path.GetDirectoryName(path)));
     }
 }
 
