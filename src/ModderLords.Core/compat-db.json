@@ -53,6 +53,44 @@
       "ClientSideBehaviors": [ "ImprovedGarrisons.SaveSystem.UiBehavior" ],
       "Notes": "Reaches SERVING with the bundled guards. Garrison logic must be server-only (Settings sync + Server-only logic on) so only the host's copy manages garrisons; the save/UI behaviour stays client-side.",
       "UpdatedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "Id": "TAOM.Dependencies",
+      "Verdict": "NeedsRecipe",
+      "TestedVersions": [ "v2.0.26" ],
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "DependencyOnly",
+      "KeepSubModules": [ "TAOM.Dependencies.SubModule" ],
+      "Notes": "TAOM's bundled BUTR stack: it packs UIExtenderEx, ButterLib, MCM and the MBOptionScreen module loader into one module, and lists UIExtenderEx FIRST with no DedicatedServerType tag, so the server tries to load a UI framework before anything else and dies there. DependencyOnly drops the bundled client frameworks; TAOM.Dependencies.SubModule is kept because it is TAOM's own dependency bootstrap, and MCM's two settings-core class types are kept through the shared keep-list.",
+      "UpdatedAt": "2026-09-07T00:00:00Z"
+    },
+    {
+      "Id": "TAOM",
+      "Verdict": "NeedsRecipe",
+      "TestedVersions": [ "v2.0.27" ],
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "DependencyOnly",
+      "Notes": "The Age of Machinery. Its own manifest tags TAOM.SubModule DedicatedServerType=none - the mod does not intend to run on a dedicated server - and TAOM.dll backs that up: it constructs GauntletLayer, GauntletMovie, MapScreen, MissionView and ScreenBase and references SandBox.View / SandBox.GauntletUI / SandBox.ViewModelCollection. Forcing it with Run pulls the render stack into the headless process and kills it with no managed exception. DependencyOnly keeps the id+version for Coop's handshake and keeps every <Xmls> entry (81 ModuleData files: kingdoms, cultures, clans, lords, heroes), so the server still serves TAOM's world. CAVEAT: TAOM.dll also owns ~51 campaign behaviours (Diplomacy, WarOfTheRing, Enlistment, CareerSystem, SupplyLines, CultureConversion, SpecialResources, Siege, ...) and ~25 mission behaviours. Under DependencyOnly none of those run server-side, so the host runs vanilla campaign logic against TAOM data while clients run the full mod. Expect divergence on anything those behaviours drive. Reaching SERVING this way is a data-parity server, not a full TAOM coop server.",
+      "Url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3770450698",
+      "UpdatedAt": "2026-09-07T00:00:00Z"
+    },
+    {
+      "Id": "TAOM_Map",
+      "Verdict": "Works",
+      "TestedVersions": [ "v2.0.27" ],
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "Run",
+      "Notes": "TAOM's campaign map. Data only - no <SubModule> entries and no managed bin - so Run loads its <Xmls> and scene data with no code to go wrong.",
+      "UpdatedAt": "2026-09-07T00:00:00Z"
+    },
+    {
+      "Id": "LOTRLOME_Armory",
+      "Verdict": "Works",
+      "TestedVersions": [ "v2.0.26" ],
+      "TestedCoopVersion": "v0.1.4",
+      "DefaultRole": "Run",
+      "Notes": "Item pack shipped alongside TAOM. Data only - no <SubModule> entries at all - so Run just loads its item XML.",
+      "UpdatedAt": "2026-09-07T00:00:00Z"
     }
   ]
 }
