@@ -12,6 +12,7 @@ using ModderLords.Coop.Saves;
 //   catalog  [--root <DedicatedServer>] [--source <dir>]...
 //   sync     --mods Id[:Run|DependencyOnly|AsShipped],...  [--remove-all]
 //   launch   [--mods ...] [--save NAME] [--port 7210] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
+//            [--manual-order] [--stall-seconds N|off]
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
 
@@ -322,7 +323,13 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
     var serving = new TaskCompletionSource();
     // A campaign load that repeats one state forever exits with nothing and logs nothing fatal. Call it out rather
     // than running for minutes looking healthy.
-    var stall = new LoadStallDetector(engine.StartedAt);
+    var stallThreshold = LoadStallDetector.ParseThreshold(opts.GetValueOrDefault("stall-seconds"));
+    if (opts.ContainsKey("stall-seconds") && stallThreshold is null)
+        Console.Error.WriteLine("[ModderLords] --stall-seconds: expected a number of seconds, or 'off'; using the default");
+    var stall = new LoadStallDetector(engine.StartedAt, stallThreshold);
+    Console.WriteLine(stall.IsEnabled
+        ? $"[ModderLords] will report if loading goes quiet for {stall.Threshold.TotalMinutes:0.#} min (--stall-seconds N, or off)"
+        : "[ModderLords] loading-progress warnings are off");
     void Warn(string message)
     {
         log.WriteLine(message);

@@ -372,7 +372,9 @@ public partial class HostViewModel : ObservableObject
             }
             Status = $"Engine pid {_engine.ProcessId}, loading…";
             // A load that repeats one state forever produces no error and no exit. Say so instead of looking healthy.
-            var stall = new LoadStallDetector(_engine.StartedAt);
+            // The quiet period is per profile: a heavy mod can load for hours without anything being wrong.
+            var stall = new LoadStallDetector(_engine.StartedAt,
+                launchProfile.StallWarningSeconds is { } secs ? TimeSpan.FromSeconds(secs) : null);
             LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModderLords] " + s));
             LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, launchProfile.SettingsSync, launchProfile.Name);
             _engine.LineReceived += line =>

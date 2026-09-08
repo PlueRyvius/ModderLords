@@ -77,6 +77,12 @@ public sealed class Profile
     /// to win. Conflicts are still computed and still reported — this changes who decides, not what is said.
     /// </summary>
     public bool ManualLoadOrder { get; set; }
+    /// <summary>
+    /// Seconds of no loading progress before the launch console says so; 0 turns the warning off entirely. Null uses
+    /// <see cref="Logs.LoadStallDetector.DefaultThreshold"/>. Per profile because how long is "too long" is a fact
+    /// about the mods, not about the launcher: TAOM's authors put its load at up to two hours.
+    /// </summary>
+    public int? StallWarningSeconds { get; set; }
     public ServerSettings Server { get; set; } = new();
 
     /// <summary>

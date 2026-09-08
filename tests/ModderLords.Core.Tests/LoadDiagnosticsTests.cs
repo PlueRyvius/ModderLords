@@ -39,46 +39,132 @@ public class LogClassifierGapTests
 public class LoadStallDetectorTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 9, 7, 4, 53, 45, TimeSpan.Zero);
+    private static readonly TimeSpan Quick = TimeSpan.FromSeconds(90);
     private static string Step(int tick, string state) => $"[DedicatedServer] loading step @tick {tick}: manager=FinishLoadingFifthStep gameType={state}";
 
     [Fact]
     public void Advancing_steps_are_not_a_stall()
     {
-        var d = new LoadStallDetector(T0, TimeSpan.FromSeconds(90));
+        var d = new LoadStallDetector(T0, Quick);
         for (var i = 0; i < 20; i++)
             Assert.Null(d.Observe(Step(1600 + i, "State" + i), T0.AddSeconds(i * 30)));
     }
 
     [Fact]
-    public void Same_step_repeating_past_the_threshold_reports_once()
+    public void A_step_re_entered_past_the_threshold_is_called_a_stall()
     {
-        var d = new LoadStallDetector(T0, TimeSpan.FromSeconds(90));
+        var d = new LoadStallDetector(T0, Quick);
         // The real loop: the tick number climbs while the state names never change.
         Assert.Null(d.Observe(Step(1629, "LoadVisualsThirdState"), T0));
         for (var i = 1; i <= 60; i++) Assert.Null(d.Observe(Step(1629 + i, "LoadVisualsThirdState"), T0.AddSeconds(i)));
 
         var first = d.Check(T0.AddSeconds(120));
         Assert.NotNull(first);
+        Assert.StartsWith("WARNING", first);
         Assert.Contains("LoadVisualsThirdState", first);
         Assert.Contains("re-entered", first);
-        Assert.Null(d.Check(T0.AddSeconds(300)));   // reported once, not per poll
+    }
+
+    /// <summary>
+    /// Silence is much weaker evidence than repetition: it is what a legitimately slow mod looks like from outside,
+    /// so it must not be dressed up as an error. TAOM's authors put its load at up to two hours.
+    /// </summary>
+    [Fact]
+    public void Silence_alone_is_reported_as_a_heads_up_not_a_warning()
+    {
+        var d = new LoadStallDetector(T0, Quick);
+        Assert.Null(d.Check(T0.AddSeconds(60)));
+        var msg = d.Check(T0.AddSeconds(120));
+        Assert.NotNull(msg);
+        Assert.DoesNotContain("WARNING", msg);
+        Assert.Contains("still loading", msg);
+        Assert.Contains("nothing has been logged", msg);
+        Assert.Contains("not an error", msg);
+    }
+
+    /// <summary>
+    /// The real TAOM failure logs its map-scene loop continuously while the loading step never advances, so claiming
+    /// "nothing has been logged" would have been plainly false to anyone watching the console scroll past.
+    /// </summary>
+    [Fact]
+    public void Busy_but_not_advancing_does_not_claim_silence()
+    {
+        var d = new LoadStallDetector(T0, Quick);
+        Assert.Null(d.Observe(Step(1629, "LoadVisualsThirdState"), T0));
+        for (var i = 1; i <= 40; i++)
+            Assert.Null(d.Observe("[DedicatedServer] reading Main_map...", T0.AddSeconds(i)));
+
+        var msg = d.Check(T0.AddSeconds(120));
+        Assert.NotNull(msg);
+        Assert.DoesNotContain("nothing has been logged", msg);
+        Assert.Contains("still logging", msg);
+        Assert.Contains("has not advanced", msg);
+    }
+
+    /// <summary>A single warning then permanent silence reads like a verdict; a slow load wants a heartbeat.</summary>
+    [Fact]
+    public void It_keeps_reporting_at_doubling_intervals()
+    {
+        var d = new LoadStallDetector(T0, Quick);
+        Assert.NotNull(d.Check(T0.AddSeconds(90)));    // first at the threshold
+        Assert.Null(d.Check(T0.AddSeconds(120)));      // not again until double
+        Assert.NotNull(d.Check(T0.AddSeconds(180)));
+        Assert.Null(d.Check(T0.AddSeconds(300)));
+        Assert.NotNull(d.Check(T0.AddSeconds(360)));   // and again at quadruple
     }
 
     [Fact]
-    public void Silence_before_any_step_is_still_a_stall()
+    public void Progress_resets_the_heartbeat()
     {
-        var d = new LoadStallDetector(T0, TimeSpan.FromSeconds(90));
-        Assert.Null(d.Check(T0.AddSeconds(60)));
-        Assert.Contains("never reported a loading step", d.Check(T0.AddSeconds(120)));
+        var d = new LoadStallDetector(T0, Quick);
+        Assert.NotNull(d.Check(T0.AddSeconds(90)));
+        Assert.Null(d.Observe(Step(2000, "SomewhereNew"), T0.AddSeconds(100)));
+        Assert.Null(d.Check(T0.AddSeconds(150)));      // clock restarted from the new step
+        Assert.NotNull(d.Check(T0.AddSeconds(200)));
     }
 
     [Fact]
     public void Serving_disarms_it_permanently()
     {
-        var d = new LoadStallDetector(T0, TimeSpan.FromSeconds(90));
+        var d = new LoadStallDetector(T0, Quick);
         Assert.Null(d.Observe("[DedicatedServer] SERVING", T0.AddSeconds(50)));
-        Assert.Null(d.Check(T0.AddSeconds(9999)));  // an idle server is not a stalled load
+        Assert.Null(d.Check(T0.AddSeconds(99999)));    // an idle server is not a stalled load
     }
+
+    /// <summary>A mod known to load for hours can turn the warning off rather than be nagged by it.</summary>
+    [Fact]
+    public void Off_reports_nothing_ever()
+    {
+        var d = new LoadStallDetector(T0, LoadStallDetector.Off);
+        Assert.False(d.IsEnabled);
+        Assert.Null(d.Check(T0.AddHours(3)));
+        Assert.Null(d.Observe(Step(1, "X"), T0));
+        Assert.Null(d.Observe(Step(1, "X"), T0.AddHours(3)));
+    }
+
+    [Fact]
+    public void The_default_leaves_room_for_a_slow_mod()
+    {
+        // The known-good stack reaches SERVING in about 70 seconds; the old 90-second default fired during
+        // healthy heavy loads, which is the fastest way to train someone to ignore a warning.
+        Assert.True(LoadStallDetector.DefaultThreshold >= TimeSpan.FromMinutes(5));
+        Assert.Null(new LoadStallDetector(T0).Check(T0.AddMinutes(4)));
+    }
+
+    [Theory]
+    [InlineData("120", 120)]
+    [InlineData("off", 0)]
+    [InlineData("none", 0)]
+    [InlineData("0", 0)]
+    public void Thresholds_can_be_given_as_text(string text, int expectedSeconds)
+        => Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), LoadStallDetector.ParseThreshold(text));
+
+    /// <summary>A typo must be reportable, not silently equivalent to turning the warning off.</summary>
+    [Theory]
+    [InlineData("later")]
+    [InlineData("-5")]
+    [InlineData("")]
+    public void An_unparseable_threshold_is_null(string text) => Assert.Null(LoadStallDetector.ParseThreshold(text));
 
     [Fact]
     public void Step_identity_ignores_the_tick_number()
