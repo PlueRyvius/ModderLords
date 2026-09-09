@@ -12,7 +12,7 @@ using ModderLords.Coop.Saves;
 //   catalog  [--root <DedicatedServer>] [--source <dir>]...
 //   sync     --mods Id[:Run|DependencyOnly|AsShipped],...  [--remove-all]
 //   launch   [--mods ...] [--save NAME] [--port 7210] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
-//            [--manual-order] [--stall-seconds N|off]
+//            [--manual-order] [--stall-seconds N|off] [--mod-distance-cache]
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
 
@@ -233,6 +233,13 @@ switch (cmd)
             SaveName = opts.GetValueOrDefault("save"),
             ExtraEnvironment = extraEnv,
         };
+        // Off unless asked for: this is the one thing the launcher writes inside the DedicatedServer package.
+        // Called both ways so --no-mod-distance-cache (or simply omitting the flag) restores SandBox's original.
+        if (!opts.ContainsKey("dry-run"))
+            foreach (var m in DistanceCacheOverride.Sync(paths, selections.Select(x => x.Module).ToList(),
+                         opts.ContainsKey("mod-distance-cache")).Messages)
+                Console.WriteLine("[ModderLords] " + m);
+
         // Pre-flight: the world about to be loaded vs the modules about to load it. This ad-hoc --mods path is the one
         // used for diagnostic runs, so it needs the check as much as LaunchSession.Prepare does. Warn, never block.
         {

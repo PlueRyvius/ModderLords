@@ -83,6 +83,13 @@ public sealed class Profile
     /// about the mods, not about the launcher: TAOM's authors put its load at up to two hours.
     /// </summary>
     public int? StallWarningSeconds { get; set; }
+    /// <summary>
+    /// Let a map mod's settlement distance cache replace SandBox's, because the engine's path to that file is
+    /// hardcoded and a map mod's settlements do not match the vanilla cache. Off by default: it is the one thing
+    /// this launcher writes inside the DedicatedServer package, so it stays opt-in, and turning it back off restores
+    /// the original. See <see cref="Coop.Saves.DistanceCacheOverride"/> for the crash it fixes.
+    /// </summary>
+    public bool UseModDistanceCache { get; set; }
     public ServerSettings Server { get; set; } = new();
 
     /// <summary>

@@ -167,6 +167,10 @@ public sealed class LaunchSession
                 if (pm is not null) pm.LastVersion = s.Module.Version;
             }
 
+            // Always called, both ways: switching the override off has to put SandBox's original cache back.
+            var cache = DistanceCacheOverride.Sync(paths, selections.Select(s => s.Module).ToList(), profile.UseModDistanceCache);
+            messages.AddRange(cache.Messages);
+
             ServerConfig.Write(paths, profile.SaveName, profile.Server);
             WriteRecipes(profile, selections, messages);
             if (!string.IsNullOrWhiteSpace(profile.SaveName))
