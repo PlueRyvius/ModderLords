@@ -7,7 +7,7 @@ namespace ModderLords.Compat;
 /// <summary>
 /// Layer 0 of root compatibility: generic guards so single-player mods survive on a headless dedicated server.
 /// Loaded by the engine as a normal module (id prefixed "DedicatedServer." so Coop's validator exempts it from the
-/// client match). Does nothing at all outside a dedicated server process. Touches no Coop code.
+/// client match). Does nothing outside a dedicated server process. Creation mode also routes Coop startup.
 /// </summary>
 public sealed class CompatSubModule : MBSubModuleBase
 {
@@ -15,13 +15,13 @@ public sealed class CompatSubModule : MBSubModuleBase
     internal static readonly Harmony Harmony = new Harmony(HarmonyId);
 
     /// <summary>Null off a dedicated server, so the tick override costs a null check and nothing else.</summary>
-    private PerfSampler _perf;
+    private PerfSampler? _perf;
 
     /// <summary>
     /// Null unless MODDERLORDS_CREATE_WORLD asked for a world to be generated, which is never the case on a
     /// normal launch. See <see cref="WorldCreator"/>.
     /// </summary>
-    private WorldCreator _worldCreator;
+    private WorldCreator? _worldCreator;
 
     protected override void OnSubModuleLoad()
     {
@@ -48,9 +48,7 @@ public sealed class CompatSubModule : MBSubModuleBase
     }
 
     /// <summary>
-    /// Every module is loaded by now, and the host has not started its game yet — which is exactly the window
-    /// world creation has to start in. Stage 0b measured that the host loads a save even when none is named,
-    /// so this is a race, and this hook is the only point where it can be won.
+    /// Arm routing after modules load. World creation starts only when the initialized host requests a save load.
     /// </summary>
     protected override void OnBeforeInitialModuleScreenSetAsRoot()
     {
@@ -59,7 +57,7 @@ public sealed class CompatSubModule : MBSubModuleBase
         try
         {
             _worldCreator.Arm();
-            _worldCreator.Tick();   // start now rather than on the next frame; the host is about to load.
+            _worldCreator.Tick();
         }
         catch (Exception ex) { Log.Error("world creation failed to start: " + ex); }
     }

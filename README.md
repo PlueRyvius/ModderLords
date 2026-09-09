@@ -8,6 +8,8 @@ leaves your launcher's own mod list alone. Ambiguous copies and custom mod folde
 It also **hosts the Bannerlord Coop dedicated server**, using the untouched official server from the Steam Workshop.
 That half is kept out of the way unless you ask for it: see [Player mode and Host mode](#player-mode-and-host-mode).
 
+For isolated server-side world creation and reload testing, see [vanilla world generation](docs/VANILLA-WORLD-GENERATION.md).
+
 Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop v0.1.4.
 
 > **Upgrading from Modular Bannerlords Coop?** This is the same project under a new name. Your profiles, local

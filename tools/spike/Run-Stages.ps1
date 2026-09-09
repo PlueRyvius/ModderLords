@@ -123,24 +123,12 @@ $stages = [ordered]@{
 
 # --- helpers -----------------------------------------------------------------------------------------
 
-function Stop-StrayServers {
-    # A leftover engine holds the distance cache open; that is how the known-good stack got broken.
-    $killed = 0
-    Get-CimInstance Win32_Process -Filter "Name='dotnet.exe'" -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.CommandLine -and $_.CommandLine -match 'DedicatedServer|ModderLords\.Cli\.dll launch') {
-            try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; $killed++ } catch { }
-        }
-    }
-    if ($killed -gt 0) { Start-Sleep -Seconds 2 }
-    return $killed
-}
-
 function Invoke-Stage {
     param([string] $Name, [hashtable] $Def)
 
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $log = Join-Path $logDir "$Name-$stamp.log"
-    $strays = Stop-StrayServers
+    $sidecar = "$log.worldcreate.log"
     # The invariant that matters is "this stage did not change the cache behind the user's back", not that it
     # holds any particular value -- the user may legitimately have the map mod's cache installed already.
     $cacheBefore = if (Test-Path $cacheFile) { (Get-Item $cacheFile).Length } else { -1 }
@@ -148,24 +136,25 @@ function Invoke-Stage {
     Write-Host ""
     Write-Host "=== stage $Name ===" -ForegroundColor Cyan
     Write-Host $Def.Why -ForegroundColor DarkGray
-    if ($strays -gt 0) { Write-Host "  (killed $strays stray server process(es) first)" -ForegroundColor DarkYellow }
 
     # Start-Process joins ArgumentList with spaces and does NOT quote, so anything containing a space (the
     # repo path certainly does) has to be quoted here or dotnet sees it as several arguments.
-    $argv = @($cli) + $Def.Args | ForEach-Object {
+    $stageArgs = $Def.Args
+    if ($stageArgs -contains '--create-world') { $stageArgs += @('--world-log', $sidecar) }
+    $argv = @($cli) + $stageArgs | ForEach-Object {
         if ($_ -match '\s') { '"' + $_ + '"' } else { $_ }
     }
 
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $p = Start-Process -FilePath 'dotnet' -ArgumentList $argv -WorkingDirectory $repo `
-                       -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+                       -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
     # Touching Handle caches it in the returned object. Without this, Start-Process -PassThru loses the
     # handle when the process exits and ExitCode silently reads back as empty.
     $null = $p.Handle
     $timedOut = $false
     if (-not $p.WaitForExit($Def.TimeoutSec * 1000)) {
         $timedOut = $true
-        try { Stop-Process -Id $p.Id -Force } catch { }
+        try { $p.Kill($true) } catch { } # Only this stage's launcher and its descendants.
         Start-Sleep -Seconds 2
     }
     # The timed WaitForExit(ms) overload leaves ExitCode unpopulated; the parameterless one flushes the
@@ -186,7 +175,7 @@ function Invoke-Stage {
     $rows = @()
     $hardFail = $false
     $searchIn = @($log)
-    if (Test-Path $sidecar) { $searchIn += $sidecar }
+    if ((Test-Path $sidecar) -and (Get-Item $sidecar).LastWriteTime -ge $p.StartTime) { $searchIn += $sidecar }
     foreach ($a in $Def.Assert) {
         $hit = Select-String -Path $searchIn -Pattern $a.Pattern -SimpleMatch:$false -ErrorAction SilentlyContinue | Select-Object -First 1
         $present = $null -ne $hit
@@ -208,8 +197,7 @@ function Invoke-Stage {
 
     # --- invariants -----------------------------------------------------------------------------------
     $inv = @()
-    $left = Stop-StrayServers
-    $inv += [pscustomobject]@{ Ok = ($left -eq 0); Name = 'no orphan server left'; Evidence = "$left killed after the run" }
+    $inv += [pscustomobject]@{ Ok = $p.HasExited; Name = 'owned launcher exited (engine uses kill-on-close job)'; Evidence = "launcher PID $($p.Id)" }
 
     $cacheAfter = if (Test-Path $cacheFile) { (Get-Item $cacheFile).Length } else { -1 }
     if (-not $Def.KeepsCache) {

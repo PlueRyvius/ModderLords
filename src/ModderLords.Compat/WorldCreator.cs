@@ -1,11 +1,12 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
+using TaleWorlds.SaveSystem;
+using TaleWorlds.Library;
+using TaleWorlds.ModuleManager;
 
 namespace ModderLords.Compat;
 
@@ -20,16 +21,16 @@ namespace ModderLords.Compat;
 /// over 2h15m. A world generated with the mods loaded gets its objects from module XML instead of from a
 /// save, which is the hypothesis this exists to test.
 ///
-/// Nothing here is patched or rewritten. The whole path is public API:
-/// <c>MBGameManager.StartNewGame(new SandBoxGameManager(creator))</c>, then
-/// <c>Campaign.Current.SaveHandler.SaveAs(name)</c>. Only <c>SandBoxGameManager</c> itself needs reflection,
-/// because <c>SandBox.dll</c> is not in the reference-assembly package this module compiles against — the
-/// same resolve-by-name, skip-if-absent idiom <see cref="Guards"/> uses throughout.
+/// WorldCreationHooks routes the initialized host's load request through Coop's StartNewGame API and
+/// finalizes a seed character without UI. This class verifies readiness, saves, and reports completion.
+/// Installed binaries are never rewritten; the routing patches live only in a creation process.
 /// </summary>
 internal sealed class WorldCreator
 {
     private readonly CreateWorldPolicy _policy;
     private bool _saveRequested;
+    private volatile bool _saveCompleted;
+    private bool _saveSucceeded;
     private long _lastSize = -1;
     private DateTime _sizeStableSince = DateTime.MaxValue;
     private int _readyTicks;
@@ -53,9 +54,12 @@ internal sealed class WorldCreator
 
     internal void Arm()
     {
+        if (_policy.IsArmed) return; // The engine can call the initial-screen hook on multiple frames.
         // Fresh file per run: the harness reads the newest run, not an accumulation of every attempt.
         try { File.Delete(SidecarPath()); } catch { }
         Say(_policy.Arm(DateTime.UtcNow));
+        try { WorldCreationHooks.Install(this); }
+        catch (Exception ex) { Finish(_policy.Fail(DateTime.UtcNow, "unsupported world-creation route: " + ex.GetBaseException().Message)); }
     }
 
     /// <summary>
@@ -75,8 +79,8 @@ internal sealed class WorldCreator
             switch (_policy.Current)
             {
                 case CreateWorldPolicy.Phase.Armed:
-                    if (_policy.ShouldStart(now, GameIsRunning())) Start(now);
-                    else if (_policy.Current == CreateWorldPolicy.Phase.Failed) Finish(null);
+                    // Wait for the official host to initialize its container, save driver, native guards,
+                    // parallel driver and loading loop. Intercept only its final LoadGame request.
                     break;
 
                 case CreateWorldPolicy.Phase.Starting:
@@ -105,6 +109,15 @@ internal sealed class WorldCreator
 
     // ---- engine facts -------------------------------------------------------------------------------
 
+    internal void StartFromHost(object gameStateInterface, MethodInfo startNewGame)
+    {
+        var now = DateTime.UtcNow;
+        if (!_policy.ShouldStart(now, GameIsRunning())) { Finish(_policy.Fail(now, "host already started a game")); return; }
+        Say(_policy.Advance(CreateWorldPolicy.Phase.Starting, now, "official server initialized; redirecting LoadGame to StartNewGame"));
+        try { WorldCreationHooks.AllowWorldInitialization(); startNewGame.Invoke(gameStateInterface, null); }
+        catch (Exception ex) { Finish(_policy.Fail(now, ex.GetBaseException().ToString())); }
+    }
+
     /// <summary>True when the host has already started a game; we add a world, we never race one.</summary>
     private static bool GameIsRunning()
     {
@@ -127,82 +140,43 @@ internal sealed class WorldCreator
         catch { return false; }
     }
 
-    // ---- the reflection shim ------------------------------------------------------------------------
-
-    /// <summary>
-    /// Builds a <c>SandBoxGameManager</c> around a campaign creator and hands it to the engine. The ctor is
-    /// found by looking for the one whose single parameter is a delegate, rather than by hardcoding the
-    /// nested delegate's name, so a rename in SandBox.dll degrades to a clear message instead of a miss.
-    /// </summary>
-    private void Start(DateTime now)
-    {
-        Say(_policy.Advance(CreateWorldPolicy.Phase.Starting, now));
-
-        var gmType = AccessTools.TypeByName("SandBox.SandBoxGameManager");
-        if (gmType == null) { Finish(_policy.Fail(now, "SandBox.SandBoxGameManager not found")); return; }
-
-        var ctor = gmType.GetConstructors()
-            .Select(c => new { Ctor = c, Params = c.GetParameters() })
-            .Where(x => x.Params.Length == 1 && typeof(Delegate).IsAssignableFrom(x.Params[0].ParameterType))
-            .Select(x => x.Ctor)
-            .FirstOrDefault();
-        if (ctor == null)
-        {
-            Finish(_policy.Fail(now, "no SandBoxGameManager ctor takes a campaign-creator delegate"));
-            return;
-        }
-
-        var delegateType = ctor.GetParameters()[0].ParameterType;
-        var invoke = delegateType.GetMethod("Invoke");
-        // Logged unconditionally: if the bind below fails, this line is what says why.
-        Say($"worldcreate: creator delegate {delegateType.FullName} " +
-                 $"({string.Join(", ", invoke.GetParameters().Select(p => p.ParameterType.Name).ToArray())}) -> {invoke.ReturnType.Name}");
-
-        Delegate creator;
-        try
-        {
-            var factory = typeof(WorldCreator).GetMethod(nameof(CreateCampaign), BindingFlags.NonPublic | BindingFlags.Static);
-            creator = Delegate.CreateDelegate(delegateType, factory);
-        }
-        catch (Exception ex)
-        {
-            Finish(_policy.Fail(now, "cannot bind the campaign creator: " + ex.GetBaseException().Message));
-            return;
-        }
-
-        var manager = ctor.Invoke(new object[] { creator }) as MBGameManager;
-        if (manager == null) { Finish(_policy.Fail(now, "SandBoxGameManager is not an MBGameManager")); return; }
-
-        MBGameManager.StartNewGame(manager);
-    }
-
-    /// <summary>
-    /// The campaign the engine will run. Bound as the creator delegate above, whose signature is
-    /// <c>Campaign Invoke()</c> — no parameters, confirmed from SandBox.dll's metadata. <c>Campaign</c> is
-    /// public and compile-time available, so only the delegate type around it needs reflection.
-    /// </summary>
-    private static Campaign CreateCampaign() => new Campaign(CampaignGameMode.Campaign);
-
     // ---- saving -------------------------------------------------------------------------------------
 
     /// <summary>
-    /// <c>SaveHandler.SaveAs</c> rather than <c>MBSaveLoad.SaveAsCurrentGame</c>: the latter's completion
-    /// callback takes a ValueTuple, which net472 cannot bind without an extra package reference this module
-    /// deliberately does not have. Polling the file for a stable size is both dependency-free and a better
-    /// guarantee anyway — it proves the bytes reached the disk rather than that a callback ran.
+    /// Uses the host's direct save path: its native autosave guard suppresses SaveHandler.SetSaveArgs.
+    /// Require both a successful completion callback and stable, nonempty output.
     /// </summary>
     private void BeginSave(DateTime now)
     {
+        if (File.Exists(SavePath(_policy.SaveName)))
+            throw new IOException("Save already exists; refusing to overwrite: " + _policy.SaveName);
         Say(_policy.Advance(CreateWorldPolicy.Phase.Saving, now, _policy.SaveName));
         _saveRequested = true;
         _lastSize = -1;
         _sizeStableSince = DateTime.MaxValue;
-        Campaign.Current.SaveHandler.SaveAs(_policy.SaveName);
+        var metadataMethod = typeof(MBSaveLoad).GetMethod("GetSaveMetaData",
+            BindingFlags.Static | BindingFlags.NonPublic, null, new[] { typeof(CampaignSaveMetaDataArgs) }, null);
+        if (metadataMethod == null || metadataMethod.ReturnType != typeof(MetaData))
+            throw new NotSupportedException("Unsupported MBSaveLoad.GetSaveMetaData(CampaignSaveMetaDataArgs) signature");
+        var metadata = (MetaData)metadataMethod.Invoke(null, new object[] { Campaign.Current.SaveHandler.GetSaveMetaData() });
+        // The host also repairs empty headless version fields from the installed Native module.
+        var nativeVersion = ModuleHelper.GetModuleInfo("Native")?.Version ?? ApplicationVersion.Empty;
+        if (nativeVersion.Major <= 0) throw new NotSupportedException("Native module version is unavailable");
+        foreach (var key in new[] { "ApplicationVersion", "NewGameVersion" })
+            if (ApplicationVersion.FromString(metadata[key]).Major <= 0) metadata[key] = nativeVersion.ToString();
+        CampaignEventDispatcher.Instance.OnBeforeSave();
+        Game.Current.Save(metadata, _policy.SaveName, new AsyncFileSaveDriver(), result =>
+        {
+            _saveSucceeded = (int)result == 0;
+            Log.Info("worldcreate: save callback=" + result);
+            _saveCompleted = true;
+        });
     }
 
     private void CheckSaveFinished(DateTime now)
     {
-        if (!_saveRequested) return;
+        if (!_saveRequested || !_saveCompleted) return;
+        if (!_saveSucceeded) throw new IOException("Engine save callback reported failure");
         var path = SavePath(_policy.SaveName);
         if (!File.Exists(path)) return;
 
@@ -239,12 +213,14 @@ internal sealed class WorldCreator
     /// </summary>
     internal static string SidecarPath()
     {
+        var requested = Environment.GetEnvironmentVariable("MODDERLORDS_CREATE_WORLD_LOG");
+        if (!string.IsNullOrWhiteSpace(requested)) return Path.GetFullPath(requested);
         var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                                "ModderLords", "logs");
         return Path.Combine(dir, "worldcreate-latest.log");
     }
 
-    private static void Say(string line)
+    private static void Say(string? line)
     {
         if (line == null) return;
         Log.Info(line);
@@ -264,6 +240,7 @@ internal sealed class WorldCreator
     private void Finish(string finalLine)
     {
         Say(finalLine);
+        WorldCreationHooks.Finish();
         var code = _policy.ExitCode;
         Say($"worldcreate: exiting with {code}");
         try { Console.Out.Flush(); } catch { }
