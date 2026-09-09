@@ -89,6 +89,46 @@ public class NewWorldPathProbe
         }
     }
 
+    /// <summary>The exact signature WorldCreator must bind its campaign-creator delegate to.</summary>
+    [Fact]
+    public void Report_campaign_creator_delegate_signature()
+    {
+        var root = ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault();
+        if (root is null) { _out.WriteLine("no DedicatedServer package; skipped"); return; }
+        var dll = Path.Combine(ServerPaths.Create(root).DedicatedServerRoot, "engine", "Modules", "Coop",
+                               "bin", "Win64_Shipping_Server", "SandBox.dll");
+        if (!File.Exists(dll)) { _out.WriteLine("no SandBox.dll; skipped"); return; }
+
+        using var fs = File.OpenRead(dll);
+        using var pe = new PEReader(fs);
+        var md = pe.GetMetadataReader();
+
+        foreach (var th in md.TypeDefinitions)
+        {
+            var t = md.GetTypeDefinition(th);
+            if (md.GetString(t.Name) != "SandBoxGameManager") continue;
+
+            foreach (var nh in t.GetNestedTypes())
+            {
+                var n = md.GetTypeDefinition(nh);
+                _out.WriteLine($"nested: {md.GetString(n.Name)} [{n.Attributes & TypeAttributes.VisibilityMask}]");
+                foreach (var mh in n.GetMethods())
+                {
+                    var m = md.GetMethodDefinition(mh);
+                    var sig = m.DecodeSignature(new SigNames(), null!);
+                    _out.WriteLine($"   {sig.ReturnType} {md.GetString(m.Name)}({string.Join(", ", sig.ParameterTypes)})");
+                }
+            }
+            foreach (var ch in t.GetMethods())
+            {
+                var m = md.GetMethodDefinition(ch);
+                if (md.GetString(m.Name) != ".ctor") continue;
+                var sig = m.DecodeSignature(new SigNames(), null!);
+                _out.WriteLine($"ctor({string.Join(", ", sig.ParameterTypes)})");
+            }
+        }
+    }
+
     private sealed class SigNames : ISignatureTypeProvider<string, object>
     {
         public string GetPrimitiveType(PrimitiveTypeCode c) => c.ToString().ToLowerInvariant();

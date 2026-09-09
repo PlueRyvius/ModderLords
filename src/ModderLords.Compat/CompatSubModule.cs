@@ -17,6 +17,12 @@ public sealed class CompatSubModule : MBSubModuleBase
     /// <summary>Null off a dedicated server, so the tick override costs a null check and nothing else.</summary>
     private PerfSampler _perf;
 
+    /// <summary>
+    /// Null unless MODDERLORDS_CREATE_WORLD asked for a world to be generated, which is never the case on a
+    /// normal launch. See <see cref="WorldCreator"/>.
+    /// </summary>
+    private WorldCreator _worldCreator;
+
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();
@@ -29,6 +35,9 @@ public sealed class CompatSubModule : MBSubModuleBase
             }
             var installed = Guards.InstallAll(Harmony);
             Log.Info($"server guards installed: {installed}");
+
+            var creator = WorldCreator.TryCreate();
+            if (creator.IsEnabled) _worldCreator = creator;
             _perf = new PerfSampler();
             Log.Info($"performance samples every {PerfSampler.ReportPeriodSeconds:0} seconds");
         }
@@ -36,6 +45,23 @@ public sealed class CompatSubModule : MBSubModuleBase
         {
             Log.Error("guard installation failed: " + ex);
         }
+    }
+
+    /// <summary>
+    /// Every module is loaded by now, and the host has not started its game yet — which is exactly the window
+    /// world creation has to start in. Stage 0b measured that the host loads a save even when none is named,
+    /// so this is a race, and this hook is the only point where it can be won.
+    /// </summary>
+    protected override void OnBeforeInitialModuleScreenSetAsRoot()
+    {
+        base.OnBeforeInitialModuleScreenSetAsRoot();
+        if (_worldCreator is null) return;
+        try
+        {
+            _worldCreator.Arm();
+            _worldCreator.Tick();   // start now rather than on the next frame; the host is about to load.
+        }
+        catch (Exception ex) { Log.Error("world creation failed to start: " + ex); }
     }
 
     /// <summary>
@@ -61,6 +87,10 @@ public sealed class CompatSubModule : MBSubModuleBase
         if (_perf is null) return;
         try { _perf.Tick(dt); }
         catch { _perf = null; }   // never let a meter break the server it is measuring
+
+        if (_worldCreator is null) return;
+        try { _worldCreator.Tick(); }
+        catch (Exception ex) { Log.Error("world creation tick failed: " + ex); _worldCreator = null; }
     }
 }
 

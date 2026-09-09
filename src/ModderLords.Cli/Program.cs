@@ -13,6 +13,7 @@ using ModderLords.Coop.Saves;
 //   sync     --mods Id[:Run|DependencyOnly|AsShipped],...  [--remove-all]
 //   launch   [--mods ...] [--save NAME] [--port 7210] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
 //            [--manual-order] [--stall-seconds N|off] [--mod-distance-cache]
+//            [--create-world NAME] [--create-world-timeout SECONDS]
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
 
@@ -212,7 +213,24 @@ switch (cmd)
             if (ApplyOverlay(selections) is null) return 2;
         }
 
+        // World creation: the compat module generates a campaign in-process and exits. Mutually exclusive
+        // with --save, because there is deliberately no save to load yet.
+        var createWorld = opts.GetValueOrDefault("create-world");
+        if (createWorld is not null && opts.ContainsKey("save"))
+        {
+            Console.Error.WriteLine("[ModderLords] --create-world and --save are mutually exclusive: one makes a world, the other loads one");
+            return 2;
+        }
+
         var extraEnv = new Dictionary<string, string>();
+        if (createWorld is not null)
+        {
+            try { SavePreparer.ValidateSaveName(createWorld); }
+            catch (Exception ex) { Console.Error.WriteLine("[ModderLords] --create-world: " + ex.Message); return 2; }
+            extraEnv["MODDERLORDS_CREATE_WORLD"] = createWorld;
+            if (opts.GetValueOrDefault("create-world-timeout") is { } t) extraEnv["MODDERLORDS_CREATE_WORLD_TIMEOUT"] = t;
+            Console.WriteLine($"[ModderLords] create-world mode: the server will generate '{createWorld}' and exit; it will not serve");
+        }
         if (selections.Count > 0)
         {
             var hook = HookSetup.LocateHook();
@@ -242,6 +260,7 @@ switch (cmd)
 
         // Pre-flight: the world about to be loaded vs the modules about to load it. This ad-hoc --mods path is the one
         // used for diagnostic runs, so it needs the check as much as LaunchSession.Prepare does. Warn, never block.
+        if (createWorld is null)
         {
             foreach (var m in SaveModuleCheck.MessagesForLaunch(paths.SavesDir, plan.SaveName,
                          selections.ToDictionary(x => x.Module.Id, x => x.Module.Version, StringComparer.OrdinalIgnoreCase)))
@@ -257,7 +276,12 @@ switch (cmd)
         Console.Write(plan.Describe());
         if (opts.ContainsKey("dry-run")) return 0;
 
-        if (plan.SaveName is { } saveName)
+        if (createWorld is not null)
+        {
+            // Nothing to bootstrap: generating the world is the entire point of this run.
+            Console.WriteLine($"[ModderLords] not preparing a save; '{createWorld}' is what this run will create");
+        }
+        else if (plan.SaveName is { } saveName)
         {
             var prep = SavePreparer.EnsureExists(paths, saveName);
             Console.WriteLine(prep.CreatedFromTemplate
