@@ -335,7 +335,7 @@
             <TabItem Header="Server" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
                     <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,10" />
-                    <UniformGrid Columns="2" Rows="14">
+                    <UniformGrid Columns="2" Rows="16">
                         <TextBlock Text="Join port (UDP, forward this)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.JoinPort}" />
                         <TextBlock Text="Password (empty = open)" VerticalAlignment="Center" />
@@ -350,6 +350,12 @@
                         <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" />
                         <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compatModderLords.Compat from the launcher folder into their game Modules folder) and enable it." />
                         <CheckBox IsChecked="{Binding Profile.SettingsSync}" HorizontalAlignment="Left" />
+                        <!-- The one thing this launcher writes inside the DedicatedServer package, so it is opt-in and
+                             says so. Turning it off restores SandBox's file on the next launch. -->
+                        <TextBlock Text="Use a map mod's distance cache" VerticalAlignment="Center" ToolTip="A map mod replaces the campaign map but the server always reads SandBox's settlement distance cache, which was built for the vanilla map — the mismatch crashes world loading in a loop that never ends. This replaces that file with the one your map mod ships (TAOM_Map ships a rebuilt 10 MB cache). It is the only file the launcher writes inside the DedicatedServer folder; the original is backed up and put back when you untick this. Leave off unless you are running a map-replacing mod." />
+                        <CheckBox IsChecked="{Binding Profile.UseModDistanceCache}" HorizontalAlignment="Left" />
+                        <TextBlock Text="Warn if loading stalls (seconds)" VerticalAlignment="Center" ToolTip="How long the launch console waits with no loading progress before saying so. Empty uses the default (5 minutes); 0 turns the warning off. Heavy mods can legitimately load for a very long time — TAOM's authors quote up to two hours — so raise it or set 0 for those rather than being nagged." />
+                        <TextBox Text="{Binding Profile.StallWarningSeconds, TargetNullValue=''}" />
                         <TextBlock Text="Server log file" VerticalAlignment="Center" />
                         <CheckBox IsChecked="{Binding Profile.Server.LogFile}" HorizontalAlignment="Left" />
                         <TextBlock Text="Engine port / region" VerticalAlignment="Center" />

@@ -21,6 +21,22 @@ public class SaveImportBindingTests
         Assert.True(p.CanRead && p.CanWrite);
     }
 
+    /// <summary>
+    /// The Server tab's toggles bind straight through to the profile. A flag with no way to set it in the app is a
+    /// flag nobody can use: both of these existed as a profile property and a CLI switch before the UI caught up.
+    /// </summary>
+    [Theory]
+    [InlineData("UseModDistanceCache", typeof(bool))]
+    [InlineData("StallWarningSeconds", typeof(int?))]
+    [InlineData("ManualLoadOrder", typeof(bool))]
+    public void The_server_tab_toggles_bind_to_profile_properties(string name, Type expected)
+    {
+        var p = typeof(ModderLords.Core.Profiles.Profile).GetProperty(name);
+        Assert.NotNull(p);
+        Assert.Equal(expected, p!.PropertyType);
+        Assert.True(p.CanWrite);
+    }
+
     [Theory]
     [InlineData("ClientSaves")]           // <DataGrid ItemsSource="{Binding ClientSaves}">
     [InlineData("SelectedClientSave")]    //           SelectedItem="{Binding SelectedClientSave}"
