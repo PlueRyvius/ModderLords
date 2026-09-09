@@ -148,7 +148,40 @@ copies `default_new_game.sav`, which is a pre-baked *vanilla* world
 (`Modules = Native;SandBoxCore;Sandbox;Coop`). Nothing in the repo or the server package generates a
 world.
 
-## Can the server create its own world? No.
+## Can the server create its own world? Yes — but it cannot finish loading one
+
+**Corrected 2026-09-08.** The section below concluded "no" from the character-creation route alone. That was
+wrong: the programmatic route is entirely public, and a spike proved it works.
+
+`MBGameManager.StartNewGame(new SandBoxGameManager(creator))` starts a campaign in the dedicated server with
+no character creation, no screen stack, and no Harmony patch — only `SandBoxGameManager` is reached by name,
+because `SandBox.dll` is not in the reference assemblies the compat module compiles against. The creator
+delegate is `Campaign Invoke()`, no parameters (asserted in `NewWorldPathProbe`).
+
+Measured, via `tools\spike\Run-Stages.ps1`:
+
+| checkpoint | result |
+|---|---|
+| CP1 — campaign starts headlessly | **PASS** — `worldcreate: phase=campaign-created` in ~20 s |
+| CP2 — loading reaches `MapState` | **FAIL** — native access violation (0xC0000005), zero loading steps |
+
+**The object-graph hypothesis was right.** On a fresh campaign the `NavigationCacheElement.get_StringId` NRE
+that loops 159,872 times against a stale save does not occur *at all* — 0 occurrences. Settlements come from
+module XML rather than from a save, exactly as predicted, so the distance-cache mismatch simply never arises.
+
+**A different blocker replaces it.** The run dies in `SandBox.MapScene.Load_Patch1` (4 occurrences) and then
+takes an access violation. That is the **client** map scene: this run logged `DedicatedServerMapScene` and
+`CreateMapScene` **zero** times, against constant mentions in every save-loading run. `DedicatedServer.Core`
+substitutes its headless map scene somewhere on the save-load path, and the new-campaign path bypasses that
+substitution entirely, so the engine tries to load the render-bound scene in a process that has no renderer.
+
+Getting past this would mean making that substitution engage — for which no public seam is apparent — or
+patching `MapScene.Load` ourselves, which is the "nothing is rewritten" line this project does not cross, on
+top of an already-patched method. The spike stops here.
+
+### The old reasoning, kept because the details are still accurate
+
+## Can the server create its own world? (superseded — see above)
 
 Answered from assembly metadata alone, no test launch (`WorldGenerationProbe`):
 
@@ -225,6 +258,24 @@ WARNING no loading progress for 90s: stuck at
 ```
 
 The first line appears before the engine starts.
+
+## Running the spike again
+
+`tools\spike\Run-Stages.ps1` runs each checkpoint against a real server, checks a table of regex assertions,
+and writes PASS/FAIL with the matching evidence to `results.md`. Hard-fail rows stop the run, so the go/no-go
+is enforced by the script rather than by whoever is watching:
+
+```bash
+pwsh -File tools/spike/Run-Stages.ps1 -Stage all
+```
+
+Stages: `0a` `0b` `1` `1n` `2` `3` `reg`. It builds the CLI only (building the solution fails whenever the
+WPF app is open), kills stray server processes first, and asserts afterwards that SandBox's distance cache
+was left alone unless the stage opted in.
+
+Phase lines are mirrored to `%LOCALAPPDATA%\ModderLords\logs\worldcreate-latest.log`, because the engine
+writes to the same stdout without newline discipline and splices ours in half — a real run produced
+`worldcreate: phase=sta`.
 
 ## What is still unproven
 
