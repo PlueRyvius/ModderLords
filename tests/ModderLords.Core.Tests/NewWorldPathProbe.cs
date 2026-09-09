@@ -89,6 +89,58 @@ public class NewWorldPathProbe
         }
     }
 
+    /// <summary>
+    /// Asserts the shape <c>WorldCreator</c> binds against. This is not decoration: the first attempt bound
+    /// <c>CreateCampaign(CampaignGameMode)</c> and failed at runtime because the delegate is
+    /// <c>Campaign Invoke()</c> with no parameters. A game update that changes it should break here, in
+    /// seconds, rather than in a multi-minute server run.
+    /// </summary>
+    [Fact]
+    public void The_campaign_creator_delegate_takes_no_arguments_and_returns_a_campaign()
+    {
+        var dll = SandBoxDll();
+        if (dll is null) { _out.WriteLine("no SandBox.dll; skipped"); return; }
+
+        using var fs = File.OpenRead(dll);
+        using var pe = new PEReader(fs);
+        var md = pe.GetMetadataReader();
+
+        var found = false;
+        foreach (var th in md.TypeDefinitions)
+        {
+            var t = md.GetTypeDefinition(th);
+            if (md.GetString(t.Name) != "SandBoxGameManager") continue;
+
+            // The ctor WorldCreator looks for: exactly one parameter, and it is the creator delegate.
+            Assert.Contains(t.GetMethods().Select(md.GetMethodDefinition)
+                    .Where(m => md.GetString(m.Name) == ".ctor")
+                    .Select(m => m.DecodeSignature(new SigNames(), null!)),
+                sig => sig.ParameterTypes.Length == 1 && sig.ParameterTypes[0] == "CampaignCreatorDelegate");
+
+            foreach (var nh in t.GetNestedTypes())
+            {
+                var n = md.GetTypeDefinition(nh);
+                if (md.GetString(n.Name) != "CampaignCreatorDelegate") continue;
+                var invoke = n.GetMethods().Select(md.GetMethodDefinition)
+                    .Single(m => md.GetString(m.Name) == "Invoke")
+                    .DecodeSignature(new SigNames(), null!);
+                Assert.Empty(invoke.ParameterTypes);
+                Assert.Equal("Campaign", invoke.ReturnType);
+                found = true;
+            }
+        }
+        Assert.True(found, "SandBoxGameManager.CampaignCreatorDelegate was not found");
+    }
+
+    private static string? SandBoxDll()
+    {
+        var root = ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault();
+        if (root is null) return null;
+        var dll = Path.Combine(ServerPaths.Create(root).DedicatedServerRoot, "engine", "Modules", "Coop",
+                               "bin", "Win64_Shipping_Server", "SandBox.dll");
+        return File.Exists(dll) ? dll : null;
+    }
+
     /// <summary>The exact signature WorldCreator must bind its campaign-creator delegate to.</summary>
     [Fact]
     public void Report_campaign_creator_delegate_signature()
