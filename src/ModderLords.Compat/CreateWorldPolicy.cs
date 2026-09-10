@@ -41,10 +41,8 @@ internal sealed class CreateWorldPolicy
     internal const int ExitFailed = 12;
 
     /// <summary>
-    /// There is deliberately no settle delay. Measured 2026-09-08 (spike stage 0b): even with no
-    /// <c>/coopsave</c> on the command line the host still loads a save of its own, so there is no idle state
-    /// to wait for — whoever starts a game first wins. Arming happens at the "every module is loaded" hook,
-    /// which is before the host's state machine runs, and we start immediately from there.
+    /// Once the host requests its save load, redirect immediately to new-game creation. The module arms
+    /// its routing hook earlier, but waits for the official host initialization instead of racing it.
     /// </summary>
     internal static readonly TimeSpan SettleDelay = TimeSpan.Zero;
 

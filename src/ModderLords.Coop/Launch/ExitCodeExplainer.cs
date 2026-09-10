@@ -30,7 +30,7 @@ public static class ExitCodeExplainer
         11 => "World created and saved; the server stopped on purpose.",
         12 => "World creation failed; the server stopped without a usable save. The reason is on the 'worldcreate: fail' line above.",
         -1 => "The engine exited with -1: usually an unhandled startup failure. Scroll up for the reason.",
-        unchecked((int)0xC0000005) => "Access violation (0xC0000005) inside native code. A mod loaded a DLL the headless engine cannot run.",
+        unchecked((int)0xC0000005) => "Access violation (0xC0000005) inside native code. Inspect the crash dump and engine log to identify the cause.",
         unchecked((int)0xC000013A) => "Terminated by Ctrl+C / console close.",
         unchecked((int)0xE0434352) => ".NET unhandled exception (0xE0434352). The exception text is in the log above.",
         int.MinValue => "Exit code unavailable (process handle lost).",

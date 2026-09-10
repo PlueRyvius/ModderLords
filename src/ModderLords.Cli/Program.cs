@@ -14,16 +14,23 @@ using ModderLords.Coop.Saves;
 //   launch   [--mods ...] [--save NAME] [--port 7210] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
 //            [--manual-order] [--stall-seconds N|off] [--mod-distance-cache]
 //            [--create-world NAME] [--create-world-timeout SECONDS]
+//            [--data-dir PATH] [--coop-data-dir PATH] [--world-log PATH]
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
 
-DataDirMigration.RunIfNeeded();
-
 var opts = ParseArgs(args);
+if (opts.ContainsKey("data-dir") && opts.ContainsKey("profile"))
+{
+    Console.Error.WriteLine("[ModderLords] --data-dir diagnostics cannot use saved profiles; pass --mods explicitly.");
+    return 2;
+}
+// Diagnostic invocations must not migrate or touch the user's launcher data.
+if (!opts.ContainsKey("data-dir")) DataDirMigration.RunIfNeeded();
 if (!opts.TryGetValue("cmd", out var cmd))
 {
     Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
     Console.WriteLine("          play --profile NAME [--dry-run]   (start the player's own game with a profile's mods)");
+    Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
     return 1;
 }
@@ -59,7 +66,15 @@ if (cmd == "play")
 
 var root = opts.GetValueOrDefault("root") ?? ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault();
 if (root is null) { Console.Error.WriteLine("No DedicatedServer folder found; pass --root."); return 2; }
-var paths = ServerPaths.Create(root);
+var diagnosticData = opts.GetValueOrDefault("data-dir");
+var paths = ServerPaths.Create(root, diagnosticData,
+    opts.GetValueOrDefault("coop-data-dir") ?? (diagnosticData is null ? null : Path.Combine(diagnosticData, "CoopData")));
+// Validate creation before overlays, config, caches, or logs can be changed.
+if (cmd == "launch" && opts.GetValueOrDefault("create-world") is { } requestedWorld)
+{
+    try { WorldCreationRequest.Validate(paths, requestedWorld, opts.ContainsKey("save")); }
+    catch (Exception ex) { Console.Error.WriteLine("[ModderLords] --create-world: " + ex.Message); return 2; }
+}
 var problems = paths.Validate().ToList();
 foreach (var p in problems) Console.Error.WriteLine("[ModderLords] " + p);
 if (problems.Count > 0) return 2;
@@ -70,7 +85,9 @@ var customRoots = opts.TryGetValue("source", out var src) ? src.Split(';', Strin
 var catalog = ModuleCatalog.Scan(paths.ModulesRoot, gameRoot, libraries, customRoots);
 foreach (var p in catalog.Problems) Console.Error.WriteLine("[ModderLords] catalog: " + p);
 
-var overlayRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ModderLords", "overlay", "default");
+var overlayRoot = diagnosticData is null
+    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ModderLords", "overlay", "default")
+    : Path.Combine(paths.DataDir, "overlay");
 var applier = new OverlayApplier { KeepForDependencyOnly = LaunchSession.KeepForDependencyOnly };
 
 switch (cmd)
@@ -186,10 +203,10 @@ switch (cmd)
             if (sync is null) Console.Error.WriteLine("[ModderLords] --settings-sync: module not found under compat\\ next to the CLI");
             else selections.Add(new ModSelection(sync, ServerRole.AsShipped));
         }
-        if (opts.ContainsKey("compat"))
+        if (opts.ContainsKey("compat") || opts.ContainsKey("create-world"))
         {
             var compat = LaunchSession.LocateCompatModule();
-            if (compat is null) Console.Error.WriteLine("[ModderLords] --compat: module not found under compat\\ next to the CLI");
+            if (compat is null) { Console.Error.WriteLine("[ModderLords] required compatibility module not found under compat\\ next to the CLI"); return 2; }
             else selections.Add(new ModSelection(compat, ServerRole.AsShipped));
         }
         foreach (var s in selections)
@@ -228,6 +245,8 @@ switch (cmd)
             try { SavePreparer.ValidateSaveName(createWorld); }
             catch (Exception ex) { Console.Error.WriteLine("[ModderLords] --create-world: " + ex.Message); return 2; }
             extraEnv["MODDERLORDS_CREATE_WORLD"] = createWorld;
+            extraEnv["MODDERLORDS_CREATE_WORLD_LOG"] = opts.GetValueOrDefault("world-log")
+                ?? Path.Combine(paths.LogsDir, $"worldcreate-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.log");
             if (opts.GetValueOrDefault("create-world-timeout") is { } t) extraEnv["MODDERLORDS_CREATE_WORLD_TIMEOUT"] = t;
             Console.WriteLine($"[ModderLords] create-world mode: the server will generate '{createWorld}' and exit; it will not serve");
         }
@@ -238,7 +257,7 @@ switch (cmd)
             else
             {
                 var dirs = HookSetup.SearchDirs(paths, (overlayPlan ?? OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections)).Entries, gameRoot);
-                foreach (var kv in HookSetup.Environment(hook, dirs, verbose: opts.ContainsKey("hook-verbose"), sidecarPath: HookSetup.SidecarPathFor(DateTime.Now))) extraEnv[kv.Key] = kv.Value;
+                foreach (var kv in HookSetup.Environment(hook, dirs, verbose: opts.ContainsKey("hook-verbose"), sidecarPath: diagnosticData is null ? HookSetup.SidecarPathFor(DateTime.Now) : Path.Combine(paths.LogsDir, $"hook-{Guid.NewGuid():N}.log"))) extraEnv[kv.Key] = kv.Value;
             }
         }
 
@@ -249,6 +268,7 @@ switch (cmd)
             EnginePort = int.TryParse(opts.GetValueOrDefault("port"), out var port) ? port : 7210,
             Region = opts.GetValueOrDefault("region") ?? "EU",
             SaveName = opts.GetValueOrDefault("save"),
+            Visibility = diagnosticData is null ? null : ModderLords.Core.Profiles.ServerVisibility.None,
             ExtraEnvironment = extraEnv,
         };
         // Off unless asked for: this is the one thing the launcher writes inside the DedicatedServer package.
@@ -401,9 +421,10 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
     {
         _ = Task.Run(async () =>
         {
-            await Task.WhenAny(serving.Task, Task.Delay(TimeSpan.FromSeconds(stopAfter)));
+            var completed = await Task.WhenAny(serving.Task, Task.Delay(TimeSpan.FromSeconds(stopAfter)));
+            var reason = completed == serving.Task ? "serving reached" : "timeout reached";
             await Task.Delay(TimeSpan.FromSeconds(5));
-            Console.WriteLine("[ModderLords] auto-stop: sending 'stop' over stdin");
+            Console.WriteLine($"[ModderLords] auto-stop: {reason}; sending 'stop' over stdin");
             await engine.StopAsync(TimeSpan.FromSeconds(30));
         });
     }
