@@ -8,12 +8,15 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Setup','Control','Create','Reload','Timeout','All')][string]$Stage = 'All',
+    [ValidateSet('Vanilla','Taom','TaomFull')][string]$Recipe = 'Vanilla',
     [string]$Name = ('vanilla_' + (Get-Date -Format 'yyyyMMdd_HHmmss')),
     [string]$Workspace = 'D:\Design\Bannerlord Mods\_vanilla-world-proof',
     [string]$InstalledServer = 'D:\Program Files (x86)\Steam\steamapps\workshop\content\261550\3770450698\DedicatedServer',
+    [string]$InstalledGame = 'D:\Program Files (x86)\Steam\steamapps\common\Mount & Blade II Bannerlord',
     [int]$EnginePort = 7299,
     [int]$JoinPort = 4299,
     [int]$TimeoutSeconds = 900,
+    [string]$HeadlessScene,
     [switch]$NoBuild
 )
 $ErrorActionPreference = 'Stop'
@@ -22,6 +25,10 @@ $Workspace = [IO.Path]::GetFullPath($Workspace)
 $package = Join-Path $Workspace 'DedicatedServer'
 $source = Join-Path $Workspace 'source'
 $data = Join-Path $Workspace 'data'
+$diagnosticGame = Join-Path $Workspace 'Game'
+if ($Recipe -ne 'Vanilla' -and $Workspace -eq 'D:\Design\Bannerlord Mods\_vanilla-world-proof') {
+    throw 'TAOM requires a separate -Workspace to preserve the vanilla proof.'
+}
 $cli = Join-Path $source 'src\ModderLords.Cli\bin\Diagnostic\net10.0\ModderLords.Cli.dll'
 if ($Workspace -eq [IO.Path]::GetFullPath($InstalledServer) -or $Workspace.StartsWith([IO.Path]::GetFullPath($InstalledServer) + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Diagnostic workspace must be outside the installed server.'
@@ -57,6 +64,20 @@ if (-not $NoBuild) {
     & dotnet build (Join-Path $source 'src\ModderLords.Cli\ModderLords.Cli.csproj') -c Diagnostic -v q --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed' }
 }
+if ($Recipe -ne 'Vanilla' -and -not (Test-Path (Join-Path $diagnosticGame '.isolated-copy-complete'))) {
+    # Real copies keep mod-side logs/config writes away from the installed client modules.
+    foreach ($module in @('TAOM.Dependencies','TAOM','TAOM_Map','LOTRLOME_Armory')) {
+        Copy-Tree (Join-Path $InstalledGame "Modules\$module") (Join-Path $diagnosticGame "Modules\$module")
+    }
+    Copy-Tree (Join-Path $InstalledGame 'bin\Win64_Shipping_Client') (Join-Path $diagnosticGame 'bin\Win64_Shipping_Client')
+    foreach ($official in @('StoryMode','CustomBattle','SandBox','SandBoxCore','Native','BirthAndDeath')) {
+        $relative = "Modules\$official\bin\Win64_Shipping_Client"
+        if (Test-Path (Join-Path $InstalledGame $relative)) {
+            Copy-Tree (Join-Path $InstalledGame $relative) (Join-Path $diagnosticGame $relative)
+        }
+    }
+    Set-Content -LiteralPath (Join-Path $diagnosticGame '.isolated-copy-complete') -Value $InstalledGame
+}
 if ($Stage -eq 'Setup') { Write-Output "Ready: $Workspace"; exit 0 }
 function Invoke-Vanilla([string]$Kind, [string]$SaveName) {
     $creating = $Kind -in @('Create','Timeout')
@@ -83,6 +104,12 @@ function Invoke-Vanilla([string]$Kind, [string]$SaveName) {
     $config = @{ saveName=$configuredSave; port=$JoinPort; password=[Guid]::NewGuid().ToString('N'); autosaveMinutes=0; steam=$false; logFile=$true }
     $config | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $data 'server-config.json')
     $argv = @($cli,'launch','--root',$package,'--data-dir',$data,'--port',"$EnginePort",'--stop-after',"$TimeoutSeconds")
+    $taomRun = $Recipe -ne 'Vanilla' -and $Kind -ne 'Control'
+    if ($taomRun) {
+        $mods = 'TAOM.Dependencies:DependencyOnly,TAOM:Run,TAOM_Map:Run'
+        if ($Recipe -eq 'TaomFull') { $mods = 'TAOM.Dependencies:DependencyOnly,LOTRLOME_Armory:Run,TAOM:Run,TAOM_Map:Run' }
+        $argv += @('--game',$diagnosticGame,'--mods',$mods,'--mod-distance-cache')
+    }
     if ($creating) {
         $creationTimeout = if ($Kind -eq 'Timeout') { 1 } else { $TimeoutSeconds }
         $argv += @('--create-world',$SaveName,'--create-world-timeout',"$creationTimeout",'--world-log',$phase)
@@ -93,7 +120,35 @@ function Invoke-Vanilla([string]$Kind, [string]$SaveName) {
     $argv | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $run 'arguments.json')
     $quoted = $argv | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
     $started = [DateTime]::UtcNow
-    $p = Start-Process -FilePath 'dotnet' -ArgumentList $quoted -WorkingDirectory $source -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError $err
+    $mapFiles = @()
+    $mapEnvironment = @{ MODDERLORDS_HEADLESS_MAP = '' }
+    $mapTarget = Join-Path $package 'engine\Modules\DedicatedServer.Windows\SceneObj\Main_map'
+    $mapBackup = Join-Path $run 'original-map'
+    function Restore-DiagnosticMap {
+        foreach ($file in $mapFiles) {
+            $target = Join-Path $mapTarget $file.Name
+            $backup = Join-Path $mapBackup $file.Name
+            if (Test-Path -LiteralPath $backup) { Copy-Item -LiteralPath $backup -Destination $target -Force }
+            elseif (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target }
+        }
+    }
+    if ($HeadlessScene -and $taomRun) {
+        if (-not (Test-Path (Join-Path $HeadlessScene 'modderlords-map.xml'))) { throw 'Prepare the headless scene with Build-HeadlessMap.py first' }
+        New-Item -ItemType Directory $mapBackup | Out-Null
+        try {
+            foreach ($file in Get-ChildItem -LiteralPath $HeadlessScene -File) {
+                $target = Join-Path $mapTarget $file.Name
+                if (Test-Path -LiteralPath $target) { Copy-Item -LiteralPath $target -Destination $mapBackup }
+                # Track only files whose originals have already been secured, including a partial copy.
+                $mapFiles += $file
+                Copy-Item -LiteralPath $file.FullName -Destination $target
+            }
+        } catch { Restore-DiagnosticMap; throw }
+        $mapEnvironment.MODDERLORDS_HEADLESS_MAP = Join-Path $mapTarget 'modderlords-map.xml'
+    }
+    try {
+        $p = Start-Process -FilePath 'dotnet' -ArgumentList $quoted -WorkingDirectory $source -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError $err -Environment $mapEnvironment
+    } catch { Restore-DiagnosticMap; throw }
     $null = $p.Handle
     $timeout = $false
     try {
@@ -106,8 +161,17 @@ function Invoke-Vanilla([string]$Kind, [string]$SaveName) {
         }
         $p.WaitForExit()
         $code = $p.ExitCode
-    } finally { if (-not $p.HasExited) { $p.Kill($true); $p.WaitForExit() }; $p.Dispose() }
+    } finally { if (-not $p.HasExited) { $p.Kill($true); $p.WaitForExit() }; $p.Dispose(); Restore-DiagnosticMap }
     $text = [IO.File]::ReadAllText($log) + [IO.File]::ReadAllText($err)
+    $timeout = $timeout -or $text.Contains('auto-stop: timeout reached')
+    if ($Recipe -ne 'Vanilla') {
+        $engineLogs = Join-Path $package 'engine\bin\Win64_Shipping_Server\Logs'
+        if (Test-Path $engineLogs) {
+            foreach ($file in Get-ChildItem -LiteralPath $engineLogs -File | Where-Object LastWriteTimeUtc -GE $started) {
+                Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $run $file.Name)
+            }
+        }
+    }
     $phases = if (Test-Path -LiteralPath $phase) { [IO.File]::ReadAllText($phase) } else { '' }
     $save = Join-Path $data "Game Saves\$SaveName.sav"
     $ok = -not $timeout
@@ -128,6 +192,12 @@ function Invoke-Vanilla([string]$Kind, [string]$SaveName) {
                 $ids = $header.List.Modules -split ';'
                 foreach ($required in @('Native','SandBoxCore','Sandbox')) { if ($ids -notcontains $required) { throw "Missing module in save: $required" } }
                 if (-not ($ids -contains 'Coop' -or $ids -contains 'CoopNightly')) { throw 'Save is missing Coop' }
+                if ($taomRun) {
+                    foreach ($required in @('TAOM.Dependencies','TAOM','TAOM_Map')) {
+                        if ($ids -notcontains $required) { throw "Missing TAOM module in save: $required" }
+                    }
+                    if ($Recipe -eq 'TaomFull' -and $ids -notcontains 'LOTRLOME_Armory') { throw 'Save is missing LOTRLOME_Armory' }
+                }
                 $hash = (Get-FileHash -LiteralPath $save).Hash
                 $template = Join-Path $package 'server-data\Game Saves\default_new_game.sav'
                 if ($hash -eq (Get-FileHash -LiteralPath $template).Hash) { throw 'Generated save is a copy of the template' }
@@ -148,7 +218,7 @@ function Invoke-Vanilla([string]$Kind, [string]$SaveName) {
         catch { $ok=$false }
         finally { $socket.Dispose() }
     }
-    $result = [ordered]@{ stage=$Kind; name=$SaveName; passed=$ok; exitCode=$code; timedOut=$timeout; seconds=[int]([DateTime]::UtcNow-$started).TotalSeconds; log=$log; phaseLog=$phase; save=$save }
+    $result = [ordered]@{ stage=$Kind; recipe=$Recipe; name=$SaveName; passed=$ok; exitCode=$code; timedOut=$timeout; seconds=[int]([DateTime]::UtcNow-$started).TotalSeconds; log=$log; phaseLog=$phase; save=$save }
     $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $run 'result.json')
     $result | ConvertTo-Json | Write-Output
     if (-not $ok) { throw "Stage failed; evidence: $run" }

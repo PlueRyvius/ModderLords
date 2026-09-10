@@ -1,5 +1,14 @@
 # Running TAOM (and other client-packaged mods) on the dedicated server
 
+**Continuation, 2026-09-10:** vanilla server-side generation and exact-save reload are now proven;
+see [the vanilla proof](VANILLA-WORLD-GENERATION.md) and PR #44. Statements below that require a
+client-generated world or declare the headless creation route inaccessible are historical findings,
+superseded by that proof. The isolated TAOM continuation now generates a fresh save and reloads it
+to `SERVING` using TAOM's own navigation mesh, terrain and bounds. See
+[TAOM world generation](TAOM-WORLD-GENERATION.md) for the required assets, runtime compatibility
+changes, reproducible commands and limits. Experiments use a separate `_taom-world-proof`
+workspace, with copied mod files and bounded, experiment-owned process cleanup.
+
 Investigation notes, 2026-09-07. Written down because two plausible-sounding diagnoses were both
 wrong, and the evidence that settled it is easy to lose when launch logs rotate.
 

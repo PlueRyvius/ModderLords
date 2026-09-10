@@ -38,8 +38,14 @@ internal static class WorldCreationHooks
             ?? throw new MissingMemberException("SandBoxGameManager not found");
         var finished = managerType.GetMethod("OnLoadFinished", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
         if (finished?.ReturnType != typeof(void)) throw new MissingMethodException("SandBoxGameManager.OnLoadFinished()");
-        Patches.Patch(finished, prefix: new HarmonyMethod(typeof(WorldCreationHooks), nameof(FinishNewCampaign)));
+        PatchManager(finished);
+        var loadedSetter = AccessTools.PropertySetter(typeof(MBGameManager), "IsLoaded");
+        if (loadedSetter == null || loadedSetter.GetParameters().Length != 1 || loadedSetter.GetParameters()[0].ParameterType != typeof(bool))
+            throw new MissingMethodException("MBGameManager.IsLoaded setter");
+        Patches.Patch(loadedSetter, prefix: new HarmonyMethod(typeof(WorldCreationHooks), nameof(KeepCreating)));
         Patches.Patch(AccessTools.Method(typeof(Campaign), "LoadMapScene"), postfix: new HarmonyMethod(typeof(WorldCreationHooks), nameof(MapLoaded)));
+        Patches.Patch(AccessTools.Method(typeof(MBObjectManager), "LoadXml", new[] { typeof(XmlDocument), typeof(bool) }),
+            finalizer: new HarmonyMethod(typeof(WorldCreationHooks), nameof(XmlFinished)));
         Log.Info("worldcreate: installed creation-only LoadGame -> StartNewGame route");
     }
 
@@ -76,6 +82,7 @@ internal static class WorldCreationHooks
 
     private static bool FinishNewCampaign(MBGameManager __instance)
     {
+        Log.Info("worldcreate: finalization entered manager=" + __instance.GetType().AssemblyQualifiedName);
         if (_creator == null) return true;
         if (_finalized) return false;
         _finalized = true;
@@ -99,12 +106,41 @@ internal static class WorldCreationHooks
 
     private static void MapLoaded()
     {
+        var manager = Game.Current.GameManager;
+        Log.Info("worldcreate: actual manager=" + manager.GetType().AssemblyQualifiedName + " assembly=" + manager.GetType().Assembly.Location);
+        var finished = manager.GetType().GetMethod("OnLoadFinished", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null)
+            ?? throw new MissingMethodException("Actual game manager OnLoadFinished()");
+        PatchManager(finished);
         Log.Info($"worldcreate: map scene={Campaign.Current.MapSceneWrapper.GetType().FullName} clans={Clan.All.Count} settlements={Settlement.All.Count}");
         var xmlClans = MBObjectManager.Instance.GetObjectTypeList<Clan>();
         Log.Info($"worldcreate: XML clans={xmlClans.Count}: {string.Join(",", xmlClans.Take(10).Select(c => c.StringId))}");
         foreach (var c in Clan.All.Take(8)) Log.Info($"worldcreate: clan id={c.StringId} culture={c.Culture?.StringId} leader={c.Leader?.StringId}");
         var invalid = Settlement.All.Where(s => s.OwnerClan == null).ToList();
         Log.Info($"worldcreate: settlements missing owner clan={invalid.Count}: {string.Join(",", invalid.Take(8).Select(s => s.StringId))}");
+        var template = MBObjectManager.Instance.GetObject<CharacterObject>("spc_ghilman_leader_0");
+        Log.Info($"worldcreate: ghilman template culture={template?.Culture?.StringId} hero={template?.IsHero} battle={template?.Culture?.DefaultBattleEquipmentRoster?.StringId} stealth={template?.Culture?.DefaultStealthEquipmentRoster?.StringId}; registered default stealth={MBObjectManager.Instance.GetObject<MBEquipmentRoster>("default_stealth_equipment_roster")?.StringId}");
+    }
+
+    private static bool KeepCreating(bool value) => !value;
+
+    private static void PatchManager(MethodInfo method)
+    {
+        var info = Harmony.GetPatchInfo(method);
+        Log.Info("worldcreate: finish target=" + method.DeclaringType?.AssemblyQualifiedName + " patches=" +
+            (info == null ? "none" : string.Join(",", info.Prefixes.Select(p => p.owner + ":" + p.PatchMethod.Name))));
+        if (info?.Prefixes.Any(p => p.owner == Patches.Id) == true) return;
+        Patches.Patch(method, prefix: new HarmonyMethod(typeof(WorldCreationHooks), nameof(FinishNewCampaign)) { priority = Priority.First });
+    }
+
+    private static Exception? XmlFinished(XmlDocument doc, bool __runOriginal, Exception? __exception)
+    {
+        if (__exception != null || doc.DocumentElement?.Name == "NPCCharacters")
+        {
+            var message = $"worldcreate: XML finished root={doc.DocumentElement?.Name} ranOriginal={__runOriginal} exception={__exception}";
+            Log.Info(message);
+            System.IO.File.AppendAllText(WorldCreator.SidecarPath() + ".xml-errors", message + Environment.NewLine);
+        }
+        return __exception;
     }
 
 }

@@ -421,9 +421,10 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
     {
         _ = Task.Run(async () =>
         {
-            await Task.WhenAny(serving.Task, Task.Delay(TimeSpan.FromSeconds(stopAfter)));
+            var completed = await Task.WhenAny(serving.Task, Task.Delay(TimeSpan.FromSeconds(stopAfter)));
+            var reason = completed == serving.Task ? "serving reached" : "timeout reached";
             await Task.Delay(TimeSpan.FromSeconds(5));
-            Console.WriteLine("[ModderLords] auto-stop: sending 'stop' over stdin");
+            Console.WriteLine($"[ModderLords] auto-stop: {reason}; sending 'stop' over stdin");
             await engine.StopAsync(TimeSpan.FromSeconds(30));
         });
     }

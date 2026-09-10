@@ -53,6 +53,13 @@ public sealed class CompatSubModule : MBSubModuleBase
     protected override void OnBeforeInitialModuleScreenSetAsRoot()
     {
         base.OnBeforeInitialModuleScreenSetAsRoot();
+        try { HeadlessMapExperiment.Install(); }
+        catch (Exception ex)
+        {
+            Log.Info("headless-map: unsupported diagnostic map: " + ex);
+            Environment.Exit(12);
+            return;
+        }
         if (_worldCreator is null) return;
         try
         {

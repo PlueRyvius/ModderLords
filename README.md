@@ -9,6 +9,7 @@ It also **hosts the Bannerlord Coop dedicated server**, using the untouched offi
 That half is kept out of the way unless you ask for it: see [Player mode and Host mode](#player-mode-and-host-mode).
 
 For isolated server-side world creation and reload testing, see [vanilla world generation](docs/VANILLA-WORLD-GENERATION.md).
+The [TAOM continuation](docs/TAOM-WORLD-GENERATION.md) documents the full mod recipe, headless assets and map preparation.
 
 Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop v0.1.4.
 
