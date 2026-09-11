@@ -111,17 +111,31 @@ public sealed class OverlayApplier
         var binDir = Path.Combine(shadow, "bin");
         Directory.CreateDirectory(binDir);
         var serverBinLink = Path.Combine(binDir, "Win64_Shipping_Server");
-        if (Directory.Exists(e.BinTarget)) Junction.Create(serverBinLink, e.BinTarget);
+        if (Directory.Exists(e.BinTarget)) ReplaceShadowJunction(serverBinLink, e.BinTarget);
         else if (Junction.IsJunction(serverBinLink)) Junction.Remove(serverBinLink);
 
-        // 3. Every other top-level directory of the mod is junctioned as-is (ModuleData, GUI, AssetPackages, SceneObj ...).
+        // 3. Every other top-level directory of the mod is junctioned as-is, except client-only AssetPackages. The
+        // dedicated server reads DsAssetPackages; exposing a full client pack here is both unnecessary and unsafe.
         var wantedDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "bin" };
         foreach (var dir in Directory.EnumerateDirectories(mod.FolderPath))
         {
             var name = Path.GetFileName(dir);
             if (name.Equals("bin", StringComparison.OrdinalIgnoreCase)) continue;
+            if (name.Equals("AssetPackages", StringComparison.OrdinalIgnoreCase)) continue;
+            if (name.Equals("SceneObj", StringComparison.OrdinalIgnoreCase) && e.HeadlessMapPath is not null)
+            {
+                wantedDirs.Add(name);
+                BuildMapShadow(e, dir);
+                continue;
+            }
             wantedDirs.Add(name);
-            Junction.Create(Path.Combine(shadow, name), dir);
+            ReplaceShadowJunction(Path.Combine(shadow, name), dir);
+        }
+
+        if (e.HeadlessAssetPath is not null)
+        {
+            wantedDirs.Add("DsAssetPackages");
+            ReplaceShadowJunction(Path.Combine(shadow, "DsAssetPackages"), e.HeadlessAssetPath);
         }
         foreach (var dir in Directory.EnumerateDirectories(shadow))
         {
@@ -149,6 +163,50 @@ public sealed class OverlayApplier
             if (!wantedFiles.Contains(Path.GetFileName(file))) File.Delete(file);
 
         return rewritten.Changes;
+    }
+
+    private static void BuildMapShadow(OverlayEntry e, string sourceSceneObj)
+    {
+        var targetSceneObj = Path.Combine(e.ShadowPath!, "SceneObj");
+        // SceneObj is a generated projection inside our private overlay. Rebuild that one directory so a shadow
+        // left by an older launcher version (which may contain copied real folders) cannot prevent the junctions
+        // from being created. This never touches the downloaded module or the user's game data.
+        if (Junction.IsJunction(targetSceneObj))
+        {
+            Junction.Remove(targetSceneObj);
+        }
+        else if (Directory.Exists(targetSceneObj))
+        {
+            // Directory.Delete(recursive:true) follows junctions on some Windows builds. Remove this private
+            // projection one entry at a time so an old Main_map junction cannot make cleanup fail with ACCESS_DENIED.
+            foreach (var entry in Directory.EnumerateFileSystemEntries(targetSceneObj).ToList())
+            {
+                if (Directory.Exists(entry) && Junction.IsJunction(entry)) Junction.Remove(entry);
+                else if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
+                else File.Delete(entry);
+            }
+        }
+        else if (File.Exists(targetSceneObj)) File.Delete(targetSceneObj);
+        Directory.CreateDirectory(targetSceneObj);
+        foreach (var child in Directory.EnumerateDirectories(sourceSceneObj))
+        {
+            var name = Path.GetFileName(child);
+            // TAOM ships an editor-only SceneObj\Backups folder. It is a real directory in the downloaded
+            // package, and it has no runtime scene. Leaving it out also keeps an old diagnostic shadow from
+            // blocking the whole module when that folder already exists as a real directory.
+            if (name.Equals("Main_map", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Backups", StringComparison.OrdinalIgnoreCase)) continue;
+            Junction.Create(Path.Combine(targetSceneObj, name), child);
+        }
+        Junction.Create(Path.Combine(targetSceneObj, "Main_map"), e.HeadlessMapPath!);
+    }
+
+    private static void ReplaceShadowJunction(string path, string target)
+    {
+        if (Junction.IsJunction(path)) Junction.Remove(path);
+        else if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        else if (File.Exists(path)) File.Delete(path);
+        Junction.Create(path, target);
     }
 
     private static State LoadState(string overlayRoot)

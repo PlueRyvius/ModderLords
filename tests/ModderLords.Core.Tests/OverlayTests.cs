@@ -188,4 +188,35 @@ public sealed class OverlayTests : IDisposable
         Assert.Contains(result.Warnings, w => w.Contains("real folder"));
         Assert.False(Junction.IsJunction(Path.Combine(_engineModules, "Taken")));
     }
+
+    [Fact]
+    public void Headless_projection_excludes_client_assets_and_repoints_the_map()
+    {
+        var mod = MakeMod("Projected", serverBin: false, clientOnlyTags: true);
+        Directory.CreateDirectory(Path.Combine(mod.FolderPath, "AssetPackages"));
+        File.WriteAllText(Path.Combine(mod.FolderPath, "AssetPackages", "client.tpac"), "client");
+        Directory.CreateDirectory(Path.Combine(mod.FolderPath, "SceneObj", "Main_map"));
+        Directory.CreateDirectory(Path.Combine(mod.FolderPath, "SceneObj", "Backups"));
+        File.WriteAllText(Path.Combine(mod.FolderPath, "SceneObj", "Main_map", "scene.xscene"), "client-scene");
+
+        var generatedAssets = Path.Combine(_root, "generated", "DsAssetPackages");
+        var generatedMap = Path.Combine(_root, "generated", "Main_map");
+        Directory.CreateDirectory(generatedAssets);
+        Directory.CreateDirectory(generatedMap);
+        File.WriteAllText(Path.Combine(generatedAssets, "server.tpac"), "server");
+        File.WriteAllText(Path.Combine(generatedMap, "modderlords-map.xml"), "<map />");
+
+        var plan = OverlayPlanner.Plan(_overlay, _engineModules, [new ModSelection(mod, ServerRole.Run)],
+            headlessAssetPaths: new Dictionary<string, string> { [mod.Id] = generatedAssets },
+            headlessMapPaths: new Dictionary<string, string> { [mod.Id] = generatedMap });
+        var result = new OverlayApplier().Apply(plan);
+        Assert.Empty(result.Warnings);
+
+        var shadow = plan.Entries.Single().ShadowPath!;
+        Assert.False(Directory.Exists(Path.Combine(shadow, "AssetPackages")));
+        Assert.True(Junction.PointsTo(Path.Combine(shadow, "DsAssetPackages"), generatedAssets));
+        Assert.True(Junction.PointsTo(Path.Combine(shadow, "SceneObj", "Main_map"), generatedMap));
+        Assert.False(Directory.Exists(Path.Combine(shadow, "SceneObj", "Backups")));
+        Assert.True(File.Exists(Path.Combine(mod.FolderPath, "AssetPackages", "client.tpac")));
+    }
 }

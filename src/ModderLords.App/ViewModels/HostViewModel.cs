@@ -16,6 +16,7 @@ using ModderLords.Core.Perf;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
 using ModderLords.Coop.Saves;
+using ModderLords.Coop.Config;
 
 namespace ModderLords.App.ViewModels;
 
@@ -162,6 +163,7 @@ public partial class HostViewModel : ObservableObject
         Saves.Clear();
         foreach (var h in SaveHeaderReader.ReadAll(paths.SavesDir)) Saves.Add(new SaveRow { Header = h });
         SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(Profile.SaveName, StringComparison.OrdinalIgnoreCase));
+        RefreshClientSaves();
     }
 
     partial void OnSelectedSaveChanged(SaveRow? value)
@@ -174,10 +176,63 @@ public partial class HostViewModel : ObservableObject
     internal void UpdateSaveDiff()
     {
         if (SelectedSave is null || _prepared is null) { SaveDiff = SelectedSave is null ? "Pick a save, or type a new name to start a fresh world." : ""; return; }
-        var diffs = SaveHeaderReader.Compare(SelectedSave.Header, LaunchSession.PlannedCommunityVersions(_prepared));
-        SaveDiff = diffs.Count == 0
-            ? "Save and profile agree on every community module."
-            : "The engine will load this save anyway, with a warning:\n" + string.Join("\n", diffs.Select(d => $"  {d.ModuleId}: {d.Kind} (save {d.SaveVersion ?? "-"}, now {d.CurrentVersion ?? "-"})"));
+        // Added/removed modules and a version bump are not the same thing, and saying "with a warning" for both
+        // understates the case that actually stalls a load. Same severity split the CLI reports.
+        var r = SaveModuleCheck.Compare(SelectedSave.Header, LaunchSession.PlannedCommunityVersions(_prepared));
+        if (r.IsClean) { SaveDiff = "Save and profile agree on every community module."; return; }
+
+        var lines = new List<string>();
+        if (r.IsSevere)
+        {
+            lines.Add("This world was not built with this module set. The engine will force the load and the campaign may stall while the world initialises.");
+            if (r.Removed.Count > 0) lines.Add("  missing now: " + string.Join(", ", r.Removed));
+            if (r.Added.Count > 0) lines.Add("  new in this profile: " + string.Join(", ", r.Added));
+            lines.Add("  To host these mods, start a campaign in the game with them and import that save.");
+        }
+        foreach (var d in r.VersionChanges) lines.Add($"  {d.ModuleId}: version changed (save {d.SaveVersion ?? "-"}, now {d.CurrentVersion ?? "-"})");
+        SaveDiff = string.Join("\n", lines);
+    }
+
+    /// <summary>The player's own saves, for seeding the server with a world built by the real game (see SavePreparer.ImportFrom).</summary>
+    public ObservableCollection<SaveRow> ClientSaves { get; } = new();
+
+    [ObservableProperty] private SaveRow? _selectedClientSave;
+
+    [RelayCommand]
+    internal void RefreshClientSaves()
+    {
+        ClientSaves.Clear();
+        try { foreach (var h in SavePreparer.ClientSaves()) ClientSaves.Add(new SaveRow { Header = h }); }
+        catch (Exception ex) { AddLine(LogCategory.Tool, "[ModderLords] could not read the game's saves: " + ex.Message); }
+    }
+
+    [RelayCommand]
+    private void ImportClientSave()
+    {
+        if (SelectedClientSave is null) { Status = "Pick one of the game's saves to import."; return; }
+        try
+        {
+            var paths = LaunchSession.ResolvePaths(Profile);
+            var name = SelectedClientSave.Name;
+            var exists = SavePreparer.Exists(paths, name);
+            // Replacing a hosted world is not something to do on a single click without saying so.
+            if (exists && MessageBox.Show(
+                    $"The server already has a save called '{name}'. Replace it?\n\nThe existing one is kept alongside it, not deleted.",
+                    "Import save", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            var r = SavePreparer.ImportFrom(SelectedClientSave.Header.Path, paths, name, overwrite: exists);
+            foreach (var w in r.Warnings) AddLine(LogCategory.Warning, "[ModderLords] " + w);
+            AddLine(LogCategory.Tool, $"[ModderLords] imported '{name}' into {paths.SavesDir}");
+            RefreshSaves(paths);
+            SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            Status = $"Imported save '{name}'";
+        }
+        catch (Exception ex)
+        {
+            AddLine(LogCategory.Error, "[ModderLords] import failed: " + ex.Message);
+            Status = "Import failed: " + ex.Message;
+        }
     }
 
     // ---- drift / resync / gameplay --------------------------------------------------------------------
@@ -266,8 +321,22 @@ public partial class HostViewModel : ObservableObject
         var launchProfile = ProfileStore.Snapshot(Profile);
         Console.Clear();
         Status = "Checking…";
+        var autoTaomCreate = false;
         try
         {
+            var profileModuleIds = launchProfile.EnabledMods.Select(m => m.Id).ToList();
+            if (TaomLaunchPolicy.IsTaom(profileModuleIds))
+            {
+                if (string.IsNullOrWhiteSpace(launchProfile.SaveName))
+                {
+                    launchProfile.SaveName = "taom_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    Profile.SaveName = launchProfile.SaveName;
+                    ProfileStore.Save(Profile);
+                    AddLine(LogCategory.Tool, $"[ModderLords] no TAOM save was selected; creating '{launchProfile.SaveName}' automatically");
+                }
+                var taomPaths = LaunchSession.ResolvePaths(launchProfile);
+                autoTaomCreate = !SavePreparer.Exists(taomPaths, launchProfile.SaveName);
+            }
             var pre = await Task.Run(() =>
             {
                 var paths = LaunchSession.ResolvePaths(launchProfile);
@@ -282,7 +351,7 @@ public partial class HostViewModel : ObservableObject
             }
 
             Status = "Preparing…";
-            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile));
+            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowTaomWorldCreation: autoTaomCreate));
             _prepared = prepared;
             // Preparing can take long enough for the user to save more edits. Merge observations into
             // the latest saved document instead of overwriting it with the launch snapshot.
@@ -305,6 +374,38 @@ public partial class HostViewModel : ObservableObject
             _pending.Clear();
             _totalDropped = 0;
 
+            if (autoTaomCreate)
+            {
+                Status = $"Creating TAOM world '{launchProfile.SaveName}'…";
+                AddLine(LogCategory.Milestone, $"[ModderLords] creating TAOM world '{launchProfile.SaveName}' before starting the server");
+                // The creation phase must start with no configured save. Otherwise a stale server-config.json can
+                // make the official host begin loading an older campaign before the creation hook gets control.
+                ServerConfig.Write(prepared.Paths, "", launchProfile.Server);
+                using var creation = EngineProcess.Start(LaunchSession.CreateWorldPlan(prepared, launchProfile.SaveName));
+                creation.LineReceived += line =>
+                {
+                    if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase) ||
+                        line.Text.Contains("phase=", StringComparison.OrdinalIgnoreCase))
+                        Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModderLords] " + line.Text));
+                };
+                // The compat module normally exits at the same deadline. Keep a launcher-side watchdog as well so
+                // a native hang cannot leave a half-started creation process behind indefinitely.
+                var creationExit = creation.Exited;
+                var watchdog = Task.Delay(TimeSpan.FromSeconds(LaunchSession.DefaultCreateWorldTimeoutSeconds + 30));
+                var completed = await Task.WhenAny(creationExit, watchdog);
+                var creationCode = completed == creationExit
+                    ? await creationExit
+                    : await creation.StopAsync(TimeSpan.FromSeconds(20));
+                if (completed != creationExit)
+                    AddLine(LogCategory.Error, "[ModderLords] TAOM world creation exceeded its 15-minute limit; the creation process was stopped");
+                if (creationCode != 11 || !SavePreparer.Exists(prepared.Paths, launchProfile.SaveName))
+                    throw new InvalidOperationException($"TAOM world creation stopped with exit code {creationCode}; no usable save was written.");
+                AddLine(LogCategory.Milestone, $"[ModderLords] TAOM world '{launchProfile.SaveName}' saved; starting the server");
+                prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile));
+                _prepared = prepared;
+                foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
+            }
+
             _engine = EngineProcess.Start(prepared.Plan);
             RecordRunningSession(prepared, launchProfile);
             Performance.SessionStarted();
@@ -317,6 +418,10 @@ public partial class HostViewModel : ObservableObject
                 _resources.Start();
             }
             Status = $"Engine pid {_engine.ProcessId}, loading…";
+            // A load that repeats one state forever produces no error and no exit. Say so instead of looking healthy.
+            // The quiet period is per profile: a heavy mod can load for hours without anything being wrong.
+            var stall = new LoadStallDetector(_engine.StartedAt,
+                launchProfile.StallWarningSeconds is { } secs ? TimeSpan.FromSeconds(secs) : null);
             LiveSettings.Log ??= s => Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModderLords] " + s));
             LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, launchProfile.SettingsSync, launchProfile.Name);
             _engine.LineReceived += line =>
@@ -334,6 +439,11 @@ public partial class HostViewModel : ObservableObject
                     _pendingPerf.Enqueue(sample);
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
                     Application.Current.Dispatcher.BeginInvoke(() => Status = "SERVING, waiting for clients");
+                // LineReceived runs on the stream-reader thread, so this has to hop to the dispatcher like the
+                // SERVING line above; AddLine touches an ObservableCollection a CollectionView is bound to. Fires at
+                // most once per launch, so BeginInvoke here costs nothing and does not need the batched queue.
+                if (stall.Observe(line.Text, line.At) is { } warning)
+                    Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Warning, "[ModderLords] " + warning));
             };
             var code = await _engine.Exited;
             IsRunning = false;
@@ -640,4 +750,3 @@ public partial class HostViewModel : ObservableObject
         if (_engine is { IsRunning: true }) await _engine.StopAsync(TimeSpan.FromSeconds(20));
     }
 }
-

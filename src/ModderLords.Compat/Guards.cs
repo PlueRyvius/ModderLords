@@ -17,6 +17,58 @@ internal static class Guards
 {
     private static readonly HashSet<string> Announced = new HashSet<string>(StringComparer.Ordinal);
 
+    /// <summary>
+    /// How many times in a row the same inquiry may be auto-answered before the run is abandoned. 0 disables the cap.
+    ///
+    /// This exists because the guards turned a crash into a hang. Measured 2026-09-08: a TAOM server threw the same
+    /// NullReferenceException inside Campaign.LoadMapScene on every tick; TAOM's handler raised an inquiry; this
+    /// class answered it; the tick returned normally; the state machine re-entered and did it again -- 159,872 times
+    /// over 2h15m, with no error, no exit and no progress past 81 seconds. Answering an inquiry so a mod's callback
+    /// can continue is right; answering the same one forever is just hiding a failure.
+    ///
+    /// Deliberately generous, and keyed on the inquiry repeating CONSECUTIVELY, so a busy server answering many
+    /// different prompts over hours never trips it.
+    /// </summary>
+    private static readonly int InquiryLimit = ReadLimit();
+
+    private static int ReadLimit()
+    {
+        try
+        {
+            var raw = Environment.GetEnvironmentVariable("MODDERLORDS_INQUIRY_LIMIT");
+            if (!string.IsNullOrWhiteSpace(raw) && int.TryParse(raw.Trim(), out var n) && n >= 0) return n;
+        }
+        catch { }
+        return 500;
+    }
+
+    private static string _lastInquiry = "";
+    private static int _sameInquiryCount;
+    private static readonly object InquiryLock = new object();
+
+    /// <summary>
+    /// Counts consecutive identical inquiries and ends the run when the cap is reached. Exit code 3 ("fatal error"),
+    /// because that is what this is: a failure that was being answered instead of reported.
+    /// </summary>
+    private static void CountInquiry(string key)
+    {
+        if (InquiryLimit <= 0) return;
+        int count;
+        lock (InquiryLock)
+        {
+            if (key == _lastInquiry) _sameInquiryCount++;
+            else { _lastInquiry = key; _sameInquiryCount = 1; }
+            count = _sameInquiryCount;
+        }
+        if (count != InquiryLimit) return;
+
+        Log.Error($"the same prompt has been auto-answered {count} times in a row: {key}");
+        Log.Error("the server is repeating a failure rather than making progress, so it is being stopped instead of "
+                + "looping. The cause is the last exception above this line. Set MODDERLORDS_INQUIRY_LIMIT=0 to let it run anyway.");
+        try { Console.Out.Flush(); } catch { }
+        Environment.Exit(3);
+    }
+
     public static string InstallAll(Harmony harmony)
     {
         var ok = new List<string>();
@@ -42,6 +94,23 @@ internal static class Guards
         // pass objects the server never builds (null visuals). Swallow them.
         Try("ShowTooltip", () => Prefix(harmony, "TaleWorlds.Library.InformationManager", "ShowTooltip", nameof(SkipWithLogPrefix)));
 
+        // Not a patch: Debug.DebugManager is a settable property, so the engine's own message boxes are handled by
+        // decorating the manager DedicatedServer.Core installed rather than by rewriting anything. See
+        // HeadlessDebugManager for why exactly one member is intercepted.
+        Try("Debug.DebugManager", () =>
+        {
+            var wrapped = HeadlessDebugManager.Install();
+            if (wrapped is not null) Log.Info("decorating the installed IDebugManager (" + wrapped + ")");
+            return wrapped is not null;
+        });
+
+        // The asset-failure modals do not come through the managed manager at all; these do reach them.
+        Try("NativeAssertions", () =>
+        {
+            Log.Info("native assertions: " + HeadlessDebugManager.ReleaseNativeAssertions());
+            return true;
+        });
+
         return $"{ok.Count} active [{string.Join(", ", ok)}]" + (missing.Count > 0 ? $"; not installed [{string.Join(", ", missing)}]" : "");
     }
 
@@ -51,6 +120,7 @@ internal static class Guards
     public static bool MultiSelectionInquiryPrefix(object data)
     {
         Announce("ShowMultiSelectionInquiry");
+        CountInquiry("ShowMultiSelectionInquiry|" + Describe(data));
         try
         {
             var options = Traverse.Create(data).Property("InquiryElements").GetValue() as System.Collections.IList;
@@ -71,6 +141,7 @@ internal static class Guards
     public static bool TextInquiryPrefix(object textData)
     {
         Announce("ShowTextInquiry");
+        CountInquiry("ShowTextInquiry|" + Describe(textData));
         try
         {
             var affirmative = Traverse.Create(textData).Property("AffirmativeAction").GetValue() as Delegate;
@@ -86,6 +157,7 @@ internal static class Guards
     public static bool InquiryPrefix(object data)
     {
         Announce("ShowInquiry");
+        CountInquiry("ShowInquiry|" + Describe(data));
         try
         {
             var affirmative = Traverse.Create(data).Property("AffirmativeAction").GetValue() as Delegate;
@@ -93,6 +165,19 @@ internal static class Guards
         }
         catch (Exception ex) { Log.Error("inquiry auto-accept failed: " + ex.GetBaseException().Message); }
         return false;
+    }
+
+    /// <summary>The inquiry's title/text, for telling one repeating prompt from a series of different ones.</summary>
+    private static string Describe(object data)
+    {
+        try
+        {
+            var title = Traverse.Create(data).Property("TitleText").GetValue() as string;
+            var text = Traverse.Create(data).Property("Text").GetValue() as string;
+            var combined = ((title ?? "") + " / " + (text ?? "")).Trim();
+            return combined.Length > 1 ? combined : data.GetType().Name;
+        }
+        catch { return data.GetType().Name; }
     }
 
     public static bool SkipWithLogPrefix(MethodBase __originalMethod)
@@ -121,6 +206,9 @@ internal static class Guards
         var info = Harmony.GetPatchInfo(target);
         return info != null && info.Prefixes.Count > 0;
     }
+
+    /// <summary>The same once-per-(entry point, mod) logging, for guards that are not Harmony patches.</summary>
+    internal static void AnnounceExternal(string entryPoint) => Announce(entryPoint);
 
     /// <summary>Logs the first time each (entry point, calling mod assembly) pair is hit.</summary>
     private static void Announce(string entryPoint)

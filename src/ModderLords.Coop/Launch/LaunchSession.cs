@@ -24,6 +24,8 @@ namespace ModderLords.Coop.Launch;
 /// </summary>
 public sealed class LaunchSession
 {
+    public const int DefaultCreateWorldTimeoutSeconds = 900;
+
     public sealed record Prepared(
         ServerPaths Paths,
         ModuleCatalog Catalog,
@@ -36,6 +38,8 @@ public sealed class LaunchSession
         /// <summary>The engine-agnostic half of this launch, for the code shared with the client path.</summary>
         public ModuleSelectionResult Modules => new(Catalog, Selections, Order);
     }
+
+    public sealed record HeadlessContent(IReadOnlyDictionary<string, string> AssetPaths, IReadOnlyDictionary<string, string> MapPaths);
 
     /// <summary>Submodule class types that survive DependencyOnly, from the compat database (MCM's settings core when no DB ships).</summary>
     public static IReadOnlyCollection<string> KeepForDependencyOnly => CompatDb.Current.KeepForDependencyOnly();
@@ -96,7 +100,7 @@ public sealed class LaunchSession
     }
 
     /// <summary>Everything except starting the process. Applies the overlay and writes server-config.json.</summary>
-    public static Prepared Prepare(Profile profile, bool applySideEffects = true)
+    public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowTaomWorldCreation = false)
     {
         var messages = new List<string>();
         var paths = ResolvePaths(profile);
@@ -116,12 +120,28 @@ public sealed class LaunchSession
                 ". Download them and Rescan, or untick them. The imported list has been kept.");
         }
 
+        var taomSaveMessage = TaomLaunchPolicy.MessageFor(selections.Select(s => s.Module.Id), profile.SaveName,
+            name => SavePreparer.Exists(paths, name));
+        if (taomSaveMessage is not null)
+        {
+            var canCreate = allowTaomWorldCreation && TaomLaunchPolicy.HasCompleteRecipe(selections.Select(s => s.Module.Id)) &&
+                !string.IsNullOrWhiteSpace(profile.SaveName) && !SavePreparer.Exists(paths, profile.SaveName);
+            if (applySideEffects && !canCreate) throw new InvalidOperationException(taomSaveMessage);
+            if (canCreate) messages.Add("TAOM: this campaign will be created automatically before the server starts");
+            messages.Add("TAOM: " + taomSaveMessage);
+        }
+
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
-        var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList());
+        var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
+            policy: profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);
         messages.AddRange(order.Issues.Select(i => "order: " + i));
 
         var overlayRoot = ProfileStore.OverlayDirFor(profile.Name);
-        var overlayPlan = OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections);
+        var content = PrepareHeadlessContent(overlayRoot, selections, applySideEffects, messages);
+        var headlessAssets = content.AssetPaths;
+        var headlessMaps = content.MapPaths;
+        var overlayPlan = OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections,
+            headlessAssetPaths: headlessAssets, headlessMapPaths: headlessMaps);
         // The planner's warnings (a Run mod that declares itself client-only and reaches for the render stack) have to
         // reach the launch messages: the CLI prints plan notes itself, the app only ever sees this list.
         foreach (var e in overlayPlan.Entries)
@@ -129,6 +149,11 @@ public sealed class LaunchSession
                 messages.Add($"{e.Selection.Module.Id}: {n}");
 
         var extraEnv = new Dictionary<string, string>();
+        if (headlessMaps.TryGetValue("TAOM_Map", out var mapPath))
+        {
+            extraEnv["MODDERLORDS_HEADLESS_MAP"] = Path.Combine(mapPath, "modderlords-map.xml");
+            extraEnv["MODDERLORDS_HEADLESS_MAP_MODULE"] = "TAOM_Map";
+        }
         if (selections.Count > 0)
         {
             var hook = HookSetup.LocateHook();
@@ -166,14 +191,23 @@ public sealed class LaunchSession
                 if (pm is not null) pm.LastVersion = s.Module.Version;
             }
 
+            // Always called, both ways: switching the override off has to put SandBox's original cache back.
+            var cache = DistanceCacheOverride.Sync(paths, selections.Select(s => s.Module).ToList(), profile.UseModDistanceCache);
+            messages.AddRange(cache.Messages);
+
             ServerConfig.Write(paths, profile.SaveName, profile.Server);
             WriteRecipes(profile, selections, messages);
-            if (!string.IsNullOrWhiteSpace(profile.SaveName))
+            if (!string.IsNullOrWhiteSpace(profile.SaveName) && !(allowTaomWorldCreation &&
+                TaomLaunchPolicy.HasCompleteRecipe(selections.Select(s => s.Module.Id)) && !SavePreparer.Exists(paths, profile.SaveName)))
             {
                 var prep = SavePreparer.EnsureExists(paths, profile.SaveName);
                 if (prep.CreatedFromTemplate) messages.Add($"save '{profile.SaveName}' did not exist; created a fresh world from {prep.TemplateUsed}");
             }
         }
+
+        // Pre-flight: does the world we are about to load actually match the modules we are about to run? Warn only —
+        // outside applySideEffects too, so --dry-run reports it without the save having to be created first.
+        messages.AddRange(SaveModuleCheck.MessagesForLaunch(paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections)));
 
         var plan = new LaunchPlan
         {
@@ -187,6 +221,72 @@ public sealed class LaunchSession
             ExtraEnvironment = extraEnv,
         };
         return new Prepared(paths, catalog, selections, order, overlayPlan, plan, messages);
+    }
+
+    /// <summary>Stages safe server assets and a render-free map under the profile overlay. It never writes into an
+    /// installed mod or the official server package.</summary>
+    public static HeadlessContent PrepareHeadlessContent(string overlayRoot, IReadOnlyList<ModSelection> selections,
+        bool applySideEffects, List<string> messages)
+    {
+        var assets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var maps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!applySideEffects || !TaomLaunchPolicy.IsTaom(selections.Select(s => s.Module.Id)))
+            return new HeadlessContent(assets, maps);
+        var generatedRoot = Path.Combine(overlayRoot, ".generated");
+        try
+        {
+            foreach (var selection in selections.Where(s => TaomLaunchPolicy.NeedsPreparation(s.Module.Id)))
+            {
+                var projection = HeadlessAssetProjection.Prepare(selection.Module.Id, selection.Module.FolderPath, generatedRoot);
+                if (projection is not null)
+                {
+                    assets[selection.Module.Id] = projection.OutputPath;
+                    messages.Add(projection.Reused
+                        ? $"TAOM: reusing prepared server assets for {selection.Module.Id}"
+                        : $"TAOM: prepared {projection.AssetCount} simulation assets for {selection.Module.Id} ({projection.Bytes / 1024 / 1024} MB)");
+                }
+            }
+
+            var map = selections.FirstOrDefault(s => s.Module.Id.Equals("TAOM_Map", StringComparison.OrdinalIgnoreCase));
+            if (map is not null)
+            {
+                var source = Path.Combine(map.Module.FolderPath, "SceneObj", "Main_map");
+                var output = Path.Combine(generatedRoot, "TAOM_Map", "Main_map");
+                var projection = HeadlessMapProjection.Prepare(source, output);
+                maps[map.Module.Id] = projection.OutputPath;
+                messages.Add(projection.Reused ? "TAOM: reusing prepared server map" : "TAOM: prepared a private headless map");
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("TAOM server preparation failed: " + ex.Message, ex);
+        }
+        return new HeadlessContent(assets, maps);
+    }
+
+    /// <summary>Creates the first phase of an automatic TAOM launch. It generates the campaign and exits; the caller
+    /// must start the ordinary plan again after the generated save appears.</summary>
+    public static LaunchPlan CreateWorldPlan(Prepared prepared, string saveName, int timeoutSeconds = DefaultCreateWorldTimeoutSeconds)
+    {
+        SavePreparer.ValidateSaveName(saveName);
+        if (SavePreparer.Exists(prepared.Paths, saveName))
+            throw new InvalidOperationException($"Save '{saveName}' already exists; automatic world creation will not overwrite it.");
+        var env = prepared.Plan.ExtraEnvironment.ToDictionary(k => k.Key, v => v.Value, StringComparer.OrdinalIgnoreCase);
+        env["MODDERLORDS_CREATE_WORLD"] = saveName;
+        env["MODDERLORDS_CREATE_WORLD_TIMEOUT"] = timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        env["MODDERLORDS_CREATE_WORLD_LOG"] = Path.Combine(prepared.Paths.LogsDir,
+            $"worldcreate-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.log");
+        return new LaunchPlan
+        {
+            Paths = prepared.Plan.Paths,
+            ModuleIds = prepared.Plan.ModuleIds,
+            EnginePort = prepared.Plan.EnginePort,
+            Region = prepared.Plan.Region,
+            SaveName = null,
+            Password = null,
+            Visibility = null,
+            ExtraEnvironment = env,
+        };
     }
 
     public sealed record Drift(string ModuleId, string LastVersion, string CurrentVersion);
@@ -244,5 +344,13 @@ public sealed class LaunchSession
     }
 
     /// <summary>Planned community modules with the versions the server will advertise (for save diffs and client export).</summary>
-    public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(Prepared p) => p.Modules.Versions;
+    public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(Prepared p) => PlannedCommunityVersions(p.Selections);
+
+    /// <summary>The launcher's own bundled modules are added to every launch and are not part of anyone's world.</summary>
+    private static readonly IReadOnlySet<string> BundledIds =
+        new HashSet<string>(new[] { CompatModuleId, SyncModuleId }, StringComparer.OrdinalIgnoreCase);
+
+    public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(IReadOnlyList<ModSelection> selections) =>
+        selections.Where(s => !BundledIds.Contains(s.Module.Id))
+            .ToDictionary(s => s.Module.Id, s => s.Module.Version, StringComparer.OrdinalIgnoreCase);
 }

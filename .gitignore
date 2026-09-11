@@ -483,3 +483,7 @@ $RECYCLE.BIN/
 
 # Source folders that happen to be called Logs (the rule above is for runtime log output).
 !src/**/Logs/
+
+# Spike harness output: real server logs, tens of MB each.
+tools/spike/logs/
+tools/spike/results.md

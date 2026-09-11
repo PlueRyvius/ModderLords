@@ -80,6 +80,8 @@ $docsOut = Join-Path $out 'docs'
 New-Item -ItemType Directory -Path $docsOut -Force | Out-Null
 Copy-Item (Join-Path $root 'README.md') $docsOut -Force
 Copy-Item (Join-Path $root 'docs\ROADMAP.md') $docsOut -Force
+Copy-Item (Join-Path $root 'docs\VANILLA-WORLD-GENERATION.md') $docsOut -Force
+Copy-Item (Join-Path $root 'docs\TAOM-WORLD-GENERATION.md') $docsOut -Force
 if (Test-Path (Join-Path $root 'LICENSE')) { Copy-Item (Join-Path $root 'LICENSE') $out -Force }
 if (Test-Path (Join-Path $root 'THIRD-PARTY-NOTICES.md')) { Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.md') $docsOut -Force }
 

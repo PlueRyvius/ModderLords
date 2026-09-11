@@ -1,4 +1,4 @@
-﻿<Window x:Class="ModderLords.App.MainWindow"
+<Window x:Class="ModderLords.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:ModderLords.App.ViewModels"
@@ -122,7 +122,12 @@
                             <Button Content="Move down" Command="{Binding MoveDownCommand}" />
                             <Button Content="Refresh order" Command="{Binding RefreshPreviewCommand}" />
                             <Button Content="Use engine order" Command="{Binding UseEngineOrderCommand}"
-                                    ToolTip="Sort this list into the order the engine actually loads (shown on the right). Your own order is a preference; a dependency conflict discards it entirely." />
+                                    ToolTip="Sort this list into the order the engine actually loads (shown on the right). Only mods that a manifest forces to move are moved; the rest keep the place you gave them." />
+                            <!-- The computed order is assembled from module metadata, and metadata is sometimes wrong
+                                 (TAOM_Map declares that TAOM loads before it, contradicting its own authors' published
+                                 order). No dependency logic covers every case, so the user has to be able to win. -->
+                            <CheckBox Content="My order wins" IsChecked="{Binding ManualLoadOrder}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                      ToolTip="Use this list exactly as written, even where a mod's manifest declares a different order. Conflicts are still listed under the order preview, so you can see what you are overriding. Leave off unless a mod's declared order is wrong." />
                             <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{DynamicResource MutedForeground}"
                                        ToolTip="Frameworks declare that the game's own modules load after them, so they sit above the game and cannot be moved below it. The game's own modules are placed by the engine."
                                        Text="Drag to reorder within Frameworks / Game / Mods" />
@@ -281,8 +286,29 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <TextBlock Text="Save to host:" VerticalAlignment="Center" />
                         <TextBox Width="260" Margin="6,0" Text="{Binding Profile.SaveName, UpdateSourceTrigger=PropertyChanged}" />
-                        <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource MutedForeground}" Text="Pick one below or type a new name; a new name starts a fresh world from default_new_game.sav." />
+                        <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource MutedForeground}" Text="Pick one below, or type a new name to start from default_new_game.sav — which is a vanilla world, with none of this profile's mods in it." />
                     </StackPanel>
+                    <!-- Seeding from the game: the server can only ever create a vanilla world, so a world containing
+                         this profile's mods has to be started in Bannerlord itself and brought across. -->
+                    <Expander DockPanel.Dock="Bottom" Header="Import a world from the game" Margin="0,6,0,0">
+                        <DockPanel Margin="0,6,0,0">
+                            <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}"
+                                       Text="The server cannot build a world with mods in it. Start a campaign in Bannerlord with this profile's mods (Play), then import that save here to host it." />
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Content="Refresh" Command="{Binding RefreshClientSavesCommand}" Padding="10,3" />
+                                <Button Content="Import selected" Command="{Binding ImportClientSaveCommand}" Margin="6,0,0,0" Padding="10,3" />
+                            </StackPanel>
+                            <DataGrid Height="120" ItemsSource="{Binding ClientSaves}" SelectedItem="{Binding SelectedClientSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Save" Binding="{Binding Name}" Width="200" />
+                                    <DataGridTextColumn Header="Character" Binding="{Binding Character}" Width="120" />
+                                    <DataGridTextColumn Header="Day" Binding="{Binding Day}" Width="60" />
+                                    <DataGridTextColumn Header="Written" Binding="{Binding Written}" Width="130" />
+                                    <DataGridTextColumn Header="Community modules in save" Binding="{Binding Mods}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Expander>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" MinHeight="80" />
@@ -290,7 +316,7 @@
                             <RowDefinition x:Name="SaveDiffRow" Height="110" MinHeight="60" />
                         </Grid.RowDefinitions>
                         <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,2" />
-                        <TextBox Grid.Row="2" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" />
+                        <TextBox Grid.Row="2" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
                     <DataGrid Grid.Row="0" ItemsSource="{Binding Saves}" SelectedItem="{Binding SelectedSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Save" Binding="{Binding Name}" Width="200" />
@@ -309,7 +335,7 @@
             <TabItem Header="Server" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
                     <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,10" />
-                    <UniformGrid Columns="2" Rows="14">
+                    <UniformGrid Columns="2" Rows="16">
                         <TextBlock Text="Join port (UDP, forward this)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.JoinPort}" />
                         <TextBlock Text="Password (empty = open)" VerticalAlignment="Center" />
@@ -324,6 +350,12 @@
                         <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" />
                         <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compatModderLords.Compat from the launcher folder into their game Modules folder) and enable it." />
                         <CheckBox IsChecked="{Binding Profile.SettingsSync}" HorizontalAlignment="Left" />
+                        <!-- The one thing this launcher writes inside the DedicatedServer package, so it is opt-in and
+                             says so. Turning it off restores SandBox's file on the next launch. -->
+                        <TextBlock Text="Use a map mod's distance cache" VerticalAlignment="Center" ToolTip="A map mod replaces the campaign map but the server always reads SandBox's settlement distance cache, which was built for the vanilla map — the mismatch crashes world loading in a loop that never ends. This replaces that file with the one your map mod ships (TAOM_Map ships a rebuilt 10 MB cache). It is the only file the launcher writes inside the DedicatedServer folder; the original is backed up and put back when you untick this. Leave off unless you are running a map-replacing mod." />
+                        <CheckBox IsChecked="{Binding Profile.UseModDistanceCache}" HorizontalAlignment="Left" />
+                        <TextBlock Text="Warn if loading stalls (seconds)" VerticalAlignment="Center" ToolTip="How long the launch console waits with no loading progress before saying so. Empty uses the default (5 minutes); 0 turns the warning off. Heavy mods can legitimately load for a very long time — TAOM's authors quote up to two hours — so raise it or set 0 for those rather than being nagged." />
+                        <TextBox Text="{Binding Profile.StallWarningSeconds, TargetNullValue=''}" />
                         <TextBlock Text="Server log file" VerticalAlignment="Center" />
                         <CheckBox IsChecked="{Binding Profile.Server.LogFile}" HorizontalAlignment="Left" />
                         <TextBlock Text="Engine port / region" VerticalAlignment="Center" />

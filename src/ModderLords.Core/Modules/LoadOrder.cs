@@ -48,7 +48,21 @@ public static class LoadOrder
 
     public sealed record Result(IReadOnlyList<string> ModuleIds, IReadOnlyList<string> Issues);
 
-    public static Result Compute(IReadOnlyList<DiscoveredModule> stock, IReadOnlyList<DiscoveredModule> community, IReadOnlyList<string>? preferredOrder = null, Profile? profile = null)
+    /// <summary>
+    /// How much authority the computed order has over the user's. The order this class produces is assembled from
+    /// module metadata, and metadata is sometimes simply wrong -- TAOM_Map declares that TAOM loads before it, which
+    /// contradicts the load order TAOM's own authors publish. Dependency logic cannot cover every such case, so the
+    /// user must be able to overrule it; what does not change is that the conflicts are still reported either way.
+    /// </summary>
+    public enum OrderPolicy
+    {
+        /// <summary>Move mods when a manifest says they must move, and say so. The default.</summary>
+        Suggest,
+        /// <summary>Take the requested order verbatim. Conflicts become warnings instead of moves.</summary>
+        Manual,
+    }
+
+    public static Result Compute(IReadOnlyList<DiscoveredModule> stock, IReadOnlyList<DiscoveredModule> community, IReadOnlyList<string>? preferredOrder = null, Profile? profile = null, OrderPolicy policy = OrderPolicy.Suggest)
     {
         profile ??= Profile.DedicatedServer;
         var issues = new List<string>();
@@ -84,10 +98,23 @@ public static class LoadOrder
         if (preferredOrder is { Count: > 0 })
         {
             var pref = preferredOrder.Where(id => communityIds.Contains(id)).ToList();
+            // Anything the preference does not mention keeps the sorter's relative position, at the end.
             var wanted = communitySorted.OrderBy(id => { var i = pref.FindIndex(p => p.Equals(id, StringComparison.OrdinalIgnoreCase)); return i < 0 ? int.MaxValue : i; }).ToList();
-            communitySorted = SortRespectingPreference(wanted, community, communitySorted);
-            foreach (var conflict in DependencyConflicts(wanted, community))
-                issues.Add("moved to satisfy a dependency: " + conflict);
+            var conflicts = DependencyConflicts(wanted, community);
+            if (policy == OrderPolicy.Manual)
+            {
+                // The user's order stands. Still say exactly what a manifest disagrees with, so an override is an
+                // informed one rather than a silent one.
+                communitySorted = wanted;
+                foreach (var conflict in conflicts)
+                    issues.Add("kept your order despite a declared dependency: " + conflict);
+            }
+            else
+            {
+                communitySorted = SortRespectingPreference(wanted, community, communitySorted);
+                foreach (var conflict in conflicts)
+                    issues.Add("moved to satisfy a dependency: " + conflict);
+            }
         }
 
         // Whole-set topological order from BUTR (this is what lets frameworks that declare "load Native after me",
