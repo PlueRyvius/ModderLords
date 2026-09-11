@@ -12,12 +12,27 @@ public static class TaomLaunchPolicy
         "TAOM", "TAOM_Map",
     };
 
+    private static readonly HashSet<string> PreparationIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LOTRLOME_Armory", "TAOM", "TAOM_Map",
+    };
+
     public static bool IsTaom(IEnumerable<string> moduleIds) => moduleIds.Any(TaomIds.Contains);
+    public static bool NeedsPreparation(string moduleId) => PreparationIds.Contains(moduleId);
+    public static bool HasCompleteRecipe(IEnumerable<string> moduleIds)
+    {
+        var ids = moduleIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return ids.Contains("TAOM") && ids.Contains("TAOM_Map") && ids.Contains("LOTRLOME_Armory");
+    }
 
     /// <summary>Returns a plain-language blocker, or null when the selected save is usable.</summary>
     public static string? MessageFor(IEnumerable<string> moduleIds, string? saveName, Func<string, bool> saveExists)
     {
-        if (!IsTaom(moduleIds)) return null;
+        var ids = moduleIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!IsTaom(ids)) return null;
+        var missing = new[] { "TAOM", "TAOM_Map", "LOTRLOME_Armory" }.Where(id => !ids.Contains(id)).ToList();
+        if (missing.Count > 0)
+            return "TAOM hosting needs TAOM, TAOM_Map, and LOTRLOME_Armory enabled. Missing: " + string.Join(", ", missing) + ".";
         if (string.IsNullOrWhiteSpace(saveName))
             return "TAOM needs a campaign save created with TAOM loaded. Create the campaign in Bannerlord, then use Import client save.";
         if (!saveExists(saveName))

@@ -6,17 +6,18 @@ You do not need to read or run this document. It records a maintainer-only proof
 the game's `AssetPackages` into `DsAssetPackages`, do not replace files in the installed server, and do not run the
 PowerShell/Python commands below as part of a normal install.
 
-In release `v0.9.2`, the Host button is one-click for a vanilla fresh world and for loading an existing compatible
-save. A TAOM host should install Bannerlord Coop and the TAOM mod pack normally, then select a TAOM save in the Saves
-tab. If the save only exists in the game's own save folder, use **Import client save** first. Fresh TAOM generation is
-not wired into the release launcher yet; the commands in this file are for reproducing the engineering proof only.
+In the launcher build containing the automatic TAOM preparation, the Host button handles both cases. Install Bannerlord
+Coop and the TAOM mod pack normally, select **TAOM**, **TAOM_Map** and **LOTRLOME_Armory**, and leave the save name
+empty for a new campaign. The launcher creates the campaign in its private data folder, then starts a separate server
+process against that save. To use an existing campaign, select it in the Saves tab or use **Import client save** when it
+only exists in the game's own save folder. No user action involving `AssetPackages` or `DsAssetPackages` is required.
 
 The missing-animation lines that appear in the proof console are headless diagnostic warnings. They do not mean that a
 user should fetch or copy an asset folder, and they do not prove that every client animation or battle visual works on
 the server. They are retained in the diagnostic log so unsupported content is visible to maintainers.
 
 The isolated experiment generated two distinct worlds directly in the dedicated server,
-then separate server processes loaded each exact save and reached `SERVING` on TAOM's map.
+then a separate server process loaded the first exact automatic save and reached `SERVING` on TAOM's map.
 This does not test client joining or gameplay synchronization. The vanilla checkpoint is
 [PR #44](https://github.com/PlueRyvius/ModderLords/pull/44).
 
@@ -45,9 +46,9 @@ This does not test client joining or gameplay synchronization. The vanilla check
    `DedicatedServer.Core` headless scene type. Creation and reload both need this map.
 
 The runtime still uses the official headless scene initialization. No installed game,
-server or Coop DLL is rewritten. The map files are replaced only inside the diagnostic
-package for a run, with per-run backups restored after process cleanup. Normal launches
-do not enable the map experiment. Original saves, profiles and distance caches are preserved.
+server or Coop DLL is rewritten. The map files are projected into a private overlay for
+the TAOM launch and reused by later starts; vanilla launches do not create this projection.
+Original saves, profiles and distance caches are preserved.
 
 ## Reproduce in a fresh workspace
 
@@ -102,6 +103,11 @@ Tested Native version: `v1.4.8.118999`; CoopNightly `v0.1.5.0`; TAOM/TAOM_Map
 - `taom_real_map_15`: 10,870,050-byte save, exit 11; separate exact reload reached
   `SERVING` and exited 0. Its world ID `eu5K0rSdDdjR` differs from the first world's
   `olFFXMs0JSOp`; the preserved save hashes also differ.
+- The automatic launcher path was then exercised twice with fresh names:
+  `auto_taom_20260910e` and `auto_taom_20260910f` each reached `map-ready`, wrote a
+  new save and exited 11; separate reloads of both reached `SERVING` and exited 0.
+  Their logs and saves are retained under the local `_taom-world-proof` workspace,
+  with the machine's client `AssetPackages` absent from the server overlay.
 - Six Python tests cover opaque asset preservation, bad package rejection, map projection,
   bounds extraction and refusal to overwrite outputs. The 328 core tests pass.
 - Live existing-name and create/load conflict checks both returned exit 2 with the server

@@ -6,6 +6,8 @@ using System.Security.Cryptography;
 using System.Xml;
 using HarmonyLib;
 using TaleWorlds.Library;
+using TaleWorlds.Engine;
+using IoPath = System.IO.Path;
 
 namespace ModderLords.Compat;
 
@@ -16,6 +18,7 @@ internal static class HeadlessMapExperiment
     private static float _height;
     private static bool _installed;
     private static Type? _headlessType;
+    private static string _mapModuleId = "TAOM_Map";
 
     internal static void Install()
     {
@@ -23,15 +26,11 @@ internal static class HeadlessMapExperiment
         var path = Environment.GetEnvironmentVariable("MODDERLORDS_HEADLESS_MAP");
         if (string.IsNullOrEmpty(path)) return;
         if (!ServerDetect.IsDedicatedServer) throw new InvalidOperationException("Headless map requires a dedicated server");
-        var expected = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(),
-            "../../Modules/DedicatedServer.Windows/SceneObj/Main_map/modderlords-map.xml"));
-        if (!string.Equals(Path.GetFullPath(path), expected, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Map metadata must describe the host's Main_map");
         var document = new XmlDocument();
         document.Load(path);
         var root = document.DocumentElement ?? throw new InvalidDataException("Missing map metadata");
         using (var sha = SHA256.Create())
-        using (var stream = File.OpenRead(Path.Combine(Path.GetDirectoryName(path), "navmesh.bin")))
+        using (var stream = File.OpenRead(IoPath.Combine(IoPath.GetDirectoryName(path)!, "navmesh.bin")))
         {
             var hash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
             if (hash != root.GetAttribute("navmesh-sha256")) throw new InvalidDataException("Headless map navmesh hash mismatch");
@@ -43,6 +42,9 @@ internal static class HeadlessMapExperiment
             throw new InvalidDataException("Invalid map dimensions");
         _min = new Vec2(min[0], min[1]); _max = new Vec2(max[0], max[1]);
         _height = max[2]; _size = new Vec2(size[0], size[1]);
+        _mapModuleId = Environment.GetEnvironmentVariable("MODDERLORDS_HEADLESS_MAP_MODULE") ?? "TAOM_Map";
+        if (_mapModuleId.Length == 0 || _mapModuleId.Contains(IoPath.DirectorySeparatorChar) || _mapModuleId.Contains(IoPath.AltDirectorySeparatorChar))
+            throw new InvalidDataException("Invalid headless map module id");
         var type = AccessTools.TypeByName("SandBox.MapScene") ?? throw new MissingMemberException("SandBox.MapScene");
         // The host implementation lives in DedicatedServer.Core, not in SandBox.
         _headlessType = AppDomain.CurrentDomain.GetAssemblies()
@@ -54,11 +56,14 @@ internal static class HeadlessMapExperiment
         var terrain = AccessTools.Method(type, "GetTerrainSize", Type.EmptyTypes);
         if (borders?.ReturnType != typeof(void) || terrain?.ReturnType != typeof(Vec2))
             throw new MissingMethodException("Unsupported headless map bounds signatures");
+        var read = AccessTools.Method(typeof(Scene), "Read", new[] { typeof(string), typeof(SceneInitializationData).MakeByRefType(), typeof(string) });
+        if (read?.ReturnType != typeof(void)) throw new MissingMethodException("Unsupported Scene.Read headless signature");
         var harmony = new Harmony("ModderLords.HeadlessMapExperiment");
         harmony.Patch(borders, prefix: new HarmonyMethod(typeof(HeadlessMapExperiment), nameof(Borders)) { priority = Priority.First });
         harmony.Patch(terrain, prefix: new HarmonyMethod(typeof(HeadlessMapExperiment), nameof(Size)) { priority = Priority.First });
+        harmony.Patch(read, prefix: new HarmonyMethod(typeof(HeadlessMapExperiment), nameof(Read)) { priority = Priority.First });
         _installed = true;
-        Log.Info($"headless-map: validated navmesh; borders={_min}..{_max}; height={_height}; terrain={_size}");
+        Log.Info($"headless-map: validated navmesh; module={_mapModuleId}; borders={_min}..{_max}; height={_height}; terrain={_size}");
     }
 
     private static float[] Numbers(string text, int count)
@@ -75,4 +80,11 @@ internal static class HeadlessMapExperiment
     }
     private static bool Size(object __instance, ref Vec2 __result)
     { if (__instance.GetType() != _headlessType) return true; __result = _size; return false; }
+
+    private static bool Read(Scene __instance, string sceneName, ref SceneInitializationData initData, string forcedAtmoName)
+    {
+        if (!sceneName.Equals("Main_map", StringComparison.OrdinalIgnoreCase)) return true;
+        __instance.Read(sceneName, _mapModuleId, ref initData, forcedAtmoName);
+        return false;
+    }
 }

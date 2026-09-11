@@ -7,6 +7,7 @@ using ModderLords.Core.Overlay;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
 using ModderLords.Coop.Saves;
+using ModderLords.Coop.Config;
 
 // Command-line driver (Phase 0/1). Commands:
 //   catalog  [--root <DedicatedServer>] [--source <dir>]...
@@ -224,10 +225,13 @@ switch (cmd)
 
         // Overlay first (it decides the junction paths the hook's search dirs point at), then the plan.
         OverlayPlan? overlayPlan = null;
+        var contentMessages = new List<string>();
+        var headlessContent = LaunchSession.PrepareHeadlessContent(overlayRoot, selections, !opts.ContainsKey("dry-run"), contentMessages);
         if (selections.Count > 0 && !opts.ContainsKey("dry-run"))
         {
-            overlayPlan = OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections);
-            if (ApplyOverlay(selections) is null) return 2;
+            overlayPlan = OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections,
+                headlessAssetPaths: headlessContent.AssetPaths, headlessMapPaths: headlessContent.MapPaths);
+            if (ApplyOverlay(selections, overlayPlan) is null) return 2;
         }
 
         // World creation: the compat module generates a campaign in-process and exits. Mutually exclusive
@@ -240,6 +244,11 @@ switch (cmd)
         }
 
         var extraEnv = new Dictionary<string, string>();
+        if (headlessContent.MapPaths.TryGetValue("TAOM_Map", out var headlessMapPath))
+        {
+            extraEnv["MODDERLORDS_HEADLESS_MAP"] = Path.Combine(headlessMapPath, "modderlords-map.xml");
+            extraEnv["MODDERLORDS_HEADLESS_MAP_MODULE"] = "TAOM_Map";
+        }
         if (createWorld is not null)
         {
             try { SavePreparer.ValidateSaveName(createWorld); }
@@ -293,6 +302,7 @@ switch (cmd)
         }
 
         Console.WriteLine("[ModderLords] launch plan");
+        foreach (var m in contentMessages) Console.WriteLine("[ModderLords] " + m);
         Console.Write(plan.Describe());
         if (opts.ContainsKey("dry-run")) return 0;
 
@@ -308,6 +318,12 @@ switch (cmd)
                 ? $"[ModderLords] save '{saveName}' did not exist; created a fresh world from {prep.TemplateUsed}"
                 : $"[ModderLords] hosting existing save {prep.SavePath}");
         }
+        // The official server chooses its save from server-config.json. Render the ad-hoc request explicitly so a
+        // previous run cannot make --create-world load an unrelated old campaign (or make --save load the wrong one).
+        var adHocSettings = ServerConfig.Read(paths.ServerConfigPath)?.Settings ?? new ServerSettings();
+        adHocSettings.JoinPort = plan.EnginePort;
+        if (diagnosticData is not null) adHocSettings.Steam = false;
+        ServerConfig.Write(paths, plan.SaveName ?? "", adHocSettings);
         return await RunEngine(plan, opts);
     }
 
@@ -316,9 +332,9 @@ switch (cmd)
         return 1;
 }
 
-OverlayApplier.ApplyResult? ApplyOverlay(List<ModSelection> selections)
+OverlayApplier.ApplyResult? ApplyOverlay(List<ModSelection> selections, OverlayPlan? planned = null)
 {
-    var plan = OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections);
+    var plan = planned ?? OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections);
     foreach (var e in plan.Entries)
     {
         Console.WriteLine($"[ModderLords] overlay {e.Selection.Module.Id} [{e.Selection.Role}] {e.Kind} <- {e.Selection.Module.FolderPath}");

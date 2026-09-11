@@ -20,7 +20,9 @@ public sealed record OverlayEntry(
     string EngineModulePath,
     string? ShadowPath,
     string BinTarget,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    string? HeadlessAssetPath = null,
+    string? HeadlessMapPath = null);
 
 public sealed record OverlayPlan(string OverlayRoot, string EngineModulesRoot, IReadOnlyList<OverlayEntry> Entries);
 
@@ -32,7 +34,9 @@ public sealed record OverlayPlan(string OverlayRoot, string EngineModulesRoot, I
 public static class OverlayPlanner
 {
     public static OverlayPlan Plan(string overlayRoot, string engineModulesRoot, IEnumerable<ModSelection> selections,
-        Func<DiscoveredModule, ScanResult>? scan = null, Func<string, CompatRecord?>? record = null)
+        Func<DiscoveredModule, ScanResult>? scan = null, Func<string, CompatRecord?>? record = null,
+        IReadOnlyDictionary<string, string>? headlessAssetPaths = null,
+        IReadOnlyDictionary<string, string>? headlessMapPaths = null)
     {
         scan ??= AssemblyScan.Scan;
         record ??= CompatDb.Current.Find;
@@ -78,9 +82,16 @@ public static class OverlayPlanner
             }
             if (sel.Role == ServerRole.DependencyOnly) notes.Add("dependency-only: kept in the module list for the handshake, no code loaded");
 
-            var kind = (!manifestNeedsRewrite && (mod.HasServerBin || !mod.HasClientBin)) ? OverlayKind.DirectJunction : OverlayKind.Shadow;
+            string? headlessAssetPath = null;
+            string? headlessMapPath = null;
+            headlessAssetPaths?.TryGetValue(mod.Id, out headlessAssetPath);
+            headlessMapPaths?.TryGetValue(mod.Id, out headlessMapPath);
+            if (headlessAssetPath is not null) notes.Add("server simulation assets prepared in the private launch overlay");
+            if (headlessMapPath is not null) notes.Add("server map projection prepared in the private launch overlay");
+            var kind = (!manifestNeedsRewrite && headlessAssetPath is null && headlessMapPath is null &&
+                        (mod.HasServerBin || !mod.HasClientBin)) ? OverlayKind.DirectJunction : OverlayKind.Shadow;
             var shadow = kind == OverlayKind.Shadow ? Path.Combine(overlayRoot, mod.Id) : null;
-            entries.Add(new OverlayEntry(sel, kind, enginePath, shadow, binTarget, notes));
+            entries.Add(new OverlayEntry(sel, kind, enginePath, shadow, binTarget, notes, headlessAssetPath, headlessMapPath));
         }
         return new OverlayPlan(overlayRoot, engineModulesRoot, entries);
     }

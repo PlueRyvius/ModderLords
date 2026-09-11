@@ -13,7 +13,7 @@ public sealed class TaomLaunchPolicyTests
     [Fact]
     public void TaomRequiresAnExistingCampaign()
     {
-        var message = TaomLaunchPolicy.MessageFor(["TAOM", "TAOM_Map"], "new_world", _ => false);
+        var message = TaomLaunchPolicy.MessageFor(["TAOM", "TAOM_Map", "LOTRLOME_Armory"], "new_world", _ => false);
         Assert.Contains("was not found", message);
         Assert.Contains("Import client save", message);
     }
@@ -22,7 +22,7 @@ public sealed class TaomLaunchPolicyTests
     public void BlankTaomSaveIsRejectedWithoutTouchingTheFileSystem()
     {
         var called = false;
-        var message = TaomLaunchPolicy.MessageFor(["TAOM"], "", _ => { called = true; return true; });
+        var message = TaomLaunchPolicy.MessageFor(["TAOM", "TAOM_Map", "LOTRLOME_Armory"], "", _ => { called = true; return true; });
         Assert.Contains("needs a campaign save", message);
         Assert.False(called);
     }
@@ -30,6 +30,14 @@ public sealed class TaomLaunchPolicyTests
     [Fact]
     public void ExistingTaomCampaignIsAllowed()
     {
-        Assert.Null(TaomLaunchPolicy.MessageFor(["TAOM", "TAOM_Map"], "taom_campaign", _ => true));
+        Assert.Null(TaomLaunchPolicy.MessageFor(["TAOM", "TAOM_Map", "LOTRLOME_Armory"], "taom_campaign", _ => true));
+    }
+
+    [Fact]
+    public void MapAndArmoryWithoutTaomAreRejected()
+    {
+        var message = TaomLaunchPolicy.MessageFor(["TAOM_Map", "LOTRLOME_Armory"], "taom_campaign", _ => true);
+        Assert.Contains("TAOM", message);
+        Assert.False(TaomLaunchPolicy.HasCompleteRecipe(["TAOM_Map", "LOTRLOME_Armory"]));
     }
 }
