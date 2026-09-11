@@ -320,10 +320,15 @@ switch (cmd)
         }
         // The official server chooses its save from server-config.json. Render the ad-hoc request explicitly so a
         // previous run cannot make --create-world load an unrelated old campaign (or make --save load the wrong one).
-        var adHocSettings = ServerConfig.Read(paths.ServerConfigPath)?.Settings ?? new ServerSettings();
+        var configured = ServerConfig.Read(paths.ServerConfigPath);
+        var adHocSettings = configured?.Settings ?? new ServerSettings();
         adHocSettings.JoinPort = plan.EnginePort;
         if (diagnosticData is not null) adHocSettings.Steam = false;
-        ServerConfig.Write(paths, plan.SaveName ?? "", adHocSettings);
+        // --compat is intentionally driven by the existing server-config.json. Preserve its save name when no
+        // explicit --save was supplied. World creation is the one exception: it must clear a stale configured save
+        // so the creation process cannot accidentally load an unrelated campaign.
+        var configuredSave = createWorld is not null ? "" : plan.SaveName ?? configured?.SaveName ?? "";
+        ServerConfig.Write(paths, configuredSave, adHocSettings);
         return await RunEngine(plan, opts);
     }
 
