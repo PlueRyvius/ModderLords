@@ -1,5 +1,20 @@
 # TAOM dedicated-server world generation
 
+## If you are hosting the mod
+
+You do not need to read or run this document. It records a maintainer-only proof run, not a setup step. Do not copy
+the game's `AssetPackages` into `DsAssetPackages`, do not replace files in the installed server, and do not run the
+PowerShell/Python commands below as part of a normal install.
+
+In release `v0.9.2`, the Host button is one-click for a vanilla fresh world and for loading an existing compatible
+save. A TAOM host should install Bannerlord Coop and the TAOM mod pack normally, then select a TAOM save in the Saves
+tab. If the save only exists in the game's own save folder, use **Import client save** first. Fresh TAOM generation is
+not wired into the release launcher yet; the commands in this file are for reproducing the engineering proof only.
+
+The missing-animation lines that appear in the proof console are headless diagnostic warnings. They do not mean that a
+user should fetch or copy an asset folder, and they do not prove that every client animation or battle visual works on
+the server. They are retained in the diagnostic log so unsupported content is visible to maintainers.
+
 The isolated experiment generated two distinct worlds directly in the dedicated server,
 then separate server processes loaded each exact save and reached `SERVING` on TAOM's map.
 This does not test client joining or gameplay synchronization. The vanilla checkpoint is

@@ -116,6 +116,14 @@ public sealed class LaunchSession
                 ". Download them and Rescan, or untick them. The imported list has been kept.");
         }
 
+        var taomSaveMessage = TaomLaunchPolicy.MessageFor(selections.Select(s => s.Module.Id), profile.SaveName,
+            name => SavePreparer.Exists(paths, name));
+        if (taomSaveMessage is not null)
+        {
+            if (applySideEffects) throw new InvalidOperationException(taomSaveMessage);
+            messages.Add("TAOM: " + taomSaveMessage);
+        }
+
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
             policy: profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);

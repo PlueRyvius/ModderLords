@@ -8,8 +8,9 @@ leaves your launcher's own mod list alone. Ambiguous copies and custom mod folde
 It also **hosts the Bannerlord Coop dedicated server**, using the untouched official server from the Steam Workshop.
 That half is kept out of the way unless you ask for it: see [Player mode and Host mode](#player-mode-and-host-mode).
 
-For isolated server-side world creation and reload testing, see [vanilla world generation](docs/VANILLA-WORLD-GENERATION.md).
-The [TAOM continuation](docs/TAOM-WORLD-GENERATION.md) documents the full mod recipe, headless assets and map preparation.
+For the normal hosting setup, follow the steps below. The [TAOM world-generation record](docs/TAOM-WORLD-GENERATION.md)
+is maintainer evidence, not an end-user installation guide: users should never copy asset folders or run its diagnostic
+scripts.
 
 Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop v0.1.4.
 
@@ -152,8 +153,10 @@ running. Your window size, theme and selected tab are remembered between runs to
 
 1. Switch to **Host mode** if you are not already in it.
 2. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see below). Click **Save**.
-2. **Saves tab**: pick the save to host, or type a new name to start a fresh world.
-3. **Server tab**: set a password if you want one, leave the join port at 4200 (forward UDP 4200 on your router for
+3. **Saves tab**: pick the save to host. For a vanilla profile you may type a new name to start a fresh world. For a
+   TAOM profile in v0.9.2, choose a TAOM save or use **Import client save** after creating the campaign in Bannerlord;
+   fresh TAOM generation is still a diagnostic-only path and is not exposed by this button.
+4. **Server tab**: set a password if you want one, leave the join port at 4200 (forward UDP 4200 on your router for
    direct connections; Steam joins need no forwarding).
 4. Click **Launch server**. The Console tab shows progress; the status line reads *SERVING, waiting for clients* when
    the server is ready. First load takes about a minute.
@@ -320,7 +323,9 @@ Every `.sav` in the server's save folder with the character, level, day and the 
 Selecting one sets it as the save to host. The box below lists differences between that save and your current mod set.
 The engine loads such a save anyway and logs *module mismatch ... Forcing load anyway*; the tool never rewrites a save.
 
-Typing a name that does not exist starts a **new world** from the official `default_new_game.sav`.
+Typing a name that does not exist starts a **vanilla** world from the official `default_new_game.sav`. A TAOM world must
+already have been created with TAOM's campaign data; select that save or import it with **Import client save**. The
+launcher does not ask users to copy `AssetPackages`, `DsAssetPackages`, or any other game files.
 
 ### Server *(Host mode)*
 
