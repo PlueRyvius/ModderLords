@@ -1,9 +1,9 @@
 # Field battles crash the client — handoff
 
-**CAUSE FOUND 2026-09-12.** The server's stripped map scene returns `sceneIndex` 0 from
-`GetMapPatchAtPosition` at every position on the map. The field-battle initializer reads it once, and the client
-is asked to build a texture array from patch 0. Serving the real value makes the battle load. The measurements
-are below, newest section first among the dated ones; the fix still has to be built (step 2).
+**STATUS 2026-09-12: not solved.** A confident mid-session claim that it was has been retracted — read
+"Retraction" below before acting on any earlier section. What is established: the server's stripped map scene
+returned `sceneIndex` 0 everywhere, and that is now fixed (`MapPatchRestore` reads the engine's real 1024x1024
+index map). The client still crashes.
 
 Status of the rest of the TAOM path: world generation, serving, joining and village-raid battles all work.
 
@@ -131,7 +131,7 @@ scene *selection* is in the ruled-out table. Selection being right does not mean
 `TerrainReplayExperiment` with its default `FIELDS=patch` tests exactly this, by serving the client's own
 recorded `sceneIndex` and `normalizedCoordinates`.
 
-### SOLVED 2026-09-12, fourth run: serving a real `sceneIndex` loads the battle
+### 2026-09-12, fourth run: serving *a* `sceneIndex` loaded the battle — but see the retraction below
 
 `TerrainReplayExperiment` with its default `FIELDS=patch`, serving the client's own recorded map patch:
 
@@ -142,12 +142,9 @@ recorded `sceneIndex` and `normalizedCoordinates`.
               terrain replay: served 2 patch, 0 height, 0 env answer(s)
 ```
 
-**The field battle loaded.** No `create_texture_array`, no client crash. One value — `sceneIndex` 66 instead of
-0, at one position, served once — is the difference between a battle and a dead client.
-
-That closes the causal chain: the projection strips `terrain`/`layers`/`nodes`; `A.G` re-implements
-`GetMapPatchAtPosition` and returns `sceneIndex` 0 for every position on the map; the field-battle initializer
-reads it exactly once; and the client is asked to build a texture array from patch 0.
+**The field battle loaded.** No `create_texture_array`, no client crash. At the time this read as the whole
+causal chain closing. **It was not** — see the retraction below. The value served, 66, was not the correct one
+for that position: the replay's 34-unit grid returned a neighbouring cell.
 
 Note what was **not** served: height, and the environment terrain-type lists (`0 height, 0 env`). Neither was
 needed. The stub spike had already corrected the height answers in an earlier run without changing the crash,
@@ -253,6 +250,66 @@ now looks less like a dead end than like the missing prerequisite: nothing had e
 
 This is the general fix the handoff asked for. No format is parsed, nothing is prepared per map, and any mod that
 replaces the campaign map is covered, because the data comes from whatever scene the server actually loaded.
+
+### Retraction, and what the crash log says (2026-09-12, runs five to eight)
+
+`MapPatchRestore` works. It reads a genuine 1024x1024 index map with 182 distinct scene indices, **and it does so
+without `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN`** — that pairing was an untested assumption and is wrong. The
+descriptor is not needed and the switch can be dropped.
+
+It also does not fix the crash.
+
+| Run | Patch served at the battle position | Result |
+|---|---|---|
+| replay (48-per-axis recording) | `sceneIndex` **66** — a neighbouring cell, not the true value | **battle loaded** |
+| restore (engine's own 1024x1024 map) | `sceneIndex` **55** — the true value | crashed |
+
+Every one of these battles was fought at the same place. So the run that loaded did so because it served an
+**incorrect** value, and the correct one crashes. "Serving a real sceneIndex loads the battle" was wrong. The
+section above is left standing with a pointer here rather than rewritten, because the reasoning that produced a
+confident wrong conclusion is worth not repeating.
+
+What the indices name in TAOM's `sp_battle_scenes.xml`:
+
+- 66 → `battle_terrain_d` (Desert, no `<TerrainTypes>`) — loaded
+- 55 → `battle_terrain_020` (Plain, declares `<TerrainTypes>` Water and Mountain) — crashed
+- 0 → `battle_terrain_a` — the original failing case
+
+A tempting hypothesis was that scenes declaring `<TerrainTypes>` need terrain-type queries the server cannot
+answer. **Measured false:** with a real patch being served, `TerrainStubExperiment` still reports
+`filled 0 empty type list(s)`. The server is never asked for terrain types, patch or no patch. And all three
+scenes ship the same shape of terrain (6x6 nodes at 200), so "the working scene had no terrain to build" is out
+as well.
+
+The client's own crash log is the most specific evidence yet:
+
+```
+[06:29:19.673] Scene_view::clear_all(Main_map)
+[06:29:20.266] Loading xml file: $BASE/Modules/SandBoxCore/SceneObj/battle_terrain_020/scene.xscene.
+[06:29:20.385] NAV_MESH: load finished, first load for scene: 1
+[06:29:20.412] rglTerrain_shader_generator::clear
+[06:29:20.432] Missing shader from sack: pbr_terrain            (many)
+[06:29:20.432] compile_shader: $BASE/Shaders/Sources/pbr_terrain.rs, main_vs, vs_5_0, ...
+[06:29:20.443] ERROR: rglGPU_device::create_texture_array failed at d3d_device_->CreateTexture2D!
+```
+
+The battle scene's XML, atmosphere and navmesh all load **successfully**. The failure is in terrain rendering
+setup, immediately after the terrain shader generator finds `pbr_terrain` missing from the shader sack and
+compiles it at runtime.
+
+That reopens something the ruled-out table dismissed. "Missing shader cache" was eliminated by comparing
+*counts* — the working village raid had 120 misses, the failing battle 21 — but nobody looked at *which* shaders.
+These are `pbr_terrain`, `pbr_terrain_gbuffer`, `pbr_terrain_shadowmap`, `pbr_terrain_pointlight`: the terrain
+shaders specifically, missing at the exact moment the terrain texture array is built. A count argument does not
+eliminate that.
+
+**Establish whether coop is implicated at all.** Fight this same battle, at this same map position, in
+single-player. Everything so far rests on "it works in single-player", which was confirmed early but not
+demonstrably at this position — and every coop run has been at one spot.
+
+- If single-player crashes too, this is not a coop bug, and the map-scene work, while correct, was never the cause.
+- If single-player loads, the difference is in what the client does under coop with a scene that otherwise loads
+  fine, and the terrain shader path is where to look.
 
 ### The two routes considered before that, kept for the record
 
