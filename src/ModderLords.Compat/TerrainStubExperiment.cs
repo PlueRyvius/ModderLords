@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
@@ -49,17 +50,25 @@ internal static class TerrainStubExperiment
         _size = raw == "1" ? DefaultNeighbourhood : Parse(raw!);
         _headless = MapSceneTarget.Headless();
 
-        foreach (var target in MapSceneTarget.Both("GetEnvironmentTerrainTypesCount",
-                     new[] { typeof(CampaignVec2).MakeByRefType(), typeof(TerrainType).MakeByRefType() }))
-            harmony.Patch(target, postfix: new HarmonyMethod(typeof(TerrainStubExperiment), nameof(FillTypes)));
-        foreach (var target in MapSceneTarget.Both("GetHeightAtPoint",
-                     new[] { typeof(CampaignVec2).MakeByRefType(), typeof(float).MakeByRefType() }))
-            harmony.Patch(target, postfix: new HarmonyMethod(typeof(TerrainStubExperiment), nameof(OwnUpToNoHeight)));
+        Patch(harmony, "GetEnvironmentTerrainTypesCount",
+            new[] { typeof(CampaignVec2).MakeByRefType(), typeof(TerrainType).MakeByRefType() }, nameof(FillTypes));
+        Patch(harmony, "GetHeightAtPoint",
+            new[] { typeof(CampaignVec2).MakeByRefType(), typeof(float).MakeByRefType() }, nameof(OwnUpToNoHeight));
 
         _installed = true;
         Log.Warn($"SPIKE {Variable} is on: empty terrain-type lists become {_size} copies of the current type, and " +
                  "GetHeightAtPoint will report failure instead of a height of 0. This server is now telling " +
                  "deliberate lies about the world; do not draw gameplay conclusions from this run.");
+    }
+
+    /// <summary>Names what was patched: under obfuscation that line is the only way to check it was the right thing.</summary>
+    private static void Patch(Harmony harmony, string name, Type[] signature, string postfix)
+    {
+        var targets = MapSceneTarget.Implementations(_headless!, name, signature);
+        foreach (var target in targets)
+            harmony.Patch(target, postfix: new HarmonyMethod(typeof(TerrainStubExperiment), postfix));
+        Log.Info($"terrain stub: {name} -> " +
+                 string.Join(", ", targets.Select(t => t.DeclaringType?.Name + "." + t.Name)));
     }
 
     /// <summary>Null when the spike is off, so a normal run logs nothing at all about it.</summary>
@@ -75,24 +84,25 @@ internal static class TerrainStubExperiment
     }
 
     /// <summary>
-    /// The out terrain type is taken by name — both declarations agree on it, and the measurement showed this
-    /// particular value is already correct on the server, which is the whole reason a fabricated list is defensible.
+    /// __1 rather than a parameter name: DedicatedServer.Core is obfuscated and its copy of this method declares the
+    /// out parameter with no name at all. It holds the current terrain type, which the measurement showed the server
+    /// already gets right — the whole reason a fabricated list around it is defensible.
     /// </summary>
-    private static void FillTypes(object __instance, ref List<TerrainType> __result, ref TerrainType currentPositionTerrainType)
+    private static void FillTypes(object __instance, ref List<TerrainType> __result, ref TerrainType __1)
     {
         if (__instance.GetType() != _headless) return;
-        if (__result != null && __result.Count > 0) return;      // idempotent: both declarations may fire
-        var current = currentPositionTerrainType;
+        if (__result != null && __result.Count > 0) return;
+        var current = __1;
         var filled = new List<TerrainType>(_size);
         for (var i = 0; i < _size; i++) filled.Add(current);
         __result = filled;
         if (_listsFilled++ == 0) Log.Info($"terrain stub: first empty type list filled ({_size} x {current})");
     }
 
-    private static void OwnUpToNoHeight(object __instance, ref bool __result, ref float height)
+    private static void OwnUpToNoHeight(object __instance, ref bool __result, ref float __1)
     {
         if (__instance.GetType() != _headless) return;
-        if (!__result || height != 0f) return;
+        if (!__result || __1 != 0f) return;
         __result = false;
         if (_heightLies++ == 0) Log.Info("terrain stub: first height-of-zero success reported as a failure instead");
     }

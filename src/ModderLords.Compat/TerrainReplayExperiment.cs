@@ -62,22 +62,26 @@ internal static class TerrainReplayExperiment
         Load(path!);
         _headless = MapSceneTarget.Headless();
 
-        if (_patch)
-            foreach (var target in MapSceneTarget.Both("GetMapPatchAtPosition", new[] { typeof(CampaignVec2).MakeByRefType() }))
-                harmony.Patch(target, postfix: new HarmonyMethod(typeof(TerrainReplayExperiment), nameof(ServePatch)));
-        if (_height)
-            foreach (var target in MapSceneTarget.Both("GetHeightAtPoint",
-                         new[] { typeof(CampaignVec2).MakeByRefType(), typeof(float).MakeByRefType() }))
-                harmony.Patch(target, postfix: new HarmonyMethod(typeof(TerrainReplayExperiment), nameof(ServeHeight)));
-        if (_env)
-            foreach (var target in MapSceneTarget.Both("GetEnvironmentTerrainTypesCount",
-                         new[] { typeof(CampaignVec2).MakeByRefType(), typeof(TerrainType).MakeByRefType() }))
-                harmony.Patch(target, postfix: new HarmonyMethod(typeof(TerrainReplayExperiment), nameof(ServeEnv)));
+        if (_patch) Patch(harmony, "GetMapPatchAtPosition", new[] { typeof(CampaignVec2).MakeByRefType() }, nameof(ServePatch));
+        if (_height) Patch(harmony, "GetHeightAtPoint",
+            new[] { typeof(CampaignVec2).MakeByRefType(), typeof(float).MakeByRefType() }, nameof(ServeHeight));
+        if (_env) Patch(harmony, "GetEnvironmentTerrainTypesCount",
+            new[] { typeof(CampaignVec2).MakeByRefType(), typeof(TerrainType).MakeByRefType() }, nameof(ServeEnv));
 
         _installed = true;
         Log.Warn($"SPIKE {Variable} is on: replaying {Fields()} from {_grid}x{_grid} recorded client samples over " +
                  $"{_min}..{_max}. The answers are real but are sampled every " +
                  $"{(_max.x - _min.x) / _grid:0.#} units; this is a diagnostic, not a fix.");
+    }
+
+    /// <summary>Says which method was patched: under obfuscation that is the only way to check it was the right one.</summary>
+    private static void Patch(Harmony harmony, string name, Type[] signature, string postfix)
+    {
+        var targets = MapSceneTarget.Implementations(_headless!, name, signature);
+        foreach (var target in targets)
+            harmony.Patch(target, postfix: new HarmonyMethod(typeof(TerrainReplayExperiment), postfix));
+        Log.Info($"terrain replay: {name} -> " +
+                 string.Join(", ", targets.Select(t => t.DeclaringType?.Name + "." + t.Name)));
     }
 
     /// <summary>Null when the spike is off, so a normal run logs nothing at all about it.</summary>
@@ -195,42 +199,39 @@ internal static class TerrainReplayExperiment
         return iy * _grid + ix;
     }
 
-    private static bool Find(object[] args, out Sample sample)
+    private static bool Find(CampaignVec2 position, out Sample sample)
     {
         sample = default;
-        if (args.Length < 1 || args[0] is not CampaignVec2 position) return false;
         var index = IndexOf(position.X, position.Y);
         if (index < 0) { _missed++; return false; }
         sample = _samples[index];
         return true;
     }
 
-    private static void ServePatch(object __instance, ref MapPatchData __result, object[] __args)
+    private static void ServePatch(object __instance, ref MapPatchData __result, ref CampaignVec2 __0)
     {
-        if (__instance.GetType() != _headless || !Find(__args, out var sample)) return;
+        if (__instance.GetType() != _headless || !Find(__0, out var sample)) return;
         __result.sceneIndex = sample.SceneIndex;
         __result.normalizedCoordinates = new Vec2(sample.U, sample.V);
         if (_patchServed++ == 0) Log.Info($"terrain replay: first map patch served (sceneIndex {sample.SceneIndex})");
     }
 
     /// <summary>
-    /// The position arrives through __args because the two declarations name it differently (originPosition against
-    /// vec2), but the by-ref output is taken by name: Harmony writes a named ref parameter back to the caller, and
-    /// both declarations agree on this one's name.
+    /// Positional, never by name: the method actually patched is DedicatedServer.Core's, whose parameters are
+    /// nameless after obfuscation. __0 is the position, __1 the by-ref height the caller reads back.
     /// </summary>
-    private static void ServeHeight(object __instance, ref bool __result, object[] __args, ref float height)
+    private static void ServeHeight(object __instance, ref bool __result, ref CampaignVec2 __0, ref float __1)
     {
-        if (__instance.GetType() != _headless || !Find(__args, out var sample)) return;
+        if (__instance.GetType() != _headless || !Find(__0, out var sample)) return;
         __result = sample.HeightOk;
-        height = sample.Height;
+        __1 = sample.Height;
         if (_heightServed++ == 0) Log.Info($"terrain replay: first height served ({sample.Height:0.##})");
     }
 
-    private static void ServeEnv(object __instance, ref List<TerrainType> __result, object[] __args)
+    private static void ServeEnv(object __instance, ref List<TerrainType> __result, ref CampaignVec2 __0)
     {
-        if (__instance.GetType() != _headless || !Find(__args, out var sample)) return;
+        if (__instance.GetType() != _headless || !Find(__0, out var sample)) return;
         if (sample.Env.Length == 0) return;
-        if (__result != null && __result.Count > 0) return;       // idempotent: both declarations may fire
         __result = new List<TerrainType>(sample.Env);
         if (_envServed++ == 0) Log.Info($"terrain replay: first environment type list served ({sample.Env.Length} entries)");
     }

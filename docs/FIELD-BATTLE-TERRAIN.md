@@ -183,10 +183,27 @@ Reading the outcome:
 | Only `FIELDS=all` fixes it | Several answers are needed together; bisect from there. |
 | Neither changes anything | The client is not consuming these. Stop working on the map scene and instrument what Coop sends on a field-battle start instead. |
 
-Implementation note for whoever extends this: `SandBox.MapScene` declares these queries **non-virtual** and also
-carries sealed explicit `IMapScene` implementations of the same signatures, so the host's `A.G` subclass can
-override neither. `MapSceneTarget.Both` patches both declarations and every postfix is idempotent, so it does not
-matter which path a caller takes or whether both fire.
+Implementation note, and a correction worth not repeating. `SandBox.MapScene` declares these queries
+**non-virtual**, from which the first version of these spikes concluded that the host's `A.G` could not take them
+over, and patched SandBox's declarations. Wrong: `A.G` cannot *override* them, but it **re-implements the
+interface**, which has the same effect. It carries its own sealed explicit `IMapScene.GetMapPatchAtPosition`,
+`GetEnvironmentTerrainTypesCount` and `GetHeightAtPoint`, forwarding to obfuscated methods of its own
+(`MapPatchData A(ref CampaignVec2)`). The interface slots point at those, so patches on SandBox's copies never
+fired — a spike ran through a whole battle and served zero answers.
+
+`MapSceneTarget.Implementations` therefore resolves through the runtime **interface map**, which names whatever
+the type genuinely dispatches to without depending on a method name, and also patches any same-signature sibling
+on `A.G` in case the host calls the inner method directly. Every postfix is idempotent, so more than one firing
+is harmless.
+
+Two rules follow for anything else patched in `DedicatedServer.Core`:
+
+- Resolve targets through the interface map, never by assuming an inherited declaration is the one that runs.
+- Bind by-ref patch arguments **positionally** (`__0`, `__1`). Obfuscation strips parameter names — `A.G`'s copy
+  declares its out parameter with no name at all — so name-bound patch arguments fail silently.
+
+Note also what `A.G` re-implements: exactly the three queries measured to return nothing, and none of the ones
+measured to be correct. The obfuscated class is its own map of where the terrain data went.
 
 **3. Keep it general.** The rule to aim for is "a mod that replaces the campaign map keeps its terrain
 queries answerable headlessly" — not anything TAOM-shaped. The world-map grid textures went in by naming
