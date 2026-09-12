@@ -140,6 +140,54 @@ The measurement narrows this to three members, in priority order:
 
 `GetTerrainTypeAtPosition` and `GetFaceIndex` need no work: they already match the client everywhere.
 
+### Before that: two spikes settle whether the client consumes these answers at all
+
+What is proved is that the server's answers are empty. What is **not** proved is that the client's crash consumes
+*these* answers rather than deriving terrain on a path of its own. `terrain.bin` is a 56 MB format and parsing it
+is days of work, all of it wasted if the answer is no. Both spikes live in the guards module (always in the
+server's load order), are off unless their own variable is set, and must never ship enabled.
+
+**Spike 1 — fabricate the missing list** (`TerrainStubExperiment`). Asks the narrow question: is an empty
+terrain-type list the cause? It needs no terrain data, because the server already answers the *current* terrain
+type correctly everywhere — so a neighbourhood of that type is free.
+
+```
+set MODDERLORDS_TERRAIN_STUB=1          # or a neighbourhood size; 1 means 49, what the client returns
+```
+
+An empty list becomes N copies of the current type, and `GetHeightAtPoint` reports failure instead of `true`
+with a height of 0.
+
+**Spike 2 — replay ground truth** (`TerrainReplayExperiment`). Isolates `sceneIndex`, which spike 1 deliberately
+leaves alone. Fabricating a patch index would be guessing, and a wrong index selects a wrong scene — a different
+failure that muddies the result. So this answers from a *recorded single-player client probe CSV* instead, which
+is ground truth at 48 samples per axis (~34 map units per cell: useless for gameplay, ample for "does the battle
+load").
+
+```
+set MODDERLORDS_TERRAIN_REPLAY=...\terrain-probe-client.csv
+set MODDERLORDS_TERRAIN_REPLAY_FIELDS=patch          # default; also height, env, or all
+```
+
+Run them **one at a time**, so a change in behaviour names which value mattered. Both print a line every 30
+seconds saying how many answers they actually changed — a spike that patched the wrong thing and served nothing
+is the failure most easily mistaken for a disproved hypothesis, so check that count is non-zero before believing
+a negative result.
+
+Reading the outcome:
+
+| Result | Meaning |
+|---|---|
+| Spike 1 fixes the battle | The empty type list is the cause. Source that list from `terrain.bin` and stop. |
+| Spike 2 (`patch`) fixes it | `sceneIndex` is the cause, despite scene *selection* already being ruled out. |
+| Only `FIELDS=all` fixes it | Several answers are needed together; bisect from there. |
+| Neither changes anything | The client is not consuming these. Stop working on the map scene and instrument what Coop sends on a field-battle start instead. |
+
+Implementation note for whoever extends this: `SandBox.MapScene` declares these queries **non-virtual** and also
+carries sealed explicit `IMapScene` implementations of the same signatures, so the host's `A.G` subclass can
+override neither. `MapSceneTarget.Both` patches both declarations and every postfix is idempotent, so it does not
+matter which path a caller takes or whether both fire.
+
 **3. Keep it general.** The rule to aim for is "a mod that replaces the campaign map keeps its terrain
 queries answerable headlessly" — not anything TAOM-shaped. The world-map grid textures went in by naming
 convention rather than a per-mod offset table for the same reason.

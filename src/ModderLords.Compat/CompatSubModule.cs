@@ -17,6 +17,9 @@ public sealed class CompatSubModule : MBSubModuleBase
     /// <summary>Null off a dedicated server, so the tick override costs a null check and nothing else.</summary>
     private PerfSampler? _perf;
 
+    /// <summary>Seconds since the terrain spikes last reported. Stays at zero unless one of them is on.</summary>
+    private float _sinceSpikeReport;
+
     /// <summary>
     /// Null unless MODDERLORDS_CREATE_WORLD asked for a world to be generated, which is never the case on a
     /// normal launch. See <see cref="WorldCreator"/>.
@@ -60,6 +63,12 @@ public sealed class CompatSubModule : MBSubModuleBase
             Environment.Exit(12);
             return;
         }
+        // Both are off unless their own variable is set, and both are diagnostics rather than fixes, so a failure to
+        // install one warns and leaves the server alone. Unlike the headless map, nothing downstream depends on them.
+        try { TerrainStubExperiment.Install(Harmony); }
+        catch (Exception ex) { Log.Warn("terrain stub not installed: " + ex.GetBaseException().Message); }
+        try { TerrainReplayExperiment.Install(Harmony); }
+        catch (Exception ex) { Log.Warn("terrain replay not installed: " + ex.GetBaseException().Message); }
         if (_worldCreator is null) return;
         try
         {
@@ -93,6 +102,20 @@ public sealed class CompatSubModule : MBSubModuleBase
         // rides in this module rather than the settings-sync one because this module is always in the server's load
         // order, and a diagnostic nobody remembered to enable a second module for is a diagnostic that never ran.
         Diagnostics.TerrainProbe.Tick(Log.Info, Log.Warn);
+
+        // Every 30 s while a spike is on, say how many answers it has changed. A spike that patched the wrong thing
+        // and served nothing is the failure mode most likely to be mistaken for a disproved hypothesis.
+        _sinceSpikeReport += dt;
+        if (_sinceSpikeReport >= 30f)
+        {
+            _sinceSpikeReport = 0f;
+            try
+            {
+                if (TerrainStubExperiment.Summary() is { } stub) Log.Info(stub);
+                if (TerrainReplayExperiment.Summary() is { } replay) Log.Info(replay);
+            }
+            catch { }
+        }
 
         if (_perf is null) return;
         try { _perf.Tick(dt); }
