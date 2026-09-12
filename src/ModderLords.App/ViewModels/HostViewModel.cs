@@ -104,6 +104,8 @@ public partial class HostViewModel : ObservableObject
     private int _repliesSeen;
     private static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(3);
     private CappedLogWriter? _launchLog;
+    /// <summary>Per launch: is the server about to host the world on the map it was built on? See MapIdentityCheck.</summary>
+    private MapIdentityCheck _mapIdentity = new();
     private long _totalDropped;
 
     public ObservableCollection<SaveRow> Saves { get; } = new();
@@ -376,6 +378,7 @@ public partial class HostViewModel : ObservableObject
             _launchLog = new CappedLogWriter(Path.Combine(logDir, $"launch-{DateTime.Now:yyyyMMdd-HHmmss}.log"));
             _pending.Clear();
             _totalDropped = 0;
+            _mapIdentity = new MapIdentityCheck();
             if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
             if (rotatedCrashes > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedCrashes} old engine crash report(s)");
 
@@ -398,6 +401,7 @@ public partial class HostViewModel : ObservableObject
                     var c = LogClassifier.Classify(line.Text);
                     _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
                     _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
+                    _mapIdentity.ObserveCreation(line.Text);
                     if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase) ||
                         line.Text.Contains("phase=", StringComparison.OrdinalIgnoreCase))
                         Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Milestone, "[ModderLords] " + line.Text));
@@ -418,6 +422,11 @@ public partial class HostViewModel : ObservableObject
                 prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile));
                 _prepared = prepared;
                 foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
+                // The serve phase is a second, independently prepared plan with its own environment. Describing
+                // only the creation plan hid a real divergence between the two: the served world loaded the vanilla
+                // map while the generated one used TAOM's, and the env that decides it was never written down.
+                foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                    AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
             }
 
             _engine = EngineProcess.Start(prepared.Plan);
@@ -451,8 +460,19 @@ public partial class HostViewModel : ObservableObject
                 // able to touch the UI per line than any other.
                 if (c.Category == LogCategory.Perf && PerfLineParser.TryParse(line.Text, line.At) is { } sample)
                     _pendingPerf.Enqueue(sample);
+                // A map mismatch has to be said out loud before SERVING makes the run look healthy: the engine will
+                // not report it, and the failure it eventually produces is a native crash with no explanation.
+                if (_mapIdentity.ObserveServing(line.Text) is { } mismatch)
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        AddLine(LogCategory.Error, "[ModderLords] WRONG MAP: " + mismatch);
+                        Status = "Wrong map — stop the server";
+                    });
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
-                    Application.Current.Dispatcher.BeginInvoke(() => Status = "SERVING, waiting for clients");
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                        Status = _mapIdentity.ServedOn is { } s && _mapIdentity.CreatedOn is { } b && s != b
+                            ? "SERVING on the WRONG MAP — stop the server"
+                            : "SERVING, waiting for clients");
                 // LineReceived runs on the stream-reader thread, so this has to hop to the dispatcher like the
                 // SERVING line above; AddLine touches an ObservableCollection a CollectionView is bound to. Fires at
                 // most once per launch, so BeginInvoke here costs nothing and does not need the batched queue.
