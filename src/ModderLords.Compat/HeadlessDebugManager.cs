@@ -77,6 +77,23 @@ internal sealed class HeadlessDebugManager : IDebugManager
         catch (Exception ex) { done.Add("SetAssertionsAndWarningsSetExitCode failed: " + ex.GetBaseException().Message); }
         try { TaleWorlds.Engine.Utilities.SetCrashOnAsserts(false); done.Add("asserts no longer crash"); }
         catch (Exception ex) { done.Add("SetCrashOnAsserts failed: " + ex.GetBaseException().Message); }
+
+        // Not crashing is not the same as not dumping. Measured 2026-09-11: a TAOM creation run raised 227 asset
+        // warnings and the engine wrote a full ~540 MB crash report for each one -- 100 GB, one every 3.5 seconds,
+        // which is the entire 15-minute creation budget spent on minidumps. The run never reached phase=armed.
+        //
+        // All four are public statics on the pinned reference assemblies (DebugManagerProbe prints their exact
+        // signatures, so a game update that renames one shows up as a diff in that probe's output rather than as
+        // a silent 100 GB regression). Each is wrapped separately: one missing toggle must not skip the rest.
+        try { TaleWorlds.Engine.Utilities.SetCreateDumpOnWarnings(false); done.Add("warnings no longer write a dump"); }
+        catch (Exception ex) { done.Add("SetCreateDumpOnWarnings failed: " + ex.GetBaseException().Message); }
+        try { TaleWorlds.Engine.Utilities.SetCrashOnWarnings(false); done.Add("warnings no longer crash"); }
+        catch (Exception ex) { done.Add("SetCrashOnWarnings failed: " + ex.GetBaseException().Message); }
+        try { TaleWorlds.Engine.Utilities.SetDisableDumpGeneration(true); done.Add("dump generation disabled"); }
+        catch (Exception ex) { done.Add("SetDisableDumpGeneration failed: " + ex.GetBaseException().Message); }
+        try { TaleWorlds.Engine.MBDebug.SetDumpGenerationDisabled(true); done.Add("MBDebug dump generation disabled"); }
+        catch (Exception ex) { done.Add("MBDebug.SetDumpGenerationDisabled failed: " + ex.GetBaseException().Message); }
+
         return string.Join("; ", done);
     }
 
@@ -93,8 +110,17 @@ internal sealed class HeadlessDebugManager : IDebugManager
     public void ShowError(string message) => _inner.ShowError(message);
     public void Assert(bool condition, string message, string callerFile, string callerMethod, int callerLine)
         => _inner.Assert(condition, message, callerFile, callerMethod, callerLine);
+    /// <summary>
+    /// Forwarded, but never with <c>getDump</c>. A silent assert that asks for a dump costs ~540 MB and several
+    /// seconds; an asset-warning storm turns that into the whole run. The assert itself still reaches the host and
+    /// is still logged — only the minidump is declined. See <see cref="ReleaseNativeAssertions"/>, which handles
+    /// the native side; this covers the managed one.
+    /// </summary>
     public void SilentAssert(bool condition, string message, bool getDump, string callerFile, string callerMethod, int callerLine)
-        => _inner.SilentAssert(condition, message, getDump, callerFile, callerMethod, callerLine);
+    {
+        if (getDump) Guards.AnnounceExternal("Debug.SilentAssert(getDump)");
+        _inner.SilentAssert(condition, message, getDump: false, callerFile, callerMethod, callerLine);
+    }
     public void Print(string message, int debugFilter, Debug.DebugColor color, ulong debugColor)
         => _inner.Print(message, debugFilter, color, debugColor);
     public void PrintError(string error, string stackTrace, ulong debugFilter) => _inner.PrintError(error, stackTrace, debugFilter);
