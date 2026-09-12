@@ -178,7 +178,7 @@ variables, marked, so "was it actually set?" is answerable from the log):
 |---|---|---|
 | `MODDERLORDS_MAP_PATCH_RESTORE` | on | Answers `GetMapPatchAtPosition` from the engine's own battle-scene index map. Without it every field battle loads one arbitrary battle terrain. `0` disables. |
 | `MODDERLORDS_STUB_WARNINGS` | on | Warns once per run when a mod reads a query the server does not implement. `0` silences. |
-| `MODDERLORDS_HEADLESS_MAP_BOUNDS_CHECK` | on | Reports whether the scene can answer for its own bounds, which is how the map sidecar gets retired. `0` silences. |
+| `MODDERLORDS_HEADLESS_MAP_BOUNDS_CHECK` | **off** | Reports whether the scene can answer for its own bounds. Every call it makes crosses into native code and an early version took the server down with an access violation, so it is opt-in. `1` enables. |
 | `MODDERLORDS_TERRAIN_PROBE` | off | Samples the map scene to a CSV; `scripts/Compare-TerrainProbe.ps1` diffs a server's against a client's. |
 | `MODDERLORDS_MAPSCENE_CENSUS` | off | Counts which map-scene members are actually called, and names those never called. |
 | `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` | off | Keeps the scene's `<terrain>` descriptor. Measured safe; not currently needed. |

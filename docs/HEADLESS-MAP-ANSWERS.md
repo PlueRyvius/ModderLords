@@ -106,8 +106,14 @@ pure transforms, no mesh, no components, no children**:
 ```
 
 The projection deleted them along with everything else renderable, which is the only reason the sidecar had to
-exist. It now keeps them (`HeadlessMapProjection.BoundsEntities`), and `HeadlessMapBounds` reports on each server
-start whether the scene's own bounds match the injected ones.
+exist. It now keeps them (`HeadlessMapProjection.BoundsEntities`), and `HeadlessMapBounds`
+(`MODDERLORDS_HEADLESS_MAP_BOUNDS_CHECK=1`) reports whether the scene's own bounds match the injected ones.
+
+**It is opt-in because its first version crashed a server.** Every call it makes crosses into native code, where a
+fault cannot be caught by the try/catch around it, and it took the engine down with an access violation moments
+after the map scene loaded. It now announces each call before making it — so a repeat names the exact one — and
+refuses to ask a terrain-less scene for terrain data, which is the likeliest of the two candidates. The retained
+markers themselves are not implicated: the scene loaded and logged `Load complete` before anything went wrong.
 
 **Next step:** read that comparison on a real map. If it agrees, the sidecar, the hash check, the env var and the
 exit path can all go, and map-replacing mods need no preparation for bounds at all. The terrain size is the
