@@ -89,6 +89,11 @@ public sealed class CompatSubModule : MBSubModuleBase
             }
         }
         catch { }
+        // Off unless MODDERLORDS_TERRAIN_PROBE is set, and it disarms itself on the first tick when it is not. It
+        // rides in this module rather than the settings-sync one because this module is always in the server's load
+        // order, and a diagnostic nobody remembered to enable a second module for is a diagnostic that never ran.
+        Diagnostics.TerrainProbe.Tick(Log.Info, Log.Warn);
+
         if (_perf is null) return;
         try { _perf.Tick(dt); }
         catch { _perf = null; }   // never let a meter break the server it is measuring

@@ -6,7 +6,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 
-namespace ModderLords.CompatSync;
+namespace ModderLords.Diagnostics;
 
 /// <summary>
 /// Diagnostic: records what the campaign map scene answers about terrain, so a server's answers can be diffed
@@ -19,6 +19,10 @@ namespace ModderLords.CompatSync;
 ///
 /// Off unless MODDERLORDS_TERRAIN_PROBE is set, and it writes once per process. Everything is by reflection: the
 /// server's IMapScene is an obfuscated type inside DedicatedServer.Core, and this must bind to the interface only.
+///
+/// Compiled into BOTH module assemblies, because the two sides of the comparison load different modules: the server
+/// always loads DedicatedServer.ModderLordsCompat, while a client can only load the community ModderLords.Compat.
+/// Each host passes its own logger.
 /// </summary>
 public static class TerrainProbe
 {
@@ -31,13 +35,22 @@ public static class TerrainProbe
 
     private static bool _finished;
     private static bool _off;
+    private static bool _announced;
 
-    /// <summary>Cheap enough to call on the settings tick: an env read and a null check until a campaign exists.</summary>
-    public static void Tick()
+    /// <summary>
+    /// Cheap enough to call every tick: an env read and a null check until a campaign exists, and nothing at all
+    /// once it has answered. Say when it is armed — "no output" otherwise cannot be told apart from "not loaded".
+    /// </summary>
+    public static void Tick(Action<string> info, Action<string> warn)
     {
         if (_finished || _off) return;
         var target = Environment.GetEnvironmentVariable(PathVariable);
         if (string.IsNullOrEmpty(target)) { _off = true; return; }
+        if (!_announced)
+        {
+            _announced = true;
+            info("terrain probe armed (" + PathVariable + "=" + target + "); waiting for the campaign map scene");
+        }
         object? mapScene;
         try
         {
@@ -53,12 +66,12 @@ public static class TerrainProbe
         {
             var path = Resolve(target!);
             var rows = Write(mapScene, path);
-            Log.Info("terrain probe: wrote " + rows + " samples to " + path);
+            info("terrain probe: wrote " + rows + " samples to " + path);
         }
         catch (Exception ex)
         {
             // A diagnostic that takes the session down with it is worse than no diagnostic.
-            Log.Warn("terrain probe failed: " + ex.GetBaseException().Message);
+            warn("terrain probe failed: " + ex.GetBaseException().Message);
         }
     }
 

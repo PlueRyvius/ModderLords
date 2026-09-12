@@ -14,7 +14,7 @@ namespace ModderLords.CompatSync;
 /// </summary>
 public sealed class SyncSubModule : MBSubModuleBase
 {
-    public const string Version = "0.1.0";
+    public const string Version = "0.1.1";
     private const string AdapterFileName = "ModderLords.CompatSync.Coop.dll";
 
     private float _sinceTick;
@@ -55,7 +55,7 @@ public sealed class SyncSubModule : MBSubModuleBase
             try { CampaignWatch.Tick(); SettingsSources.Refresh(); }
             catch (Exception ex) { Log.Warn("settings discovery failed: " + ex.GetBaseException().Message); }
             // Off unless MODDERLORDS_TERRAIN_PROBE is set, and it disarms itself on the first tick when it is not.
-            TerrainProbe.Tick();
+            Diagnostics.TerrainProbe.Tick(Log.Info, Log.Warn);
             LiveSettings.Poll();
             if (_adapterTick is null) { TryLoadAdapter(); }
             else try { _adapterTick.Invoke(null, null); }
