@@ -28,7 +28,11 @@ internal static class MapSceneCallCensus
 {
     public const string Variable = "MODDERLORDS_MAPSCENE_CENSUS";
 
-    /// <summary>Everything a battle could plausibly ask about terrain, and nothing on a hot path.</summary>
+    /// <summary>
+    /// Everything a battle could plausibly ask about terrain, minus anything hot. GetFaceTerrainType was in this
+    /// list once and ran to 47 million calls in a single session, dragging the server from 64 fps to the low 40s:
+    /// counting it measured the census more than the game.
+    /// </summary>
     private static readonly HashSet<string> Watched = new HashSet<string>(StringComparer.Ordinal)
     {
         "GetEnvironmentTerrainTypes",
@@ -38,7 +42,6 @@ internal static class MapSceneCallCensus
         "GetTerrainHeightAndNormal",
         "GetGroundNormal",
         "GetTerrainTypeAtPosition",
-        "GetFaceTerrainType",
         "GetSnowAmountAtPosition",
         "GetRainAmountAtPosition",
         "GetWinterTimeFactor",

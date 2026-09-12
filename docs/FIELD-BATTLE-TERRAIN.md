@@ -1,11 +1,18 @@
 # Field battles crash the client — handoff
 
-**STATUS 2026-09-12: largely explained, not finished.** Two independent faults stacked. (1) The server
-answered `sceneIndex` 0 for the whole map, so every field battle loaded one arbitrary scene — fixed by
-`MapPatchRestore`. (2) That scene, and the one at the position every test used, are the only two of TAOM's 81
-battle scenes shipped without a terrain shader cache, and those crash the client. Details below.
+**STATUS 2026-09-12: field battles work. One known gap remains.** Two independent faults were stacked.
 
-**An earlier confident claim to have solved this was retracted mid-session.** A confident mid-session claim that it was has been retracted — read
+1. The server answered `sceneIndex` 0 for the whole map, so **every** field battle anywhere loaded one arbitrary
+   battle terrain. Fixed by `MapPatchRestore`, which is now on by default.
+2. That arbitrary scene — and the scene at the one position every early test used — are the only **two** of
+   TAOM's **81** selectable battle scenes shipped without a terrain shader cache. Those two still crash the
+   client. The other 79 load.
+
+Confirmed by prediction: with the restore on, a battle away from the test position resolved to index 46
+(`battle_terrain_biome_046`, 2.8 MB shader cache) and **loaded**. Four for four across the session.
+
+**An earlier confident claim to have solved this was retracted mid-session** — the retraction is kept below,
+because the reasoning that produced it is worth not repeating. A confident mid-session claim that it was has been retracted — read
 "Retraction" below before acting on any earlier section. What is established: the server's stripped map scene
 returned `sceneIndex` 0 everywhere, and that is now fixed (`MapPatchRestore` reads the engine's real 1024x1024
 index map). The client still crashes.
@@ -346,13 +353,34 @@ position tested since happens to resolve to 55, the other one.
 position: without it every field battle crashes; with it, battles reach their true scene and 79 of 81 have a
 shader cache.
 
-Prediction, and the next test: with the restore on, **a field battle well away from that position should load**.
-The served index is logged, so the scene it picked can be checked against the two above.
+**Prediction made, then confirmed.** With the restore on, a field battle well away from that position was called
+to load. It resolved to index 46 — `battle_terrain_biome_046` (Swamp, SandBoxCore, 2,798,080-byte shader cache)
+— and loaded.
 
-Caveat worth keeping: vanilla ships those two scenes without a sack and presumably plays them fine in
+| served index | scene | shader cache | result |
+|---|---|---|---|
+| 0 | `battle_terrain_a` | none | crashed |
+| 55 | `battle_terrain_020` | none | crashed |
+| 66 | `battle_terrain_d` | 415,948 bytes | loaded |
+| 46 | `battle_terrain_biome_046` | 2,798,080 bytes | loaded |
+
+So field battles work, on 79 of 81 scenes. The served index is logged on every battle, so any future crash can be
+checked against the two sackless scenes in one step.
+
+#### What is left
+
+Caveat worth keeping: vanilla ships those two scenes without a cache and presumably plays them fine in
 single-player, so a missing cache may be necessary but not sufficient. What makes runtime terrain-shader
-compilation fail *here* is not yet established, and a battle loading elsewhere would confirm the pattern without
-explaining it.
+compilation fail *here* is not established — the correlation is 4 for 4, but it is still a correlation.
+
+Ideas, cheapest first, for whoever picks this up:
+
+- Check whether those two scenes crash a **single-player** client too. If they do, this is a vanilla content gap
+  that coop merely exposed, and it belongs upstream rather than here.
+- Compare what the client does differently for a sackless scene when joined versus solo; the terrain shader
+  generator path is where to look.
+- A per-scene shader cache is a build artefact, not content. If the engine can be made to write one, generating
+  the two missing caches once would close the gap without touching either mod.
 
 ### The two routes considered before that, kept for the record
 

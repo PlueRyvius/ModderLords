@@ -28,14 +28,21 @@ namespace ModderLords.Compat;
 /// and nothing is prepared per map: any mod that replaces the campaign map is covered, because the data comes from
 /// whatever scene the server actually loaded.</para>
 ///
-/// <para>Whether it needs <c>MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN</c> is UNTESTED. The two were first run
-/// together on the assumption that the native index map needs a declared terrain, and that run still crashed the
-/// client — while the earlier spike that served a recorded patch over a fully stripped scene did not. So keeping
-/// the terrain descriptor is itself a suspect, and these two switches must be varied one at a time.</para>
+/// <para>It does <b>not</b> need <c>MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN</c>: measured, the engine returns the
+/// index map from a fully stripped scene. The two were first run together on an assumption, which was wrong.</para>
+///
+/// <para>Measured 2026-09-12 on TAOM's map: a 1024x1024 index map, 182 distinct scene indices, and field battles
+/// that load. It is not a complete cure — two of TAOM's 81 selectable battle scenes ship without a terrain shader
+/// cache and still crash the client — but without this every field battle anywhere loads scene 0, which is one of
+/// those two.</para>
 /// </summary>
 internal static class MapPatchRestore
 {
-    /// <summary>Set to 1 to restore the map patch answers. Opt-in until it is proven on a live battle.</summary>
+    /// <summary>
+    /// On by default. Set to 0 (or false/off) to leave the map patch unanswered, which is only useful for
+    /// reproducing the original failure: without this, the server reports scene 0 for the whole map and every
+    /// field battle loads one arbitrary battle terrain.
+    /// </summary>
     public const string Variable = "MODDERLORDS_MAP_PATCH_RESTORE";
 
     private static Type? _headless;
@@ -51,7 +58,7 @@ internal static class MapPatchRestore
 
     internal static void Install(Harmony harmony)
     {
-        if (_installed || string.IsNullOrEmpty(Environment.GetEnvironmentVariable(Variable))) return;
+        if (_installed || !Enabled()) return;
         if (!ServerDetect.IsDedicatedServer) throw new InvalidOperationException("The map patch restore is server-only");
         _headless = MapSceneTarget.Headless();
         foreach (var target in MapSceneTarget.Implementations(_headless, "GetMapPatchAtPosition",
@@ -59,6 +66,18 @@ internal static class MapPatchRestore
             harmony.Patch(target, postfix: new HarmonyMethod(typeof(MapPatchRestore), nameof(Serve)));
         _installed = true;
         Log.Info("map patch restore: armed; will read the battle scene index map once the map scene has loaded");
+    }
+
+    /// <summary>Default on; only an explicit 0, false or off turns it off.</summary>
+    private static bool Enabled()
+    {
+        var raw = Environment.GetEnvironmentVariable(Variable);
+        if (string.IsNullOrWhiteSpace(raw)) return true;
+        raw = raw!.Trim();
+        return !(raw == "0"
+                 || raw.Equals("false", StringComparison.OrdinalIgnoreCase)
+                 || raw.Equals("off", StringComparison.OrdinalIgnoreCase)
+                 || raw.Equals("no", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -85,8 +104,8 @@ internal static class MapPatchRestore
             if (data == null || width <= 0 || height <= 0 || data.Length < width * height * 2)
             {
                 Log.Warn($"map patch restore: the engine returned no battle scene index map ({width}x{height}). " +
-                         "The scene most likely has no terrain — set MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN=1. " +
-                         "Map patches stay at 0 and field battles will keep crashing clients.");
+                         "Map patches stay at 0, so every field battle will load the same arbitrary battle terrain " +
+                         "and clients will crash entering one. This is the failure this exists to prevent.");
                 return;
             }
             _indexMap = data;
