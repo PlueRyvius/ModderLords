@@ -81,7 +81,12 @@ public static class TerrainProbe
         var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         var dir = Path.Combine(docs, "Mount and Blade II Bannerlord", "Configs", "ModLogs");
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "terrain-probe-" + Side() + ".csv");
+        // The pid is in the name because a TAOM launch runs two engine processes — world creation, then serving —
+        // and they are not always on the same map. One run left a "terrain-probe-server.csv" holding a 17,153-face
+        // map while the server was serving a 19,396-face one. A file that quietly describes something other than
+        // what you think you measured is worse than no file.
+        var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+        return Path.Combine(dir, "terrain-probe-" + Side() + "-" + pid + ".csv");
     }
 
     private static string Side()
