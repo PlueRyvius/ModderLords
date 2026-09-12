@@ -151,7 +151,7 @@ internal static class MapPatchRestore
             sceneIndex = _indexMap[index],
             normalizedCoordinates = new Vec2((packed & 0xF) / 15f, ((packed >> 4) & 0xF) / 15f),
         };
-        if (_served < LoggedAnswers)
+        if (_served < LoggedAnswers && !Diagnostics.TerrainProbe.Sweeping)
             Log.Info($"map patch restore: ({__0.X:0.##}, {__0.Y:0.##}) -> cell {x},{y} of {_width}x{_height} " +
                      $"= sceneIndex {__result.sceneIndex}, coords {__result.normalizedCoordinates}");
         _served++;

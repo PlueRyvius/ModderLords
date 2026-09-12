@@ -38,6 +38,14 @@ public static class TerrainProbe
     private static bool _announced;
 
     /// <summary>
+    /// True while the grid sweep is running. The sweep calls every map-scene query thousands of times, which drowns
+    /// any other diagnostic that logs the first few answers it serves — the probe's own edge samples ate the map
+    /// patch restore's entire log budget before a battle ever asked it anything. Anything that logs per answer
+    /// should stay quiet while this is set.
+    /// </summary>
+    public static bool Sweeping { get; private set; }
+
+    /// <summary>
     /// Cheap enough to call every tick: an env read and a null check until a campaign exists, and nothing at all
     /// once it has answered. Say when it is armed — "no output" otherwise cannot be told apart from "not loaded".
     /// </summary>
@@ -122,21 +130,27 @@ public static class TerrainProbe
 
         var grid = ReadGrid();
         var rows = 0;
-        // Cell centres, not border lines: the border itself is off the navmesh on every map and produces a band of
-        // identical "no answer" rows that agree trivially and prove nothing.
-        for (var iy = 0; iy < grid; iy++)
-        for (var ix = 0; ix < grid; ix++)
+        Sweeping = true;
+        try
         {
-            var x = min.Item1 + (max.Item1 - min.Item1) * (ix + 0.5f) / grid;
-            var y = min.Item2 + (max.Item2 - min.Item2) * (iy + 0.5f) / grid;
-            Row(text, api, x, y);
-            rows++;
+            // Cell centres, not border lines: the border itself is off the navmesh on every map and produces a band
+            // of identical "no answer" rows that agree trivially and prove nothing.
+            for (var iy = 0; iy < grid; iy++)
+            for (var ix = 0; ix < grid; ix++)
+            {
+                var x = min.Item1 + (max.Item1 - min.Item1) * (ix + 0.5f) / grid;
+                var y = min.Item2 + (max.Item2 - min.Item2) * (iy + 0.5f) / grid;
+                Row(text, api, x, y);
+                rows++;
+            }
+            foreach (var point in ReadPoints())
+            {
+                Row(text, api, point.Item1, point.Item2);
+                rows++;
+            }
         }
-        foreach (var point in ReadPoints())
-        {
-            Row(text, api, point.Item1, point.Item2);
-            rows++;
-        }
+        finally { Sweeping = false; }
+
         File.WriteAllText(path, text.ToString());
         return rows;
     }
