@@ -363,16 +363,20 @@ public partial class HostViewModel : ObservableObject
             }
             if (Profile.Name == launchProfile.Name) ProfileStore.MergeLastVersions(Profile, launchProfile);
             DriftText = "";
-            foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
-            foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
 
+            // Open the log before anything is reported into it. The preparation messages and the plan description
+            // (cwd, exe, args, env) are the most useful thing a launch log can hold, and they were being written
+            // before this line existed — so they never reached disk at all.
             var logDir = Path.Combine(ProfileStore.RootDir, "logs");
             Directory.CreateDirectory(logDir);
             var rotated = Preflight.RotateLogs(logDir, "launch-*.log", keep: 20);
-            if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
             _launchLog = new CappedLogWriter(Path.Combine(logDir, $"launch-{DateTime.Now:yyyyMMdd-HHmmss}.log"));
             _pending.Clear();
             _totalDropped = 0;
+            if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
+
+            foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
+            foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
 
             if (autoTaomCreate)
             {
@@ -384,9 +388,15 @@ public partial class HostViewModel : ObservableObject
                 using var creation = EngineProcess.Start(LaunchSession.CreateWorldPlan(prepared, launchProfile.SaveName));
                 creation.LineReceived += line =>
                 {
+                    // Everything the creation process says goes to the log and the console, exactly as the run
+                    // phase does. Only the worldcreate milestones were kept before, so when creation failed the
+                    // engine's own explanation — the one line that says why — had already been thrown away.
+                    var c = LogClassifier.Classify(line.Text);
+                    _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
+                    _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
                     if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase) ||
                         line.Text.Contains("phase=", StringComparison.OrdinalIgnoreCase))
-                        Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModderLords] " + line.Text));
+                        Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Milestone, "[ModderLords] " + line.Text));
                 };
                 // The compat module normally exits at the same deadline. Keep a launcher-side watchdog as well so
                 // a native hang cannot leave a half-started creation process behind indefinitely.
@@ -654,13 +664,22 @@ public partial class HostViewModel : ObservableObject
 
     internal void AddLine(LogCategory c, string text)
     {
-        Console.Add(new ConsoleLine(DateTime.Now.ToString("HH:mm:ss"), c, text));
+        // The launcher's own lines are the ones a bug report needs most — the plan, the env, the worldcreate
+        // phases — and they used to exist only in this window. Write them to the launch log too; AddLine is
+        // low-volume (the engine's thousands of lines go through LineReceived), so this costs nothing.
+        var at = DateTime.Now;
+        _launchLog?.WriteLine($"{at:HH:mm:ss.fff} {c,-10} {text}");
+        Console.Add(new ConsoleLine(at.ToString("HH:mm:ss"), c, text));
         ConsoleFlushed?.Invoke();
     }
 
     private void FlushConsole()
     {
         DrainPerf();
+        // The launch log buffers rather than flushing per line; push it to disk on every tick. This has to happen
+        // before the early return below: a creation-only phase produces launcher lines and no queued engine lines,
+        // so a flush gated on _pending left the file at zero bytes for the whole run.
+        _launchLog?.Flush();
         if (_pending.IsEmpty) return;
         // No DeferRefresh here: a ListCollectionView throws if its source changes while a refresh is deferred.
         var n = 0;
@@ -677,8 +696,6 @@ public partial class HostViewModel : ObservableObject
                 "The engine is printing faster than this window can show. If a Trace switch is on under the Server tab, turn it off."));
         }
 
-        // The launch log buffers rather than flushing per line; push it to disk on the same tick.
-        _launchLog?.Flush();
         // Engine chatter is the bulk of the output; drop it first so module-load, probe, server and error lines survive a whole campaign load.
         if (Console.Count > 60000) Console.TrimTo(50000, l => l.Category is LogCategory.Engine);
         ConsoleFlushed?.Invoke();
