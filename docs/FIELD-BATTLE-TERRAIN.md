@@ -1,6 +1,11 @@
 # Field battles crash the client — handoff
 
-**STATUS 2026-09-12: not solved.** A confident mid-session claim that it was has been retracted — read
+**STATUS 2026-09-12: largely explained, not finished.** Two independent faults stacked. (1) The server
+answered `sceneIndex` 0 for the whole map, so every field battle loaded one arbitrary scene — fixed by
+`MapPatchRestore`. (2) That scene, and the one at the position every test used, are the only two of TAOM's 81
+battle scenes shipped without a terrain shader cache, and those crash the client. Details below.
+
+**An earlier confident claim to have solved this was retracted mid-session.** A confident mid-session claim that it was has been retracted — read
 "Retraction" below before acting on any earlier section. What is established: the server's stripped map scene
 returned `sceneIndex` 0 everywhere, and that is now fixed (`MapPatchRestore` reads the engine's real 1024x1024
 index map). The client still crashes.
@@ -310,6 +315,44 @@ demonstrably at this position — and every coop run has been at one spot.
 - If single-player crashes too, this is not a coop bug, and the map-scene work, while correct, was never the cause.
 - If single-player loads, the difference is in what the client does under coop with a scene that otherwise loads
   fine, and the terrain shader path is where to look.
+
+### 2026-09-12: the two battle scenes that crash are the only two without a shader cache
+
+Of the **81** battle scenes TAOM's `sp_battle_scenes.xml` can select, exactly **two** ship without a compiled
+terrain shader cache (`ShaderCache/D3D11/compressed_shader_cache.sack`):
+
+```
+NO SACK: battle_terrain_a     map_indices = 0, 2, 136, 118
+NO SACK: battle_terrain_020   map_indices = 52, 54, 86, 35, 121, 122, 59, 55, 56, 57, 63, 110, 117, 144
+```
+
+Against every run of the session:
+
+| served index | scene | shader sack | result |
+|---|---|---|---|
+| 0 — the server's broken default | `battle_terrain_a` | **none** | crashed |
+| 55 — the true value at the test position | `battle_terrain_020` | **none** | crashed |
+| 66 — the replay's wrong neighbouring cell | `battle_terrain_d` | 415,948 bytes | **loaded** |
+
+Three for three, and hitting the only two sackless scenes out of 81 twice is roughly a 0.06% coincidence. It also
+matches the crash log line for line: `read_compressed_shader_cache_package : 0.000012` finds nothing, every
+`pbr_terrain*` shader is then missing, they are compiled at runtime, and the texture array creation fails.
+
+This is also why the failure looked total. Before `MapPatchRestore`, the server answered `sceneIndex` 0 for the
+**entire map**, so every field battle anywhere loaded `battle_terrain_a` — one of the two broken scenes. The one
+position tested since happens to resolve to 55, the other one.
+
+**`MapPatchRestore` is therefore necessary and is a real fix**, even though it did not stop the crash at that
+position: without it every field battle crashes; with it, battles reach their true scene and 79 of 81 have a
+shader cache.
+
+Prediction, and the next test: with the restore on, **a field battle well away from that position should load**.
+The served index is logged, so the scene it picked can be checked against the two above.
+
+Caveat worth keeping: vanilla ships those two scenes without a sack and presumably plays them fine in
+single-player, so a missing cache may be necessary but not sufficient. What makes runtime terrain-shader
+compilation fail *here* is not yet established, and a battle loading elsewhere would confirm the pattern without
+explaining it.
 
 ### The two routes considered before that, kept for the record
 
