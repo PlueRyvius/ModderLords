@@ -56,12 +56,16 @@ public sealed class CompatSubModule : MBSubModuleBase
     protected override void OnBeforeInitialModuleScreenSetAsRoot()
     {
         base.OnBeforeInitialModuleScreenSetAsRoot();
+        // This used to Environment.Exit(12) on any failure, because serving a mod's map with the vanilla map's
+        // bounds is how a server once hosted a TAOM campaign on the wrong map. Killing the process was a blunt way
+        // to guarantee that never went unnoticed. HeadlessMapBounds now compares the loaded scene's own bounds
+        // against whatever is in effect and says so on every start, so the failure is reported rather than fatal —
+        // and a server that would otherwise refuse to start at all gets to run.
         try { HeadlessMapExperiment.Install(); }
         catch (Exception ex)
         {
-            Log.Info("headless-map: unsupported diagnostic map: " + ex);
-            Environment.Exit(12);
-            return;
+            Log.Warn("headless-map: could not apply the prepared map bounds, so the stock map's are in effect. " +
+                     "If this server is hosting a mod's map, expect the bounds check below to disagree. Cause: " + ex);
         }
         // A failure to install any of these warns and leaves the server alone: the map patch restore is a fix, the
         // census is a diagnostic, and unlike the headless map nothing downstream depends on either.
