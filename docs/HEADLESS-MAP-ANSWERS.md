@@ -136,10 +136,20 @@ bounds getters *before* the scene loads, so correct values are in effect from th
 scene-derived values only exist afterwards. The sidecar is also free — the projection computes those numbers
 from the scene XML anyway.
 
-What can go is the **machinery around** it: the navmesh SHA-256 validation, the hard `MODDERLORDS_HEADLESS_MAP`
-requirement, and the `Environment.Exit(12)` on mismatch. Their job is to prove the sidecar matches the scene,
-and the runtime comparison now does that directly and more cheaply — a warning instead of a killed process.
-`MapIdentityCheck` already guards the wrong-map incident those checks were written for.
+**Done 2026-09-12.** The machinery around the sidecar is gone: the navmesh SHA-256 validation, and the
+`Environment.Exit(12)` that killed the process when anything about the sidecar failed. Their job was to prove the
+sidecar matched the scene, and `HeadlessMapBounds` now does that directly against the **loaded** scene, which is
+a stronger check than hashing a file next to the sidecar. It is on by default, and a disagreement is a loud
+warning naming the consequence rather than a silent exit code.
+
+The sidecar itself stays, deliberately. `HeadlessMapExperiment` patches the bounds getters *before* the scene
+loads, so its values are in effect from the first read; scene-derived ones only exist afterwards. It is also
+free — the projection computes those numbers from the scene XML regardless. The `navmesh-sha256` attribute is
+still written for provenance; nothing reads it.
+
+A failure to apply the prepared bounds no longer stops the server. It warns, runs, and the bounds check then
+reports the disagreement — so a server that would previously have refused to start gets to run, and the problem
+is still impossible to miss.
 
 **Original next step, now done:** read that comparison on a real map. If it agrees, the sidecar, the hash check, the env var and the
 exit path can all go, and map-replacing mods need no preparation for bounds at all. The terrain size is the

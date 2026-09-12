@@ -87,6 +87,9 @@ public static class HeadlessMapProjection
             new XAttribute("border_min", string.Join(',', min.Select(Format))),
             new XAttribute("border_max", string.Join(',', max.Select(Format))),
             new XAttribute("terrain-size", terrainSize),
+            // Kept for provenance only. The server no longer validates against it: HeadlessMapBounds compares the
+            // loaded scene's own border markers with the bounds in effect, which checks the same thing directly.
+            // (The marker file's copy below is a different matter — that one decides whether the cache is stale.)
             new XAttribute("navmesh-sha256", navmeshHash));
         new XDocument(map).Save(metadata);
         File.WriteAllText(Path.Combine(outputScene, Marker), JsonSerializer.Serialize(new

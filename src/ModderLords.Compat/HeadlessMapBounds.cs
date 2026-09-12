@@ -30,19 +30,22 @@ namespace ModderLords.Compat;
 /// keeps them, so the server can answer the same question the same way — for any map-replacing mod, with nothing
 /// prepared in advance.</para>
 ///
-/// <para>This logs the comparison rather than acting on it. If the derived bounds match the injected ones on a real
-/// map, the sidecar and everything guarding it can go.</para>
+/// <para>Measured 2026-09-12 on TAOM's map: derived and injected agree exactly, borders and terrain size both.
+/// So this is now the check that the sidecar is describing the scene actually being served — it replaced a
+/// navmesh SHA-256 comparison against a file next to the sidecar, and the process-killing exit that went with
+/// it.</para>
 ///
-/// <para><b>OFF by default, and it killed a server to earn that.</b> Enabled on its first outing, it took the
-/// engine down with an access violation in native code moments after the map scene loaded — every call it makes
-/// crosses into native, and a native fault cannot be caught by the try/catch around it. It now announces each call
-/// before making it, so a repeat names the exact one, and it refuses to ask for terrain data on a scene whose
-/// terrain descriptor was stripped. A diagnostic that can take down what it is measuring does not belong on a
-/// default launch.</para>
+/// <para><b>It killed a server once.</b> On its first outing it took the engine down with an access violation
+/// moments after the map scene loaded. Every call it makes crosses into native, where a fault cannot be caught by
+/// the try/catch around it. The culprit was identified by elimination — a borders-only run does everything the
+/// crashing run did except ask for terrain data, and is clean — so <c>GetTerrainData</c> on a scene whose terrain
+/// descriptor was stripped is the fault, and it is now only called when the descriptor was kept. Each call still
+/// announces itself first, so any repeat names the exact one.</para>
 /// </summary>
 internal static class HeadlessMapBounds
 {
-    /// <summary>Set to 1 to run the comparison. Off by default: every call it makes crosses into native code.</summary>
+    /// <summary>Set to 0 to skip the comparison. On by default — it is the only thing checking that the bounds in
+    /// effect match the map actually loaded.</summary>
     public const string Variable = "MODDERLORDS_HEADLESS_MAP_BOUNDS_CHECK";
 
     /// <summary>The launcher's switch, by name: this module cannot reference ModderLords.Core, where it is declared.</summary>
@@ -53,7 +56,7 @@ internal static class HeadlessMapBounds
     internal static void Tick()
     {
         if (_done || !ServerDetect.IsDedicatedServer) return;
-        if (Environment.GetEnvironmentVariable(Variable) != "1") { _done = true; return; }
+        if (Environment.GetEnvironmentVariable(Variable) == "0") { _done = true; return; }
         try
         {
             if (Campaign.Current?.MapSceneWrapper is not IMapScene wrapper) return;
@@ -65,8 +68,8 @@ internal static class HeadlessMapBounds
             var max = scene.GetFirstEntityWithName("border_max");
             if (min == null || max == null)
             {
-                Log.Info("map bounds: the scene carries no border_min/border_max markers, so its bounds cannot be " +
-                         "derived; the launcher's injected values stand. Re-prepare the map to keep the markers.");
+                Log.Info("map bounds: the scene carries no border_min/border_max markers, so they cannot be checked " +
+                         "against what is in effect. Re-prepare the map to keep the markers.");
                 return;
             }
 
@@ -83,9 +86,9 @@ internal static class HeadlessMapBounds
             Log.Info($"map bounds currently in effect    : {liveMin}..{liveMax} height={liveHeight:0.###}");
             var agrees = Near(derivedMin, liveMin) && Near(derivedMax, liveMax)
                          && Math.Abs(derivedHeight - liveHeight) < 0.01f;
-            Log.Info(agrees
-                ? "map bounds: the scene agrees with the injected borders"
-                : "map bounds: WARNING the scene and the injected borders disagree");
+            if (agrees) Log.Info("map bounds: the scene agrees with the bounds in effect");
+            else Log.Warn("map bounds: THE BOUNDS IN EFFECT ARE NOT THIS MAP'S. The server is about to run a " +
+                          "campaign against the wrong dimensions; stop it and re-prepare the map.");
 
             // Terrain size needs the scene's <terrain> descriptor, and asking a scene that has none is a plausible
             // reading of the access violation this used to cause. Only ask when the descriptor was kept.
