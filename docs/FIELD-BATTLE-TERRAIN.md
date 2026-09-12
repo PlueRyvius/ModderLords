@@ -467,74 +467,19 @@ The measurement narrows this to three members, in priority order:
 
 `GetTerrainTypeAtPosition` and `GetFaceIndex` need no work: they already match the client everywhere.
 
-### Before that: two spikes settle whether the client consumes these answers at all
+### The two spikes that got us here (removed)
 
-What is proved is that the server's answers are empty. What is **not** proved is that the client's crash consumes
-*these* answers rather than deriving terrain on a path of its own. `terrain.bin` is a 56 MB format and parsing it
-is days of work, all of it wasted if the answer is no. Both spikes live in the guards module (always in the
-server's load order), are off unless their own variable is set, and must never ship enabled.
+`TerrainStubExperiment` fabricated the missing terrain-type list; `TerrainReplayExperiment` replayed a recorded
+client probe. Both answered their question and were deleted — the stub because nothing ever asks the server for
+terrain types, the replay because `MapPatchRestore` now reads the real map from the engine. They are in the
+history if ever wanted: `git show 4b96b21`.
 
-**Spike 1 — fabricate the missing list** (`TerrainStubExperiment`). Asks the narrow question: is an empty
-terrain-type list the cause? It needs no terrain data, because the server already answers the *current* terrain
-type correctly everywhere — so a neighbourhood of that type is free.
+What they established is worth keeping:
 
-```
-set MODDERLORDS_TERRAIN_STUB=1          # or a neighbourhood size; 1 means 49, what the client returns
-```
-
-An empty list becomes N copies of the current type, and `GetHeightAtPoint` reports failure instead of `true`
-with a height of 0.
-
-**Spike 2 — replay ground truth** (`TerrainReplayExperiment`). Isolates `sceneIndex`, which spike 1 deliberately
-leaves alone. Fabricating a patch index would be guessing, and a wrong index selects a wrong scene — a different
-failure that muddies the result. So this answers from a *recorded single-player client probe CSV* instead, which
-is ground truth at 48 samples per axis (~34 map units per cell: useless for gameplay, ample for "does the battle
-load").
-
-```
-set MODDERLORDS_TERRAIN_REPLAY=...\terrain-probe-client.csv
-set MODDERLORDS_TERRAIN_REPLAY_FIELDS=patch          # default; also height, env, or all
-```
-
-Run them **one at a time**, so a change in behaviour names which value mattered. Both print a line every 30
-seconds saying how many answers they actually changed — a spike that patched the wrong thing and served nothing
-is the failure most easily mistaken for a disproved hypothesis, so check that count is non-zero before believing
-a negative result.
-
-Reading the outcome:
-
-| Result | Meaning |
-|---|---|
-| Spike 1 fixes the battle | The empty type list is the cause. Source that list from `terrain.bin` and stop. |
-| Spike 2 (`patch`) fixes it | `sceneIndex` is the cause, despite scene *selection* already being ruled out. |
-| Only `FIELDS=all` fixes it | Several answers are needed together; bisect from there. |
-| Neither changes anything | The client is not consuming these. Stop working on the map scene and instrument what Coop sends on a field-battle start instead. |
-
-Implementation note, and a correction worth not repeating. `SandBox.MapScene` declares these queries
-**non-virtual**, from which the first version of these spikes concluded that the host's `A.G` could not take them
-over, and patched SandBox's declarations. Wrong: `A.G` cannot *override* them, but it **re-implements the
-interface**, which has the same effect. It carries its own sealed explicit `IMapScene.GetMapPatchAtPosition`,
-`GetEnvironmentTerrainTypesCount` and `GetHeightAtPoint`, forwarding to obfuscated methods of its own
-(`MapPatchData A(ref CampaignVec2)`). The interface slots point at those, so patches on SandBox's copies never
-fired — a spike ran through a whole battle and served zero answers.
-
-`MapSceneTarget.Implementations` therefore resolves through the runtime **interface map**, which names whatever
-the type genuinely dispatches to without depending on a method name, and also patches any same-signature sibling
-on `A.G` in case the host calls the inner method directly. Every postfix is idempotent, so more than one firing
-is harmless.
-
-Two rules follow for anything else patched in `DedicatedServer.Core`:
-
-- Resolve targets through the interface map, never by assuming an inherited declaration is the one that runs.
-- Bind by-ref patch arguments **positionally** (`__0`, `__1`). Obfuscation strips parameter names — `A.G`'s copy
-  declares its out parameter with no name at all — so name-bound patch arguments fail silently.
-
-Note also what `A.G` re-implements: exactly the three queries measured to return nothing, and none of the ones
-measured to be correct. The obfuscated class is its own map of where the terrain data went.
-
-**3. Keep it general.** The rule to aim for is "a mod that replaces the campaign map keeps its terrain
-queries answerable headlessly" — not anything TAOM-shaped. The world-map grid textures went in by naming
-convention rather than a per-mod offset table for the same reason.
+- A count of served answers is not evidence. The stub reported `filled 0` through an entire battle because it had
+  patched a method nothing calls, which reads exactly like a disproved hypothesis.
+- The one run that loaded a battle did so on a *wrong* value, which is why every spike since prints the values it
+  serves and not just how many.
 
 ## Useful assets
 

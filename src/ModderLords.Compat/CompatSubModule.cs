@@ -63,16 +63,12 @@ public sealed class CompatSubModule : MBSubModuleBase
             Environment.Exit(12);
             return;
         }
-        // Both are off unless their own variable is set, and both are diagnostics rather than fixes, so a failure to
-        // install one warns and leaves the server alone. Unlike the headless map, nothing downstream depends on them.
+        // A failure to install any of these warns and leaves the server alone: the map patch restore is a fix, the
+        // census is a diagnostic, and unlike the headless map nothing downstream depends on either.
         try { MapPatchRestore.Install(Harmony); }
         catch (Exception ex) { Log.Warn("map patch restore not installed: " + ex.GetBaseException().Message); }
         try { MapSceneCallCensus.Install(Harmony); }
         catch (Exception ex) { Log.Warn("map scene census not installed: " + ex.GetBaseException().Message); }
-        try { TerrainStubExperiment.Install(Harmony); }
-        catch (Exception ex) { Log.Warn("terrain stub not installed: " + ex.GetBaseException().Message); }
-        try { TerrainReplayExperiment.Install(Harmony); }
-        catch (Exception ex) { Log.Warn("terrain replay not installed: " + ex.GetBaseException().Message); }
         if (_worldCreator is null) return;
         try
         {
@@ -110,17 +106,17 @@ public sealed class CompatSubModule : MBSubModuleBase
         // The battle scene index map can only be read once the native scene has finished loading its terrain, which
         // is long after modules are set up. Costs a bool check per frame after the one tick that reads it.
         try { MapPatchRestore.Tick(); } catch { }
+        // Measurement only: says whether the scene can answer for its own bounds, which is what a client does.
+        try { HeadlessMapBounds.Tick(); } catch { }
 
-        // Every 30 s while a spike is on, say how many answers it has changed. A spike that patched the wrong thing
-        // and served nothing is the failure mode most likely to be mistaken for a disproved hypothesis.
+        // Every 30 s, report what the map-scene layer has actually done. A patch that fired on the wrong method and
+        // changed nothing is the failure most easily mistaken for a disproved hypothesis, so the counts are printed.
         _sinceSpikeReport += dt;
         if (_sinceSpikeReport >= 30f)
         {
             _sinceSpikeReport = 0f;
             try
             {
-                if (TerrainStubExperiment.Summary() is { } stub) Log.Info(stub);
-                if (TerrainReplayExperiment.Summary() is { } replay) Log.Info(replay);
                 if (MapSceneCallCensus.Summary() is { } census) Log.Info(census);
                 if (MapPatchRestore.Summary() is { } patch) Log.Info(patch);
             }

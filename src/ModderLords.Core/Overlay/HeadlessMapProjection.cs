@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -8,6 +9,15 @@ namespace ModderLords.Core.Overlay;
 public static class HeadlessMapProjection
 {
     private const string Marker = ".modderlords-headless-map";
+
+    /// <summary>
+    /// The two entities a map scene carries its own bounds in. A client reads them straight out of the scene
+    /// (<c>MapScene.Load</c>: <c>GetFirstEntityWithName("border_min")</c> and <c>"border_max"</c>, whose global frame
+    /// origins are the minimum position, the maximum position and the maximum height). They are pure transform
+    /// markers — 153 bytes each in TAOM's map, no mesh, no components, no children — so keeping them costs nothing
+    /// and removes the reason this projection has to publish its bounds in a sidecar at all.
+    /// </summary>
+    private static readonly string[] BoundsEntities = ["border_min", "border_max"];
 
     /// <summary>
     /// Set to keep the scene's &lt;terrain&gt; descriptor instead of removing it.
@@ -53,8 +63,15 @@ public static class HeadlessMapProjection
         var min = Position(root, "border_min");
         var max = Position(root, "border_max");
         if (max[0] <= min[0] || max[1] <= min[1]) throw new InvalidDataException("Map border dimensions are invalid");
-        var removed = entities.Descendants("game_entity").Count();
+        // Everything renderable goes; the two bounds markers stay. The headless scene otherwise hardcodes the
+        // vanilla map's borders (62,30)..(790,640), which is wrong for every map-replacing mod.
+        var kept = entities.Descendants("game_entity")
+            .Where(e => BoundsEntities.Contains((string?)e.Attribute("name"), StringComparer.OrdinalIgnoreCase))
+            .Select(e => new XElement(e))
+            .ToList();
+        var removed = entities.Descendants("game_entity").Count() - kept.Count;
         entities.RemoveNodes();
+        foreach (var marker in kept) entities.Add(marker);
         var terrain = root.Element("terrain") ?? throw new InvalidDataException("Map scene has no terrain dimensions");
         var nodeSize = ParseDouble(terrain.Attribute("node_size"), "terrain node_size");
         var nodesX = ParseInt(terrain.Attribute("node_dimension_x"), "terrain node_dimension_x");
@@ -78,6 +95,7 @@ public static class HeadlessMapProjection
             removed_entities = removed,
             navmesh_sha256 = navmeshHash,
             keep_terrain = keepTerrain.Value,
+            kept_bounds_entities = kept.Count,
             source_xml_length = new FileInfo(sourceXml).Length,
             source_xml_write_utc_ticks = File.GetLastWriteTimeUtc(sourceXml).Ticks,
         }, new JsonSerializerOptions { WriteIndented = true }));
@@ -99,6 +117,9 @@ public static class HeadlessMapProjection
                 !string.Equals(hashValue.GetString(), navmeshHash, StringComparison.OrdinalIgnoreCase)) return false;
             var cachedKeepTerrain = root.TryGetProperty("keep_terrain", out var keepValue) && keepValue.GetBoolean();
             if (cachedKeepTerrain != keepTerrain) return false;
+            // A projection built before the bounds markers were retained has none, and reusing it would hide the
+            // very thing they were kept for.
+            if (!root.TryGetProperty("kept_bounds_entities", out _)) return false;
             if (BinaryFiles.Any(name => !File.Exists(Path.Combine(output, name))) || !File.Exists(Path.Combine(output, "scene.xscene"))) return false;
             result = new Result(source, output, metadata, navmeshHash, true);
             return true;
