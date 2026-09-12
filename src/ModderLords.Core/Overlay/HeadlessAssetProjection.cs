@@ -20,6 +20,30 @@ public static class HeadlessAssetProjection
         [Guid.Parse("e8528e0e-64b6-4e61-bae0-7569c0452aea")] = "PhysicsShape",
     };
 
+    /// <summary>Texture records. Excluded wholesale — they are the render resources that crash a headless engine.</summary>
+    private static readonly Guid TextureType = Guid.Parse("c974cbcb-5f1c-49f6-9a32-2b5b6c92c2e8");
+
+    /// <summary>
+    /// The exception to "no textures": a handful of world-map textures are not drawn, they are read as lookup
+    /// grids that drive simulation decisions. <c>worldmap_battle_scene_grid</c> is the one that decides which
+    /// battle scene a map position produces, so a server without it cannot tell a client which terrain to build.
+    ///
+    /// Measured 2026-09-12: with these absent, a field battle killed the client in
+    /// <c>rglGPU_device::create_texture_array … CreateTexture2D … The parameter is incorrect</c> while the server
+    /// carried on reporting a healthy mission. TAOM ships both inside a 908 MB pack that projected to nothing.
+    ///
+    /// Matched by name rather than by a per-mod offset table, so any mod that replaces the campaign map is covered
+    /// by the same rule: these names come from the stock world-map convention, not from TAOM.
+    /// </summary>
+    private static readonly HashSet<string> SimulationGridTextures = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "worldmap_battle_scene_grid", "worldmap_colorgrade_grid_custom", "worldmap_colorgrade_grid",
+    };
+
+    /// <summary>True for a record the server needs, whether it is a simulation type or a lookup-grid texture.</summary>
+    private static bool IsWanted(Guid kind, string name)
+        => SimulationTypes.ContainsKey(kind) || (kind == TextureType && SimulationGridTextures.Contains(name));
+
     private const string Marker = ".modderlords-headless-assets.json";
 
     /// <summary>One asset record as it exists in a package: what it is called and what type it is.</summary>
@@ -48,8 +72,9 @@ public static class HeadlessAssetProjection
             catch { continue; } // an unreadable package is not this diagnostic's problem to report
             foreach (var record in package.Records)
                 found.Add(new InventoryEntry(record.Name,
-                    SimulationTypes.TryGetValue(record.Kind, out var t) ? t : record.Kind.ToString(),
-                    SimulationTypes.ContainsKey(record.Kind), file));
+                    SimulationTypes.TryGetValue(record.Kind, out var t) ? t
+                        : record.Kind == TextureType ? "Texture" : record.Kind.ToString(),
+                    IsWanted(record.Kind, record.Name), file));
         }
         return found;
     }
@@ -85,7 +110,7 @@ public static class HeadlessAssetProjection
         foreach (var packagePath in packages)
         {
             var package = ReadPackage(packagePath);
-            var selected = package.Records.Where(r => SimulationTypes.ContainsKey(r.Kind)).ToList();
+            var selected = package.Records.Where(r => IsWanted(r.Kind, r.Name)).ToList();
             if (selected.Count == 0) continue;
             var destination = Path.Combine(output, Path.GetFileName(packagePath));
             var result = WriteSubset(packagePath, destination, package, selected);

@@ -89,6 +89,38 @@ public class MissingAssetProbe
         Assert.Equal(new[] { "female_run_right_1h", "warg_attack_stand" }, MissingNames(lines).ToArray());
     }
 
+    /// <summary>
+    /// What types a set of packages actually contains, and how much of each. Answers "is there anything in here the
+    /// server needs that the projection's four simulation types do not cover?" — the question raised by TAOM's
+    /// battle terrain, whose two world-map textures live in a package that projects to nothing.
+    /// Set MODDERLORDS_PROBE_ROOTS alone (no log needed).
+    /// </summary>
+    [Fact]
+    public void Report_asset_types_present()
+    {
+        var roots = Environment.GetEnvironmentVariable("MODDERLORDS_PROBE_ROOTS");
+        if (string.IsNullOrWhiteSpace(roots)) { _out.WriteLine("set MODDERLORDS_PROBE_ROOTS to run this; skipped"); return; }
+
+        foreach (var root in roots.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var entries = HeadlessAssetProjection.Inventory(root);
+            _out.WriteLine($"=== {root}: {entries.Count} record(s)");
+            foreach (var byPackage in entries.GroupBy(e => Path.GetFileName(e.Package)).OrderBy(g => g.Key))
+            {
+                _out.WriteLine($"  {byPackage.Key}");
+                // Keyed on what the projection will actually do, not just the type: a type can be excluded in
+                // general while a named few inside it are kept (the world-map lookup grids).
+                foreach (var byType in byPackage.GroupBy(e => (e.Type, e.IsSimulation)).OrderByDescending(g => g.Count()))
+                {
+                    var projected = byType.Key.IsSimulation ? "projected" : "EXCLUDED";
+                    _out.WriteLine($"    {byType.Count(),7} {byType.Key.Type,-40} {projected}");
+                    // Name the handful, so a two-texture package is identifiable rather than just a count.
+                    if (byType.Count() <= 6) foreach (var e in byType) _out.WriteLine($"            {e.Name}");
+                }
+            }
+        }
+    }
+
     [Fact]
     public void Inventory_of_a_missing_folder_is_empty_not_an_error()
         => Assert.Empty(HeadlessAssetProjection.Inventory(
