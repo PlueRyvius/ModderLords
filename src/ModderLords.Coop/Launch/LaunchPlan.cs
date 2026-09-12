@@ -102,7 +102,20 @@ public sealed class LaunchPlan
             sb.Append(a.Contains(' ') ? $"\"{a}\" " : a + " ");
         }
         sb.AppendLine();
-        foreach (var kv in Environment()) sb.AppendLine($"env : {kv.Key}={kv.Value}");
+        var planned = Environment();
+        foreach (var kv in planned) sb.AppendLine($"env : {kv.Key}={kv.Value}");
+
+        // The server also inherits this process's environment, and that is where a MODDERLORDS_* diagnostic switch
+        // comes from. Not logging them cost a whole debugging round: a run appeared to have a spike enabled because
+        // the operator had set it, while the launcher that actually started the server was an older instance that
+        // never saw it. What is inherited is as much a part of how a run was configured as what is passed.
+        foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+        {
+            var name = entry.Key as string;
+            if (name is null || !name.StartsWith("MODDERLORDS_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (planned.ContainsKey(name)) continue;   // already listed above, with the value actually being passed
+            sb.AppendLine($"env : {name}={entry.Value} (inherited)");
+        }
         return sb.ToString();
     }
 }
