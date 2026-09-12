@@ -50,11 +50,34 @@ This is a hypothesis, not a finding. It has not been instrumented.
 **1. Prove it before building anything.** Three guesses in this investigation looked equally plausible and
 were wrong; the cheap confirmations are what moved it forward each time.
 
-Find what the server actually reports for terrain at the battle position. `DedicatedServer.Core`'s name heap
-contains `GetTerrainTypeAtPosition`, `TaleWorlds.CampaignSystem.Map.IMapScene.GetEnvironmentTerrainTypes`,
-`GetEnvironmentTerrainTypesCount`, `GetMapPatchAtPosition`, `GetHeightAtPoint`. Patch or log those in
-`ModderLords.Compat` on a field-battle start and compare against the same calls on a single-player client at
-the same position. If they disagree, the hypothesis holds and the disagreement names the fix.
+The instrument for this exists now: **`TerrainProbe`** in `ModderLords.CompatSync` (the `ModderLords.Compat`
+module, which is enabled on both the server and every client). It samples the campaign map scene through
+`IMapScene` — terrain type, navmesh face, height, map patch, environment terrain counts, snow and rain — and
+writes one CSV. Run it on the server and in single-player on the same map, then diff.
+
+```
+set MODDERLORDS_TERRAIN_PROBE=1            # or a full path; "1" writes to Configs\ModLogs\terrain-probe-<side>.csv
+set MODDERLORDS_TERRAIN_PROBE_GRID=48      # optional, samples per axis (default 48 → 2304 rows)
+set MODDERLORDS_TERRAIN_PROBE_AT=x,y       # optional extra exact positions, "x,y;x,y" — the battle position
+```
+
+It arms on the settings tick, fires once as soon as `Campaign.Current.MapSceneWrapper` exists, and is a no-op
+when the variable is unset. Everything is bound by reflection against the interface, because the server's
+implementation is the obfuscated `A.G` inside `DedicatedServer.Core`. A bind failure throws at setup and is
+logged rather than producing a CSV of empty columns that reads like an answer.
+
+Then:
+
+```
+.\scripts\Compare-TerrainProbe.ps1 -Server terrain-probe-server.csv -Client terrain-probe-client.csv
+```
+
+It checks map identity first — borders, terrain size, both scene CRCs, navmesh face count — and refuses to
+let a row comparison be read when the two runs were not on the same map. Below that it reports a
+disagreement rate per column and the first differing samples.
+
+**If every column agrees, the hypothesis is dead** and the crash is not the server misreporting terrain.
+If they disagree, the columns that disagree name the fix.
 
 **2. If confirmed, the fix is most likely to restore terrain data the stripped scene lost** — not to un-strip
 the scene (that reintroduces the deadlock the stripping exists to avoid), but to supply terrain-type answers
@@ -71,6 +94,8 @@ convention rather than a per-mod offset table for the same reason.
   (`Artifacts/TAOM-Coop-Wrapper/*/Mapping.txt`). This is how `A.G` was identified as
   `DedicatedServerMapSceneCreator` and `A.f` as `ConsoleDebugManager`. Invaluable; the core is otherwise
   obfuscated with encrypted string literals.
+- **`TerrainProbe`** — see step 1 above. `MODDERLORDS_TERRAIN_PROBE`, and
+  `scripts\Compare-TerrainProbe.ps1` to diff two of its CSVs.
 - **`MissingAssetProbe`** / `HeadlessAssetProjection.Inventory` — what a package actually contains
   (`MODDERLORDS_PROBE_LOG`, `MODDERLORDS_PROBE_ROOTS`).
 - **`ModuleDependencyProbe`** — what a module references (`MODDERLORDS_DEPS`). Note its limit: it answers

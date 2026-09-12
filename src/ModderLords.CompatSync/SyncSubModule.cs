@@ -54,6 +54,8 @@ public sealed class SyncSubModule : MBSubModuleBase
             // broadcasts anything that changed and re-applies snapshots that arrived before their object existed.
             try { CampaignWatch.Tick(); SettingsSources.Refresh(); }
             catch (Exception ex) { Log.Warn("settings discovery failed: " + ex.GetBaseException().Message); }
+            // Off unless MODDERLORDS_TERRAIN_PROBE is set, and it disarms itself on the first tick when it is not.
+            TerrainProbe.Tick();
             LiveSettings.Poll();
             if (_adapterTick is null) { TryLoadAdapter(); }
             else try { _adapterTick.Invoke(null, null); }
