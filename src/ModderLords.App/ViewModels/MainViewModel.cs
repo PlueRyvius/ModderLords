@@ -189,14 +189,25 @@ public partial class MainViewModel : ObservableObject
     /// are dead weight and — because the old community module has the same shape as the new one — a confusing
     /// second entry in every mod list. Say so rather than deleting anything inside the player's game folder.
     /// </summary>
-    private static IEnumerable<string> LegacyModuleNotice(string? gameRoot)
+    private static IEnumerable<string> LegacyModuleNotice(string? gameRoot, ServerPaths? paths)
     {
-        if (string.IsNullOrWhiteSpace(gameRoot)) yield break;
-        foreach (var id in new[] { "ModularCoop.Compat", "DedicatedServer.ModularCoopCompat" })
+        // Both roots. The client module lands in the game install, but DedicatedServer.ModularCoopCompat is a
+        // SERVER module and lives in the dedicated server's engine\Modules -- so looking only at the game root
+        // could never find the one it was most likely to find. Verified on a real install 2026-09-11: a 0.8.7
+        // DedicatedServer.ModularCoopCompat junction had survived every upgrade there, unreported.
+        foreach (var root in new[]
+                 {
+                     string.IsNullOrWhiteSpace(gameRoot) ? null : System.IO.Path.Combine(gameRoot, "Modules"),
+                     paths?.ModulesRoot,
+                 })
         {
-            var dir = System.IO.Path.Combine(gameRoot, "Modules", id);
-            if (System.IO.Directory.Exists(dir))
-                yield return $"left over from the old name: the module folder {id} is no longer used and can be deleted ({dir})";
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            foreach (var id in new[] { "ModularCoop.Compat", "DedicatedServer.ModularCoopCompat" })
+            {
+                var dir = System.IO.Path.Combine(root, id);
+                if (System.IO.Directory.Exists(dir))
+                    yield return $"left over from the old name: the module folder {id} is no longer used and can be deleted ({dir})";
+            }
         }
     }
     public ObservableCollection<string> LoadOrderPreview { get; } = new();
@@ -458,7 +469,7 @@ public partial class MainViewModel : ObservableObject
             foreach (var p in catalog.Problems) Messages.Add("catalog: " + p);
             var db = CompatDb.Reload();
             foreach (var p in db.Problems) Messages.Add("compat db: " + p);
-            foreach (var m in LegacyModuleNotice(gameRoot)) Messages.Add(m);
+            foreach (var m in LegacyModuleNotice(gameRoot, paths)) Messages.Add(m);
             CoopVersion = catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop")?.Version;
 
             // One row per module id AND version. The same mod routinely exists in the game's Modules folder and in

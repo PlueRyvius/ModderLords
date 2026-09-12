@@ -22,11 +22,43 @@ public static class HeadlessAssetProjection
 
     private const string Marker = ".modderlords-headless-assets.json";
 
+    /// <summary>One asset record as it exists in a package: what it is called and what type it is.</summary>
+    public sealed record InventoryEntry(string Name, string Type, bool IsSimulation, string Package);
+
+    /// <summary>
+    /// Lists every asset record in every .tpac under <paramref name="root"/>, recursively.
+    ///
+    /// This exists to settle a specific class of question with evidence. A server run logs hundreds of
+    /// "Could not find animation: X" warnings, and the obvious conclusion — that the projection stripped X — is
+    /// testable only by asking which records actually exist. Measured 2026-09-11: all 116 distinct names a TAOM
+    /// run complained about were absent from every installed package, client and server alike, so there was
+    /// nothing to widen the projection to include; they are dangling references in a mod's action_sets.xml.
+    ///
+    /// A substring search over the raw bytes will NOT answer this: a name appears inside other records as a
+    /// dependency reference, so it reads as "present" when no such record exists. Parse the table instead.
+    /// </summary>
+    public static IReadOnlyList<InventoryEntry> Inventory(string root)
+    {
+        var found = new List<InventoryEntry>();
+        if (!Directory.Exists(root)) return found;
+        foreach (var file in Directory.EnumerateFiles(root, "*.tpac", SearchOption.AllDirectories).OrderBy(p => p))
+        {
+            Package package;
+            try { package = ReadPackage(file); }
+            catch { continue; } // an unreadable package is not this diagnostic's problem to report
+            foreach (var record in package.Records)
+                found.Add(new InventoryEntry(record.Name,
+                    SimulationTypes.TryGetValue(record.Kind, out var t) ? t : record.Kind.ToString(),
+                    SimulationTypes.ContainsKey(record.Kind), file));
+        }
+        return found;
+    }
+
     public sealed record Result(string ModuleId, string OutputPath, int PackageCount, long Bytes, int AssetCount, bool Reused);
     private sealed record SourceStamp(string File, long Length, long LastWriteUtcTicks);
     private sealed record CacheManifest(string ModuleId, IReadOnlyList<SourceStamp> Sources, Result Result);
     private sealed record Segment(int Location, long Offset, long Stored);
-    private sealed record AssetRecord(Guid Kind, byte[] Raw, IReadOnlyList<Segment> Segments);
+    private sealed record AssetRecord(Guid Kind, string Name, byte[] Raw, IReadOnlyList<Segment> Segments);
     private sealed record Package(byte[] Header, int Version, IReadOnlyList<AssetRecord> Records);
 
     /// <summary>
@@ -212,7 +244,9 @@ public static class HeadlessAssetProjection
             if (version == 2) _ = ReadExactly(stream, 4);
             var nameSize = ReadUInt32(stream);
             if (nameSize > 1_000_000) throw new InvalidDataException("Invalid TPAC name size");
-            _ = ReadExactly(stream, checked((int)nameSize));
+            // Kept rather than discarded, so Inventory can answer "does this module actually supply asset X?" with
+            // evidence. The bytes are still carried verbatim inside the opaque Raw copy; this only reads them.
+            var name = System.Text.Encoding.UTF8.GetString(ReadExactly(stream, checked((int)nameSize))).TrimEnd('\0');
             var metadataSize = ReadUInt64(stream);
             if (metadataSize > (ulong)(length - stream.Position)) throw new InvalidDataException("Invalid TPAC metadata size");
             stream.Position += checked((long)metadataSize);
@@ -235,7 +269,7 @@ public static class HeadlessAssetProjection
             var end = stream.Position;
             stream.Position = start;
             var raw = ReadExactly(stream, checked((int)(end - start)));
-            records.Add(new AssetRecord(kind, raw, segments));
+            records.Add(new AssetRecord(kind, name, raw, segments));
             stream.Position = end;
         }
         var tableEnd = stream.Position;

@@ -127,8 +127,10 @@ public sealed class LaunchSession
             var canCreate = allowTaomWorldCreation && TaomLaunchPolicy.HasCompleteRecipe(selections.Select(s => s.Module.Id)) &&
                 !string.IsNullOrWhiteSpace(profile.SaveName) && !SavePreparer.Exists(paths, profile.SaveName);
             if (applySideEffects && !canCreate) throw new InvalidOperationException(taomSaveMessage);
+            // One or the other, never both. Printing the "create it in Bannerlord and import it" advice directly
+            // under "this will be created automatically" told the user to do work the launcher was about to do.
             if (canCreate) messages.Add("TAOM: this campaign will be created automatically before the server starts");
-            messages.Add("TAOM: " + taomSaveMessage);
+            else messages.Add("TAOM: " + taomSaveMessage);
         }
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
