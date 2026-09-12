@@ -28,9 +28,10 @@ namespace ModderLords.Compat;
 /// and nothing is prepared per map: any mod that replaces the campaign map is covered, because the data comes from
 /// whatever scene the server actually loaded.</para>
 ///
-/// <para>It needs the scene to carry its terrain, so it pairs with
-/// <c>MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN</c> — measured safe: the server reaches SERVING with the descriptor
-/// kept, and only entity removal is load-bearing.</para>
+/// <para>Whether it needs <c>MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN</c> is UNTESTED. The two were first run
+/// together on the assumption that the native index map needs a declared terrain, and that run still crashed the
+/// client — while the earlier spike that served a recorded patch over a fully stripped scene did not. So keeping
+/// the terrain descriptor is itself a suspect, and these two switches must be varied one at a time.</para>
 /// </summary>
 internal static class MapPatchRestore
 {
@@ -43,6 +44,10 @@ internal static class MapPatchRestore
     private static Vec2 _terrainSize;
     private static bool _armed, _installed;
     private static int _served;
+
+    /// <summary>How many served answers to print in full. A count proves the patch fired; only the values prove it
+    /// served the right thing, and a battle asks for exactly one or two.</summary>
+    private const int LoggedAnswers = 6;
 
     internal static void Install(Harmony harmony)
     {
@@ -120,6 +125,9 @@ internal static class MapPatchRestore
             sceneIndex = _indexMap[index],
             normalizedCoordinates = new Vec2((packed & 0xF) / 15f, ((packed >> 4) & 0xF) / 15f),
         };
+        if (_served < LoggedAnswers)
+            Log.Info($"map patch restore: ({__0.X:0.##}, {__0.Y:0.##}) -> cell {x},{y} of {_width}x{_height} " +
+                     $"= sceneIndex {__result.sceneIndex}, coords {__result.normalizedCoordinates}");
         _served++;
     }
 }
