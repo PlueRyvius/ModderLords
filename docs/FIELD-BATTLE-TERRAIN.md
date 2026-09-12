@@ -212,7 +212,51 @@ the dedicated server does not run. **The fix has to supply the answers itself**,
 - `TAOM_Map` ships no `map_patch*` file of any kind, and neither does Native.
 - Which leaves `Main_map	errain.bin` (56,114,607 bytes) or `SceneEditData\Main_map	errain_ed.bin`.
 
-Two ways forward, and they are very different sizes of job:
+### The answer, from SandBox's own source (2026-09-12)
+
+`SandBox.dll` is not obfuscated. Decompiled, the entire query is:
+
+```csharp
+public MapPatchData GetMapPatchAtPosition(in CampaignVec2 position)
+{
+    if (_battleTerrainIndexMap != null)
+    {
+        int x = MathF.Floor(position.X / _terrainSize.X * _battleTerrainIndexMapWidth);
+        int y = MathF.Floor(position.Y / _terrainSize.Y * _battleTerrainIndexMapHeight);
+        int i = (MBMath.ClampIndex(y, 0, H) * W + MBMath.ClampIndex(x, 0, W)) * 2;
+        byte b = _battleTerrainIndexMap[i + 1];
+        return new MapPatchData {
+            sceneIndex = _battleTerrainIndexMap[i],
+            normalizedCoordinates = new Vec2((b & 0xF) / 15f, ((b >> 4) & 0xF) / 15f) };
+    }
+    return default(MapPatchData);        // sceneIndex 0, coordinates 0,0
+}
+```
+
+**The server was never computing a wrong answer.** `_battleTerrainIndexMap` is null and it returns the default
+struct — which is exactly the `sceneIndex` 0 and `0,0` coordinates measured at all 2304 samples. It also explains
+why the coordinates observed on the client were always multiples of 1/15: they are two 4-bit halves of one byte.
+
+And the array is filled, in `MapScene.AfterLoad`, by:
+
+```csharp
+MBMapScene.GetBattleSceneIndexMap(_scene, ref _battleTerrainIndexMap, ref width, ref height);
+```
+
+`TaleWorlds.MountAndBlade.MBMapScene.GetBattleSceneIndexMap` is a **public managed API over the native scene**,
+present in the engine the dedicated server already runs, and in the reference assemblies. Nothing needs decoding:
+ask the engine for the same bytes the client asks for, and answer with the same arithmetic.
+
+`MapPatchRestore` (`MODDERLORDS_MAP_PATCH_RESTORE=1`) does exactly that. It needs the scene to carry its terrain,
+so it pairs with `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN=1` — which the experiment above proved safe, and which
+now looks less like a dead end than like the missing prerequisite: nothing had ever asked for the index map.
+
+This is the general fix the handoff asked for. No format is parsed, nothing is prepared per map, and any mod that
+replaces the campaign map is covered, because the data comes from whatever scene the server actually loaded.
+
+### The two routes considered before that, kept for the record
+
+They are very different sizes of job:
 
 **A. Read the patch layer out of `terrain.bin`.** The most correct fix and the most general — any map-replacing
 mod would work headlessly with no per-map preparation. Cost is unknown until the format is cracked; it is

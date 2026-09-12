@@ -32,9 +32,13 @@ internal static class MapSceneTarget
     /// The host's own MapScene subclass. Spikes also guard on this at call time so they cannot alter a scene that is
     /// not the stripped one.
     /// </summary>
+    /// <summary>SandBox.MapScene: the base every map scene derives from, and where its private fields are declared.</summary>
+    internal static Type Base =>
+        AccessTools.TypeByName("SandBox.MapScene") ?? throw new MissingMemberException("SandBox.MapScene");
+
     internal static Type Headless()
     {
-        var mapScene = AccessTools.TypeByName("SandBox.MapScene") ?? throw new MissingMemberException("SandBox.MapScene");
+        var mapScene = Base;
         var headless = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => a.GetName().Name == "DedicatedServer.Core")
             .Select(a => a.GetType("A.G"))
