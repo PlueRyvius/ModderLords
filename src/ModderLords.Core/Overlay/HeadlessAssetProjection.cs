@@ -7,8 +7,9 @@ namespace ModderLords.Core.Overlay;
 /// <summary>
 /// Builds the small simulation-only asset view a dedicated server can safely read from a client-packaged mod. A full
 /// client TPAC contains render resources that have caused native access violations in the headless engine; this class
-/// retains only skeleton, animation, animation-clip and physics-shape records, copying opaque metadata and compressed
-/// payloads byte-for-byte. Outputs live only below the launcher's private overlay.
+/// retains only skeleton, animation, animation-clip and physics-shape records — plus the named world-map textures the
+/// server reads as lookup grids rather than draws — copying opaque metadata and compressed payloads byte-for-byte.
+/// Outputs live only below the launcher's private overlay.
 /// </summary>
 public static class HeadlessAssetProjection
 {
@@ -81,7 +82,20 @@ public static class HeadlessAssetProjection
 
     public sealed record Result(string ModuleId, string OutputPath, int PackageCount, long Bytes, int AssetCount, bool Reused);
     private sealed record SourceStamp(string File, long Length, long LastWriteUtcTicks);
-    private sealed record CacheManifest(string ModuleId, IReadOnlyList<SourceStamp> Sources, Result Result);
+    private sealed record CacheManifest(string ModuleId, IReadOnlyList<SourceStamp> Sources, Result Result, int Recipe = 0);
+
+    /// <summary>
+    /// Which selection rule produced a cached projection. Bump it whenever what gets projected changes.
+    ///
+    /// Without this the cache is keyed only on the source packages, which never change — so a launcher that learns
+    /// to project something new would go on reusing output that predates it, for as long as the mod stays
+    /// installed. Found the hard way: adding the world-map lookup grids fixed nothing until the stale TAOM_Map
+    /// output was deleted by hand, and no user would have known to do that.
+    ///
+    /// 1: skeletons, animations, animation clips and physics shapes.
+    /// 2: adds the world-map lookup-grid textures (worldmap_battle_scene_grid and friends).
+    /// </summary>
+    private const int CurrentRecipe = 2;
     private sealed record Segment(int Location, long Offset, long Stored);
     private sealed record AssetRecord(Guid Kind, string Name, byte[] Raw, IReadOnlyList<Segment> Segments);
     private sealed record Package(byte[] Header, int Version, IReadOnlyList<AssetRecord> Records);
@@ -126,7 +140,7 @@ public static class HeadlessAssetProjection
         }
 
         var final = new Result(moduleId, output, results.Count, totalBytes, assetCount, false);
-        var manifest = new CacheManifest(moduleId, stamps, final);
+        var manifest = new CacheManifest(moduleId, stamps, final, CurrentRecipe);
         File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
         return final;
     }
@@ -139,7 +153,7 @@ public static class HeadlessAssetProjection
         {
             if (!File.Exists(manifestPath)) return false;
             var manifest = JsonSerializer.Deserialize<CacheManifest>(File.ReadAllText(manifestPath));
-            if (manifest is null || !manifest.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase) ||
+            if (manifest is null || manifest.Recipe != CurrentRecipe || !manifest.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase) ||
                 manifest.Sources.Count != stamps.Count || !manifest.Sources.SequenceEqual(stamps) ||
                 manifest.Result.PackageCount == 0 || !Directory.Exists(output)) return false;
             foreach (var file in Directory.EnumerateFiles(output, "*.tpac")) if (new FileInfo(file).Length == 0) return false;
