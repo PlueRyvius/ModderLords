@@ -191,9 +191,40 @@ set MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN=1
 ```
 
 keeps the descriptor and strips entities as before. The projection cache records which rule built it, so flipping
-the switch rebuilds rather than silently reusing the other one. If the server still reaches SERVING with it on,
-the fix is one line and no parser. If it deadlocks, that bounds the problem precisely and *then* the parser is
-justified — at which point the target is narrow: one member, two fields.
+the switch rebuilds rather than silently reusing the other one.
+
+**Tested 2026-09-12. Half good, half not.**
+
+- **The descriptor does not deadlock the server.** `prepared a private headless map WITH its terrain descriptor
+  kept` → `SERVING` at 05:36:47 → client joined → `FieldBattleMissionInitializer` at 05:39:14, server healthy
+  throughout. "The stripping is load-bearing" was true of the pair; it is the **entity removal** that carries it,
+  not the terrain element. That rule can be narrowed.
+- **It changes no answers.** Probed on the same run, on the right map (19,396 faces): `sceneIndex` 0 on all 2304
+  samples, `normalizedCoordinates` 0 on all 2304, height 0 on all 2304, terrain-type lists still empty. Byte for
+  byte the same as with the element removed. The client crashed identically.
+
+So declaring the terrain is not enough to populate it headlessly — the engine evidently builds that data on a path
+the dedicated server does not run. **The fix has to supply the answers itself**, and the cheap path is closed.
+
+### Where the data actually lives
+
+- `scene.xscene` contains the string "patch" **zero** times. It is not in the scene XML.
+- `TAOM_Map` ships no `map_patch*` file of any kind, and neither does Native.
+- Which leaves `Main_map	errain.bin` (56,114,607 bytes) or `SceneEditData\Main_map	errain_ed.bin`.
+
+Two ways forward, and they are very different sizes of job:
+
+**A. Read the patch layer out of `terrain.bin`.** The most correct fix and the most general — any map-replacing
+mod would work headlessly with no per-map preparation. Cost is unknown until the format is cracked; it is
+proprietary and undocumented.
+
+**B. Prepare a patch table from the player's own client, and serve it.** This is exactly what
+`TerrainReplayExperiment` already proves works at runtime — it is only reading a CSV that happens to have been
+written by a probe. Promoted from spike to feature, the launcher would capture the table once per map (the client
+loads the full map anyway) and ship it beside the projected scene, the same shape as the existing asset and map
+preparation steps. Known cost, proven mechanism, no reverse engineering. Needs a resolution study first: the
+48-per-axis recording used for the spike is far coarser than the real patch grid, and the sampling needs to match
+whatever that grid turns out to be.
 
 Still not shown: that the client's crash consumes any of these rather than computing its own terrain.
 
