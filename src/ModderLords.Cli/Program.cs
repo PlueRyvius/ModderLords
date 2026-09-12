@@ -12,7 +12,7 @@ using ModderLords.Coop.Config;
 // Command-line driver (Phase 0/1). Commands:
 //   catalog  [--root <DedicatedServer>] [--source <dir>]...
 //   sync     --mods Id[:Run|DependencyOnly|AsShipped],...  [--remove-all]
-//   launch   [--mods ...] [--save NAME] [--port 7210] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
+//   launch   [--mods ...] [--save NAME] [--port 7210] [--join-port 4200] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
 //            [--manual-order] [--stall-seconds N|off] [--mod-distance-cache]
 //            [--create-world NAME] [--create-world-timeout SECONDS]
 //            [--data-dir PATH] [--coop-data-dir PATH] [--world-log PATH]
@@ -29,7 +29,7 @@ if (opts.ContainsKey("data-dir") && opts.ContainsKey("profile"))
 if (!opts.ContainsKey("data-dir")) DataDirMigration.RunIfNeeded();
 if (!opts.TryGetValue("cmd", out var cmd))
 {
-    Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
+    Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--join-port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
     Console.WriteLine("          play --profile NAME [--dry-run]   (start the player's own game with a profile's mods)");
     Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
@@ -322,7 +322,10 @@ switch (cmd)
         // previous run cannot make --create-world load an unrelated old campaign (or make --save load the wrong one).
         var configured = ServerConfig.Read(paths.ServerConfigPath);
         var adHocSettings = configured?.Settings ?? new ServerSettings();
-        adHocSettings.JoinPort = plan.EnginePort;
+        // --port is the ENGINE port. JoinPort is the Coop port clients dial, a different number entirely (7210
+        // against 4200 by default), and assigning one to the other both misdirects clients and rewrites the user's
+        // server-config.json behind their back. Keep what is configured unless --join-port says otherwise.
+        if (int.TryParse(opts.GetValueOrDefault("join-port"), out var joinPort)) adHocSettings.JoinPort = joinPort;
         if (diagnosticData is not null) adHocSettings.Steam = false;
         // --compat is intentionally driven by the existing server-config.json. Preserve its save name when no
         // explicit --save was supplied. World creation is the one exception: it must clear a stale configured save
