@@ -29,7 +29,51 @@ Do not re-investigate these; each was tested and eliminated.
 | Coop's ObjectManager id failures | 10,827 of them stream through a completely healthy session. Noise, not cause. |
 | The map is wrong | Both phases read navmesh CRC 3101457840 in the working runs. `MapIdentityCheck` guards this now. |
 
-## The leading hypothesis
+## CONFIRMED 2026-09-12: the stripped server scene answers terrain queries with nothing
+
+Measured with `TerrainProbe` (below), 2304 grid samples on TAOM's map, server against single-player client.
+Same map on both sides: identical borders `62,0..1700,1550`, identical terrain size `1600,1600`, identical
+navmesh face count `19396`.
+
+What **agrees** on all 2304 samples — the control that makes the rest meaningful:
+
+| Query | Result |
+|---|---|
+| `GetTerrainTypeAtPosition` | identical everywhere |
+| `GetFaceIndex` (index, group) | identical everywhere |
+| `GetEnvironmentTerrainTypesCount`'s `out currentPositionTerrainType` | identical everywhere |
+
+What **disagrees**, and how:
+
+| Query | Server (stripped) | Client (full) |
+|---|---|---|
+| `GetEnvironmentTerrainTypesCount` return list | **empty on all 2304** | 49 entries on all 2304 |
+| `GetMapPatchAtPosition().sceneIndex` | **0 on all 2304** | 181 distinct values (123, 124, 125, 126, 130, 255, …) |
+| `GetMapPatchAtPosition().normalizedCoordinates` | `0,0` (98–99% of rows) | real coordinates |
+| `GetHeightAtPoint` height | **0 on all 2304** | real heights; 144 genuine zeros |
+| `GetHeightAtPoint` return | **`true` on all 2304** | `true` on 2160 |
+| `GetSnowAmountAtPosition` | differs on 30% | — |
+| `GetRainAmountAtPosition` | differs on 22% | — |
+| `GetFaceIndex().FaceIslandIndex` | `-1` in most rows | real island ids |
+
+The split is exactly along the projection boundary. `navmesh.bin` is projected intact, so every answer derived
+from the navmesh matches. `terrain`, `layers` and `nodes` are stripped, so every answer derived from terrain is
+empty or zero — **and the server reports success while returning it.** `GetHeightAtPoint` returns `true` with a
+height of 0 on every single sample. Nothing throws, nothing logs, and the first thing that notices is D3D.
+
+Two of these are the direct candidates for `create_texture_array`:
+
+1. **The environment terrain-type list is empty.** The client gets a 49-entry neighbourhood sample; the server
+   gets none. A battle composites one texture-array slice per terrain type in that neighbourhood. Zero types is
+   a zero-length array, and `CreateTexture2D` with an array size of 0 fails with exactly "The parameter is
+   incorrect."
+2. **Every map patch reports `sceneIndex` 0.** On the client the same 2304 positions produce 181 distinct
+   scene indices. This is the patch-to-scene selector, and on the server it is a constant.
+
+Not yet shown: that the client's crash consumes *these particular* answers rather than computing its own from a
+different path. That is the next cheap check, and it is a much narrower question than the one this settles.
+
+## The original hypothesis (now confirmed — kept for the reasoning)
 
 Field battles derive terrain from the campaign map; village raids load a pre-built named scene. That is
 exactly the axis the failure splits on.
@@ -43,12 +87,13 @@ So the server can answer "which scene" correctly, but whatever it reports about 
 position comes from a scene that no longer has any. The client is then asked to build a texture array whose
 slices do not agree, and D3D refuses.
 
-This is a hypothesis, not a finding. It has not been instrumented.
+This was written as a hypothesis, before instrumentation. It held — see the section above for the measurement.
 
 ## Recommended path
 
-**1. Prove it before building anything.** Three guesses in this investigation looked equally plausible and
-were wrong; the cheap confirmations are what moved it forward each time.
+**1. Prove it before building anything.** ✅ Done 2026-09-12 — the result is the section above. Three guesses in
+this investigation looked equally plausible and were wrong; the cheap confirmations are what moved it forward
+each time.
 
 The instrument for this exists now: **`TerrainProbe`** in `ModderLords.CompatSync` (the `ModderLords.Compat`
 module, which is enabled on both the server and every client). It samples the campaign map scene through
@@ -79,10 +124,21 @@ disagreement rate per column and the first differing samples.
 **If every column agrees, the hypothesis is dead** and the crash is not the server misreporting terrain.
 If they disagree, the columns that disagree name the fix.
 
-**2. If confirmed, the fix is most likely to restore terrain data the stripped scene lost** — not to un-strip
-the scene (that reintroduces the deadlock the stripping exists to avoid), but to supply terrain-type answers
-from `terrain.bin`, which *is* projected and complete (56 MB, byte-identical to source). The server has the
-data; the scene object it queries no longer exposes it.
+**2. Restore the terrain data the stripped scene lost** — not by un-stripping the scene (that reintroduces the
+deadlock the stripping exists to avoid), but by answering the terrain queries from `terrain.bin`, which *is*
+projected and complete (56 MB, byte-identical to source). The server has the data; the scene object it queries
+no longer exposes it.
+
+The measurement narrows this to three members, in priority order:
+
+1. `GetEnvironmentTerrainTypesCount` — must return the neighbourhood list, not an empty one. Note that its
+   `out` parameter is already correct, so only the list needs sourcing.
+2. `GetMapPatchAtPosition` — must return the real `sceneIndex` and `normalizedCoordinates`, not 0.
+3. `GetHeightAtPoint` — should return the terrain height, and in the meantime should at least return `false`
+   rather than `true` with a height of 0. A query that admits it cannot answer is recoverable; one that lies
+   is not.
+
+`GetTerrainTypeAtPosition` and `GetFaceIndex` need no work: they already match the client everywhere.
 
 **3. Keep it general.** The rule to aim for is "a mod that replaces the campaign map keeps its terrain
 queries answerable headlessly" — not anything TAOM-shaped. The world-map grid textures went in by naming

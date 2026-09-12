@@ -46,17 +46,29 @@ function Get-HeaderField([string[]]$header, [string]$name) {
 }
 $identity = @('borders', 'terrainSize', 'sceneXmlCrc', 'navMeshCrc', 'navMeshFaces')
 $identityDiffs = @()
+$notReported = @()
 foreach ($field in $identity) {
     $x = Get-HeaderField $a.Header $field
     $y = Get-HeaderField $b.Header $field
-    if ($x -ne $y) { $identityDiffs += "  $field : server=$x client=$y" }
+    if ($x -eq $y) { continue }
+    # A CRC of 0 is "this scene does not carry one", not "a different map". The stripped headless scene reports 0 for
+    # both, and treating that as a map mismatch hides the very comparison this script exists to make.
+    if (($field -eq 'sceneXmlCrc' -or $field -eq 'navMeshCrc') -and ($x -eq '0' -or $y -eq '0')) {
+        $notReported += "  $field : server=$x client=$y  (a 0 means the scene does not report one)"
+        continue
+    }
+    $identityDiffs += "  $field : server=$x client=$y"
+}
+if ($notReported.Count -gt 0) {
+    Write-Host "`nnot reported by one side (not a map difference):" -ForegroundColor DarkGray
+    $notReported | ForEach-Object { $_ }
 }
 if ($identityDiffs.Count -gt 0) {
     Write-Host "`nSTOP: the two runs are not on the same map." -ForegroundColor Red
     $identityDiffs | ForEach-Object { $_ }
     Write-Host "Row comparisons below are meaningless until this matches." -ForegroundColor Red
 } else {
-    Write-Host "`nmap identity matches (borders, terrain size, both CRCs, face count)" -ForegroundColor Green
+    Write-Host "`nmap identity matches (borders, terrain size, navmesh face count)" -ForegroundColor Green
 }
 
 if (($a.Columns -join ',') -ne ($b.Columns -join ',')) { throw "probe files have different columns; they came from different builds" }
@@ -70,7 +82,12 @@ $shown = New-Object System.Collections.ArrayList
 for ($i = 0; $i -lt $a.Rows.Count; $i++) {
     $left = $a.Rows[$i].Split(',')
     $right = $b.Rows[$i].Split(',')
-    if ($left[0] -ne $right[0] -or $left[1] -ne $right[1]) { throw "row $i samples different positions; the grids are not aligned" }
+    # Same grid arithmetic on both sides, but the two runs get their borders from different places, so the last bit of
+    # a float can differ and print as 1034.562 against 1034.563. Compare with a tolerance; a real misalignment is
+    # orders of magnitude bigger than one grid cell's rounding.
+    if ([math]::Abs([double]$left[0] - [double]$right[0]) -gt 0.01 -or [math]::Abs([double]$left[1] - [double]$right[1]) -gt 0.01) {
+        throw "row $i samples different positions ($($left[0]),$($left[1])) vs ($($right[0]),$($right[1])); the grids are not aligned"
+    }
     $rowDiffs = @()
     for ($c = 2; $c -lt $columns.Count; $c++) {
         if ($left[$c] -ne $right[$c]) {
