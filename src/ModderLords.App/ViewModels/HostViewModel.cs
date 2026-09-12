@@ -106,6 +106,8 @@ public partial class HostViewModel : ObservableObject
     private CappedLogWriter? _launchLog;
     /// <summary>Per launch: is the server about to host the world on the map it was built on? See MapIdentityCheck.</summary>
     private MapIdentityCheck _mapIdentity = new();
+    /// <summary>Per launch: keeps an endlessly repeated engine line from burying the console. The log keeps them all.</summary>
+    private RepeatCollapser _repeats = new();
     private long _totalDropped;
 
     public ObservableCollection<SaveRow> Saves { get; } = new();
@@ -379,6 +381,7 @@ public partial class HostViewModel : ObservableObject
             _pending.Clear();
             _totalDropped = 0;
             _mapIdentity = new MapIdentityCheck();
+            _repeats = new RepeatCollapser();
             if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
             if (rotatedCrashes > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedCrashes} old engine crash report(s)");
 
@@ -455,7 +458,11 @@ public partial class HostViewModel : ObservableObject
                 // Never touch the UI per line: the engine prints thousands during load. Queue and flush on a timer.
                 // Bounded: if the engine outruns the flush timer the oldest waiting lines are dropped and
                 // counted, rather than the queue growing without limit.
-                _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
+                //
+                // The console also collapses a line the server repeats without end -- the launch log above keeps
+                // every one, so nothing is lost for diagnosis; this is only about what a person can read.
+                if (_repeats.Filter(line.Text) is { } shown)
+                    _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, shown));
                 // Parse here (cheap, off the UI thread) but apply on the flush tick, so a perf line is no more
                 // able to touch the UI per line than any other.
                 if (c.Category == LogCategory.Perf && PerfLineParser.TryParse(line.Text, line.At) is { } sample)
@@ -484,6 +491,9 @@ public partial class HostViewModel : ObservableObject
             _resources?.Dispose(); _resources = null;
             if (Performance.WriteSessionSummary(launchProfile.Name) is { } summary)
                 AddLine(LogCategory.Tool, "[ModderLords] performance summary written to " + summary);
+            // What was collapsed, so a quietened console still ends with the honest totals.
+            foreach (var (message, count) in _repeats.Totals.Take(5).Select(kv => (kv.Key, kv.Value)))
+                AddLine(LogCategory.Warning, $"[ModderLords] repeated {count:N0} times: {message}");
             Status = $"Engine exited with {code}: {ExitCodeExplainer.Explain(code)}";
             AddLine(LogCategory.Milestone, "[ModderLords] " + Status);
             _launchLog?.Dispose(); _launchLog = null;
