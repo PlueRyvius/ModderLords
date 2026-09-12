@@ -1,7 +1,11 @@
 # Field battles crash the client — handoff
 
-Status as of 2026-09-12. Everything else on the TAOM path works: world generation, serving, joining,
-village-raid battles. This is the one remaining failure, and it is ours to fix.
+**CAUSE FOUND 2026-09-12.** The server's stripped map scene returns `sceneIndex` 0 from
+`GetMapPatchAtPosition` at every position on the map. The field-battle initializer reads it once, and the client
+is asked to build a texture array from patch 0. Serving the real value makes the battle load. The measurements
+are below, newest section first among the dated ones; the fix still has to be built (step 2).
+
+Status of the rest of the TAOM path: world generation, serving, joining and village-raid battles all work.
 
 ## The failure
 
@@ -126,6 +130,49 @@ This reverses an earlier judgement recorded above — `sceneIndex` was set aside
 scene *selection* is in the ruled-out table. Selection being right does not mean the patch data is unused.
 `TerrainReplayExperiment` with its default `FIELDS=patch` tests exactly this, by serving the client's own
 recorded `sceneIndex` and `normalizedCoordinates`.
+
+### SOLVED 2026-09-12, fourth run: serving a real `sceneIndex` loads the battle
+
+`TerrainReplayExperiment` with its default `FIELDS=patch`, serving the client's own recorded map patch:
+
+```
+05:23:08.367  terrain replay: first map patch served (sceneIndex 66)
+05:23:08.389  [Coop] [BattleMissionLifecycle] Sending attack mission start: mapEvent="MapEvent_Created_1323"
+05:23:16.907  [Coop] Controller entered instance "MapEvent_Created_1323"
+              terrain replay: served 2 patch, 0 height, 0 env answer(s)
+```
+
+**The field battle loaded.** No `create_texture_array`, no client crash. One value — `sceneIndex` 66 instead of
+0, at one position, served once — is the difference between a battle and a dead client.
+
+That closes the causal chain: the projection strips `terrain`/`layers`/`nodes`; `A.G` re-implements
+`GetMapPatchAtPosition` and returns `sceneIndex` 0 for every position on the map; the field-battle initializer
+reads it exactly once; and the client is asked to build a texture array from patch 0.
+
+Note what was **not** served: height, and the environment terrain-type lists (`0 height, 0 env`). Neither was
+needed. The stub spike had already corrected the height answers in an earlier run without changing the crash,
+and the census showed the type lists are never read at all. The map patch was the whole of it.
+
+#### Two things this run also surfaced
+
+**It loaded slowly — minutes, not seconds.** Over the same window `GetFaceTerrainType` ran to 47.9 million calls
+and was still climbing at ~95,000/second *after* the battle ended, with the server at 37–44 fps against its
+usual 63. In the crashing runs that member was never called once. So reaching a working battle has uncovered a
+scan that the crash used to pre-empt.
+
+Be careful attributing all of that to the game: the census postfix is itself on `GetFaceTerrainType`, and the
+claim in `MapSceneCallCensus` that its watch list holds "nothing on a hot path" is wrong for that member. Re-run
+the replay **without** the census before believing any figure for how slow this really is.
+
+**The load time is worth testing against `FIELDS=all`.** Height is still answered as 0-with-`true`, and a scan
+hunting for usable ground is a plausible reading of 47 million face queries. Serving the recorded heights too is
+a one-variable change from here.
+
+#### What the real fix now has to do
+
+Step 2 below narrows to one member. `GetMapPatchAtPosition` must return the true `sceneIndex` and
+`normalizedCoordinates` from `terrain.bin`, answered headlessly. `GetHeightAtPoint` and the terrain-type lists
+are no longer on the critical path for this crash, though height may matter for the load time above.
 
 Still not shown: that the client's crash consumes any of these rather than computing its own terrain.
 
