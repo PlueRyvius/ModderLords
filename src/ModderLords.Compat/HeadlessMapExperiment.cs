@@ -2,7 +2,6 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Xml;
 using HarmonyLib;
 using TaleWorlds.Library;
@@ -36,12 +35,10 @@ internal static class HeadlessMapExperiment
         var document = new XmlDocument();
         document.Load(path);
         var root = document.DocumentElement ?? throw new InvalidDataException("Missing map metadata");
-        using (var sha = SHA256.Create())
-        using (var stream = File.OpenRead(IoPath.Combine(IoPath.GetDirectoryName(path)!, "navmesh.bin")))
-        {
-            var hash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
-            if (hash != root.GetAttribute("navmesh-sha256")) throw new InvalidDataException("Headless map navmesh hash mismatch");
-        }
+        // The navmesh SHA-256 check that used to live here is gone. Its job was to prove this sidecar describes the
+        // scene actually being served, and HeadlessMapBounds now proves that directly against the LOADED scene by
+        // reading its own border markers — a stronger check than hashing a file next to the sidecar, and one that
+        // reports rather than refuses. The attribute is still written; nothing reads it.
         var min = Numbers(root.GetAttribute("border_min"), 3);
         var max = Numbers(root.GetAttribute("border_max"), 3);
         var size = Numbers(root.GetAttribute("terrain-size"), 2);

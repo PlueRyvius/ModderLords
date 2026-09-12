@@ -39,7 +39,7 @@ Do not re-investigate these; each was tested and eliminated.
 | Hypothesis | Why it is wrong |
 |---|---|
 | Missing world-map grid textures | Added (`worldmap_battle_scene_grid` + colorgrade). Projection verified rebuilt — `pack4.tpac`, 276 KB, 1043 assets. Crash unchanged. |
-| Missing shader cache | The village raid that **worked** had 120 `Missing shader from sack` lines; the field battle that crashed had 21. More misses in the working case. |
+| Missing shader cache (as a *count*) | The village raid that **worked** had 120 `Missing shader from sack` lines; the field battle that crashed had 21. More misses in the working case. **But the count argument was too coarse** — see "the two battle scenes that crash are the only two without a shader cache" below. The *shipped per-scene* sack is the discriminator; the user-level cache under `ProgramData` is build-keyed and empty for every battle scene, so clearing it changes nothing. |
 | Wrong battle scene chosen | `battle_terrain_a` is a legitimate TAOM entry — its own `sp_battle_scenes.xml` maps `map_indices="0, 2, 136, 118"` to it. The server reads that file; selection works. |
 | A TAOM client-side asset fault | **The same field battle works in single-player.** Confirmed by the user. It is coop-specific. |
 | Coop's ObjectManager id failures | 10,827 of them stream through a completely healthy session. Noise, not cause. |
@@ -366,6 +366,46 @@ to load. It resolved to index 46 — `battle_terrain_biome_046` (Swamp, SandBoxC
 
 So field battles work, on 79 of 81 scenes. The served index is logged on every battle, so any future crash can be
 checked against the two sackless scenes in one step.
+
+#### Shader caches: where they are, how they are keyed, and why clearing them does nothing here
+
+Bannerlord clears compiled shaders when it detects a change, which makes "the cache is stale for this mod set" a
+natural suspicion. Measured 2026-09-12, it is not what is happening — and the layout is worth writing down so
+nobody spends an evening on it.
+
+There are three separate things called a shader cache:
+
+| | Where | What it is |
+|---|---|---|
+| Global | `<game>\Shaders\D3D11\compressed_shader_cache.sack` | 1.5 GB, shipped. Read once at startup (~145 ms in the client log). |
+| **Per-scene, shipped** | `<game>\Modules\<mod>\SceneObj\<scene>\ShaderCache\D3D11\compressed_shader_cache.sack` | Game content. **This is the discriminator.** |
+| Per-scene, user | `C:\ProgramData\Mount and Blade II Bannerlord\Shaders\TerrainShaders\<mod>\<scene>\D3D11\` | `shader_mapping.bin` + `NNNp.sacx`, written at runtime. |
+
+**The user cache is keyed on the game build, not on the mod set.** `shader_mapping.bin` begins:
+
+```
+83 07 00 00 | 06 00 00 00 | 31 31 39 33 30 33
+   1923      |  length 6   |  "119303"  = the build number
+```
+
+Nothing in it identifies the mods that were loaded. So it does **not** invalidate when the mod set changes — a
+scene whose terrain layers a mod alters would keep serving shaders compiled for the old configuration. Worth
+knowing; no evidence it has caused harm. TAOM's `Main_map` is the only scene here with real cached content
+(12,758-byte mapping, 90 `.sacx` variants) and it renders correctly.
+
+**And it is empty for every battle scene, working and crashing alike.** A 14-byte mapping is the header and
+nothing else — zero entries:
+
+| scene | user mapping | cached variants | shipped `.sack` | result |
+|---|---|---|---|---|
+| `battle_terrain_020` | 14 bytes (empty) | 0 | **absent** | crashed |
+| `battle_terrain_a` | 14 bytes (empty) | 0 | **absent** | crashed |
+| `battle_terrain_d` | 14 bytes (empty) | 0 | 415,948 bytes | loaded |
+| `battle_terrain_biome_046` | 14 bytes (empty) | 0 | 2,798,080 bytes | loaded |
+
+So nothing stale is being served to these scenes, because nothing is cached for them at all. **Clearing
+`ProgramData\...\TerrainShaders` is a no-op for this bug.** The split falls entirely on the *shipped* per-scene
+sack, which clearing does not touch and which only TaleWorlds can add.
 
 #### What is left
 
