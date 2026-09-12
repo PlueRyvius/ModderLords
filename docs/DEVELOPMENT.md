@@ -183,6 +183,27 @@ variables, marked, so "was it actually set?" is answerable from the log):
 | `MODDERLORDS_MAPSCENE_CENSUS` | off | Counts which map-scene members are actually called, and names those never called. |
 | `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` | off | Keeps the scene's `<terrain>` descriptor. Measured safe; not currently needed. |
 
+### Smoke-testing a server without the GUI
+
+`ModderLords.Cli launch --stop-after N` runs a round unattended: it waits for SERVING, then sends `stop` and
+exits with the engine's code. Useful for repeated launches.
+
+**It does not currently host TAOM.** Measured 2026-09-12, with the same binaries the GUI served on minutes
+earlier:
+
+| | `CreateMapScene` calls | `guard: ShowInquiry by TAOM` | SERVING |
+|---|---|---|---|
+| GUI Host button | 1 | no | **yes** |
+| CLI ad-hoc `launch --mods ...` | **17,128** | **yes** | no, exit -1 after 15 min |
+
+The ad-hoc run ends in the `CreateMapScene` loop that `compat-db.json` already describes as "the campaign state
+machine re-entering after a swallowed exception", and the one line the GUI run does not have is TAOM raising an
+inquiry during campaign init. This matches what `docs/TAOM-WORLD-GENERATION.md` records of every earlier ad-hoc
+attempt — they "stalled in campaign init" — so it is a long-standing gap in that path, not a regression.
+
+Until it is fixed, smoke-test TAOM through the launcher. The CLI is fine for vanilla and for world creation,
+which is what it was built for.
+
 ## Phase 4 (2026-09-02): hardening
 
 - `Preflight`: refuses to launch when the join or engine UDP port is in use, an engine from this package is already
