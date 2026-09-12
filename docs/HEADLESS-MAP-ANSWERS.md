@@ -115,7 +115,33 @@ after the map scene loaded. It now announces each call before making it — so a
 refuses to ask a terrain-less scene for terrain data, which is the likeliest of the two candidates. The retained
 markers themselves are not implicated: the scene loaded and logged `Load complete` before anything went wrong.
 
-**Next step:** read that comparison on a real map. If it agrees, the sidecar, the hash check, the env var and the
+**Measured 2026-09-12 on TAOM's map — they agree exactly.**
+
+```
+map bounds derived from the scene : (62, 0)..(1700, 1550) height=646.01
+map bounds currently in effect    : (62, 0)..(1700, 1550) height=646.01
+map bounds: terrain derived=(1600, 1600) in effect=(1600, 1600) (agree)
+```
+
+Both runs reached SERVING and stopped cleanly. So the scene can answer for its own bounds, and the sidecar is
+carrying numbers that are already in the scene the server loads.
+
+That run also settled what the earlier access violation was, by elimination: the borders-only run does
+everything the crashing run did **except** `GetTerrainData`, and it was clean. `GetTerrainData` on a scene whose
+terrain descriptor was stripped is the fault. It is safe with `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN=1`, which
+is the only configuration that calls it.
+
+**What this unlocks, and the caveat.** The sidecar cannot simply be deleted: `HeadlessMapExperiment` patches the
+bounds getters *before* the scene loads, so correct values are in effect from the first read, whereas
+scene-derived values only exist afterwards. The sidecar is also free — the projection computes those numbers
+from the scene XML anyway.
+
+What can go is the **machinery around** it: the navmesh SHA-256 validation, the hard `MODDERLORDS_HEADLESS_MAP`
+requirement, and the `Environment.Exit(12)` on mismatch. Their job is to prove the sidecar matches the scene,
+and the runtime comparison now does that directly and more cheaply — a warning instead of a killed process.
+`MapIdentityCheck` already guards the wrong-map incident those checks were written for.
+
+**Original next step, now done:** read that comparison on a real map. If it agrees, the sidecar, the hash check, the env var and the
 exit path can all go, and map-replacing mods need no preparation for bounds at all. The terrain size is the
 remaining question: `GetTerrainData` needs the scene's `<terrain>` descriptor, which
 `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` retains and which was measured safe — the server reaches SERVING with it.
