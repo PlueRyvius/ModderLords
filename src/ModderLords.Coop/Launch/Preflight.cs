@@ -100,6 +100,40 @@ public static class Preflight
         return n;
     }
 
+    /// <summary>
+    /// The same policy as <see cref="RotateLogs"/>, for the engine's crash reports — which are directories, not
+    /// files, and enormous: one report is a ~540 MB minidump plus the engine logs.
+    ///
+    /// This exists because warnings used to write one report each. That is fixed at the source now
+    /// (HeadlessDebugManager stops warnings dumping), but the suppression is deliberately narrow so a real crash
+    /// still leaves evidence — which means this folder can still grow, just far more slowly. Measured 2026-09-11
+    /// before the fix: 227 reports, 100 GB, from a single 15-minute run.
+    ///
+    /// Shared with the retail game, so the newest report is never deleted: it is the one someone is trying to read.
+    /// </summary>
+    public static int RotateCrashDirs(string dir, int keep = 5, long maxTotalBytes = 5L * 1024 * 1024 * 1024)
+    {
+        if (!Directory.Exists(dir)) return 0;
+        var all = new DirectoryInfo(dir).GetDirectories().OrderByDescending(d => d.LastWriteTimeUtc).ToList();
+        var n = 0;
+
+        foreach (var d in all.Skip(keep)) { try { d.Delete(recursive: true); n++; } catch { } }
+
+        var survivors = all.Take(keep).ToList();
+        var total = survivors.Sum(SafeSize);
+        for (var i = survivors.Count - 1; i >= 1 && total > maxTotalBytes; i--)
+        {
+            var len = SafeSize(survivors[i]);
+            try { survivors[i].Delete(recursive: true); n++; total -= len; } catch { }
+        }
+        return n;
+    }
+
+    private static long SafeSize(DirectoryInfo d)
+    {
+        try { return d.GetFiles("*", SearchOption.AllDirectories).Sum(SafeLength); } catch { return 0; }
+    }
+
     private static long SafeLength(FileInfo f)
     {
         try { return f.Length; } catch { return 0; }

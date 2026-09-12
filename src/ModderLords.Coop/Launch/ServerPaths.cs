@@ -36,6 +36,14 @@ public sealed record ServerPaths(string DedicatedServerRoot, string DataDir, str
     public string LogsDir => Path.Combine(DataDir, "logs");
 
     /// <summary>
+    /// Where the engine writes crash reports. Not under <see cref="DataDir"/> and not ours: the retail game uses
+    /// the same folder, which is why <see cref="Preflight.RotateCrashDirs"/> caps it rather than emptying it.
+    /// </summary>
+    public static string CrashesDir => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "Mount and Blade II Bannerlord", "crashes");
+
+    /// <summary>
     /// Where the real game keeps a player's saves: Documents\Mount and Blade II Bannerlord\Game Saves. The server
     /// writes to <see cref="SavesDir"/> under CoopData instead, and nothing copies between the two, which is why a
     /// world made by a modded client cannot be hosted without an explicit import.

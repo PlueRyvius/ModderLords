@@ -370,10 +370,14 @@ public partial class HostViewModel : ObservableObject
             var logDir = Path.Combine(ProfileStore.RootDir, "logs");
             Directory.CreateDirectory(logDir);
             var rotated = Preflight.RotateLogs(logDir, "launch-*.log", keep: 20);
+            // Crash reports are ~540 MB each and land in a folder shared with the retail game, so they are capped
+            // rather than cleared. Warnings no longer dump, but a real crash still does, and should.
+            var rotatedCrashes = Preflight.RotateCrashDirs(ServerPaths.CrashesDir);
             _launchLog = new CappedLogWriter(Path.Combine(logDir, $"launch-{DateTime.Now:yyyyMMdd-HHmmss}.log"));
             _pending.Clear();
             _totalDropped = 0;
             if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
+            if (rotatedCrashes > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedCrashes} old engine crash report(s)");
 
             foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
             foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());

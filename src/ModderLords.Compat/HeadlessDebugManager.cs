@@ -82,17 +82,19 @@ internal sealed class HeadlessDebugManager : IDebugManager
         // warnings and the engine wrote a full ~540 MB crash report for each one -- 100 GB, one every 3.5 seconds,
         // which is the entire 15-minute creation budget spent on minidumps. The run never reached phase=armed.
         //
-        // All four are public statics on the pinned reference assemblies (DebugManagerProbe prints their exact
+        // Deliberately narrow: only WARNINGS stop dumping. The blunter switches next door --
+        // Utilities.SetDisableDumpGeneration and MBDebug.SetDumpGenerationDisabled -- also suppress the dump for a
+        // genuine native crash, and we measured the cost of that: a 0xC0000005 access violation on a client join
+        // (2026-09-11 23:49) left no dump to read. An asset warning is noise; an access violation is the evidence.
+        // The crash-folder rotation in Preflight is what bounds the folder now, not blanket suppression.
+        //
+        // Both are public statics on the pinned reference assemblies; DebugManagerProbe prints their exact
         // signatures, so a game update that renames one shows up as a diff in that probe's output rather than as
-        // a silent 100 GB regression). Each is wrapped separately: one missing toggle must not skip the rest.
+        // a silent return to 100 GB. Wrapped separately: one missing toggle must not skip the other.
         try { TaleWorlds.Engine.Utilities.SetCreateDumpOnWarnings(false); done.Add("warnings no longer write a dump"); }
         catch (Exception ex) { done.Add("SetCreateDumpOnWarnings failed: " + ex.GetBaseException().Message); }
         try { TaleWorlds.Engine.Utilities.SetCrashOnWarnings(false); done.Add("warnings no longer crash"); }
         catch (Exception ex) { done.Add("SetCrashOnWarnings failed: " + ex.GetBaseException().Message); }
-        try { TaleWorlds.Engine.Utilities.SetDisableDumpGeneration(true); done.Add("dump generation disabled"); }
-        catch (Exception ex) { done.Add("SetDisableDumpGeneration failed: " + ex.GetBaseException().Message); }
-        try { TaleWorlds.Engine.MBDebug.SetDumpGenerationDisabled(true); done.Add("MBDebug dump generation disabled"); }
-        catch (Exception ex) { done.Add("MBDebug.SetDumpGenerationDisabled failed: " + ex.GetBaseException().Message); }
 
         return string.Join("; ", done);
     }
