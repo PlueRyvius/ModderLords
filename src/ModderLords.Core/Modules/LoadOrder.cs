@@ -42,6 +42,19 @@ public static class LoadOrder
     /// This is a fact about the mod, not a preference: <see cref="Compute"/> reads it, and the mod list in the app
     /// shows it, so the two can never disagree about where a framework sits.
     /// </summary>
+    /// <summary>
+    /// Whether a community module has to load AFTER Coop, because its manifest says Coop loads before it.
+    ///
+    /// The official host pins Coop after every community module, which is right for mods that know nothing about
+    /// it. A compatibility module that patches Coop itself is the opposite case: TAOM's own TAOM.CoopCompat
+    /// declares <c>&lt;DependedModuleMetadata id="CoopNightly" order="LoadBeforeThis" /&gt;</c> and its bootstrap
+    /// submodule binds to Coop's assemblies as it loads, so placing it ahead of Coop puts it in front of the thing
+    /// it exists to patch. It still goes before DedicatedServer.Windows, which the host pins absolutely last.
+    /// </summary>
+    public static bool LoadsAfterCoop(DiscoveredModule module, IReadOnlyCollection<string> coopIds) =>
+        module.Info.DependentModuleMetadatas.Any(d => d.LoadType == LoadType.LoadBeforeThis &&
+            coopIds.Contains(d.Id, StringComparer.OrdinalIgnoreCase));
+
     public static bool LoadsBeforeNative(DiscoveredModule module) =>
         module.Info.ModulesToLoadAfterThis.Any(d => d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase))
         || module.Info.DependentModuleMetadatas.Any(d => d.LoadType == LoadType.LoadAfterThis && d.Id.Equals("Native", StringComparison.OrdinalIgnoreCase));
@@ -142,8 +155,27 @@ public static class LoadOrder
         var pinned = new HashSet<string>(headIds.Concat(tailIds), StringComparer.OrdinalIgnoreCase);
         var stockIds = new HashSet<string>(stock.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
         ordered.AddRange(sorted.Select(m => m.Id).Where(id => stockIds.Contains(id) && !pinned.Contains(id) && !phantomIds.Contains(id)));
-        ordered.AddRange(communitySorted.Where(id => !WantsToPrecedeNative(id)));
-        ordered.AddRange(tailIds);
+
+        // A module that patches Coop has to follow it. Everything else keeps the host's order, where Coop trails
+        // the community block and DedicatedServer.Windows is last of all.
+        var coopIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Coop", "CoopNightly" };
+        if (StockId("Coop") is { } resolvedCoopId) coopIds.Add(resolvedCoopId);
+        bool WantsToFollowCoop(string id)
+        {
+            var m = community.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            return m is not null && LoadsAfterCoop(m, coopIds);
+        }
+        var followCoop = communitySorted.Where(id => !WantsToPrecedeNative(id) && WantsToFollowCoop(id)).ToList();
+        var followCoopSet = new HashSet<string>(followCoop, StringComparer.OrdinalIgnoreCase);
+
+        ordered.AddRange(communitySorted.Where(id => !WantsToPrecedeNative(id) && !followCoopSet.Contains(id)));
+        if (tailIds.Count == 0) ordered.AddRange(followCoop);
+        else
+        {
+            ordered.AddRange(tailIds.Take(tailIds.Count - 1));   // Coop
+            ordered.AddRange(followCoop);                        // the modules that patch it
+            ordered.Add(tailIds[^1]);                            // DedicatedServer.Windows, always last
+        }
 
         // Validate the FINAL order (phantoms appended last so they count as present without affecting the token).
         var byId = all.GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
