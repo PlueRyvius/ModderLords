@@ -168,11 +168,32 @@ the replay **without** the census before believing any figure for how slow this 
 hunting for usable ground is a plausible reading of 47 million face queries. Serving the recorded heights too is
 a one-variable change from here.
 
-#### What the real fix now has to do
+#### What the real fix now has to do — and try the cheap one first
 
-Step 2 below narrows to one member. `GetMapPatchAtPosition` must return the true `sceneIndex` and
-`normalizedCoordinates` from `terrain.bin`, answered headlessly. `GetHeightAtPoint` and the terrain-type lists
-are no longer on the critical path for this crash, though height may matter for the load time above.
+Step 2 below narrows to one member: `GetMapPatchAtPosition` must return the true `sceneIndex` and
+`normalizedCoordinates`. `GetHeightAtPoint` and the terrain-type lists are off the critical path for this crash,
+though height may matter for the load time above.
+
+**Before writing a `terrain.bin` parser, read what the projection actually does.** `HeadlessMapProjection.Prepare`
+does two separable things:
+
+1. `entities.RemoveNodes()` — empties every `game_entity` from the scene. Plainly about rendering.
+2. `root.Element("terrain").Remove()` — removes the `<terrain>` descriptor (`node_size`, `node_dimension_x/y`).
+
+Only the second causes this bug, and **`terrain.bin` is copied into the projection intact** by the same method
+(it is in `BinaryFiles`). The data is already sitting next to the scene the server loads; what was removed is the
+eight-attribute element that declares it. Whether the headless engine can carry that descriptor without reaching
+the landscape renderer it deadlocks in has never been tested apart from entity removal — "the stripping is
+load-bearing" was recorded about the pair, not about each half.
+
+```
+set MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN=1
+```
+
+keeps the descriptor and strips entities as before. The projection cache records which rule built it, so flipping
+the switch rebuilds rather than silently reusing the other one. If the server still reaches SERVING with it on,
+the fix is one line and no parser. If it deadlocks, that bounds the problem precisely and *then* the parser is
+justified — at which point the target is narrow: one member, two fields.
 
 Still not shown: that the client's crash consumes any of these rather than computing its own terrain.
 

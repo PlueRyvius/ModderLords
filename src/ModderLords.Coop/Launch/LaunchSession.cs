@@ -263,9 +263,12 @@ public sealed class LaunchSession
             {
                 var source = Path.Combine(map.Module.FolderPath, "SceneObj", "Main_map");
                 var output = Path.Combine(generatedRoot, "TAOM_Map", "Main_map");
-                var projection = HeadlessMapProjection.Prepare(source, output);
+                var keepTerrain = !string.IsNullOrEmpty(
+                    Environment.GetEnvironmentVariable(HeadlessMapProjection.KeepTerrainVariable));
+                var projection = HeadlessMapProjection.Prepare(source, output, keepTerrain);
                 maps[map.Module.Id] = projection.OutputPath;
-                messages.Add(projection.Reused ? "TAOM: reusing prepared server map" : "TAOM: prepared a private headless map");
+                messages.Add((projection.Reused ? "TAOM: reusing prepared server map" : "TAOM: prepared a private headless map")
+                    + (keepTerrain ? " WITH its terrain descriptor kept (" + HeadlessMapProjection.KeepTerrainVariable + ")" : ""));
             }
         }
         catch (Exception ex)
