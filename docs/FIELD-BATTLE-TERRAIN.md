@@ -95,8 +95,39 @@ runs. `MapSceneCallCensus` (`MODDERLORDS_MAPSCENE_CENSUS=1`) counts calls to eve
 member at once and reports which were never called, so the next run names the consumer instead of guessing it. It
 changes no answers, so it can run alongside a spike.
 
-Still not shown: that the client's crash consumes any of these rather than computing its own terrain. The census
-answers the server half of that directly.
+### Measured 2026-09-12, third run: what a field battle actually asks the map scene
+
+The census, over a full field battle:
+
+```
+map scene census: GetSiegeCampFrames=221 GetHeightAtPoint=2 GetSnowAmountAtPosition=1
+                  GetAtmosphereStates=1 GetMapPatchAtPosition=1 GetRainAmountAtPosition=1;
+                  never called: GetEnvironmentTerrainTypes, GetEnvironmentTerrainTypesCount,
+                  GetFaceTerrainType, GetGroundNormal, GetTerrainHeightAndNormal, GetTerrainSize, ...
+```
+
+**The environment terrain-type list is never asked for, in either form.** Candidate 1 is dead — measured this
+time, not inferred from a mis-aimed patch. `GetSiegeCampFrames` is campaign-AI background noise, not the battle.
+
+What the battle asks, once each, at mission start:
+
+| Member | Server's answer (measured) |
+|---|---|
+| **`GetMapPatchAtPosition`** | **`sceneIndex` 0 everywhere; the client produces 181 distinct values** |
+| `GetHeightAtPoint` (×2) | 0 everywhere, returning `true` |
+| `GetSnowAmountAtPosition` | differs from the client on 30% of samples |
+| `GetRainAmountAtPosition` | differs on 22% |
+| `GetAtmosphereStates` | never probed |
+
+So `GetMapPatchAtPosition` is now the candidate, and it is the *only* one of the battle's queries still returning
+garbage: the stub already corrected the height answers in this very run and the crash was unchanged.
+
+This reverses an earlier judgement recorded above — `sceneIndex` was set aside as "probably a symptom" because
+scene *selection* is in the ruled-out table. Selection being right does not mean the patch data is unused.
+`TerrainReplayExperiment` with its default `FIELDS=patch` tests exactly this, by serving the client's own
+recorded `sceneIndex` and `normalizedCoordinates`.
+
+Still not shown: that the client's crash consumes any of these rather than computing its own terrain.
 
 ## The original hypothesis (now confirmed — kept for the reasoning)
 

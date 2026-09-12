@@ -54,6 +54,9 @@ internal static class MapSceneCallCensus
 
     private static readonly ConcurrentDictionary<MethodBase, string> Names = new ConcurrentDictionary<MethodBase, string>();
     private static readonly ConcurrentDictionary<string, int> Counts = new ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+    /// <summary>Members the census could not hook. Named in every report, so their silence is never read as data.</summary>
+    private static readonly List<string> Unpatchable = new List<string>();
+
     private static bool _installed;
     private static string _last = "";
 
@@ -69,7 +72,20 @@ internal static class MapSceneCallCensus
             if (!Watched.Contains(pair.Key)) continue;
             // Two interface members can share one implementation under obfuscation; record the first name and patch once.
             if (!Names.TryAdd(pair.Value, pair.Key)) continue;
-            harmony.Patch(pair.Value, postfix: postfix);
+            // Where A.G does not re-implement a member, the interface map hands back a slot Harmony refuses with
+            // "you can only patch implemented methods"; the declared virtual on SandBox.MapScene is the patchable
+            // one. Falling back keeps a census complete — an unpatched member would otherwise report "never called",
+            // which is a wrong answer wearing the clothes of a measurement.
+            var target = pair.Value;
+            try { harmony.Patch(target, postfix: postfix); }
+            catch (Exception)
+            {
+                target = pair.Value.GetBaseDefinition();
+                if (target == pair.Value) { Names.TryRemove(pair.Value, out _); Unpatchable.Add(pair.Key); continue; }
+                Names.TryAdd(target, pair.Key);
+                try { harmony.Patch(target, postfix: postfix); }
+                catch (Exception ex) { Unpatchable.Add(pair.Key + " (" + ex.GetBaseException().Message + ")"); continue; }
+            }
             patched++;
         }
         if (patched == 0) throw new MissingMethodException("the census matched no IMapScene members");
@@ -85,7 +101,8 @@ internal static class MapSceneCallCensus
             .Select(c => c.Key + "=" + c.Value).ToList();
         var silent = Names.Values.Distinct().Where(n => !Counts.ContainsKey(n)).OrderBy(n => n, StringComparer.Ordinal).ToList();
         var line = "map scene census: " + (called.Count == 0 ? "nothing called yet" : string.Join(" ", called))
-                   + (silent.Count == 0 ? "" : "; never called: " + string.Join(", ", silent));
+                   + (silent.Count == 0 ? "" : "; never called: " + string.Join(", ", silent))
+                   + (Unpatchable.Count == 0 ? "" : "; NOT COUNTED: " + string.Join(", ", Unpatchable));
         if (line == _last) return null;
         _last = line;
         return line;
