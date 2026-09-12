@@ -155,9 +155,11 @@ running. Your window size, theme and selected tab are remembered between runs to
 2. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see below). Click **Save**.
 3. **Saves tab**: pick the save to host. For a vanilla profile you may type a new name to start a fresh world. For a
    TAOM profile, select the TAOM, TAOM_Map and LOTRLOME_Armory modules and leave the save name empty when you want
-   the launcher to create a new TAOM campaign automatically. It prepares the server-safe files in its private data
-   folder, creates a unique campaign, and then starts the server. If you already have a TAOM save, select it instead;
-   **Import client save** is available when the save only exists in Bannerlord's own save folder.
+   the launcher to create a new TAOM campaign automatically (TAOM.Dependencies comes along on its own as a declared
+   dependency — you do not have to tick it). It prepares the server-safe files in its private data folder, creates a
+   unique campaign, and then starts the server; creating the world takes about three minutes before hosting begins,
+   and the Console tab shows its progress as `worldcreate: phase=...` lines. If you already have a TAOM save, select
+   it instead; **Import client save** is available when the save only exists in Bannerlord's own save folder.
 4. **Server tab**: set a password if you want one, leave the join port at 4200 (forward UDP 4200 on your router for
    direct connections; Steam joins need no forwarding).
 5. Click **Launch server**. The Console tab shows progress; the status line reads *SERVING, waiting for clients* when

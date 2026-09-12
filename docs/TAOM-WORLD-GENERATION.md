@@ -34,6 +34,30 @@ This does not test client joining or gameplay synchronization. The vanilla check
    The tested installation produced nine packages totaling 78,439,919 bytes. TAOM itself
    contributed no matching assets; Armory and TAOM_Map supplied them. Missing-animation
    warnings still appear, so this is not a claim that all client assets are supported.
+
+   Those warnings were measured on 2026-09-11 and are **not** evidence that the projection
+   strips something it should keep. Of 130 distinct names an engine run complained about,
+   **120 exist as an asset record in no installed package at all** — not in the client
+   `AssetPackages` for Native, SandBox, TAOM, TAOM_Map, TAOM.Dependencies or
+   LOTRLOME_Armory, and not in the server's own `Native\DsAssetPackages`. They are
+   dangling references in `LOTRLOME_Armory\ModuleData\action_sets.xml`, which the server
+   receives intact. The remaining 10 all *are* simulation types the projection retains,
+   and are present where the server can reach them: 9 in the server's stock Native, and
+   `warg_attack_stand` as an AnimationClip in Armory's `pack7.tpac`, which is projected.
+   There is nothing to widen `SimulationTypes` to include.
+
+   `MissingAssetProbe` (in `ModderLords.Core.Tests`) reproduces this against a real install:
+   set `MODDERLORDS_PROBE_LOG` to an `rgl_log_errors_*.txt` and `MODDERLORDS_PROBE_ROOTS`
+   to a `;`-separated list of module roots. Note that a byte-substring search over a `.tpac`
+   will wrongly report these names as present — they appear inside other records as
+   dependency references. The probe parses the resource table instead.
+
+   What the warnings *did* cost was the run itself: the engine wrote a full crash report
+   (~540 MB) for each one, 227 of them in a single 15-minute attempt, which starved world
+   creation before it armed. `HeadlessDebugManager.ReleaseNativeAssertions` now calls
+   `SetCreateDumpOnWarnings(false)` and `SetCrashOnWarnings(false)`. It deliberately does
+   **not** disable dump generation outright: a genuine native crash must still leave a dump.
+   `Preflight.RotateCrashDirs` caps the folder instead.
 3. Give the creation-only finalization prefix priority over TAOM's character-creation
    prefix, and keep `IsLoaded` false until the creation process saves and exits. The
    ordinary server's bootstrap save must not be mistaken for the generated world.

@@ -18,4 +18,11 @@
     <PackageReference Include="Lib.Harmony" Version="2.4.2" ExcludeAssets="runtime" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <!-- One copy of the terrain diagnostic, compiled into both module assemblies: the server loads this module and a
+         client can only load the community one, so the probe has to exist in each. -->
+    <Compile Include="..\Shared\TerrainProbe.cs" Link="TerrainProbe.cs" />
+  </ItemGroup>
+
 </Project>

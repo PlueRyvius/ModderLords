@@ -222,4 +222,20 @@ public sealed class CompatDbTests : IDisposable
         Assert.Equal(CompatVerdict.NeedsRecipe, db.Find("TAOM")!.Verdict);
         Assert.Contains("campaign behaviours", db.Find("TAOM")!.Notes);
     }
+
+    /// <summary>
+    /// TAOM.CoopCompat waits for a hash-qualified wrapper to register pre-save and pre-serving guards. On the stock
+    /// server nothing registers them and the host waits forever at a healthy 64fps with no error, which is very
+    /// expensive to diagnose from scratch — so the record has to keep saying why.
+    /// </summary>
+    [Fact]
+    public void The_TAOM_compat_module_is_recorded_as_needing_its_own_wrapper()
+    {
+        var record = CompatDb.Reload().Find("TAOM.CoopCompat");
+
+        Assert.NotNull(record);
+        Assert.Equal(CompatVerdict.Broken, record!.Verdict);
+        Assert.Contains("wrapper", record.Notes, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pre-serving", record.Notes, StringComparison.OrdinalIgnoreCase);
+    }
 }

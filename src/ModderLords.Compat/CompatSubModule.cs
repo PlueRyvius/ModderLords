@@ -17,6 +17,9 @@ public sealed class CompatSubModule : MBSubModuleBase
     /// <summary>Null off a dedicated server, so the tick override costs a null check and nothing else.</summary>
     private PerfSampler? _perf;
 
+    /// <summary>Seconds since the terrain spikes last reported. Stays at zero unless one of them is on.</summary>
+    private float _sinceSpikeReport;
+
     /// <summary>
     /// Null unless MODDERLORDS_CREATE_WORLD asked for a world to be generated, which is never the case on a
     /// normal launch. See <see cref="WorldCreator"/>.
@@ -60,6 +63,14 @@ public sealed class CompatSubModule : MBSubModuleBase
             Environment.Exit(12);
             return;
         }
+        // A failure to install any of these warns and leaves the server alone: the map patch restore is a fix, the
+        // census is a diagnostic, and unlike the headless map nothing downstream depends on either.
+        try { MapPatchRestore.Install(Harmony); }
+        catch (Exception ex) { Log.Warn("map patch restore not installed: " + ex.GetBaseException().Message); }
+        try { MapSceneCallCensus.Install(Harmony); }
+        catch (Exception ex) { Log.Warn("map scene census not installed: " + ex.GetBaseException().Message); }
+        try { SilentDefaultWatch.Install(Harmony); }
+        catch (Exception ex) { Log.Warn("stub warnings not installed: " + ex.GetBaseException().Message); }
         if (_worldCreator is null) return;
         try
         {
@@ -89,6 +100,31 @@ public sealed class CompatSubModule : MBSubModuleBase
             }
         }
         catch { }
+        // Off unless MODDERLORDS_TERRAIN_PROBE is set, and it disarms itself on the first tick when it is not. It
+        // rides in this module rather than the settings-sync one because this module is always in the server's load
+        // order, and a diagnostic nobody remembered to enable a second module for is a diagnostic that never ran.
+        Diagnostics.TerrainProbe.Tick(Log.Info, Log.Warn);
+
+        // The battle scene index map can only be read once the native scene has finished loading its terrain, which
+        // is long after modules are set up. Costs a bool check per frame after the one tick that reads it.
+        try { MapPatchRestore.Tick(); } catch { }
+        // Measurement only: says whether the scene can answer for its own bounds, which is what a client does.
+        try { HeadlessMapBounds.Tick(); } catch { }
+
+        // Every 30 s, report what the map-scene layer has actually done. A patch that fired on the wrong method and
+        // changed nothing is the failure most easily mistaken for a disproved hypothesis, so the counts are printed.
+        _sinceSpikeReport += dt;
+        if (_sinceSpikeReport >= 30f)
+        {
+            _sinceSpikeReport = 0f;
+            try
+            {
+                if (MapSceneCallCensus.Summary() is { } census) Log.Info(census);
+                if (MapPatchRestore.Summary() is { } patch) Log.Info(patch);
+            }
+            catch { }
+        }
+
         if (_perf is null) return;
         try { _perf.Tick(dt); }
         catch { _perf = null; }   // never let a meter break the server it is measuring

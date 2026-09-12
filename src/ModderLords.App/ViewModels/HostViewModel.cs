@@ -104,6 +104,10 @@ public partial class HostViewModel : ObservableObject
     private int _repliesSeen;
     private static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(3);
     private CappedLogWriter? _launchLog;
+    /// <summary>Per launch: is the server about to host the world on the map it was built on? See MapIdentityCheck.</summary>
+    private MapIdentityCheck _mapIdentity = new();
+    /// <summary>Per launch: keeps an endlessly repeated engine line from burying the console. The log keeps them all.</summary>
+    private RepeatCollapser _repeats = new();
     private long _totalDropped;
 
     public ObservableCollection<SaveRow> Saves { get; } = new();
@@ -363,16 +367,26 @@ public partial class HostViewModel : ObservableObject
             }
             if (Profile.Name == launchProfile.Name) ProfileStore.MergeLastVersions(Profile, launchProfile);
             DriftText = "";
-            foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
-            foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
 
+            // Open the log before anything is reported into it. The preparation messages and the plan description
+            // (cwd, exe, args, env) are the most useful thing a launch log can hold, and they were being written
+            // before this line existed — so they never reached disk at all.
             var logDir = Path.Combine(ProfileStore.RootDir, "logs");
             Directory.CreateDirectory(logDir);
             var rotated = Preflight.RotateLogs(logDir, "launch-*.log", keep: 20);
-            if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
+            // Crash reports are ~540 MB each and land in a folder shared with the retail game, so they are capped
+            // rather than cleared. Warnings no longer dump, but a real crash still does, and should.
+            var rotatedCrashes = Preflight.RotateCrashDirs(ServerPaths.CrashesDir);
             _launchLog = new CappedLogWriter(Path.Combine(logDir, $"launch-{DateTime.Now:yyyyMMdd-HHmmss}.log"));
             _pending.Clear();
             _totalDropped = 0;
+            _mapIdentity = new MapIdentityCheck();
+            _repeats = new RepeatCollapser();
+            if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
+            if (rotatedCrashes > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedCrashes} old engine crash report(s)");
+
+            foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
+            foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
 
             if (autoTaomCreate)
             {
@@ -384,9 +398,16 @@ public partial class HostViewModel : ObservableObject
                 using var creation = EngineProcess.Start(LaunchSession.CreateWorldPlan(prepared, launchProfile.SaveName));
                 creation.LineReceived += line =>
                 {
+                    // Everything the creation process says goes to the log and the console, exactly as the run
+                    // phase does. Only the worldcreate milestones were kept before, so when creation failed the
+                    // engine's own explanation — the one line that says why — had already been thrown away.
+                    var c = LogClassifier.Classify(line.Text);
+                    _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
+                    _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
+                    _mapIdentity.ObserveCreation(line.Text);
                     if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase) ||
                         line.Text.Contains("phase=", StringComparison.OrdinalIgnoreCase))
-                        Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Tool, "[ModderLords] " + line.Text));
+                        Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Milestone, "[ModderLords] " + line.Text));
                 };
                 // The compat module normally exits at the same deadline. Keep a launcher-side watchdog as well so
                 // a native hang cannot leave a half-started creation process behind indefinitely.
@@ -404,6 +425,11 @@ public partial class HostViewModel : ObservableObject
                 prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile));
                 _prepared = prepared;
                 foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
+                // The serve phase is a second, independently prepared plan with its own environment. Describing
+                // only the creation plan hid a real divergence between the two: the served world loaded the vanilla
+                // map while the generated one used TAOM's, and the env that decides it was never written down.
+                foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                    AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
             }
 
             _engine = EngineProcess.Start(prepared.Plan);
@@ -432,13 +458,28 @@ public partial class HostViewModel : ObservableObject
                 // Never touch the UI per line: the engine prints thousands during load. Queue and flush on a timer.
                 // Bounded: if the engine outruns the flush timer the oldest waiting lines are dropped and
                 // counted, rather than the queue growing without limit.
-                _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
+                //
+                // The console also collapses a line the server repeats without end -- the launch log above keeps
+                // every one, so nothing is lost for diagnosis; this is only about what a person can read.
+                if (_repeats.Filter(line.Text) is { } shown)
+                    _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, shown));
                 // Parse here (cheap, off the UI thread) but apply on the flush tick, so a perf line is no more
                 // able to touch the UI per line than any other.
                 if (c.Category == LogCategory.Perf && PerfLineParser.TryParse(line.Text, line.At) is { } sample)
                     _pendingPerf.Enqueue(sample);
+                // A map mismatch has to be said out loud before SERVING makes the run look healthy: the engine will
+                // not report it, and the failure it eventually produces is a native crash with no explanation.
+                if (_mapIdentity.ObserveServing(line.Text) is { } mismatch)
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        AddLine(LogCategory.Error, "[ModderLords] WRONG MAP: " + mismatch);
+                        Status = "Wrong map — stop the server";
+                    });
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
-                    Application.Current.Dispatcher.BeginInvoke(() => Status = "SERVING, waiting for clients");
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                        Status = _mapIdentity.ServedOn is { } s && _mapIdentity.CreatedOn is { } b && s != b
+                            ? "SERVING on the WRONG MAP — stop the server"
+                            : "SERVING, waiting for clients");
                 // LineReceived runs on the stream-reader thread, so this has to hop to the dispatcher like the
                 // SERVING line above; AddLine touches an ObservableCollection a CollectionView is bound to. Fires at
                 // most once per launch, so BeginInvoke here costs nothing and does not need the batched queue.
@@ -450,6 +491,9 @@ public partial class HostViewModel : ObservableObject
             _resources?.Dispose(); _resources = null;
             if (Performance.WriteSessionSummary(launchProfile.Name) is { } summary)
                 AddLine(LogCategory.Tool, "[ModderLords] performance summary written to " + summary);
+            // What was collapsed, so a quietened console still ends with the honest totals.
+            foreach (var (message, count) in _repeats.Totals.Take(5).Select(kv => (kv.Key, kv.Value)))
+                AddLine(LogCategory.Warning, $"[ModderLords] repeated {count:N0} times: {message}");
             Status = $"Engine exited with {code}: {ExitCodeExplainer.Explain(code)}";
             AddLine(LogCategory.Milestone, "[ModderLords] " + Status);
             _launchLog?.Dispose(); _launchLog = null;
@@ -654,13 +698,22 @@ public partial class HostViewModel : ObservableObject
 
     internal void AddLine(LogCategory c, string text)
     {
-        Console.Add(new ConsoleLine(DateTime.Now.ToString("HH:mm:ss"), c, text));
+        // The launcher's own lines are the ones a bug report needs most — the plan, the env, the worldcreate
+        // phases — and they used to exist only in this window. Write them to the launch log too; AddLine is
+        // low-volume (the engine's thousands of lines go through LineReceived), so this costs nothing.
+        var at = DateTime.Now;
+        _launchLog?.WriteLine($"{at:HH:mm:ss.fff} {c,-10} {text}");
+        Console.Add(new ConsoleLine(at.ToString("HH:mm:ss"), c, text));
         ConsoleFlushed?.Invoke();
     }
 
     private void FlushConsole()
     {
         DrainPerf();
+        // The launch log buffers rather than flushing per line; push it to disk on every tick. This has to happen
+        // before the early return below: a creation-only phase produces launcher lines and no queued engine lines,
+        // so a flush gated on _pending left the file at zero bytes for the whole run.
+        _launchLog?.Flush();
         if (_pending.IsEmpty) return;
         // No DeferRefresh here: a ListCollectionView throws if its source changes while a refresh is deferred.
         var n = 0;
@@ -677,8 +730,6 @@ public partial class HostViewModel : ObservableObject
                 "The engine is printing faster than this window can show. If a Trace switch is on under the Server tab, turn it off."));
         }
 
-        // The launch log buffers rather than flushing per line; push it to disk on the same tick.
-        _launchLog?.Flush();
         // Engine chatter is the bulk of the output; drop it first so module-load, probe, server and error lines survive a whole campaign load.
         if (Console.Count > 60000) Console.TrimTo(50000, l => l.Category is LogCategory.Engine);
         ConsoleFlushed?.Invoke();

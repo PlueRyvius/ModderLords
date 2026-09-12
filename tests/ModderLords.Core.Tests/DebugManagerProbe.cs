@@ -63,6 +63,10 @@ public class DebugManagerProbe
     {
         "SetAssertionsAndWarningsSetExitCode", "SetCrashOnAsserts", "SilentAssert", "SetTestMode",
         "IgnoreWarning", "SetIgnore", "ExitCode", "DisableWarning", "SetDebugMode",
+        // Not crashing is not the same as not dumping: an asset-warning storm wrote 227 minidumps (100 GB) in one
+        // creation run. HeadlessDebugManager.ReleaseNativeAssertions resolves these by name, so if a game update
+        // renames one this probe's output changes instead of the suppression silently no-opping.
+        "Dump", "CrashOnWarnings",
     };
 
     private void ReportEngineToggles(string dll)

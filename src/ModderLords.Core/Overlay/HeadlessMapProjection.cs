@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -8,12 +9,37 @@ namespace ModderLords.Core.Overlay;
 public static class HeadlessMapProjection
 {
     private const string Marker = ".modderlords-headless-map";
+
+    /// <summary>
+    /// The two entities a map scene carries its own bounds in. A client reads them straight out of the scene
+    /// (<c>MapScene.Load</c>: <c>GetFirstEntityWithName("border_min")</c> and <c>"border_max"</c>, whose global frame
+    /// origins are the minimum position, the maximum position and the maximum height). They are pure transform
+    /// markers — 153 bytes each in TAOM's map, no mesh, no components, no children — so keeping them costs nothing
+    /// and removes the reason this projection has to publish its bounds in a sidecar at all.
+    /// </summary>
+    private static readonly string[] BoundsEntities = ["border_min", "border_max"];
+
+    /// <summary>
+    /// Set to keep the scene's &lt;terrain&gt; descriptor instead of removing it.
+    ///
+    /// <para>The projection does two separable things: it empties &lt;entities&gt; of every game_entity, and it removes
+    /// the &lt;terrain&gt; element. Only the first is obviously about rendering. The second is what leaves
+    /// GetMapPatchAtPosition answering sceneIndex 0 for the whole map, which is the measured cause of the
+    /// field-battle client crash (docs/FIELD-BATTLE-TERRAIN.md) — and terrain.bin itself is copied into the
+    /// projection intact, so the data is already there, merely undeclared.</para>
+    ///
+    /// <para>Whether the headless engine can carry the terrain descriptor without reaching the landscape renderer it
+    /// deadlocks in has never been tested separately from entity removal. This switch is how to test it. If the
+    /// server still serves with it on, the fix costs a line rather than a parser for a 56 MB format.</para>
+    /// </summary>
+    public const string KeepTerrainVariable = "MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN";
     private static readonly string[] BinaryFiles = ["navmesh.bin", "terrain.bin", "flora.bin", "atmosphere.xml"];
 
     public sealed record Result(string SourcePath, string OutputPath, string MetadataPath, string NavmeshSha256, bool Reused);
 
-    public static Result Prepare(string sourceScene, string outputScene)
+    public static Result Prepare(string sourceScene, string outputScene, bool? keepTerrain = null)
     {
+        keepTerrain ??= !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(KeepTerrainVariable));
         sourceScene = Path.GetFullPath(sourceScene);
         outputScene = Path.GetFullPath(outputScene);
         if (!Directory.Exists(sourceScene)) throw new DirectoryNotFoundException($"Map scene was not found: {sourceScene}");
@@ -25,7 +51,9 @@ public static class HeadlessMapProjection
             throw new InvalidDataException($"Map scene is incomplete: {sourceScene}");
         var navmeshHash = Sha256(sourceFiles[0]);
         var metadata = Path.Combine(outputScene, "modderlords-map.xml");
-        if (TryReuse(outputScene, sourceScene, navmeshHash, metadata, out var reused)) return reused!;
+        // The cache has to know which rule produced it, or flipping the switch silently reuses a scene built under
+        // the other one — the same trap that made a mixed-version run look like a projection bug.
+        if (TryReuse(outputScene, sourceScene, navmeshHash, metadata, keepTerrain.Value, out var reused)) return reused!;
 
         RefuseUnexpected(outputScene);
         Directory.CreateDirectory(outputScene);
@@ -35,14 +63,21 @@ public static class HeadlessMapProjection
         var min = Position(root, "border_min");
         var max = Position(root, "border_max");
         if (max[0] <= min[0] || max[1] <= min[1]) throw new InvalidDataException("Map border dimensions are invalid");
-        var removed = entities.Descendants("game_entity").Count();
+        // Everything renderable goes; the two bounds markers stay. The headless scene otherwise hardcodes the
+        // vanilla map's borders (62,30)..(790,640), which is wrong for every map-replacing mod.
+        var kept = entities.Descendants("game_entity")
+            .Where(e => BoundsEntities.Contains((string?)e.Attribute("name"), StringComparer.OrdinalIgnoreCase))
+            .Select(e => new XElement(e))
+            .ToList();
+        var removed = entities.Descendants("game_entity").Count() - kept.Count;
         entities.RemoveNodes();
+        foreach (var marker in kept) entities.Add(marker);
         var terrain = root.Element("terrain") ?? throw new InvalidDataException("Map scene has no terrain dimensions");
         var nodeSize = ParseDouble(terrain.Attribute("node_size"), "terrain node_size");
         var nodesX = ParseInt(terrain.Attribute("node_dimension_x"), "terrain node_dimension_x");
         var nodesY = ParseInt(terrain.Attribute("node_dimension_y"), "terrain node_dimension_y");
         var terrainSize = $"{nodeSize * nodesX:0.###############},{nodeSize * nodesY:0.###############}";
-        terrain.Remove();
+        if (!keepTerrain.Value) terrain.Remove();
 
         var targetXml = Path.Combine(outputScene, "scene.xscene");
         document.Save(targetXml, SaveOptions.DisableFormatting);
@@ -59,13 +94,15 @@ public static class HeadlessMapProjection
             source = sourceScene,
             removed_entities = removed,
             navmesh_sha256 = navmeshHash,
+            keep_terrain = keepTerrain.Value,
+            kept_bounds_entities = kept.Count,
             source_xml_length = new FileInfo(sourceXml).Length,
             source_xml_write_utc_ticks = File.GetLastWriteTimeUtc(sourceXml).Ticks,
         }, new JsonSerializerOptions { WriteIndented = true }));
         return new Result(sourceScene, outputScene, metadata, navmeshHash, false);
     }
 
-    private static bool TryReuse(string output, string source, string navmeshHash, string metadata, out Result? result)
+    private static bool TryReuse(string output, string source, string navmeshHash, string metadata, bool keepTerrain, out Result? result)
     {
         result = null;
         try
@@ -78,6 +115,11 @@ public static class HeadlessMapProjection
                 !string.Equals(sourceValue.GetString(), source, StringComparison.OrdinalIgnoreCase) ||
                 !root.TryGetProperty("navmesh_sha256", out var hashValue) ||
                 !string.Equals(hashValue.GetString(), navmeshHash, StringComparison.OrdinalIgnoreCase)) return false;
+            var cachedKeepTerrain = root.TryGetProperty("keep_terrain", out var keepValue) && keepValue.GetBoolean();
+            if (cachedKeepTerrain != keepTerrain) return false;
+            // A projection built before the bounds markers were retained has none, and reusing it would hide the
+            // very thing they were kept for.
+            if (!root.TryGetProperty("kept_bounds_entities", out _)) return false;
             if (BinaryFiles.Any(name => !File.Exists(Path.Combine(output, name))) || !File.Exists(Path.Combine(output, "scene.xscene"))) return false;
             result = new Result(source, output, metadata, navmeshHash, true);
             return true;

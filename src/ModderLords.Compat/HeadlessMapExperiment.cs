@@ -24,7 +24,14 @@ internal static class HeadlessMapExperiment
     {
         if (_installed) return;
         var path = Environment.GetEnvironmentVariable("MODDERLORDS_HEADLESS_MAP");
-        if (string.IsNullOrEmpty(path)) return;
+        // Say so. Declining silently is how a server came to host a TAOM campaign on the vanilla map: the creation
+        // process installed this and the serving process did not, and neither the log nor the console said which.
+        if (string.IsNullOrEmpty(path))
+        {
+            if (ServerDetect.IsDedicatedServer)
+                Log.Info("headless-map: MODDERLORDS_HEADLESS_MAP is not set; the stock map will be used");
+            return;
+        }
         if (!ServerDetect.IsDedicatedServer) throw new InvalidOperationException("Headless map requires a dedicated server");
         var document = new XmlDocument();
         document.Load(path);

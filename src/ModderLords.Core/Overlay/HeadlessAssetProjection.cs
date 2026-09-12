@@ -7,8 +7,9 @@ namespace ModderLords.Core.Overlay;
 /// <summary>
 /// Builds the small simulation-only asset view a dedicated server can safely read from a client-packaged mod. A full
 /// client TPAC contains render resources that have caused native access violations in the headless engine; this class
-/// retains only skeleton, animation, animation-clip and physics-shape records, copying opaque metadata and compressed
-/// payloads byte-for-byte. Outputs live only below the launcher's private overlay.
+/// retains only skeleton, animation, animation-clip and physics-shape records — plus the named world-map textures the
+/// server reads as lookup grids rather than draws — copying opaque metadata and compressed payloads byte-for-byte.
+/// Outputs live only below the launcher's private overlay.
 /// </summary>
 public static class HeadlessAssetProjection
 {
@@ -20,13 +21,83 @@ public static class HeadlessAssetProjection
         [Guid.Parse("e8528e0e-64b6-4e61-bae0-7569c0452aea")] = "PhysicsShape",
     };
 
+    /// <summary>Texture records. Excluded wholesale — they are the render resources that crash a headless engine.</summary>
+    private static readonly Guid TextureType = Guid.Parse("c974cbcb-5f1c-49f6-9a32-2b5b6c92c2e8");
+
+    /// <summary>
+    /// The exception to "no textures": a handful of world-map textures are not drawn, they are read as lookup
+    /// grids that drive simulation decisions. <c>worldmap_battle_scene_grid</c> is the one that decides which
+    /// battle scene a map position produces, so a server without it cannot tell a client which terrain to build.
+    ///
+    /// Measured 2026-09-12: with these absent, a field battle killed the client in
+    /// <c>rglGPU_device::create_texture_array … CreateTexture2D … The parameter is incorrect</c> while the server
+    /// carried on reporting a healthy mission. TAOM ships both inside a 908 MB pack that projected to nothing.
+    ///
+    /// Matched by name rather than by a per-mod offset table, so any mod that replaces the campaign map is covered
+    /// by the same rule: these names come from the stock world-map convention, not from TAOM.
+    /// </summary>
+    private static readonly HashSet<string> SimulationGridTextures = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "worldmap_battle_scene_grid", "worldmap_colorgrade_grid_custom", "worldmap_colorgrade_grid",
+    };
+
+    /// <summary>True for a record the server needs, whether it is a simulation type or a lookup-grid texture.</summary>
+    private static bool IsWanted(Guid kind, string name)
+        => SimulationTypes.ContainsKey(kind) || (kind == TextureType && SimulationGridTextures.Contains(name));
+
     private const string Marker = ".modderlords-headless-assets.json";
+
+    /// <summary>One asset record as it exists in a package: what it is called and what type it is.</summary>
+    public sealed record InventoryEntry(string Name, string Type, bool IsSimulation, string Package);
+
+    /// <summary>
+    /// Lists every asset record in every .tpac under <paramref name="root"/>, recursively.
+    ///
+    /// This exists to settle a specific class of question with evidence. A server run logs hundreds of
+    /// "Could not find animation: X" warnings, and the obvious conclusion — that the projection stripped X — is
+    /// testable only by asking which records actually exist. Measured 2026-09-11: all 116 distinct names a TAOM
+    /// run complained about were absent from every installed package, client and server alike, so there was
+    /// nothing to widen the projection to include; they are dangling references in a mod's action_sets.xml.
+    ///
+    /// A substring search over the raw bytes will NOT answer this: a name appears inside other records as a
+    /// dependency reference, so it reads as "present" when no such record exists. Parse the table instead.
+    /// </summary>
+    public static IReadOnlyList<InventoryEntry> Inventory(string root)
+    {
+        var found = new List<InventoryEntry>();
+        if (!Directory.Exists(root)) return found;
+        foreach (var file in Directory.EnumerateFiles(root, "*.tpac", SearchOption.AllDirectories).OrderBy(p => p))
+        {
+            Package package;
+            try { package = ReadPackage(file); }
+            catch { continue; } // an unreadable package is not this diagnostic's problem to report
+            foreach (var record in package.Records)
+                found.Add(new InventoryEntry(record.Name,
+                    SimulationTypes.TryGetValue(record.Kind, out var t) ? t
+                        : record.Kind == TextureType ? "Texture" : record.Kind.ToString(),
+                    IsWanted(record.Kind, record.Name), file));
+        }
+        return found;
+    }
 
     public sealed record Result(string ModuleId, string OutputPath, int PackageCount, long Bytes, int AssetCount, bool Reused);
     private sealed record SourceStamp(string File, long Length, long LastWriteUtcTicks);
-    private sealed record CacheManifest(string ModuleId, IReadOnlyList<SourceStamp> Sources, Result Result);
+    private sealed record CacheManifest(string ModuleId, IReadOnlyList<SourceStamp> Sources, Result Result, int Recipe = 0);
+
+    /// <summary>
+    /// Which selection rule produced a cached projection. Bump it whenever what gets projected changes.
+    ///
+    /// Without this the cache is keyed only on the source packages, which never change — so a launcher that learns
+    /// to project something new would go on reusing output that predates it, for as long as the mod stays
+    /// installed. Found the hard way: adding the world-map lookup grids fixed nothing until the stale TAOM_Map
+    /// output was deleted by hand, and no user would have known to do that.
+    ///
+    /// 1: skeletons, animations, animation clips and physics shapes.
+    /// 2: adds the world-map lookup-grid textures (worldmap_battle_scene_grid and friends).
+    /// </summary>
+    private const int CurrentRecipe = 2;
     private sealed record Segment(int Location, long Offset, long Stored);
-    private sealed record AssetRecord(Guid Kind, byte[] Raw, IReadOnlyList<Segment> Segments);
+    private sealed record AssetRecord(Guid Kind, string Name, byte[] Raw, IReadOnlyList<Segment> Segments);
     private sealed record Package(byte[] Header, int Version, IReadOnlyList<AssetRecord> Records);
 
     /// <summary>
@@ -53,7 +124,7 @@ public static class HeadlessAssetProjection
         foreach (var packagePath in packages)
         {
             var package = ReadPackage(packagePath);
-            var selected = package.Records.Where(r => SimulationTypes.ContainsKey(r.Kind)).ToList();
+            var selected = package.Records.Where(r => IsWanted(r.Kind, r.Name)).ToList();
             if (selected.Count == 0) continue;
             var destination = Path.Combine(output, Path.GetFileName(packagePath));
             var result = WriteSubset(packagePath, destination, package, selected);
@@ -69,7 +140,7 @@ public static class HeadlessAssetProjection
         }
 
         var final = new Result(moduleId, output, results.Count, totalBytes, assetCount, false);
-        var manifest = new CacheManifest(moduleId, stamps, final);
+        var manifest = new CacheManifest(moduleId, stamps, final, CurrentRecipe);
         File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
         return final;
     }
@@ -82,7 +153,7 @@ public static class HeadlessAssetProjection
         {
             if (!File.Exists(manifestPath)) return false;
             var manifest = JsonSerializer.Deserialize<CacheManifest>(File.ReadAllText(manifestPath));
-            if (manifest is null || !manifest.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase) ||
+            if (manifest is null || manifest.Recipe != CurrentRecipe || !manifest.ModuleId.Equals(moduleId, StringComparison.OrdinalIgnoreCase) ||
                 manifest.Sources.Count != stamps.Count || !manifest.Sources.SequenceEqual(stamps) ||
                 manifest.Result.PackageCount == 0 || !Directory.Exists(output)) return false;
             foreach (var file in Directory.EnumerateFiles(output, "*.tpac")) if (new FileInfo(file).Length == 0) return false;
@@ -212,7 +283,9 @@ public static class HeadlessAssetProjection
             if (version == 2) _ = ReadExactly(stream, 4);
             var nameSize = ReadUInt32(stream);
             if (nameSize > 1_000_000) throw new InvalidDataException("Invalid TPAC name size");
-            _ = ReadExactly(stream, checked((int)nameSize));
+            // Kept rather than discarded, so Inventory can answer "does this module actually supply asset X?" with
+            // evidence. The bytes are still carried verbatim inside the opaque Raw copy; this only reads them.
+            var name = System.Text.Encoding.UTF8.GetString(ReadExactly(stream, checked((int)nameSize))).TrimEnd('\0');
             var metadataSize = ReadUInt64(stream);
             if (metadataSize > (ulong)(length - stream.Position)) throw new InvalidDataException("Invalid TPAC metadata size");
             stream.Position += checked((long)metadataSize);
@@ -235,7 +308,7 @@ public static class HeadlessAssetProjection
             var end = stream.Position;
             stream.Position = start;
             var raw = ReadExactly(stream, checked((int)(end - start)));
-            records.Add(new AssetRecord(kind, raw, segments));
+            records.Add(new AssetRecord(kind, name, raw, segments));
             stream.Position = end;
         }
         var tableEnd = stream.Position;

@@ -120,6 +120,15 @@ public sealed class LaunchSession
                 ". Download them and Rescan, or untick them. The imported list has been kept.");
         }
 
+        // A curated "Broken" verdict has to reach the console before the engine starts. It was only ever a badge on
+        // the Mods tab, so a mod known to hang the server looked no different from any other at launch -- which cost
+        // two fifteen-minute stalls before anyone connected the two. A warning, not a refusal: the verdict is a
+        // record of what was observed, and overruling it is the user's call.
+        foreach (var s in selections)
+            if (CompatDb.Current.Find(s.Module.Id) is { Verdict: CompatVerdict.Broken } broken)
+                messages.Add($"WARNING {s.Module.Id} is recorded as Broken on the Coop server" +
+                             (string.IsNullOrWhiteSpace(broken.Notes) ? "." : ": " + broken.Notes));
+
         var taomSaveMessage = TaomLaunchPolicy.MessageFor(selections.Select(s => s.Module.Id), profile.SaveName,
             name => SavePreparer.Exists(paths, name));
         if (taomSaveMessage is not null)
@@ -127,8 +136,10 @@ public sealed class LaunchSession
             var canCreate = allowTaomWorldCreation && TaomLaunchPolicy.HasCompleteRecipe(selections.Select(s => s.Module.Id)) &&
                 !string.IsNullOrWhiteSpace(profile.SaveName) && !SavePreparer.Exists(paths, profile.SaveName);
             if (applySideEffects && !canCreate) throw new InvalidOperationException(taomSaveMessage);
+            // One or the other, never both. Printing the "create it in Bannerlord and import it" advice directly
+            // under "this will be created automatically" told the user to do work the launcher was about to do.
             if (canCreate) messages.Add("TAOM: this campaign will be created automatically before the server starts");
-            messages.Add("TAOM: " + taomSaveMessage);
+            else messages.Add("TAOM: " + taomSaveMessage);
         }
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
@@ -252,9 +263,12 @@ public sealed class LaunchSession
             {
                 var source = Path.Combine(map.Module.FolderPath, "SceneObj", "Main_map");
                 var output = Path.Combine(generatedRoot, "TAOM_Map", "Main_map");
-                var projection = HeadlessMapProjection.Prepare(source, output);
+                var keepTerrain = !string.IsNullOrEmpty(
+                    Environment.GetEnvironmentVariable(HeadlessMapProjection.KeepTerrainVariable));
+                var projection = HeadlessMapProjection.Prepare(source, output, keepTerrain);
                 maps[map.Module.Id] = projection.OutputPath;
-                messages.Add(projection.Reused ? "TAOM: reusing prepared server map" : "TAOM: prepared a private headless map");
+                messages.Add((projection.Reused ? "TAOM: reusing prepared server map" : "TAOM: prepared a private headless map")
+                    + (keepTerrain ? " WITH its terrain descriptor kept (" + HeadlessMapProjection.KeepTerrainVariable + ")" : ""));
             }
         }
         catch (Exception ex)

@@ -31,6 +31,7 @@ internal sealed class WorldCreator
     private bool _saveRequested;
     private volatile bool _saveCompleted;
     private bool _saveSucceeded;
+    private volatile string? _saveResult;
     private long _lastSize = -1;
     private DateTime _sizeStableSince = DateTime.MaxValue;
     private int _readyTicks;
@@ -168,7 +169,10 @@ internal sealed class WorldCreator
         Game.Current.Save(metadata, _policy.SaveName, new AsyncFileSaveDriver(), result =>
         {
             _saveSucceeded = (int)result == 0;
-            Log.Info("worldcreate: save callback=" + result);
+            _saveResult = result.ToString();
+            // Say, not Log.Info: this is the one line that explains a failed creation, and stdout is spliced by
+            // the engine and not captured at all by the launcher's creation phase. It has to reach the sidecar.
+            Say("worldcreate: save callback=" + result);
             _saveCompleted = true;
         });
     }
@@ -176,7 +180,7 @@ internal sealed class WorldCreator
     private void CheckSaveFinished(DateTime now)
     {
         if (!_saveRequested || !_saveCompleted) return;
-        if (!_saveSucceeded) throw new IOException("Engine save callback reported failure");
+        if (!_saveSucceeded) throw new IOException("Engine save callback reported failure: " + (_saveResult ?? "unknown"));
         var path = SavePath(_policy.SaveName);
         if (!File.Exists(path)) return;
 

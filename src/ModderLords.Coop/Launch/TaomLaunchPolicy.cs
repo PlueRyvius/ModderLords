@@ -1,9 +1,15 @@
 namespace ModderLords.Coop.Launch;
 
 /// <summary>
-/// Keeps the normal Host button from silently turning a TAOM profile into a vanilla world. The release launcher does
-/// not yet stage the diagnostic TAOM map and simulation assets, so a TAOM profile must point at a campaign that was
-/// already created with TAOM loaded.
+/// Keeps the normal Host button from silently turning a TAOM profile into a vanilla world.
+///
+/// A TAOM profile has to point at a campaign that was created with TAOM loaded — the pre-baked
+/// default_new_game.sav lists Native;SandBoxCore;Sandbox;Coop and nothing else, and serving it with TAOM's modules
+/// attached loads the vanilla map (navmesh CRC 1465536726 rather than TAOM's 3101457840).
+///
+/// The launcher can now make that campaign itself when the full recipe is enabled: it stages the headless map and
+/// simulation assets and runs a creation pass before hosting. So these messages are the fallback for a profile that
+/// is <i>not</i> in a state to be created automatically, not the normal path.
 /// </summary>
 public static class TaomLaunchPolicy
 {
@@ -33,10 +39,14 @@ public static class TaomLaunchPolicy
         var missing = new[] { "TAOM", "TAOM_Map", "LOTRLOME_Armory" }.Where(id => !ids.Contains(id)).ToList();
         if (missing.Count > 0)
             return "TAOM hosting needs TAOM, TAOM_Map, and LOTRLOME_Armory enabled. Missing: " + string.Join(", ", missing) + ".";
+        // Reached only when the launcher is not going to create the campaign itself, so the advice has to be the
+        // manual route. LaunchSession prints the "will be created automatically" line instead when it can.
         if (string.IsNullOrWhiteSpace(saveName))
-            return "TAOM needs a campaign save created with TAOM loaded. Create the campaign in Bannerlord, then use Import client save.";
+            return "TAOM needs a campaign save created with TAOM loaded. Leave the save name empty to have the launcher " +
+                   "create one, or create the campaign in Bannerlord and use Import client save.";
         if (!saveExists(saveName))
-            return $"TAOM save '{saveName}' was not found. Create it in Bannerlord with TAOM loaded, then use Import client save.";
+            return $"TAOM save '{saveName}' was not found. Clear the save name to have the launcher create a campaign, " +
+                   "or create it in Bannerlord with TAOM loaded and use Import client save.";
         return null;
     }
 }
