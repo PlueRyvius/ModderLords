@@ -70,8 +70,33 @@ Two of these are the direct candidates for `create_texture_array`:
 2. **Every map patch reports `sceneIndex` 0.** On the client the same 2304 positions produce 181 distinct
    scene indices. This is the patch-to-scene selector, and on the server it is a constant.
 
-Not yet shown: that the client's crash consumes *these particular* answers rather than computing its own from a
-different path. That is the next cheap check, and it is a much narrower question than the one this settles.
+### Measured 2026-09-12, second run: the battle does not ask for the terrain-type list
+
+With the stub spike correctly targeted (see the implementation note below — the first attempt patched methods
+nothing calls), a full field battle produced:
+
+```
+05:05:10.925  terrain stub: first height-of-zero success reported as a failure instead
+05:05:10.930  [Coop] [BattleSync] Using "FieldBattleMissionInitializer" for battle mission initializer
+...
+              terrain stub: filled 0 empty type list(s), corrected 2 false height success(es)
+```
+
+`GetHeightAtPoint` is called **five milliseconds before** the field-battle initializer — it is squarely on the
+battle path, and the patch demonstrably works. `GetEnvironmentTerrainTypesCount` was called **zero times** in the
+entire run.
+
+So the empty list from *that* member is not what the battle consumes, and candidate 1 above is not disproved but
+mis-aimed: `IMapScene` has a second, separate member, `GetEnvironmentTerrainTypes` (no "Count"), which the probe
+never sampled and the spike never patched. `A.G` re-implements that one too.
+
+The lesson is a method, not a fact: measuring one member at a time and inferring from silence has now cost two
+runs. `MapSceneCallCensus` (`MODDERLORDS_MAPSCENE_CENSUS=1`) counts calls to every terrain-related `IMapScene`
+member at once and reports which were never called, so the next run names the consumer instead of guessing it. It
+changes no answers, so it can run alongside a spike.
+
+Still not shown: that the client's crash consumes any of these rather than computing its own terrain. The census
+answers the server half of that directly.
 
 ## The original hypothesis (now confirmed — kept for the reasoning)
 

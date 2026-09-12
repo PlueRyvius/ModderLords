@@ -75,4 +75,16 @@ internal static class MapSceneTarget
         }
         return targets;
     }
+
+    /// <summary>
+    /// Every IMapScene member paired with the method <paramref name="scene"/> runs for it, keyed by the interface's
+    /// own name. Lets a caller work from the readable contract while patching the obfuscated reality.
+    /// </summary>
+    internal static IEnumerable<KeyValuePair<string, MethodInfo>> AllImplementations(Type scene)
+    {
+        var contract = Type.GetType(MapSceneInterface, false) ?? throw new MissingMemberException(MapSceneInterface);
+        var map = scene.GetInterfaceMap(contract);
+        for (var i = 0; i < map.InterfaceMethods.Length; i++)
+            yield return new KeyValuePair<string, MethodInfo>(map.InterfaceMethods[i].Name, map.TargetMethods[i]);
+    }
 }

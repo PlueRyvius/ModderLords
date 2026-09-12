@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Map;
 using TaleWorlds.Core;
 
 namespace ModderLords.Compat;
@@ -52,6 +53,11 @@ internal static class TerrainStubExperiment
 
         Patch(harmony, "GetEnvironmentTerrainTypesCount",
             new[] { typeof(CampaignVec2).MakeByRefType(), typeof(TerrainType).MakeByRefType() }, nameof(FillTypes));
+        // The sibling without "Count". Measured: a whole field battle called the Count variant zero times, so the
+        // plain one is the likelier consumer and costs nothing to cover. It takes no out parameter, so it has to ask
+        // the scene for the terrain type itself — which is the one thing the server still answers correctly.
+        Patch(harmony, "GetEnvironmentTerrainTypes",
+            new[] { typeof(CampaignVec2).MakeByRefType() }, nameof(FillTypesAtPosition));
         Patch(harmony, "GetHeightAtPoint",
             new[] { typeof(CampaignVec2).MakeByRefType(), typeof(float).MakeByRefType() }, nameof(OwnUpToNoHeight));
 
@@ -93,6 +99,23 @@ internal static class TerrainStubExperiment
         if (__instance.GetType() != _headless) return;
         if (__result != null && __result.Count > 0) return;
         var current = __1;
+        var filled = new List<TerrainType>(_size);
+        for (var i = 0; i < _size; i++) filled.Add(current);
+        __result = filled;
+        if (_listsFilled++ == 0) Log.Info($"terrain stub: first empty type list filled ({_size} x {current})");
+    }
+
+    /// <summary>
+    /// The no-out-parameter form. The terrain type at the position is fetched from the scene, which the measurement
+    /// showed is correct on all 2304 samples, so the fabricated neighbourhood is as defensible as the other one.
+    /// </summary>
+    private static void FillTypesAtPosition(object __instance, ref List<TerrainType> __result, ref CampaignVec2 __0)
+    {
+        if (__instance.GetType() != _headless) return;
+        if (__result != null && __result.Count > 0) return;
+        if (__instance is not IMapScene scene) return;
+        var position = __0;
+        var current = scene.GetTerrainTypeAtPosition(ref position);
         var filled = new List<TerrainType>(_size);
         for (var i = 0; i < _size; i++) filled.Add(current);
         __result = filled;

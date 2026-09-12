@@ -65,6 +65,8 @@ public sealed class CompatSubModule : MBSubModuleBase
         }
         // Both are off unless their own variable is set, and both are diagnostics rather than fixes, so a failure to
         // install one warns and leaves the server alone. Unlike the headless map, nothing downstream depends on them.
+        try { MapSceneCallCensus.Install(Harmony); }
+        catch (Exception ex) { Log.Warn("map scene census not installed: " + ex.GetBaseException().Message); }
         try { TerrainStubExperiment.Install(Harmony); }
         catch (Exception ex) { Log.Warn("terrain stub not installed: " + ex.GetBaseException().Message); }
         try { TerrainReplayExperiment.Install(Harmony); }
@@ -113,6 +115,7 @@ public sealed class CompatSubModule : MBSubModuleBase
             {
                 if (TerrainStubExperiment.Summary() is { } stub) Log.Info(stub);
                 if (TerrainReplayExperiment.Summary() is { } replay) Log.Info(replay);
+                if (MapSceneCallCensus.Summary() is { } census) Log.Info(census);
             }
             catch { }
         }
