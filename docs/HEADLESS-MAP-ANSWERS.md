@@ -114,6 +114,23 @@ exit path can all go, and map-replacing mods need no preparation for bounds at a
 remaining question: `GetTerrainData` needs the scene's `<terrain>` descriptor, which
 `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` retains and which was measured safe — the server reaches SERVING with it.
 
+## The stubs now announce themselves
+
+`SilentDefaultWatch` (on by default; `MODDERLORDS_STUB_WARNINGS=0` silences it) patches the load-bearing stubs
+and warns **once per member per run** the first time a mod reads one:
+
+```
+[ModderLords.Compat] Warning: a mod just read IMapScene.GetHeightAtPoint, which this server does not implement:
+reports SUCCESS with a height of 0, so a caller that checks the return value is told the answer is good.
+```
+
+It changes no answers. After the first report the postfix is a bool read, and members another component has
+restored are skipped so a fixed query does not keep warning. It deliberately leaves `GetFaceVertexZ` alone —
+it may sit on the pathfinding path, and the census established what patching a hot member costs.
+
+This is the point of the inventory. The field-battle crash was one of these read silently; with this in place it
+would have been a line in the first log anyone looked at.
+
 ## Diagnostics for this class of bug
 
 - **`TerrainProbe`** (`MODDERLORDS_TERRAIN_PROBE=1`, both sides) — samples the map scene over a grid and writes a

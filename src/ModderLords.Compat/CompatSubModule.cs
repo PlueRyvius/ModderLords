@@ -69,6 +69,8 @@ public sealed class CompatSubModule : MBSubModuleBase
         catch (Exception ex) { Log.Warn("map patch restore not installed: " + ex.GetBaseException().Message); }
         try { MapSceneCallCensus.Install(Harmony); }
         catch (Exception ex) { Log.Warn("map scene census not installed: " + ex.GetBaseException().Message); }
+        try { SilentDefaultWatch.Install(Harmony); }
+        catch (Exception ex) { Log.Warn("stub warnings not installed: " + ex.GetBaseException().Message); }
         if (_worldCreator is null) return;
         try
         {

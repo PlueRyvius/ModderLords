@@ -124,6 +124,13 @@ internal static class MapPatchRestore
         }
     }
 
+    /// <summary>
+    /// Whether this component answers <paramref name="member"/> itself, so the stub watch does not warn about a
+    /// query that has a fix in place.
+    /// </summary>
+    internal static bool Restores(string member) =>
+        _indexMap != null && member == "GetMapPatchAtPosition";
+
     internal static string? Summary() =>
         _installed && _indexMap != null ? $"map patch restore: answered {_served} query(ies)" : null;
 
