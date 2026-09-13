@@ -32,10 +32,32 @@ public partial class ModRow : ObservableObject
     [ObservableProperty] private bool _serverAuthoritative;
     /// <summary>Behaviours excluded from gating (kept on clients), edited in the Behaviours window.</summary>
     public List<string> ClientSideBehaviors { get; set; } = new();
+    /// <summary>The assembly scan, computed on demand. The grid's columns never call this: reading a mod's DLLs for
+    /// every row on the UI thread froze the first draw, so Rescan fills them from a background pass instead.</summary>
     public ModderLords.Core.Compat.ScanResult Scan => _scan ??= ModderLords.Core.Compat.AssemblyScan.Scan(Module);
-    public string Behaviors => (_scan ??= ModderLords.Core.Compat.AssemblyScan.Scan(Module)) is { } s
-        ? (s.CampaignBehaviors.Count + s.MissionBehaviors.Count == 0 ? "" : $"{s.CampaignBehaviors.Count} campaign, {s.MissionBehaviors.Count} mission")
-        : "";
+
+    /// <summary>Shown in the scan columns until the background pass reaches this row.</summary>
+    private const string Scanning = "…";
+
+    /// <summary>Hands this row the result of the background scan and tells the grid to redraw its scan columns.</summary>
+    internal void ApplyScan(ModderLords.Core.Compat.ScanResult scan)
+    {
+        _scan = scan;
+        OnPropertyChanged(nameof(Behaviors));
+        OnPropertyChanged(nameof(ServerVerdict));
+        OnPropertyChanged(nameof(ServerVerdictDetail));
+        OnPropertyChanged(nameof(Settings));
+        OnPropertyChanged(nameof(SettingsTip));
+    }
+
+    public string Behaviors => IsMissing ? "" : _scan is not { } s ? Scanning
+        : s.CampaignBehaviors.Count + s.MissionBehaviors.Count == 0 ? "" : $"{s.CampaignBehaviors.Count} campaign, {s.MissionBehaviors.Count} mission";
+
+    /// <summary>
+    /// Only an entry whose mod is no longer installed can be taken off the list. An installed mod is simply unticked:
+    /// it is still on disk, so the next scan would put it straight back.
+    /// </summary>
+    public bool CanRemove => IsMissing;
     public string Id => Module.Id;
     public string Version => Module.Version;
 
@@ -59,7 +81,7 @@ public partial class ModRow : ObservableObject
     {
         get
         {
-            if (IsMissing) return "Not installed. This entry is kept from the profile. Download it and Rescan, or untick it to launch without it.";
+            if (IsMissing) return "Not installed. This entry is kept from the profile. Download it and Rescan, untick it to launch without it, or right-click → Remove from profile if you deleted it.";
             var band = Band switch
             {
                 0 => "loads before the game's own modules (its manifest asks for it)",
@@ -116,13 +138,14 @@ public partial class ModRow : ObservableObject
 
     private ModderLords.Core.Compat.ScanResult? _scan;
     /// <summary>IL-metadata verdict: server-safe / guarded / needs review. Computed lazily, never executes mod code.</summary>
-    public string ServerVerdict => IsMissing ? "not installed" : (_scan ??= ModderLords.Core.Compat.AssemblyScan.Scan(Module)).Summary;
+    public string ServerVerdict => IsMissing ? "not installed" : _scan?.Summary ?? Scanning;
     public string ServerVerdictDetail => _scan is null ? "" : string.Join("\n", _scan.UiAssemblies.Concat(_scan.StoryModeAssemblies).Concat(_scan.GuardedCalls).Concat(_scan.Notes));
     /// <summary>What the Mod settings tab will find for this mod (metadata scan): MCM, its own settings classes, or nothing.</summary>
-    public string Settings => Scan.SettingsSummary;
-    public string SettingsTip => Scan.SettingsClasses.Count == 0
-        ? (Scan.UsesMcm ? "Uses MCM; its settings appear in the Mod settings tab." : "No settings class found by the scan. If the mod does have one, add its type name to the compat record as a settings hint (SettingsTypes in compat-db.local.json).")
-        : "Settings classes found (shown in the Mod settings tab once the server has created them):\n" + string.Join("\n", Scan.SettingsClasses) + (Scan.UsesMcm ? "\nPlus MCM settings." : "");
+    public string Settings => IsMissing ? "" : _scan?.SettingsSummary ?? Scanning;
+    public string? SettingsTip => _scan is not { } s ? null
+        : s.SettingsClasses.Count == 0
+            ? (s.UsesMcm ? "Uses MCM; its settings appear in the Mod settings tab." : "No settings class found by the scan. If the mod does have one, add its type name to the compat record as a settings hint (SettingsTypes in compat-db.local.json).")
+            : "Settings classes found (shown in the Mod settings tab once the server has created them):\n" + string.Join("\n", s.SettingsClasses) + (s.UsesMcm ? "\nPlus MCM settings." : "");
 
     /// <summary>Curated verdict from the compat database (bundled + local override); refreshed by Rescan and after Record….</summary>
     [ObservableProperty]
@@ -260,6 +283,12 @@ public partial class MainViewModel : ObservableObject
 
     internal MainViewModel(bool initialize)
     {
+        // Every reorder - drag, Move up/down, Use engine order - moves an item; Rescan only ever adds and clears. So a
+        // move is exactly "the user changed the order", in one place rather than at each of the three call sites.
+        Mods.CollectionChanged += (_, e) =>
+        {
+            if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Move) IsDirty = true;
+        };
         if (!initialize) return;
         LoadProfileList();
         LoadProfile(ProfileNames.FirstOrDefault() ?? "default");
@@ -297,9 +326,53 @@ public partial class MainViewModel : ObservableObject
         if (ProfileNames.Count == 0) ProfileNames.Add("default");
     }
 
+    /// <summary>
+    /// True when the mod list has been edited since the profile was last loaded or saved. Ticks, drags, removals and
+    /// the order switch set it; the window title shows it, and switching profile or closing asks before losing it.
+    /// Before this, all of those silently threw the edits away.
+    /// </summary>
+    [ObservableProperty] private bool _isDirty;
+
+    /// <summary>How the unsaved-changes question is asked. Replaceable so tests never block on a message box.</summary>
+    internal Func<string, MessageBoxResult> AskUnsaved { get; set; } = profileName => MessageBox.Show(
+        $"The mod list in profile '{profileName}' has unsaved changes. Save them?",
+        "Unsaved changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+    /// <summary>
+    /// Settles unsaved edits before they would be lost: Yes saves, No discards, Cancel stops. Returns false only on
+    /// Cancel, meaning whatever was about to happen should not.
+    /// </summary>
+    public bool ResolveUnsavedChanges()
+    {
+        if (!IsDirty) return true;
+        switch (AskUnsaved(Profile.Name))
+        {
+            case MessageBoxResult.Yes:
+                CollectProfileFromRows();
+                ProfileStore.Save(Profile);
+                Status = $"Profile '{Profile.Name}' saved";
+                break;
+            case MessageBoxResult.No:
+                break;
+            default:
+                return false;
+        }
+        IsDirty = false;
+        return true;
+    }
+
     partial void OnSelectedProfileNameChanged(string value)
     {
-        if (!string.IsNullOrWhiteSpace(value) && value != Profile.Name) LoadProfile(value);
+        if (string.IsNullOrWhiteSpace(value) || value == Profile.Name) return;
+        if (!ResolveUnsavedChanges())
+        {
+            // The dropdown is mid-update when this runs and ignores a change made now, so put the name back once
+            // it has finished.
+            var current = Profile.Name;
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() => SelectedProfileName = current);
+            return;
+        }
+        LoadProfile(value);
     }
 
     public void LoadProfile(string name)
@@ -308,6 +381,7 @@ public partial class MainViewModel : ObservableObject
         SelectedProfileName = Profile.Name;
         Rescan();
         if (IsHost) Host?.OnProfileSelected();
+        IsDirty = false;
     }
 
     [RelayCommand]
@@ -319,12 +393,14 @@ public partial class MainViewModel : ObservableObject
         // Clearing ItemsSource clears ComboBox.SelectedItem through its two-way binding.
         // Re-select the saved profile once its item exists again; do not reload its contents.
         SelectedProfileName = Profile.Name;
+        IsDirty = false;
         Status = $"Profile '{Profile.Name}' saved";
     }
 
     [RelayCommand]
     private void NewProfile()
     {
+        if (!ResolveUnsavedChanges()) return;
         var n = 1;
         string name;
         do { name = $"profile{n++}"; } while (ProfileNames.Contains(name));
@@ -339,13 +415,19 @@ public partial class MainViewModel : ObservableObject
     private void DeleteProfile()
     {
         if (MessageBox.Show($"Delete profile '{Profile.Name}'? Junctions it created are removed too.", "Delete profile", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-        try { new OverlayApplier().RemoveAll(ProfileStore.OverlayDirFor(Profile.Name)); } catch { }
-        ProfileStore.Delete(Profile.Name);
+        string? junctionError = null;
+        try { new OverlayApplier().RemoveAll(ProfileStore.OverlayDirFor(Profile.Name)); }
+        catch (Exception ex) { junctionError = ex.Message; }
+        var deleted = Profile.Name;
+        ProfileStore.Delete(deleted);
+        IsDirty = false;
         LoadProfileList();
         LoadProfile(ProfileNames.First());
+        // After the reload, which clears Messages: said before it, this would vanish at once.
+        if (junctionError is not null)
+            Messages.Add($"profile '{deleted}' deleted, but some of its junctions could not be removed: {junctionError}");
     }
 
-    /// <summary>The game modules this profile wants switched on, for reconciling the player's launcher list.</summary>
     /// <summary>
     /// Ids the CLIENT can load: the game's own Modules folder and the Steam workshop. Lets a mod-list sync tell a
     /// mod the Bannerlord launcher has simply never scanned from one that really is not installed.
@@ -387,6 +469,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_syncingVersions || e.PropertyName is not (nameof(ModRow.Enabled) or nameof(ModRow.Role) or nameof(ModRow.ServerAuthoritative))) return;
         if (sender is not ModRow row) return;
+        IsDirty = true;
         if (e.PropertyName != nameof(ModRow.Enabled) || !row.Enabled || row.IsGameModule || !row.HasVersionSiblings)
         {
             RefreshPreview();
@@ -444,6 +527,9 @@ public partial class MainViewModel : ObservableObject
     {
         Mods.Clear();
         _preview = null;
+        ScannedCatalog = null;
+        _previewLines.Clear();
+        _scanGeneration++;          // any background scan still running is for rows that no longer exist
         Host?.InvalidatePreview();
         LoadOrderPreview.Clear();
         try
@@ -465,6 +551,7 @@ public partial class MainViewModel : ObservableObject
                 catalog = ClientLaunchSession.Scan(Profile, out gameRoot);
             }
             GameRoot = gameRoot ?? "(game install not found)";
+            ScannedCatalog = (catalog, gameRoot);
             Messages.Clear();
             foreach (var p in catalog.Problems) Messages.Add("catalog: " + p);
             var db = CompatDb.Reload();
@@ -499,7 +586,8 @@ public partial class MainViewModel : ObservableObject
                 if (!byId.TryGetValue(pm.Id, out var copies))
                 {
                     if (IsHost && (stockIds.Contains(pm.Id) || ClientManifest.CoopClientModuleIds.Contains(pm.Id))) continue;
-                    Messages.Add($"MISSING: {pm.Id} — download it, then Rescan. {pm.DownloadUrl}");
+                    Messages.Add($"MISSING: {pm.Id} — download it, then Rescan, or right-click it → Remove from profile."
+                                 + (string.IsNullOrWhiteSpace(pm.DownloadUrl) ? "" : " " + pm.DownloadUrl));
                     modRows.Add(new ModRow
                     {
                         Module = new DiscoveredModule(pm.Id, pm.LastVersion ?? "unknown", "", ModuleSourceKind.Custom,
@@ -583,6 +671,8 @@ public partial class MainViewModel : ObservableObject
             foreach (var row in Mods) row.PropertyChanged += ModRowChanged;
 
             foreach (var row in Mods) row.Compat = db.For(row.Id, row.Version);
+            NotifyMissingChanged();
+            StartBackgroundScan();
 
             if (IsHost && Host is not null && paths is not null) Host.RefreshSaves(paths);
             RefreshPreview();
@@ -716,7 +806,97 @@ public partial class MainViewModel : ObservableObject
         return i >= 0 && j >= 0 && j < Mods.Count && Mods[j].Band == SelectedMod.Band;
     }
 
-    partial void OnSelectedModChanged(ModRow? value) => NotifyMoveability();
+    partial void OnSelectedModChanged(ModRow? value)
+    {
+        NotifyMoveability();
+        RemoveModCommand.NotifyCanExecuteChanged();
+        OpenModFolderCommand.NotifyCanExecuteChanged();
+    }
+
+    // ---- removing mods that are gone ---------------------------------------------------------------
+
+    /// <summary>
+    /// The catalogue from the last Rescan, with the game root it found. Previews reuse it so an edit to the list never
+    /// walks the disk; only Rescan (and a real launch, which ignores this) looks at the folders again. Null until a
+    /// scan has succeeded, and after one that failed.
+    /// </summary>
+    internal (ModuleCatalog Catalog, string? GameRoot)? ScannedCatalog { get; private set; }
+
+    /// <summary>Rows kept from the profile whose mod is no longer installed. Drives the "Remove missing" button.</summary>
+    public int MissingCount => Mods.Count(r => r.IsMissing);
+
+    [RelayCommand(CanExecute = nameof(CanRemoveMod))]
+    private void RemoveMod()
+    {
+        if (SelectedMod is not { CanRemove: true } row) return;
+        RemoveRows([row]);
+        Status = $"{row.Id} removed from profile '{Profile.Name}'. Save to keep the change.";
+    }
+
+    private bool CanRemoveMod() => SelectedMod is { CanRemove: true };
+
+    [RelayCommand(CanExecute = nameof(HasMissing))]
+    private void RemoveAllMissing()
+    {
+        var ids = Mods.Where(r => r.IsMissing).Select(r => r.Id).ToList();
+        if (ids.Count == 0) return;
+        if (MessageBox.Show($"Take these {ids.Count} mod(s) that are no longer installed off profile '{Profile.Name}'?\n\n{string.Join("\n", ids)}",
+                "Remove missing mods", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        RemoveMissingRows();
+    }
+
+    private bool HasMissing() => MissingCount > 0;
+
+    /// <summary>Removes every missing row without asking. The command asks first; tests call this directly.</summary>
+    internal void RemoveMissingRows()
+    {
+        var rows = Mods.Where(r => r.IsMissing).ToList();
+        if (rows.Count == 0) return;
+        RemoveRows(rows);
+        Status = $"Removed {rows.Count} missing mod(s) from profile '{Profile.Name}'. Save to keep the change.";
+    }
+
+    /// <summary>
+    /// Takes rows off the list AND out of the profile. Deleting the row alone is not enough: CollectProfileFromRows
+    /// deliberately keeps profile entries that have no row (a shared list's requirements must survive), so the entry
+    /// would simply come back on the next scan.
+    /// </summary>
+    private void RemoveRows(IReadOnlyList<ModRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            row.PropertyChanged -= ModRowChanged;
+            Mods.Remove(row);
+            if (row.IsGameModule)
+                Profile.ClientOfficialModules.RemoveAll(id => id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
+            // Another installed copy of the same id keeps the entry; only the last row for an id takes it away.
+            else if (!Mods.Any(r => !r.IsGameModule && r.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase)))
+                Profile.Mods.RemoveAll(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
+            foreach (var m in Messages.Where(m => m.StartsWith($"MISSING: {row.Id} ", StringComparison.OrdinalIgnoreCase)).ToList())
+                Messages.Remove(m);
+        }
+        if (rows.Contains(SelectedMod)) SelectedMod = null;
+        IsDirty = true;
+        NotifyMissingChanged();
+        RefreshPreview();
+    }
+
+    private void NotifyMissingChanged()
+    {
+        OnPropertyChanged(nameof(MissingCount));
+        RemoveModCommand.NotifyCanExecuteChanged();
+        RemoveAllMissingCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanOpenModFolder))]
+    private void OpenModFolder()
+    {
+        if (SelectedMod is not { IsMissing: false } row || !Directory.Exists(row.Folder)) return;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(row.Folder) { UseShellExecute = true }); }
+        catch (Exception ex) { Status = "Could not open the folder: " + ex.Message; }
+    }
+
+    private bool CanOpenModFolder() => SelectedMod is { IsMissing: false };
 
     /// <summary>Re-asks both buttons whether they are still available. Needed after a move as well as after a
     /// selection change: moving a row to the end of its band is what disables the button you just pressed.</summary>
@@ -842,6 +1022,7 @@ public partial class MainViewModel : ObservableObject
         {
             if (Profile.ManualLoadOrder == value) return;
             Profile.ManualLoadOrder = value;
+            IsDirty = true;
             OnPropertyChanged();
             Host?.InvalidatePreview();
             RefreshPreview();
@@ -861,7 +1042,7 @@ public partial class MainViewModel : ObservableObject
             var p = _preview;
             LoadOrderPreview.Clear();
             foreach (var id in p.Order.ModuleIds) LoadOrderPreview.Add(id);
-            foreach (var m in p.Messages.Where(m => m.StartsWith("order:"))) Messages.Add(m);
+            SetPreviewMessages(p.Messages.Where(m => m.StartsWith("order:")));
             UpdateShareText();
             if (IsHost) Host?.UpdateSaveDiff();
         }
@@ -871,14 +1052,60 @@ public partial class MainViewModel : ObservableObject
             LoadOrderPreview.Clear();
             ClientManifestText = "Cannot prepare this selection: " + ex.Message;
             if (IsHost && Host?.ClientTarget is not null) UpdateShareText();
-            Messages.Add("preview: " + ex.Message);
+            SetPreviewMessages(["preview: " + ex.Message]);
+        }
+    }
+
+    /// <summary>The lines the last preview put in Messages, so the next preview can take them back out.</summary>
+    private readonly List<string> _previewLines = new();
+
+    /// <summary>
+    /// Replaces the previous preview's lines rather than adding to them. The preview runs on every tick and every
+    /// drag, and it used to append each time, so one ordering warning filled the Messages list after a few clicks.
+    /// </summary>
+    private void SetPreviewMessages(IEnumerable<string> lines)
+    {
+        foreach (var old in _previewLines) Messages.Remove(old);
+        _previewLines.Clear();
+        foreach (var line in lines.Distinct())
+        {
+            if (Messages.Contains(line)) continue;
+            Messages.Add(line);
+            _previewLines.Add(line);
         }
     }
 
     private PreviewResult PrepareClientPreview()
     {
-        var c = ClientLaunchSession.Prepare(Profile);
+        var c = ClientLaunchSession.Prepare(Profile, ScannedCatalog);
         return new PreviewResult(c.Catalog, c.Order, c.Modules, c.Messages);
+    }
+
+    /// <summary>Bumped by every Rescan, so a background scan that outlives its rows stops instead of feeding them.</summary>
+    private int _scanGeneration;
+
+    /// <summary>
+    /// Reads each installed mod's assemblies off the UI thread and hands the result to its row. The Behaviours,
+    /// Settings and Server verdict columns show "…" until then; computing them while the grid drew froze the window
+    /// on a large mod list.
+    /// </summary>
+    private void StartBackgroundScan()
+    {
+        var rows = Mods.Where(r => !r.IsMissing).ToList();
+        if (rows.Count == 0) return;
+        var generation = _scanGeneration;
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        Task.Run(() =>
+        {
+            foreach (var row in rows)
+            {
+                if (generation != _scanGeneration) return;
+                ModderLords.Core.Compat.ScanResult scan;
+                try { scan = ModderLords.Core.Compat.AssemblyScan.Scan(row.Module); }
+                catch { continue; }     // a mod removed mid-scan; the next Rescan drops its row anyway
+                dispatcher.BeginInvoke(() => { if (generation == _scanGeneration) row.ApplyScan(scan); });
+            }
+        });
     }
 
     internal void UpdateShareText()
@@ -1013,7 +1240,10 @@ public partial class MainViewModel : ObservableObject
                 return;
             }
 
+            // Saved first, as Host mode's Launch does: what you played with is what the profile holds next time.
             CollectProfileFromRows();
+            ProfileStore.Save(Profile);
+            IsDirty = false;
             var prepared = ClientLaunchSession.Prepare(Profile);
 
             foreach (var m in prepared.Messages) Log(LogCategory.Tool, "[ModderLords] " + m);

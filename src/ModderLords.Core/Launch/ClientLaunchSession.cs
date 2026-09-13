@@ -37,10 +37,18 @@ public static class ClientLaunchSession
         return ModuleCatalog.Scan(serverModulesRoot: "", gameRoot, libraries, profile.CustomModRoots);
     }
 
-    public static Prepared Prepare(Profile profile)
+    /// <param name="scanned">
+    /// A catalogue the caller has already scanned for this profile, with the game root that scan found. The app's
+    /// order preview passes the one from its last Rescan, so ticking a box does not walk the whole Workshop again.
+    /// A launch passes nothing and always scans fresh.
+    /// </param>
+    public static Prepared Prepare(Profile profile, (ModuleCatalog Catalog, string? GameRoot)? scanned = null)
     {
         var messages = new List<string>();
-        var catalog = Scan(profile, out var gameRoot);
+        string? gameRoot;
+        ModuleCatalog catalog;
+        if (scanned is { } s) (catalog, gameRoot) = s;
+        else catalog = Scan(profile, out gameRoot);
         if (gameRoot is null)
             throw new InvalidOperationException("Bannerlord install not found. Set the game folder in the profile.");
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));

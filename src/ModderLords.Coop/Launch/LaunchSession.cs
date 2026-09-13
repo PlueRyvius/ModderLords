@@ -100,14 +100,22 @@ public sealed class LaunchSession
     }
 
     /// <summary>Everything except starting the process. Applies the overlay and writes server-config.json.</summary>
-    public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowTaomWorldCreation = false)
+    /// <param name="scanned">
+    /// A catalogue already scanned for this profile, reused only for a preview (<paramref name="applySideEffects"/>
+    /// false). A real launch ignores it and scans fresh, so it can never act on a folder that has since changed.
+    /// </param>
+    public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowTaomWorldCreation = false,
+        (ModuleCatalog Catalog, string? GameRoot)? scanned = null)
     {
         var messages = new List<string>();
         var paths = ResolvePaths(profile);
         var problems = paths.Validate().ToList();
         if (problems.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, problems));
 
-        var catalog = Scan(profile, paths, out var gameRoot);
+        string? gameRoot;
+        ModuleCatalog catalog;
+        if (!applySideEffects && scanned is { } previous) (catalog, gameRoot) = previous;
+        else catalog = Scan(profile, paths, out gameRoot);
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));
         var selections = WithCompat(profile, Select(profile, catalog, messages), messages);
         if (applySideEffects)

@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         var mode = _ui.Mode;
         if (mode is null) mode = AskForMode();
         ViewModel.ApplyMode(mode.Value);
+        _baseTitle = Title;
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         AttachHost();
         UpdateModeButton();
@@ -69,8 +70,12 @@ public partial class MainWindow : Window
 
     // ---- mode ------------------------------------------------------------------------------------------
 
+    /// <summary>The title without the unsaved-changes marker, so the marker can be added and taken away.</summary>
+    private string _baseTitle = "";
+
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainViewModel.IsDirty)) Title = ViewModel.IsDirty ? "* " + _baseTitle : _baseTitle;
         if (e.PropertyName == nameof(MainViewModel.Host)) AttachHost();
         if (e.PropertyName != nameof(MainViewModel.Mode)) return;
         UpdateModeButton();
@@ -372,11 +377,34 @@ public partial class MainWindow : Window
         if (e.Key == Key.Enter && host.SendCommandCommand.CanExecute(null)) host.SendCommandCommand.Execute(null);
     }
 
-    private async void Window_Closing(object sender, CancelEventArgs e)
+    /// <summary>
+    /// A right-click does not select a DataGrid row by default, so the context menu would act on whatever row was
+    /// selected before - which is rarely the one under the pointer.
+    /// </summary>
+    private void ModsGrid_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (RowUnder(e.OriginalSource as DependencyObject) is { Item: ModRow row }) ViewModel.SelectedMod = row;
+    }
+
+    private void ModsGrid_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete || ViewModel.SelectedMod is not { CanRemove: true }) return;
+        ViewModel.RemoveModCommand.Execute(null);
+        e.Handled = true;
+    }
+
+    private void Window_Closing(object sender, CancelEventArgs e)
     {
         SaveGeometry();
         UiStateStore.Save(_ui);
+        // Unsaved list edits first: once the server question below is answered the window closes for real.
+        if (!_closeConfirmed && !ViewModel.ResolveUnsavedChanges()) { e.Cancel = true; return; }
         if (_closeConfirmed || ViewModel.Host is not { IsRunning: true } host) return;
+        CloseAfterStoppingServer(host, e);
+    }
+
+    private async void CloseAfterStoppingServer(HostViewModel host, CancelEventArgs e)
+    {
         e.Cancel = true;
         if (MessageBox.Show("The server is running. Stop it and close?", "ModderLords", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         await host.OnClosingAsync();
