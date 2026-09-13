@@ -10,8 +10,8 @@ public static class Bridge
     {
         global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.ServerSettingsHandler.Current?.BroadcastChanges();
         global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.ClientSettingsHandler.Current?.ApplyPending();
-        SurrenderGate.EnsureInstalled();
-        SurrenderGate.Tick();
+        EncounterOptionGate.EnsureInstalled();
+        EncounterOptionGate.Tick();
     }
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
