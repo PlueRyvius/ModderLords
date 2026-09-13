@@ -8,11 +8,16 @@ leaves your launcher's own mod list alone. Ambiguous copies and custom mod folde
 It also **hosts the Bannerlord Coop dedicated server**, using the untouched official server from the Steam Workshop.
 That half is kept out of the way unless you ask for it: see [Player mode and Host mode](#player-mode-and-host-mode).
 
-For the normal hosting setup, follow the steps below. The [TAOM world-generation record](docs/TAOM-WORLD-GENERATION.md)
-is maintainer evidence, not an end-user installation guide: users should never copy asset folders or run its diagnostic
-scripts.
+Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop v0.1.5.
 
-Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop v0.1.4.
+### In a hurry?
+
+1. Unzip anywhere and run `ModderLords.exe`.
+2. Choose **Play with mods**.
+3. On the **Mods** tab, tick your mods, drag them into order, and press **Play**.
+
+If the bottom bar says the game install was not found, click **Folders…** and point it at your Bannerlord folder.
+More detail: [playing with mods](#quick-start-playing-with-mods) and [hosting a coop server](#quick-start-hosting-a-coop-server).
 
 > **Upgrading from Modular Bannerlords Coop?** This is the same project under a new name. Your profiles, local
 > compatibility records and settings caches are copied automatically on first run from `%LOCALAPPDATA%\ModularCoop`
@@ -376,7 +381,7 @@ shows what would change and offers to apply it.
 | What | Where |
 |---|---|
 | Profiles | `%LOCALAPPDATA%\ModderLords\profiles\<name>.json` |
-| Mode, theme, window size, selected tab | `%LOCALAPPDATA%\ModderLords\ui-state.json` |
+| Mode, theme, window size | `%LOCALAPPDATA%\ModderLords\ui-state.json` |
 | Compatibility database | `compat-db.json` next to the launcher (bundled); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
 | Mod settings overrides / cache | `%LOCALAPPDATA%\ModderLords\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModderLords\cache\<profile>.settings-cache.json` |
 | Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModderLords\overlay\<profile>\` |
@@ -414,8 +419,10 @@ the official `BannerlordCoopServer.exe`, or an older launcher) is still up. Stop
 
 **A mod updated.** The yellow banner tells you. Restart the server and have players update.
 
-**Nothing in the Mods tab.** The game install was not found. Set `GameRoot` in the profile JSON, or add mod folders to
-`CustomModRoots`, then Rescan.
+**Nothing in the Mods tab, or "game install not found" in the bottom bar.** The game was not found in any Steam
+library (a GOG or Xbox install, or a copied folder). Click **Folders…** on the top bar, browse to the Bannerlord folder
+(the one containing `bin` and `Modules`), and press OK; the list rescans straight away. Mods kept somewhere other than
+the game's `Modules` folder or the Workshop can be added there too, under **Extra mod folders**.
 
 ---
 

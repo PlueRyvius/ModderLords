@@ -80,8 +80,8 @@ $docsOut = Join-Path $out 'docs'
 New-Item -ItemType Directory -Path $docsOut -Force | Out-Null
 Copy-Item (Join-Path $root 'README.md') $docsOut -Force
 Copy-Item (Join-Path $root 'docs\ROADMAP.md') $docsOut -Force
-Copy-Item (Join-Path $root 'docs\VANILLA-WORLD-GENERATION.md') $docsOut -Force
-Copy-Item (Join-Path $root 'docs\TAOM-WORLD-GENERATION.md') $docsOut -Force
+# The world-generation records are maintainer evidence full of diagnostic commands a host must NOT run. They stay in
+# the repository; a zip handed to players and hosts carries only what they should follow.
 if (Test-Path (Join-Path $root 'LICENSE')) { Copy-Item (Join-Path $root 'LICENSE') $out -Force }
 if (Test-Path (Join-Path $root 'THIRD-PARTY-NOTICES.md')) { Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.md') $docsOut -Force }
 

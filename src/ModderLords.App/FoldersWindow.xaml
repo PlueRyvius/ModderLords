@@ -1,0 +1,44 @@
+<Window x:Class="ModderLords.App.FoldersWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
+        Title="Folders" Height="560" Width="760" MinWidth="520" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,10"
+                   Text="Where this profile looks for the game, the coop server and extra mods. Leave a box empty to find it automatically in your Steam libraries." />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="OK" Click="Ok_Click" MinWidth="80" Margin="4,0" IsDefault="True" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Margin="4,0" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Top">
+            <TextBlock Text="Bannerlord game folder" FontWeight="Bold" />
+            <DockPanel Margin="0,4,0,0">
+                <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseGame_Click" MinWidth="80" Margin="6,0,0,0" />
+                <TextBox x:Name="GameBox" TextChanged="Box_TextChanged" VerticalContentAlignment="Center" />
+            </DockPanel>
+            <TextBlock x:Name="GameCheck" TextWrapping="Wrap" Margin="0,3,0,12" />
+
+            <!-- Host mode only: a player has no dedicated server to point at. -->
+            <StackPanel x:Name="ServerPanel">
+                <TextBlock Text="Coop dedicated server folder" FontWeight="Bold" />
+                <DockPanel Margin="0,4,0,0">
+                    <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseServer_Click" MinWidth="80" Margin="6,0,0,0" />
+                    <TextBox x:Name="ServerBox" TextChanged="Box_TextChanged" VerticalContentAlignment="Center" />
+                </DockPanel>
+                <TextBlock x:Name="ServerCheck" TextWrapping="Wrap" Margin="0,3,0,12" />
+            </StackPanel>
+
+            <TextBlock Text="Extra mod folders" FontWeight="Bold" />
+            <TextBlock x:Name="RootsHint" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,2,0,4" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Right" Margin="6,0,0,0">
+            <Button Content="Add…" Click="AddRoot_Click" MinWidth="80" />
+            <Button Content="Remove" Click="RemoveRoot_Click" MinWidth="80" Margin="0,6,0,0" />
+        </StackPanel>
+        <ListBox x:Name="RootsList" />
+    </DockPanel>
+</Window>
