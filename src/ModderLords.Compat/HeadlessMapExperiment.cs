@@ -19,6 +19,9 @@ internal static class HeadlessMapExperiment
     private static Type? _headlessType;
     private static string _mapModuleId = "TAOM_Map";
 
+    /// <summary>True when a mod's campaign map is being served in place of the stock one.</summary>
+    internal static bool IsInstalled => _installed;
+
     internal static void Install()
     {
         if (_installed) return;

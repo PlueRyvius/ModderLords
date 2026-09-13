@@ -94,13 +94,27 @@ internal static class MapPatchRestore
             var scene = AccessTools.Field(MapSceneTarget.Base, "_scene")?.GetValue(wrapper) as Scene;
             if (scene == null) return;
 
+            // Measured 2026-09-13: on the stock map this native call never returns. The server's main thread spins
+            // right after the map loads, it never reaches SERVING, and so it never opens its join port or advertises
+            // on Steam. Every mod set on the vanilla map was affected. The stock map needs no restore to begin with,
+            // so only a mod's own map (the case this was built and measured for) is read.
+            if (!HeadlessMapExperiment.IsInstalled)
+            {
+                _armed = true;
+                Log.Info("map patch restore: the stock map is being served; nothing to restore");
+                return;
+            }
+
             _terrainSize = wrapper.GetTerrainSize();
             if (_terrainSize.x <= 0f || _terrainSize.y <= 0f) return;
 
             var data = _indexMap;
             int width = 0, height = 0;
-            MBMapScene.GetBattleSceneIndexMap(scene, ref data, ref width, ref height);
             _armed = true;
+            // Announced first: a native call that hangs or faults cannot be caught, so the last line printed has to
+            // name it.
+            Log.Info("map patch restore: asking the engine for the battle scene index map");
+            MBMapScene.GetBattleSceneIndexMap(scene, ref data, ref width, ref height);
             if (data == null || width <= 0 || height <= 0 || data.Length < width * height * 2)
             {
                 Log.Warn($"map patch restore: the engine returned no battle scene index map ({width}x{height}). " +
