@@ -37,11 +37,11 @@ git merge --ff-only origin/main
 
 - **The working tree must be clean** (`git status`).
 
-### 2. Bump the version (in a PR)
+### 2. Bump the version (in the change's own PR)
 
 Set `<VersionPrefix>` in `Directory.Build.props` to `X.Y.Z`. That one line is the only place the version lives. The title bar, the updater's "running version" and the package script all read it.
 
-Merge the bump through a PR like any other change. Agents cannot merge on this repo (`gh pr merge` is blocked); Andy merges.
+**Put the bump in the same PR as the change being released**, not in a separate version-bump PR afterwards. One PR, one merge. If a release gathers several already-merged PRs, bump in the last of them. Agents cannot merge on this repo (`gh pr merge` is blocked); Andy merges.
 
 ### 3. Tests
 
