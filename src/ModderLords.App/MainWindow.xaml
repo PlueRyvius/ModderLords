@@ -121,6 +121,21 @@
                             <Button Content="Move up" Command="{Binding MoveUpCommand}" />
                             <Button Content="Move down" Command="{Binding MoveDownCommand}" />
                             <Button Content="Refresh order" Command="{Binding RefreshPreviewCommand}" />
+                            <!-- Only there when it has something to do: a deleted mod otherwise stays on the list forever. -->
+                            <Button Command="{Binding RemoveAllMissingCommand}" Background="{DynamicResource WarningBackground}"
+                                    ToolTip="Take every mod that is no longer installed off this profile's list. You are asked first.">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                        <Setter Property="Content" Value="{Binding MissingCount}" />
+                                        <Setter Property="ContentStringFormat" Value="Remove missing ({0})" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding MissingCount}" Value="0">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                             <Button Content="Use engine order" Command="{Binding UseEngineOrderCommand}"
                                     ToolTip="Sort this list into the order the engine actually loads (shown on the right). Only mods that a manifest forces to move are moved; the rest keep the place you gave them." />
                             <!-- The computed order is assembled from module metadata, and metadata is sometimes wrong
@@ -153,7 +168,18 @@
                                   PreviewMouseLeftButtonDown="ModsGrid_PreviewMouseLeftButtonDown"
                                   PreviewMouseMove="ModsGrid_PreviewMouseMove" Drop="ModsGrid_Drop" DragOver="ModsGrid_DragOver"
                                   DragLeave="ModsGrid_DragLeave"
+                                  PreviewMouseRightButtonDown="ModsGrid_PreviewMouseRightButtonDown" KeyDown="ModsGrid_KeyDown"
                                   AllowDrop="True">
+                            <!-- A ContextMenu takes its DataContext from the grid, so these bind straight to the view model. -->
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Remove from profile" Command="{Binding RemoveModCommand}" InputGestureText="Del"
+                                              ToolTip="Take a mod you have deleted off this list. Only entries that are no longer installed can be removed; untick an installed mod instead." />
+                                    <MenuItem Header="Remove all missing mods" Command="{Binding RemoveAllMissingCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="Open folder" Command="{Binding OpenModFolderCommand}" />
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
                             <DataGrid.RowStyle>
                                 <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
                                     <!-- The band a row is in is why it can only be dragged so far, so say it on hover. -->
@@ -348,7 +374,7 @@
                         <TextBox Text="{Binding Profile.Server.AutosaveMinutes}" />
                         <TextBlock Text="Server guards (Compat module)" VerticalAlignment="Center" ToolTip="Loads the launcher's DedicatedServer.ModderLordsCompat module on the server: answers inquiries and swallows screen pushes so single-player mods do not crash the headless host. Server-only; players need nothing." />
                         <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" />
-                        <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compatModderLords.Compat from the launcher folder into their game Modules folder) and enable it." />
+                        <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compat\ModderLords.Compat from the launcher folder into their game Modules folder) and enable it." />
                         <CheckBox IsChecked="{Binding Profile.SettingsSync}" HorizontalAlignment="Left" />
                         <!-- The one thing this launcher writes inside the DedicatedServer package, so it is opt-in and
                              says so. Turning it off restores SandBox's file on the next launch. -->

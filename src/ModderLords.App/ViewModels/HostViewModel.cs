@@ -137,10 +137,6 @@ public partial class HostViewModel : ObservableObject
     [ObservableProperty] private string _saveDiff = "";
     [ObservableProperty] private string _clientCheckText = "";
 
-    /// <summary>
-    /// Builds the server plan for the Mods tab's order preview, keeping the copy this view model needs for the save
-    /// diff, the mod-list sync and the launch itself. The client-mode counterpart lives on <see cref="MainViewModel"/>.
-    /// </summary>
     /// <summary>Points the live-settings channel at the newly selected profile. Called by
     /// <see cref="MainViewModel.LoadProfile"/>, and only in Host mode: mod settings are a channel to a running
     /// dedicated server, so there is nothing for a player to be connected to.</summary>
@@ -152,10 +148,15 @@ public partial class HostViewModel : ObservableObject
         catch (Exception ex) { Messages.Add("mod settings: " + ex.Message); }
     }
 
+    /// <summary>
+    /// Builds the server plan for the Mods tab's order preview, keeping the copy this view model needs for the save
+    /// diff, the mod-list sync and the launch itself. Reuses the last Rescan's catalogue, so an edit to the list does
+    /// not rescan the disk. The client-mode counterpart lives on <see cref="MainViewModel"/>.
+    /// </summary>
     internal MainViewModel.PreviewResult PrepareServerPreview()
     {
         _prepared = null;
-        var p = LaunchSession.Prepare(Profile, applySideEffects: false);
+        var p = LaunchSession.Prepare(Profile, applySideEffects: false, scanned: Main.ScannedCatalog);
         _prepared = p;
         return new MainViewModel.PreviewResult(p.Catalog, p.Order, p.Modules, p.Messages);
     }
@@ -248,14 +249,18 @@ public partial class HostViewModel : ObservableObject
     {
         try
         {
-            var paths = LaunchSession.ResolvePaths(Profile);
-            var catalog = LaunchSession.Scan(Profile, paths, out _);
+            // Rescan has just walked every mod folder; a second walk here doubled the cost of every rescan.
+            var catalog = Main.ScannedCatalog?.Catalog ?? LaunchSession.Scan(Profile, LaunchSession.ResolvePaths(Profile), out _);
             var drift = LaunchSession.DetectDrift(Profile, catalog);
             DriftText = drift.Count == 0 ? "" :
                 "Mod versions changed since the last launch: " + string.Join(", ", drift.Select(d => $"{d.ModuleId} {d.LastVersion} → {d.CurrentVersion}"))
                 + ". Players must update to match" + (IsRunning ? "; restart the server to pick them up." : ".");
         }
-        catch { DriftText = ""; }
+        catch (Exception ex)
+        {
+            DriftText = "";
+            Messages.Add("version drift check: " + ex.Message);
+        }
     }
 
     [RelayCommand]
@@ -322,6 +327,7 @@ public partial class HostViewModel : ObservableObject
     {
         Main.CollectProfileFromRows();
         ProfileStore.Save(Profile);
+        Main.IsDirty = false;
         var launchProfile = ProfileStore.Snapshot(Profile);
         Console.Clear();
         Status = "Checking…";

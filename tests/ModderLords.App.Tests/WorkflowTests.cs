@@ -197,4 +197,117 @@ public class WorkflowTests
         vm.Mods.Single(m => m.Id == "NavalDLC").Enabled = false;
         Assert.DoesNotContain("NavalDLC", ClientLaunchSession.Prepare(vm.Profile).Plan.MissingModules);
     });
+
+    [Fact]
+    public void RemovingAMissingModTakesItOffTheProfileForGood() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var vm = fixture.ViewModel();
+        vm.Profile.Mods.Add(new ProfileMod { Id = "DeletedMod", LastVersion = "v1.0.0" });
+        vm.Rescan();
+        vm.SelectedMod = vm.Mods.Single(m => m.Id == "DeletedMod");
+        Assert.True(vm.RemoveModCommand.CanExecute(null));
+        vm.RemoveModCommand.Execute(null);
+        Assert.DoesNotContain(vm.Mods, m => m.Id == "DeletedMod");
+        Assert.True(vm.IsDirty);
+        // The two things that used to bring it back: collecting rows into the profile, and the next scan.
+        vm.CollectProfileFromRows();
+        Assert.DoesNotContain(vm.Profile.Mods, m => m.Id == "DeletedMod");
+        vm.Rescan();
+        Assert.DoesNotContain(vm.Mods, m => m.Id == "DeletedMod");
+        Assert.Equal(0, vm.MissingCount);
+        Assert.DoesNotContain(vm.Messages, m => m.Contains("DeletedMod"));
+    });
+
+    [Fact]
+    public void AnInstalledModCannotBeRemovedOnlyUnticked() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("TestMod");
+        var vm = fixture.ViewModel(); vm.Rescan();
+        vm.SelectedMod = vm.Mods.Single(m => m.Id == "TestMod");
+        Assert.False(vm.RemoveModCommand.CanExecute(null));
+    });
+
+    [Fact]
+    public void RemoveMissingClearsCommunityAndOfficialEntries() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("KeptMod");
+        var vm = fixture.ViewModel();
+        vm.Profile.Mods.Add(new ProfileMod { Id = "GoneA" });
+        vm.Profile.Mods.Add(new ProfileMod { Id = "GoneB" });
+        vm.Profile.Mods.Add(new ProfileMod { Id = "KeptMod" });
+        vm.Profile.ClientOfficialModules.Add("NavalDLC");
+        vm.Rescan();
+        Assert.Equal(3, vm.MissingCount);
+        vm.RemoveMissingRows();
+        Assert.Equal(0, vm.MissingCount);
+        // Not an exact list: the catalogue also scans this PC's Steam Workshop, whose mods join the profile unticked.
+        Assert.DoesNotContain(vm.Profile.Mods, m => m.Id is "GoneA" or "GoneB");
+        Assert.Contains(vm.Profile.Mods, m => m.Id == "KeptMod");
+        Assert.DoesNotContain("NavalDLC", vm.Profile.ClientOfficialModules);
+        Assert.DoesNotContain("NavalDLC", vm.CurrentExport()!.ClientOfficialModules ?? []);
+        Assert.Empty(ClientLaunchSession.Prepare(vm.Profile).Plan.MissingModules);
+    });
+
+    [Fact]
+    public void RepeatedPreviewsDoNotRepeatMessages() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        // A dependency that is not installed, so the order preview has something to say.
+        var folder = Path.Combine(fixture.Root, "Modules", "NeedsDep");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "SubModule.xml"),
+            "<Module><Name value='NeedsDep'/><Id value='NeedsDep'/><Version value='v1.0.0'/>" +
+            "<DependedModules><DependedModule Id='AbsentDep'/></DependedModules><SubModules/></Module>");
+        var vm = fixture.ViewModel(); vm.Rescan();
+        var row = vm.Mods.Single(m => m.Id == "NeedsDep");
+        for (var i = 0; i < 5; i++) { row.Enabled = !row.Enabled; vm.RefreshPreview(); }
+        Assert.Equal(vm.Messages.Count, vm.Messages.Distinct().Count());
+    });
+
+    [Fact]
+    public void PreviewReusesTheLastScanUntilRescan() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var vm = fixture.ViewModel(); vm.Rescan();
+        // Installed after the scan: an edit must not notice it, because an edit must not walk the disk.
+        fixture.Module("LateMod");
+        vm.Profile.Mods.Add(new ProfileMod { Id = "LateMod" });
+        vm.RefreshPreview();
+        Assert.DoesNotContain("LateMod", vm.LoadOrderPreview);
+        vm.Rescan();
+        Assert.False(vm.Mods.Single(m => m.Id == "LateMod").IsMissing);
+        Assert.Contains("LateMod", vm.LoadOrderPreview);
+    });
+
+    [Fact]
+    public void UnsavedEditsAreTrackedAndCancelKeepsTheProfile() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("TestMod");
+        var vm = fixture.ViewModel(); vm.Rescan();
+        var path = ProfileStore.PathFor(vm.Profile.Name);
+        try
+        {
+            Assert.False(vm.IsDirty);
+            vm.Mods.Single(m => m.Id == "TestMod").Enabled = true;
+            Assert.True(vm.IsDirty);
+            vm.SaveProfileCommand.Execute(null);
+            Assert.False(vm.IsDirty);
+
+            vm.Mods.Single(m => m.Id == "TestMod").Enabled = false;
+            var asked = 0;
+            vm.AskUnsaved = _ => { asked++; return System.Windows.MessageBoxResult.Cancel; };
+            var name = vm.Profile.Name;
+            vm.SelectedProfileName = "some-other-profile";
+            Assert.Equal(1, asked);
+            Assert.Equal(name, vm.Profile.Name);
+            Assert.True(vm.IsDirty);
+            Assert.False(vm.ResolveUnsavedChanges());
+
+            vm.AskUnsaved = _ => System.Windows.MessageBoxResult.No;
+            Assert.True(vm.ResolveUnsavedChanges());
+            Assert.False(vm.IsDirty);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    });
 }
