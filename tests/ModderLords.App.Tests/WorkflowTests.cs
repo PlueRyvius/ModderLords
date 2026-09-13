@@ -310,4 +310,32 @@ public class WorkflowTests
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     });
+
+    [Fact]
+    public void FoldersPinAnExtraModFolderAndRescan() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var mod = Path.Combine(fixture.Root, "ExtraMods", "SideMod");
+        Directory.CreateDirectory(mod);
+        File.WriteAllText(Path.Combine(mod, "SubModule.xml"),
+            "<Module><Name value='SideMod'/><Id value='SideMod'/><Version value='v1.0.0'/><SubModules/></Module>");
+        var vm = fixture.ViewModel(); vm.Rescan();
+        Assert.DoesNotContain(vm.Mods, m => m.Id == "SideMod");
+        // Picking the mod itself must add the folder it sits in: the catalogue scans an extra folder's children.
+        vm.ApplyFolders(fixture.Root, null, [FolderChecks.ModRootFor(mod)]);
+        Assert.Equal([Path.Combine(fixture.Root, "ExtraMods")], vm.Profile.CustomModRoots);
+        Assert.Contains(vm.Mods, m => m.Id == "SideMod" && m.Source == "Custom");
+        Assert.True(vm.IsDirty);
+    });
+
+    [Fact]
+    public void FolderChecksTellTheGameFolderFromTheWrongOne()
+    {
+        using var fixture = new Fixture();
+        Assert.True(FolderChecks.Game(fixture.Root, null).Ok);
+        Assert.False(FolderChecks.Game(Path.Combine(fixture.Root, "Modules"), null).Ok);
+        Assert.False(FolderChecks.Game(Path.Combine(fixture.Root, "absent"), null).Ok);
+        Assert.True(FolderChecks.Game(null, fixture.Root).Ok);
+        Assert.False(FolderChecks.Game(null, null).Ok);
+    }
 }

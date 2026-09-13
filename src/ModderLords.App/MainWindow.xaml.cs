@@ -290,6 +290,17 @@ public partial class MainWindow : Window
             Top = _ui.WindowTop!.Value;
             Width = _ui.WindowWidth!.Value;
             Height = _ui.WindowHeight!.Value;
+            // GeometryFitsIn only guarantees the title bar is reachable. A saved size taller than the screen - a
+            // different monitor, a changed resolution or scaling - otherwise pushes the status bar and the command
+            // box off the bottom, with no sign anything is missing.
+            var work = SystemParameters.WorkArea;
+            if (new Rect(Left, Top, Width, Height).IntersectsWith(work))
+            {
+                if (Height > work.Height) Height = work.Height;
+                if (Width > work.Width) Width = work.Width;
+                if (Top + Height > work.Bottom) Top = Math.Max(work.Top, work.Bottom - Height);
+                if (Left + Width > work.Right) Left = Math.Max(work.Left, work.Right - Width);
+            }
         }
         if (_ui.WindowMaximized) WindowState = WindowState.Maximized;
     }

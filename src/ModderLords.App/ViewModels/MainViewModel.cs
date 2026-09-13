@@ -428,6 +428,37 @@ public partial class MainViewModel : ObservableObject
             Messages.Add($"profile '{deleted}' deleted, but some of its junctions could not be removed: {junctionError}");
     }
 
+    // ---- folders ----------------------------------------------------------------------------------
+
+    [RelayCommand]
+    private void EditFolders()
+    {
+        var win = new FoldersWindow(Profile.GameRoot, Profile.DedicatedServerRoot, Profile.CustomModRoots, IsHost)
+            { Owner = Application.Current.MainWindow };
+        if (win.ShowDialog() != true) return;
+        ApplyFolders(win.GameRoot, win.ServerRoot, win.ModRoots);
+    }
+
+    /// <summary>
+    /// Pins (or un-pins, with null) the profile's folders and rescans, since every one of them changes what the
+    /// catalogue contains. The current list is collected first so ticks made before opening the dialog survive the scan.
+    /// </summary>
+    internal void ApplyFolders(string? gameRoot, string? serverRoot, IReadOnlyList<string> modRoots)
+    {
+        static string? Clean(string? p) => string.IsNullOrWhiteSpace(p) ? null : p.Trim();
+        var roots = modRoots.Select(r => r.Trim()).Where(r => r.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (string.Equals(Clean(gameRoot), Profile.GameRoot, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Clean(serverRoot), Profile.DedicatedServerRoot, StringComparison.OrdinalIgnoreCase)
+            && roots.SequenceEqual(Profile.CustomModRoots, StringComparer.OrdinalIgnoreCase))
+            return;
+        CollectProfileFromRows();
+        Profile.GameRoot = Clean(gameRoot);
+        Profile.DedicatedServerRoot = Clean(serverRoot);
+        Profile.CustomModRoots = roots;
+        Rescan();
+        IsDirty = true;
+    }
+
     /// <summary>
     /// Ids the CLIENT can load: the game's own Modules folder and the Steam workshop. Lets a mod-list sync tell a
     /// mod the Bannerlord launcher has simply never scanned from one that really is not installed.

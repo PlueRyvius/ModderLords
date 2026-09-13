@@ -28,6 +28,8 @@
                 <Button Content="Save" Command="{Binding SaveProfileCommand}" />
                 <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />
                 <Button Content="Rescan mods" Command="{Binding RescanCommand}" />
+                <Button Content="Folders…" Command="{Binding EditFoldersCommand}"
+                        ToolTip="Choose where this profile finds the game, the coop server and any extra mod folders. Needed only when they are not found automatically." />
                 <Button Content="Re-sync junctions" Command="{Binding Host.ResyncCommand}" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
                         ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
@@ -61,7 +63,10 @@
                     <Button Content="Stop" Command="{Binding Host.StopCommand}" Background="{DynamicResource DangerBackground}"
                             Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
-                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" FontStyle="Italic" />
+                <!-- Trimmed rather than clipped: in Host mode the buttons leave little room, and a status cut off
+                     mid-word read as broken. The tooltip carries the whole line. -->
+                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" FontStyle="Italic"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" />
             </DockPanel>
         </Border>
 
@@ -102,7 +107,23 @@
                 </StackPanel>
                 <StackPanel>
                     <TextBlock Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"><Run Text="Server: " FontWeight="Bold" /><Run Text="{Binding ServerRoot}" /></TextBlock>
-                    <TextBlock><Run Text="Game:   " FontWeight="Bold" /><Run Text="{Binding GameRoot}" /></TextBlock>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock><Run Text="Game:   " FontWeight="Bold" /><Run Text="{Binding GameRoot}" /></TextBlock>
+                        <!-- The fix, right where the problem is reported. Only there when the install was not found. -->
+                        <TextBlock Margin="10,0,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding GameRoot}" Value="(game install not found)">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                            <Hyperlink Command="{Binding EditFoldersCommand}" Foreground="{DynamicResource LogTool}">Set game folder…</Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -117,7 +138,9 @@
                         <ColumnDefinition x:Name="ModsSidebarColumn" Width="300" MinWidth="220" />
                     </Grid.ColumnDefinitions>
                     <DockPanel Grid.Column="0">
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <!-- Wraps rather than clips: Host mode adds the compat buttons and the role legend, which ran
+                             off the right-hand edge at the minimum window width. -->
+                        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
                             <Button Content="Move up" Command="{Binding MoveUpCommand}" />
                             <Button Content="Move down" Command="{Binding MoveDownCommand}" />
                             <Button Content="Refresh order" Command="{Binding RefreshPreviewCommand}" />
@@ -157,7 +180,7 @@
                             <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MutedForeground}"
                                        Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
                                        Text="Run = load its code on the server. DependencyOnly = listed for the handshake, no code (UI frameworks). AsShipped = let the engine decide." />
-                        </StackPanel>
+                        </WrapPanel>
                         <!-- CanUserSortColumns is OFF and must stay off. This list IS the load order: the row order
                              is the thing being edited, and a column sort silently decouples what you see from the
                              collection underneath, so Move up/down and dragging act on rows other than the ones you
