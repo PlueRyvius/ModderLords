@@ -91,6 +91,8 @@ survive a headless engine, which is not a problem the player's game has.
 
 ## Releases and the in-app updater
 
+**The step-by-step release procedure is [RELEASING.md](RELEASING.md).** Follow it; this section is the background.
+
 The updater (`src/ModderLords.Core/Updates`) trusts a narrow contract, so every release must keep it:
 
 - **Tag** `vX.Y.Z` — exactly three numbers. A suffix (`-test`, `-rc1`) is never offered.
