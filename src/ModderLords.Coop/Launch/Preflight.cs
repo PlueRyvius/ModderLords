@@ -41,6 +41,9 @@ public static class Preflight
         if (modsSelected && HookSetup.LocateHook() is null)
             list.Add(new Problem("ModderLords.Hook.dll is missing next to the launcher; mods with helper DLLs will not load. Reinstall the release zip.", true));
 
+        // The host usually plays on this PC too, so its client settings are worth checking before a session starts.
+        foreach (var w in ClientGraphicsCheck.Warnings(ClientGraphicsCheck.DefaultConfigPath())) list.Add(new Problem(w, false));
+
         var free = FreeDiskGb(paths.DataDir);
         if (free is < 2) list.Add(new Problem($"Only {free:0.#} GB free on the drive holding the saves.", false));
 

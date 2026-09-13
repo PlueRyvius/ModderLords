@@ -110,8 +110,27 @@ internal sealed class HeadlessDebugManager : IDebugManager
 
     public void ShowWarning(string message) => _inner.ShowWarning(message);
     public void ShowError(string message) => _inner.ShowError(message);
+
+    /// <summary>On unless MODDERLORDS_ASSERT_THROTTLE=0.</summary>
+    private static readonly bool ThrottleEnabled = Environment.GetEnvironmentVariable("MODDERLORDS_ASSERT_THROTTLE")?.Trim() != "0";
+    private static readonly AssertThrottlePolicy Throttle = new AssertThrottlePolicy();
+
+    /// <summary>The 30-second summary line for asserts held back since the last call, or null.</summary>
+    public static string? TakeThrottleSummary() => ThrottleEnabled ? Throttle.TakeSummary() : null;
+
+    /// <summary>
+    /// A failed assert that repeats at the same site is forwarded only occasionally. See <see cref="AssertThrottlePolicy"/>
+    /// for the measured storm this stops; the first occurrences of every site still reach the host unchanged.
+    /// </summary>
     public void Assert(bool condition, string message, string callerFile, string callerMethod, int callerLine)
-        => _inner.Assert(condition, message, callerFile, callerMethod, callerLine);
+    {
+        if (!condition && ThrottleEnabled)
+        {
+            if (!Throttle.ShouldForward(AssertThrottlePolicy.KeyFor(callerFile, callerMethod, callerLine), out var total)) return;
+            if (total > AssertThrottlePolicy.ForwardFirst) message = $"{message} [repeat #{total:N0}; repeats are held back, see ModderLords.Compat summary]";
+        }
+        _inner.Assert(condition, message, callerFile, callerMethod, callerLine);
+    }
     /// <summary>
     /// Forwarded, but never with <c>getDump</c>. A silent assert that asks for a dump costs ~540 MB and several
     /// seconds; an asset-warning storm turns that into the whole run. The assert itself still reaches the host and
@@ -121,6 +140,7 @@ internal sealed class HeadlessDebugManager : IDebugManager
     public void SilentAssert(bool condition, string message, bool getDump, string callerFile, string callerMethod, int callerLine)
     {
         if (getDump) Guards.AnnounceExternal("Debug.SilentAssert(getDump)");
+        if (!condition && ThrottleEnabled && !Throttle.ShouldForward(AssertThrottlePolicy.KeyFor(callerFile, callerMethod, callerLine), out _)) return;
         _inner.SilentAssert(condition, message, getDump: false, callerFile, callerMethod, callerLine);
     }
     public void Print(string message, int debugFilter, Debug.DebugColor color, ulong debugColor)

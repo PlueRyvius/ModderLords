@@ -31,6 +31,13 @@ public sealed class CompatRecord
     public List<string> SettingsTypes { get; set; } = new();
     /// <summary>Hints: never treat these classes as settings.</summary>
     public List<string> IgnoreSettingsTypes { get; set; } = new();
+    /// <summary>Lines the mod's own config files must contain under Coop, applied to its folder before launch. See <see cref="EnsureLinesApplier"/>.</summary>
+    public List<EnsureLine> EnsureLines { get; set; } = new();
+    /// <summary>
+    /// Mod setting values this mod needs under Coop: settingsId → propId → text (the live-settings wire form). Staged as
+    /// host overrides at launch unless the profile already overrides that property; settings sync carries them to clients.
+    /// </summary>
+    public Dictionary<string, Dictionary<string, string>> DefaultSettings { get; set; } = new(StringComparer.Ordinal);
     public string? Notes { get; set; }
     public string? Url { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -42,6 +49,8 @@ public sealed class CompatRecord
         Id = Id, Verdict = Verdict, TestedVersions = TestedVersions.ToList(), TestedCoopVersion = TestedCoopVersion,
         DefaultRole = DefaultRole, ServerAuthoritative = ServerAuthoritative, ClientSideBehaviors = ClientSideBehaviors.ToList(),
         KeepSubModules = KeepSubModules.ToList(), SettingsTypes = SettingsTypes.ToList(), IgnoreSettingsTypes = IgnoreSettingsTypes.ToList(),
+        EnsureLines = EnsureLines.Select(l => new EnsureLine { File = l.File, Section = l.Section, Value = l.Value }).ToList(),
+        DefaultSettings = DefaultSettings.ToDictionary(o => o.Key, o => new Dictionary<string, string>(o.Value, StringComparer.Ordinal), StringComparer.Ordinal),
         Notes = Notes, Url = Url, UpdatedAt = UpdatedAt,
     };
 }
