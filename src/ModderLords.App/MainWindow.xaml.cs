@@ -316,12 +316,14 @@ public partial class MainWindow : Window
         _restoring = false;
     }
 
+    /// <summary>
+    /// Always opens on the first visible tab, which is Mods. Reopening on the last tab used meant a host who closed
+    /// the app on Console started on an empty console, with the mod list a click away.
+    /// </summary>
     private void RestoreSelectedTab()
     {
         _restoring = true;
-        var wanted = Tabs.Items.OfType<TabItem>()
-            .FirstOrDefault(t => t.Visibility == Visibility.Visible && (t.Header as string) == _ui.SelectedTab);
-        Tabs.SelectedItem = wanted ?? Tabs.Items.OfType<TabItem>().FirstOrDefault(t => t.Visibility == Visibility.Visible);
+        Tabs.SelectedItem = Tabs.Items.OfType<TabItem>().FirstOrDefault(t => t.Visibility == Visibility.Visible);
         _restoring = false;
     }
 
