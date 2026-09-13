@@ -34,6 +34,8 @@
     <Compile Include="..\..\src\ModderLords.Compat\CreateWorldPolicy.cs" Link="Module\CreateWorldPolicy.cs" />
     <!-- Which failed asserts reach the engine log; TaleWorlds-free for the same reason. -->
     <Compile Include="..\..\src\ModderLords.Compat\AssertThrottlePolicy.cs" Link="Module\AssertThrottlePolicy.cs" />
+    <!-- The encounter option gate's decisions, TaleWorlds- and Coop-free for the same reason. -->
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\EncounterOptionGatePolicy.cs" Link="Module\EncounterOptionGatePolicy.cs" />
   </ItemGroup>
 
 </Project>
