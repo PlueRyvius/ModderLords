@@ -377,6 +377,9 @@ public partial class HostViewModel : ObservableObject
             // Crash reports are ~540 MB each and land in a folder shared with the retail game, so they are capped
             // rather than cleared. Warnings no longer dump, but a real crash still does, and should.
             var rotatedCrashes = Preflight.RotateCrashDirs(ServerPaths.CrashesDir);
+            // The engine's error logs sit next to the crash folder and are unbounded: a single assert storm wrote 2.7 GB
+            // in one session (2026-09-12). The size cap keeps the newest, so the session being diagnosed survives.
+            var rotatedEngineLogs = Preflight.RotateLogs(Path.Combine(Path.GetDirectoryName(ServerPaths.CrashesDir)!, "logs"), "rgl_log_errors_*.txt", keep: 6);
             _launchLog = new CappedLogWriter(Path.Combine(logDir, $"launch-{DateTime.Now:yyyyMMdd-HHmmss}.log"));
             _pending.Clear();
             _totalDropped = 0;
@@ -384,6 +387,7 @@ public partial class HostViewModel : ObservableObject
             _repeats = new RepeatCollapser();
             if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
             if (rotatedCrashes > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedCrashes} old engine crash report(s)");
+            if (rotatedEngineLogs > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedEngineLogs} old engine error log(s)");
 
             foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
             foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());

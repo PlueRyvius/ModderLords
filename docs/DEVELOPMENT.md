@@ -179,6 +179,7 @@ variables, marked, so "was it actually set?" is answerable from the log):
 | `MODDERLORDS_MAP_PATCH_RESTORE` | on | Answers `GetMapPatchAtPosition` from the engine's own battle-scene index map. Without it every field battle loads one arbitrary battle terrain. `0` disables. |
 | `MODDERLORDS_STUB_WARNINGS` | on | Warns once per run when a mod reads a query the server does not implement. `0` silences. |
 | `MODDERLORDS_HEADLESS_MAP_BOUNDS_CHECK` | on | Checks the loaded scene's own border markers against the bounds in effect, and warns loudly if they disagree. Replaced the navmesh hash check and the `Exit(12)`. `0` disables. |
+| `MODDERLORDS_ASSERT_THROTTLE` | on | Forwards each failed assert site the first 20 times, then once per 10,000, and reports the busiest held-back sites every 30 s. A new site always gets through. Added after one pathfinding assert repeated ~7,300×/s, wrote 2.7 GB and cut the tick rate to 15/s. `0` disables. |
 | `MODDERLORDS_TERRAIN_PROBE` | off | Samples the map scene to a CSV; `scripts/Compare-TerrainProbe.ps1` diffs a server's against a client's. |
 | `MODDERLORDS_MAPSCENE_CENSUS` | off | Counts which map-scene members are actually called, and names those never called. |
 | `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` | off | Keeps the scene's `<terrain>` descriptor. Measured safe; not currently needed. |

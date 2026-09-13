@@ -180,13 +180,37 @@ public sealed class LaunchSession
             if (applySideEffects)
             {
                 Live.LiveProtocol.Reset(liveDir);
-                var overrides = Live.SettingsOverridesStore.Load(profile.Name);
+                var (overrides, compatDefaults) = Live.CompatSettingsDefaults.Merge(Live.SettingsOverridesStore.Load(profile.Name), ModDefaultSettings(selections));
+                foreach (var d in compatDefaults)
+                    messages.Add($"{d.ModId}: compat database sets {d.SettingsId}.{d.PropId} = {d.Value} for co-op (override it in Mod settings to change)");
                 if (!overrides.IsEmpty)
                 {
                     Live.SettingsOverridesStore.WriteToLiveDir(liveDir, overrides);
                     messages.Add($"mod settings: {overrides.Count} override(s) in {overrides.Objects.Count} settings object(s) staged; applied once the server has loaded");
                 }
             }
+        }
+        else
+        {
+            // The defaults travel through settings sync; without it the server would get them and clients would not.
+            foreach (var (modId, defaults) in ModDefaultSettings(selections))
+                messages.Add($"WARNING {modId}: the compat database needs settings sync for {string.Join(", ", defaults.SelectMany(o => o.Value.Keys.Select(p => o.Key + "." + p)))}; turn Settings sync on");
+        }
+
+        // Mods that detect co-op by module id carry their own list and miss the id this Coop loads under (TAOM.Dependencies
+        // lists "Coop"; the Workshop build is "CoopNightly"), so every peer runs their single-player paths. The compat
+        // database names the lines each needs. The mod's own folder is edited: the client reads that copy, and the
+        // overlay mirrors top-level files from it for the server when it is applied below.
+        if (applySideEffects)
+        {
+            var tokens = new Dictionary<string, string>
+            {
+                [EnsureLinesApplier.CoopModuleIdToken] = catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop")?.Id ?? "CoopNightly",
+            };
+            foreach (var s in selections)
+                if (CompatDb.Current.Find(s.Module.Id) is { EnsureLines.Count: > 0 } rec)
+                    foreach (var m in EnsureLinesApplier.Apply(s.Module.FolderPath, rec.EnsureLines, tokens))
+                        messages.Add($"{s.Module.Id}: {m}");
         }
 
         if (applySideEffects)
@@ -317,6 +341,14 @@ public sealed class LaunchSession
                 list.Add(new Drift(sel.Module.Id, last, sel.Module.Version));
         }
         return list;
+    }
+
+    /// <summary>The compat database's setting defaults for every selected mod that has any.</summary>
+    private static IEnumerable<(string ModId, IReadOnlyDictionary<string, Dictionary<string, string>> Defaults)> ModDefaultSettings(IEnumerable<ModSelection> selections)
+    {
+        foreach (var s in selections)
+            if (CompatDb.Current.Find(s.Module.Id) is { DefaultSettings.Count: > 0 } rec)
+                yield return (s.Module.Id, rec.DefaultSettings);
     }
 
     /// <summary>Re-creates the junctions/shadow folders for the profile without touching configs or saves (after a workshop update or Steam re-download).</summary>
