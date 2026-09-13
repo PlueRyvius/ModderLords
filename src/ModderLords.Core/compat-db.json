@@ -61,6 +61,7 @@
       "TestedCoopVersion": "v0.1.4",
       "DefaultRole": "DependencyOnly",
       "KeepSubModules": [ "TAOM.Dependencies.SubModule" ],
+      "EnsureLines": [ { "File": "coop-modules.txt", "Section": "modules", "Value": "{coopModuleId}" } ],
       "Notes": "TAOM's bundled BUTR stack: it packs UIExtenderEx, ButterLib, MCM and the MBOptionScreen module loader into one module, and lists UIExtenderEx FIRST with no DedicatedServerType tag, so the server tries to load a UI framework before anything else and dies there. DependencyOnly drops the bundled client frameworks; TAOM.Dependencies.SubModule is kept because it is TAOM's own dependency bootstrap, and MCM's two settings-core class types are kept through the shared keep-list.",
       "UpdatedAt": "2026-09-07T00:00:00Z"
     },

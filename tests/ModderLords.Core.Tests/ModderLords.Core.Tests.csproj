@@ -32,6 +32,8 @@
          here. The compat module has no other test coverage, and the spike harness greps the strings this
          file emits, so both ends of that contract are asserted from one source. -->
     <Compile Include="..\..\src\ModderLords.Compat\CreateWorldPolicy.cs" Link="Module\CreateWorldPolicy.cs" />
+    <!-- Which failed asserts reach the engine log; TaleWorlds-free for the same reason. -->
+    <Compile Include="..\..\src\ModderLords.Compat\AssertThrottlePolicy.cs" Link="Module\AssertThrottlePolicy.cs" />
   </ItemGroup>
 
 </Project>

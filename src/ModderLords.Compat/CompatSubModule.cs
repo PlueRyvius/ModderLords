@@ -125,6 +125,7 @@ public sealed class CompatSubModule : MBSubModuleBase
             {
                 if (MapSceneCallCensus.Summary() is { } census) Log.Info(census);
                 if (MapPatchRestore.Summary() is { } patch) Log.Info(patch);
+                if (HeadlessDebugManager.TakeThrottleSummary() is { } asserts) Log.Warn(asserts);
             }
             catch { }
         }

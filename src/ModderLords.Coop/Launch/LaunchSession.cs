@@ -189,6 +189,22 @@ public sealed class LaunchSession
             }
         }
 
+        // Mods that detect co-op by module id carry their own list and miss the id this Coop loads under (TAOM.Dependencies
+        // lists "Coop"; the Workshop build is "CoopNightly"), so every peer runs their single-player paths. The compat
+        // database names the lines each needs. The mod's own folder is edited: the client reads that copy, and the
+        // overlay mirrors top-level files from it for the server when it is applied below.
+        if (applySideEffects)
+        {
+            var tokens = new Dictionary<string, string>
+            {
+                [EnsureLinesApplier.CoopModuleIdToken] = catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop")?.Id ?? "CoopNightly",
+            };
+            foreach (var s in selections)
+                if (CompatDb.Current.Find(s.Module.Id) is { EnsureLines.Count: > 0 } rec)
+                    foreach (var m in EnsureLinesApplier.Apply(s.Module.FolderPath, rec.EnsureLines, tokens))
+                        messages.Add($"{s.Module.Id}: {m}");
+        }
+
         if (applySideEffects)
         {
             var applier = new OverlayApplier { KeepForDependencyOnly = KeepForDependencyOnly };
