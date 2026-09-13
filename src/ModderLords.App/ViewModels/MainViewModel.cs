@@ -257,6 +257,9 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     [ObservableProperty] private HostViewModel? _host;
 
+    /// <summary>The update banner. Set by the window once it exists; null in tests, where nothing checks for updates.</summary>
+    [ObservableProperty] private UpdateViewModel? _update;
+
     public bool IsHost => Mode == AppMode.Host;
 
     partial void OnModeChanged(AppMode value)

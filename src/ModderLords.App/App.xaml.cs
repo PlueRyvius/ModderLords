@@ -24,7 +24,16 @@ public partial class App : Application
         // Upgraders from the ModularCoop-named builds keep their profiles; the old folder is copied, not moved.
         try { DataDirMigration.RunIfNeeded(); }
         catch (Exception ex) { LogCrash(ex); }
+
+        // After an in-app update the previous exe was renamed to .old because it was still running; it has exited now.
+        var i = Array.IndexOf(e.Args, "--updated-from");
+        if (i >= 0 && i + 1 < e.Args.Length) UpdatedFrom = e.Args[i + 1];
+        try { ModderLords.Core.Updates.UpdateInstaller.ForThisApp().CleanUpAfterUpdate(); }
+        catch (Exception ex) { LogCrash(ex); }
     }
+
+    /// <summary>The version this copy replaced, when it was just started by the updater; null on a normal start.</summary>
+    public static string? UpdatedFrom { get; private set; }
 
     /// <summary>
     /// Swaps the theme dictionary in slot 0 of the app's merged dictionaries (see App.xaml). Shared.xaml sits

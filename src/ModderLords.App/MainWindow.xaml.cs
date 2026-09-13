@@ -38,6 +38,15 @@ public partial class MainWindow : Window
         if (mode is null) mode = AskForMode();
         ViewModel.ApplyMode(mode.Value);
         _baseTitle = Title;
+        ViewModel.Update = new UpdateViewModel(ViewModel, _ui);
+        if (App.UpdatedFrom is { } from)
+            ViewModel.Status = $"Updated to {ModderLords.Core.Updates.UpdateChecker.Format(UpdateViewModel.Running)} from {from}.";
+        // After the first frame: the check is a network call, and the window must never wait on the network to appear.
+        ContentRendered += async (_, _) =>
+        {
+            try { if (ViewModel.Update is { } update) await update.CheckOnStartupAsync(); }
+            catch (Exception) { }
+        };
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         AttachHost();
         UpdateModeButton();
