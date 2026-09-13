@@ -89,6 +89,26 @@ Consequence for the code: `ClientLaunchSession` reuses `ModuleCatalog`, `LoadOrd
 and uses none of the overlay, the resolver hook, the compat modules or the server config. Those exist to make mods
 survive a headless engine, which is not a problem the player's game has.
 
+## Releases and the in-app updater
+
+**The step-by-step release procedure is [RELEASING.md](RELEASING.md).** Follow it; this section is the background.
+
+The updater (`src/ModderLords.Core/Updates`) trusts a narrow contract, so every release must keep it:
+
+- **Tag** `vX.Y.Z` — exactly three numbers. A suffix (`-test`, `-rc1`) is never offered.
+- **One asset** named exactly `ModderLords-X.Y.Z.zip`, produced by `scripts/package-release.ps1 -Version X.Y.Z`, with
+  `ModderLords.exe` at the zip root. The installer refuses a zip without it.
+- **A normal release**, not a prerelease or draft: the check reads `/releases/latest`, which skips both. Publish
+  anything experimental as a **prerelease** and no installed copy will see it.
+- GitHub's per-asset `sha256:` digest is required: the installer refuses a download it cannot verify.
+
+Testing the update path without publishing: set `MODDERLORDS_UPDATE_FEED` to a local JSON file shaped like the
+releases API response, whose `browser_download_url` is a local zip path. Dev (Debug) builds never install an update in
+place; they open the release page, so test with a packaged Release build.
+
+The install swaps files in place: the running exe is renamed to `ModderLords.exe.old` (deleted on the next start),
+replaced items move to `.previous\` inside the install folder, and any failure part-way restores the folder.
+
 ## Licensing note
 
 Bannerlord Coop is source-available, not open source. This project launches its binaries and relies only on their public

@@ -102,8 +102,17 @@ The release zip is self-contained; no separate .NET install is needed.
    `ModderLords.Hook.dll` and the `compat` folder next to the exe; playing needs neither, but there is no reason to
    split them up.
 2. Run `ModderLords.exe`. It asks once whether you are here to play with mods or to host a coop server.
-3. If Windows SmartScreen warns about an unknown publisher, choose "More info" then "Run anyway". The tool makes no
-   network connections and changes nothing outside the folders listed under "Where things live".
+3. If Windows SmartScreen warns about an unknown publisher, choose "More info" then "Run anyway". The only
+   network connection it makes is a check for a newer ModderLords release on GitHub when it starts; nothing is downloaded
+   unless you click **Update now** (see [Updates](#updates)). It changes nothing outside the folders listed under
+   "Where things live".
+
+   <a id="updates"></a>**Updates.** When a newer release exists, a green banner offers **What's new**, **Update now**,
+   **Later** and **Skip this version**. Update now downloads the release, checks it against the checksum GitHub
+   publishes, replaces this copy and restarts; your profiles are kept, and the files it replaced are kept in a
+   `.previous` folder beside the exe. **Updates** on the top bar checks straight away. It cannot update a copy in a
+   folder you cannot write to (such as Program Files) and opens the download page instead. To turn the startup check
+   off, set `"CheckForUpdates": false` in `%LOCALAPPDATA%\ModderLords\ui-state.json`.
 
 To uninstall: delete the folder. Playing with mods creates nothing inside your game install, so there is nothing
 else to clean up. If you hosted, remove the links it created inside the server: first click **Delete** on each

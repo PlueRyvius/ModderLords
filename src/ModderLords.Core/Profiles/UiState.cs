@@ -27,6 +27,15 @@ public sealed class UiState
     /// differ between the two modes and an index would land somewhere arbitrary after a mode switch.</summary>
     public string? SelectedTab { get; set; }
 
+    /// <summary>Whether to ask GitHub for a newer release on startup (at most once a day). Downloading always needs a click.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>When the startup check last ran, so it runs at most once a day however often the app is opened.</summary>
+    public DateTime? LastUpdateCheckUtc { get; set; }
+
+    /// <summary>A release the user chose "Skip this version" on. A later release is offered again.</summary>
+    public string? SkippedVersion { get; set; }
+
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }

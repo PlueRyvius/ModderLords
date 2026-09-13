@@ -21,21 +21,18 @@
     <DockPanel>
         <!-- top bar: profile + launch -->
         <Border DockPanel.Dock="Top" Padding="8" Background="{DynamicResource ChromeBackground}">
+            <!-- The right-hand group is docked FIRST. A DockPanel sizes its children in order, so when the profile
+                 buttons came first they took their full width and the launch buttons were drawn over them at the
+                 minimum window width ("Re-sync junctions" covered the mode button, and the status had zero width).
+                 Now the launch group always gets its space and the profile buttons wrap onto a second row instead.
+                 The status line lives in the bottom bar, where there is room for it. -->
             <DockPanel>
-                <TextBlock Text="Profile" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" DropDownOpened="Profiles_DropDownOpened" />
-                <Button Content="New" Command="{Binding NewProfileCommand}" />
-                <Button Content="Save" Command="{Binding SaveProfileCommand}" />
-                <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />
-                <Button Content="Rescan mods" Command="{Binding RescanCommand}" />
-                <Button Content="Folders…" Command="{Binding EditFoldersCommand}"
-                        ToolTip="Choose where this profile finds the game, the coop server and any extra mod folders. Needed only when they are not found automatically." />
-                <Button Content="Re-sync junctions" Command="{Binding Host.ResyncCommand}" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
-                        ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Top" DockPanel.Dock="Right">
                     <!-- One click, no restart. Which half of the app you get is the first thing you chose and the
                          easiest thing to change; see FirstRunWindow. -->
                     <Button x:Name="ModeButton" Content="Player mode" Click="Mode_Click" MinWidth="92" Margin="4,0,4,0" />
+                    <Button Content="Updates" Command="{Binding Update.CheckNowCommand}" MinWidth="64" Margin="4,0,4,0"
+                            ToolTip="Check GitHub for a newer ModderLords release now. Nothing is downloaded unless you then click Update now." />
                     <Button x:Name="ThemeButton" Content="Dark" Click="Theme_Click" MinWidth="52" Margin="4,0,12,0"
                             ToolTip="Switch between the light and dark theme" />
                     <!-- Player mode launches the mods you picked; Host mode launches the game that joins the server
@@ -63,10 +60,20 @@
                     <Button Content="Stop" Command="{Binding Host.StopCommand}" Background="{DynamicResource DangerBackground}"
                             Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
-                <!-- Trimmed rather than clipped: in Host mode the buttons leave little room, and a status cut off
-                     mid-word read as broken. The tooltip carries the whole line. -->
-                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" FontStyle="Italic"
-                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" />
+                <WrapPanel VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Profile" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" DropDownOpened="Profiles_DropDownOpened" />
+                    </StackPanel>
+                    <Button Content="New" Command="{Binding NewProfileCommand}" />
+                    <Button Content="Save" Command="{Binding SaveProfileCommand}" />
+                    <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />
+                    <Button Content="Rescan mods" Command="{Binding RescanCommand}" />
+                    <Button Content="Folders…" Command="{Binding EditFoldersCommand}"
+                            ToolTip="Choose where this profile finds the game, the coop server and any extra mod folders. Needed only when they are not found automatically." />
+                    <Button Content="Re-sync junctions" Command="{Binding Host.ResyncCommand}" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
+                            ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
+                </WrapPanel>
             </DockPanel>
         </Border>
 
@@ -83,6 +90,22 @@
                 </Style>
             </Border.Style>
             <TextBlock Text="{Binding Host.DriftText}" TextWrapping="Wrap" />
+        </Border>
+
+        <!-- update banner: only there when a newer release was found. Nothing downloads until "Update now". -->
+        <Border DockPanel.Dock="Top" Padding="8,6" Background="{DynamicResource SuccessBackground}" BorderBrush="{DynamicResource WarningBorder}" BorderThickness="0,0,0,1"
+                Visibility="{Binding Update.HasUpdate, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <TextBlock Text="{Binding Update.ProgressText}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <Button Content="What's new" Command="{Binding Update.ShowNotesCommand}" />
+                    <Button Content="Update now" Command="{Binding Update.UpdateNowCommand}" FontWeight="Bold"
+                            ToolTip="Download the new version, check it against its published checksum, replace this copy and restart. Your profiles are kept." />
+                    <Button Content="Later" Command="{Binding Update.LaterCommand}" ToolTip="Hide this until ModderLords is next started" />
+                    <Button Content="Skip this version" Command="{Binding Update.SkipCommand}" ToolTip="Do not mention this version again; a later one will still be offered" />
+                </StackPanel>
+                <TextBlock Text="{Binding Update.BannerText}" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="Bold" />
+            </DockPanel>
         </Border>
 
         <!-- status bar -->
@@ -106,6 +129,9 @@
                     </TextBlock>
                 </StackPanel>
                 <StackPanel>
+                    <!-- The one-line status. It used to squeeze into the top bar beside the buttons and had no width at
+                         all once they grew; here it always has the full width of the window. -->
+                    <TextBlock Text="{Binding Status}" FontStyle="Italic" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" Margin="0,0,0,2" />
                     <TextBlock Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"><Run Text="Server: " FontWeight="Bold" /><Run Text="{Binding ServerRoot}" /></TextBlock>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock><Run Text="Game:   " FontWeight="Bold" /><Run Text="{Binding GameRoot}" /></TextBlock>
