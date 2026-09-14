@@ -305,6 +305,24 @@ which is what it was built for.
   needs a player: expect `[ModderLords.Compat] server recipes: 6 campaign behaviour(s) gated ...` in
   `Configs\ModLogs\ModderLords.Compat-client.log`, then `RegisterEvents skipped on client: ...` lines.
 
+## Authority classifier, step 1 (2026-09-14): Coop sink catalogue
+
+Goal of the classifier: decide from IL, without game launches, which parts of a mod must run only on the server and
+which stay with the player. Step 1 reads what Coop itself already decides.
+
+- `ModderLords.Core.Compat.Authority.CoopSinks.ScanDll(GameInterface.dll)` walks Coop's Harmony prefixes (metadata +
+  method bodies, nothing loaded). A bool prefix that calls `ModInformation.get_IsServer/get_IsClient` or
+  `CallOriginalPolicy` is a gate: `ClientSkip` (exactly `return IsServer`), `Conditional` (branches, e.g.
+  RecruitmentCampaignBehavior), `Policy`. A plain `return true` prefix is not a gate. Targets come from class- and
+  method-level `[HarmonyPatch]` (type, name, `MethodType` getter/setter).
+- Also collected: `AutoSyncRegistry.AddField/AddProperty` members (`SyncedMembers`), members named inside transpilers
+  (`InterceptedMembers`, e.g. `Hero.VolunteerTypes`), and `TargetMethods()` yields. Iterator bodies live in nested
+  `<Method>d__N` types and are attributed back to their method.
+- `CoopSinks.Load` caches by SHA-256 in `%LOCALAPPDATA%\ModderLords\cache\coop-sinks-<hash>.json`.
+- Coop v0.1.5: 49 gated behaviours, 360 blocked methods, 366 synced members, 39 intercepted, 164 TargetMethods targets.
+- Harmony still runs postfixes when a prefix skips the original, so a mod postfix on a gated method runs on clients.
+  Later steps (mod call graph, verdicts, generated recipes) build on this catalogue.
+
 ## Compat verification logging (2026-09-02)
 
 - `BehaviorGate` installs counting postfixes on each gated campaign behaviour's common event handlers
