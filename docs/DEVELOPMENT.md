@@ -323,6 +323,25 @@ which stay with the player. Step 1 reads what Coop itself already decides.
 - Harmony still runs postfixes when a prefix skips the original, so a mod postfix on a gated method runs on clients.
   Later steps (mod call graph, verdicts, generated recipes) build on this catalogue.
 
+## Authority classifier, step 2 (2026-09-14): mod call graph and entry points
+
+- `ModAnalysis.Analyse(mod)` → `ModCodeModel`: per method (id `Type::Name`, overloads share one) its calls, `ldftn`
+  delegate targets, iterator/async bodies, field writes/reads, and `Opaque` when it invokes through reflection.
+  `Implementers` + `Dispatch(callee)` resolve interface/virtual calls to mod implementations, which also covers
+  DryIoc-style `Register<IFoo, Foo>` wiring (TAOM hooks).
+- Roots, each with a `RootTrigger`:
+  - `CampaignEvents.X.AddNonSerializedListener(this, handler)` → `Simulation`, or `Session` for load/session events.
+  - `AddGameMenuOption` / `AddPlayerLine` / `AddDialogLine` delegates by slot: condition → `Query`, consequence →
+    `PlayerInput` (a `null` delegate keeps its slot); `AddGameMenu`/`AddWaitGameMenu` init and tick → `Presentation`.
+  - `[HarmonyPatch]` methods (kind from attribute or conventional name) and manual `harmony.Patch(original, prefix,
+    postfix, …)` calls (slot gives the kind; RTSCamera applies 52 this way) → `Patch` with the resolved target.
+  - Overrides by base-chain family: `…Model` → `Query`, `MissionLogic/MissionBehavior` → `Mission`, `MissionView`,
+    screens and UI handlers → `Presentation`, `MBSubModuleBase` → `Lifecycle`; ViewModel `Execute*` and console commands
+    → `PlayerInput`.
+- A mod whose DLLs all fail to parse is `NotAnalysable` (KingdomPlus: corrupt metadata tables).
+- Local probe results: TAOM 14,599 methods / 756 roots (Patch 197, Query 156, PlayerInput 103, Simulation 96);
+  MyLittleWarband 29 roots; ImprovedGarrisons 88; RTSCamera 122 (52 manual patches).
+
 ## Compat verification logging (2026-09-02)
 
 - `BehaviorGate` installs counting postfixes on each gated campaign behaviour's common event handlers

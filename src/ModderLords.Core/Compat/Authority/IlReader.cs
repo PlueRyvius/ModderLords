@@ -45,6 +45,28 @@ public static class IlReader
         return list;
     }
 
+    /// <summary>
+    /// Compiler-generated nested types that carry a method's body elsewhere (iterators and async state machines,
+    /// named <c>&lt;Method&gt;d__N</c>), keyed by owner type and the method they belong to.
+    /// </summary>
+    public static Dictionary<(TypeDefinitionHandle owner, string method), List<TypeDefinitionHandle>> StateMachineTypes(MetadataReader md)
+    {
+        var map = new Dictionary<(TypeDefinitionHandle, string), List<TypeDefinitionHandle>>();
+        foreach (var h in md.TypeDefinitions)
+        {
+            var td = md.GetTypeDefinition(h);
+            var owner = td.GetDeclaringType();
+            if (owner.IsNil) continue;
+            var name = md.GetString(td.Name);
+            var close = name.IndexOf('>');
+            if (!name.StartsWith('<') || close < 2) continue;
+            var key = (owner, name[1..close]);
+            if (!map.TryGetValue(key, out var list)) map[key] = list = new List<TypeDefinitionHandle>();
+            list.Add(h);
+        }
+        return map;
+    }
+
     private static int OperandSize(ILOpCode op)
     {
         if (op.IsBranch()) return op.GetBranchOperandSize();
