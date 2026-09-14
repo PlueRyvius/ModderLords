@@ -36,10 +36,15 @@ public static class BehaviorGate
     }
 
     /// <summary>Applies a recipe set on this client. Returns a one-line report.</summary>
+    private static readonly Lazy<RecipeGates> Gates = new Lazy<RecipeGates>(() =>
+        new RecipeGates("ModderLords.Compat.RecipeGates", IsClient, msg => Log.Warn(msg)));
+
     public static string Apply(string json)
     {
         var campaign = new List<string>();
         var mission = new List<string>();
+        var handlers = new List<string>();
+        var unpatch = new List<(string target, string patch)>();
         try
         {
             var root = JObject.Parse(json);
@@ -47,9 +52,21 @@ public static class BehaviorGate
             {
                 campaign.AddRange((mod["CampaignBehaviors"] as JArray ?? new JArray()).Select(t => t.ToString()));
                 mission.AddRange((mod["MissionBehaviors"] as JArray ?? new JArray()).Select(t => t.ToString()));
+                // Schema v2: generated from the code analysis.
+                handlers.AddRange((mod["Handlers"] as JArray ?? new JArray()).Select(t => t.ToString()));
+                foreach (var u in mod["Unpatch"] as JArray ?? new JArray())
+                    unpatch.Add((u["Target"]?.ToString() ?? "", u["Patch"]?.ToString() ?? ""));
             }
         }
         catch (Exception ex) { return "recipe parse failed: " + ex.Message; }
+
+        var generated = "";
+        if (handlers.Count + unpatch.Count > 0)
+        {
+            var (applied, handlersMissing) = Gates.Value.SkipHandlers(handlers);
+            var (removed, notAttached) = Gates.Value.RemovePostfixes(unpatch);
+            generated = $"; {applied} handler(s) gated ({handlersMissing} not found), {removed} leaking postfix(es) removed ({notAttached} not attached)";
+        }
 
         int patched = 0, missing = 0, already = 0;
         foreach (var typeName in campaign)
@@ -78,7 +95,7 @@ public static class BehaviorGate
             }
             else Log.Warn("recipe: Mission.AddMissionBehavior not found; mission behaviours cannot be gated");
         }
-        return $"{patched} campaign behaviour(s) gated ({already} already), {GatedMissionTypes.Count} mission behaviour type(s) gated, {missing} not found";
+        return $"{patched} campaign behaviour(s) gated ({already} already), {GatedMissionTypes.Count} mission behaviour type(s) gated, {missing} not found" + generated;
     }
 
     private static bool IsClient()

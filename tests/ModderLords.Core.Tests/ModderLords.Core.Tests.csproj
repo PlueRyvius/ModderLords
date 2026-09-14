@@ -11,6 +11,8 @@
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
+    <!-- Real Harmony for RecipeGatesTests (the module's own copy is compile-time only). -->
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
 
@@ -36,6 +38,7 @@
     <Compile Include="..\..\src\ModderLords.Compat\AssertThrottlePolicy.cs" Link="Module\AssertThrottlePolicy.cs" />
     <!-- The encounter option gate's decisions, TaleWorlds- and Coop-free for the same reason. -->
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\EncounterOptionGatePolicy.cs" Link="Module\EncounterOptionGatePolicy.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RecipeGates.cs" Link="Module\RecipeGates.cs" />
   </ItemGroup>
 
 </Project>
