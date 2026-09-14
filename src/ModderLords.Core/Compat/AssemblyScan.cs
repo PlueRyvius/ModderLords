@@ -88,7 +88,8 @@ public static class AssemblyScan
     private static readonly string[] SingletonOnlyExcludedSuffixes = ["Manager", "UI", "Screen", "Widget", "Behavior", "Behaviour", "Handler", "Service", "Controller", "Patch", "Patches"];
     private static readonly string[] HolderProps = ["Config", "Settings", "Configuration", "Options", "Current"];
 
-    public static ScanResult Scan(DiscoveredModule mod)
+    /// <summary>The submodule DLLs a manifest names, server bin first, each path once.</summary>
+    public static IReadOnlyList<string> ModuleDlls(DiscoveredModule mod)
     {
         var dlls = new List<string>();
         foreach (var bin in new[] { mod.ServerBin, mod.ClientBin })
@@ -98,6 +99,12 @@ public static class AssemblyScan
                     var p = Path.Combine(bin, sub.DLLName);
                     if (File.Exists(p) && !dlls.Contains(p, StringComparer.OrdinalIgnoreCase)) dlls.Add(p);
                 }
+        return dlls;
+    }
+
+    public static ScanResult Scan(DiscoveredModule mod)
+    {
+        var dlls = ModuleDlls(mod);
         if (dlls.Count == 0)
             return new ScanResult(mod.Id, mod.HasCode ? ServerVerdict.Unknown : ServerVerdict.DataOnly, [], [], [], mod.HasCode ? ["submodule DLL not found"] : [], [], [], [], false);
         return ScanDlls(mod.Id, dlls, mod.Info.DependentModules.Any(d => d.Id == "StoryMode" && d.IsOptional));
