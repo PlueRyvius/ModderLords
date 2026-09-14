@@ -379,21 +379,59 @@ public sealed class LaunchSession
             if (flagged.Count > 0) messages.Add("server-only logic requested but the ModderLords.Compat module is missing; recipes not written");
             return;
         }
-        var entries = selections.Where(s => flagged.Contains(s.Module.Id)).Select(s =>
+        var flaggedSelections = selections.Where(s => flagged.Contains(s.Module.Id)).ToList();
+        var entries = flaggedSelections.Select(s =>
         {
             var pm = profile.Mods.First(m => m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase));
             return (s.Module.Id, AssemblyScan.Scan(s.Module), (IReadOnlyCollection<string>)pm.ClientSideBehaviors);
         }).ToList();
+        var authority = BuildAuthorityReports(flaggedSelections, messages);
         var db = CompatDb.Current;
         var hints = selections.Select(s => db.Find(s.Module.Id)).Where(r => r is not null)
             .Select(r => (r!.Id, (IReadOnlyList<string>)r.SettingsTypes, (IReadOnlyList<string>)r.IgnoreSettingsTypes)).ToList();
-        var set = Compat.RecipeSet.Build(entries, "ModderLords", hints);
+        var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, authority);
         set.WriteInto(sync.FolderPath);
         if (flagged.Count > 0 && !profile.SettingsSync) messages.Add("server-only logic is flagged for " + string.Join(", ", flagged) + " but Settings sync (the shared module) is off, so clients will not receive the recipe");
         foreach (var r in set.Mods)
         {
             if (r.CampaignBehaviors.Count + r.MissionBehaviors.Count > 0) messages.Add($"recipe {r.Id}: {r.CampaignBehaviors.Count} campaign behaviour(s), {r.MissionBehaviors.Count} mission behaviour(s) server-only");
+            if (r.Handlers.Count + r.Unpatch.Count > 0) messages.Add($"recipe {r.Id}: {r.Handlers.Count} handler(s) server-only, {r.Unpatch.Count} leaking postfix(es) removed on clients");
+            if (r.Notes is { } notes) messages.Add($"recipe {r.Id}: {notes}" + (notes.Contains("relay", StringComparison.Ordinal) || notes.Contains("review", StringComparison.Ordinal) ? $" (details: authority --mod {r.Id})" : ""));
             if (r.Settings is { } h) messages.Add($"recipe {r.Id}: settings hints {h.Include.Count} include, {h.Exclude.Count} exclude");
+        }
+    }
+
+    /// <summary>
+    /// Static authority analysis for the mods flagged server-authoritative, against the installed Coop. Null when Coop's
+    /// GameInterface.dll cannot be found or read, in which case recipes fall back to whole-behaviour gating.
+    /// </summary>
+    private static IReadOnlyDictionary<string, global::ModderLords.Core.Compat.Authority.AuthorityReport>? BuildAuthorityReports(
+        IReadOnlyList<ModSelection> flagged, List<string> messages)
+    {
+        if (flagged.Count == 0) return null;
+        try
+        {
+            var gameInterface = global::ModderLords.Core.Compat.Authority.CoopSinks.FindGameInterface(ServerPaths.SteamLibraries());
+            if (gameInterface is null)
+            {
+                messages.Add("server-only logic: Coop's GameInterface.dll not found, so whole behaviours are gated instead of the code analysis");
+                return null;
+            }
+            var coop = global::ModderLords.Core.Compat.Authority.CoopSinks.Load(gameInterface);
+            var reports = new Dictionary<string, global::ModderLords.Core.Compat.Authority.AuthorityReport>(StringComparer.OrdinalIgnoreCase);
+            foreach (var s in flagged)
+            {
+                var report = global::ModderLords.Core.Compat.Authority.AuthorityScan.Classify(
+                    global::ModderLords.Core.Compat.Authority.ModAnalysis.Analyse(s.Module), coop);
+                reports[s.Module.Id] = report;
+                messages.Add($"authority {s.Module.Id}: {report.Summary}");
+            }
+            return reports;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException)
+        {
+            messages.Add("server-only logic: code analysis failed (" + ex.Message + "), so whole behaviours are gated");
+            return null;
         }
     }
 

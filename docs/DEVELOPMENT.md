@@ -378,6 +378,23 @@ which stay with the player. Step 1 reads what Coop itself already decides.
   (e.g. FieldCamp's hourly tick calls Coop-blocked roster/party actions — TAOM hides Make Camp in co-op for this reason).
   MyLittleWarband NeedsRelay 2, NeedsStateSync 1; ImprovedGarrisons ServerOnly 3, NeedsStateSync 7, NeedsRelay 17.
 
+## Authority classifier, step 4 (2026-09-14): generated recipes and client gates
+
+- Ticking **Server-only logic** now uses the code analysis (maintainer's choice: replace, no new UI). At launch
+  `LaunchSession.WriteRecipes` loads Coop's catalogue (`CoopSinks.Load`, cached) and classifies each flagged mod; the
+  console shows `authority <id>: …` and `recipe <id>: N handler(s) server-only, M leaking postfix(es) removed on clients`.
+- `recipes.json` schema 2: per mod `Handlers[]` ("Type::Method") and `Unpatch[] { Target, Patch }`, filled from
+  `ServerOnly`/`NeedsStateSync` Simulation/Session roots and `LeakingPostfix` roots. `CampaignBehaviors` stays empty for
+  generated mods. `ClientSideBehaviors` still excludes a behaviour, including its lambda handlers (`Type+<>c`).
+  NeedsRelay/Review are only reported in `Notes` ("… need a server relay (details: authority --mod X)").
+- Fallback to whole-behaviour gating when Coop's GameInterface.dll is not found, analysis throws, or the mod is not
+  analysable (KingdomPlus) — the recipe note says so.
+- Client module: `RecipeGates` (Harmony only, no game/Coop types) — `SkipHandlers` prefixes each handler with
+  "return false on a client"; `RemovePostfixes` on a client detaches the named postfix/finalizer from its target via
+  `Harmony.GetPatchInfo` + `Unpatch`. `BehaviorGate.Apply` calls both and appends counts to its log line.
+- `RecipeGatesTests` run that file against real Harmony (Lib.Harmony 2.4.2 in the test project) with NoInlining targets:
+  handler skipped on client only, postfix kept on server and removed on client, missing ids reported not thrown.
+
 ## Compat verification logging (2026-09-02)
 
 - `BehaviorGate` installs counting postfixes on each gated campaign behaviour's common event handlers
