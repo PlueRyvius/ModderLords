@@ -3,6 +3,7 @@
 namespace TaleWorlds.Library
 {
     public static class InformationManager { public static void DisplayMessage(string message) { } }
+    public class ViewModel { public void ExecuteCommand(string command) { } }
 }
 
 namespace TaleWorlds.Core
@@ -93,6 +94,18 @@ namespace ModderLords.Core.Tests.AuthFakes
     {
         [HarmonyPostfix]
         private static void Wage(ref int __result) { __result = 2; }
+    }
+
+    // base.OnAgentRemoved() is a plain call: it must not reach AuthMissionB's override.
+    public sealed class AuthMissionA : MissionLogic { public override void OnAgentRemoved() { base.OnAgentRemoved(); } }
+    public sealed class AuthMissionB : MissionLogic { public override void OnAgentRemoved() => new AuthHero().Renown = 1; }
+
+    // "ViewModel" ends in "Model"; its commands are still player input, not a query.
+    [CoopFakes.HarmonyPatch(typeof(TaleWorlds.Library.ViewModel), "ExecuteCommand")]
+    internal static class AuthCareerPatch
+    {
+        [HarmonyPostfix]
+        private static void Open() => new AuthHero().Renown = 2;
     }
 
     [CoopFakes.HarmonyPatch(typeof(AuthTownVisit), "game_menu_recruit_on_consequence")]

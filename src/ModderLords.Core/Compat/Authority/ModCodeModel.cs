@@ -39,6 +39,8 @@ public sealed class MethodNode
     public string Id { get; }
     /// <summary>Callee ids: calls, object creation and state-machine bodies.</summary>
     public HashSet<string> Calls { get; } = new(StringComparer.Ordinal);
+    /// <summary>The subset of Calls made with callvirt, which can dispatch to overrides. <c>base.X()</c> is a plain call and cannot.</summary>
+    public HashSet<string> VirtualCalls { get; } = new(StringComparer.Ordinal);
     /// <summary>Methods this one turns into delegates (ldftn). Kept apart from Calls: registering a handler is not running it.</summary>
     public HashSet<string> Delegates { get; } = new(StringComparer.Ordinal);
     /// <summary>"Type.field" written with stfld/stsfld.</summary>
@@ -317,6 +319,7 @@ public static class ModAnalysis
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     var callee = ModCodeModel.MethodId(t, n);
                     node.Calls.Add(callee);
+                    if (i.OpCode == ILOpCode.Callvirt) node.VirtualCalls.Add(callee);
                     if (OpaqueCalls.Contains(callee)) node.Opaque = true;
 
                     if (t.EndsWith("CampaignEvents", StringComparison.Ordinal) && n.StartsWith("get_", StringComparison.Ordinal))

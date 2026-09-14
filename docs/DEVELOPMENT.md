@@ -371,7 +371,10 @@ which stay with the player. Step 1 reads what Coop itself already decides.
   written by at most max(5, roots/20) roots. Without the writer cap TAOM's logger fault flag made 56 handlers
   NeedsStateSync and hid the ServerOnly ones (1 → 27 once capped). `TaleWorlds.CampaignSystem.GameMenus.*` counts as
   presentation, so menu conditions setting `MenuCallbackArgs` are not Review.
-- Current results: TAOM ServerOnly 27, NeedsRelay 31, NeedsStateSync 3, LeakingPostfix 1, AlreadyHandled 61, Review 40
+- Only `callvirt` edges dispatch to overrides (`MethodNode.VirtualCalls`): `base.OnEndMission()` is a plain `call`, and
+  dispatching it made a dozen TAOM mission behaviours inherit SiegeDismount's inventory writes. A patch on a
+  `…ViewModel` (or an `Execute*` on a `…VM`) is player input — check it before the `…Model` → Query rule.
+- Current results: TAOM ServerOnly 27, NeedsRelay 33, NeedsStateSync 3, LeakingPostfix 1, AlreadyHandled 61, Review 31
   (e.g. FieldCamp's hourly tick calls Coop-blocked roster/party actions — TAOM hides Make Camp in co-op for this reason).
   MyLittleWarband NeedsRelay 2, NeedsStateSync 1; ImprovedGarrisons ServerOnly 3, NeedsStateSync 7, NeedsRelay 17.
 

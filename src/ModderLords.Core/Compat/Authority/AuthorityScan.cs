@@ -117,6 +117,9 @@ public static class AuthorityScan
         if (p.TargetMethod.Contains("_on_consequence", StringComparison.Ordinal)) return RootTrigger.PlayerInput;
         if (p.TargetMethod.Contains("_on_condition", StringComparison.Ordinal)) return RootTrigger.Query;
         if (p.TargetMethod.Contains("_on_init", StringComparison.Ordinal) || p.TargetMethod.Contains("_on_tick", StringComparison.Ordinal)) return RootTrigger.Presentation;
+        // View models before game models: "ViewModel" also ends in "Model". A ViewModel's commands are the player's clicks.
+        if (simple.EndsWith("ViewModel", StringComparison.Ordinal) || (simple.EndsWith("VM", StringComparison.Ordinal) && p.TargetMethod.StartsWith("Execute", StringComparison.Ordinal)))
+            return RootTrigger.PlayerInput;
         if (IsPresentationType(p.TargetType) || simple.EndsWith("VM", StringComparison.Ordinal) || simple.EndsWith("View", StringComparison.Ordinal)
             || simple.Contains("Gauntlet", StringComparison.Ordinal) || simple.Contains("Screen", StringComparison.Ordinal)
             || simple.Contains("Tableau", StringComparison.Ordinal) || simple.Contains("Widget", StringComparison.Ordinal))
@@ -280,19 +283,22 @@ public static class AuthorityScan
                     else if (type.EndsWith(".MBRandom", StringComparison.Ordinal)) fx.Hit(Sink.Random, "uses MBRandom", id);
                     else if (IsPresentationType(type)) fx.Hit(Sink.Presentation, "shows " + Short(callee), id);
                 }
-                foreach (var callee in node.Calls) Enqueue(fx, queue, callee, id, depth);
+                foreach (var callee in node.Calls) Enqueue(fx, queue, callee, id, depth, node.VirtualCalls.Contains(callee));
                 // Delegates run later, from wherever they are invoked; ones that are entry points get their own verdict.
                 foreach (var target in node.Delegates)
-                    if (!_rootMethods.Contains(target)) Enqueue(fx, queue, target, id, depth);
+                    if (!_rootMethods.Contains(target)) Enqueue(fx, queue, target, id, depth, dispatch: false);
             }
             return fx;
         }
 
-        /// <summary>Queues the callee and its mod overrides; past the visit cap nothing more is queued (the walk drains and is marked Truncated).</summary>
-        private void Enqueue(Effects fx, Queue<(string, int)> queue, string callee, string from, int depth)
+        /// <summary>
+        /// Queues the callee, plus its mod overrides when the call is virtual; past the visit cap nothing more is queued
+        /// (the walk drains and is marked Truncated).
+        /// </summary>
+        private void Enqueue(Effects fx, Queue<(string, int)> queue, string callee, string from, int depth, bool dispatch)
         {
             if (fx.Truncated) return;
-            foreach (var target in _model.Dispatch(callee))
+            foreach (var target in dispatch ? _model.Dispatch(callee) : [callee])
             {
                 if (!_model.Methods.ContainsKey(target) || fx.Parent.ContainsKey(target)) continue;
                 if (fx.Parent.Count >= MaxVisited) { fx.Truncated = true; return; }

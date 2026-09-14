@@ -54,6 +54,9 @@ public sealed class AuthorityScanTests
     [InlineData("AuthAlliancePatch::After", AuthorityVerdict.LeakingPostfix)]
     [InlineData("AuthWagePatch::Wage", AuthorityVerdict.Both)]
     [InlineData("AuthRecruitPatch::Swap", AuthorityVerdict.NeedsRelay)]      // patch on a menu consequence
+    [InlineData("AuthMissionA::OnAgentRemoved", AuthorityVerdict.Both)]      // base call does not dispatch to a sibling
+    [InlineData("AuthMissionB::OnAgentRemoved", AuthorityVerdict.Review)]
+    [InlineData("AuthCareerPatch::Open", AuthorityVerdict.NeedsRelay)]       // ViewModel command = player input
     public void Verdicts(string method, AuthorityVerdict expected)
     {
         var v = For(method);
