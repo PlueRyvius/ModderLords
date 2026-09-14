@@ -37,8 +37,12 @@ public sealed class MethodNode
 {
     public MethodNode(string id) => Id = id;
     public string Id { get; }
-    /// <summary>Callee ids: calls, object creation, delegate targets (ldftn) and state-machine bodies.</summary>
+    /// <summary>Callee ids: calls, object creation and state-machine bodies.</summary>
     public HashSet<string> Calls { get; } = new(StringComparer.Ordinal);
+    /// <summary>The subset of Calls made with callvirt, which can dispatch to overrides. <c>base.X()</c> is a plain call and cannot.</summary>
+    public HashSet<string> VirtualCalls { get; } = new(StringComparer.Ordinal);
+    /// <summary>Methods this one turns into delegates (ldftn). Kept apart from Calls: registering a handler is not running it.</summary>
+    public HashSet<string> Delegates { get; } = new(StringComparer.Ordinal);
     /// <summary>"Type.field" written with stfld/stsfld.</summary>
     public HashSet<string> FieldWrites { get; } = new(StringComparer.Ordinal);
     public HashSet<string> FieldReads { get; } = new(StringComparer.Ordinal);
@@ -70,6 +74,8 @@ public sealed class ModCodeModel
         if (sep < 0) yield break;
         var type = calleeId[..sep];
         var name = calleeId[(sep + 2)..];
+        // Constructors never dispatch, and System.Object/ValueType/Exception members would fan out to every override in the mod.
+        if (name.StartsWith('.') || type.StartsWith("System.", StringComparison.Ordinal)) yield break;
         var seen = new HashSet<string>(StringComparer.Ordinal) { type };
         var queue = new Queue<string>();
         queue.Enqueue(type);
@@ -246,6 +252,7 @@ public static class ModAnalysis
         catch (BadImageFormatException ex) { model.Notes.Add(id + ": " + ex.Message); return; }
 
         string? lastEvent = null, lastFtn = null, lastType = null, lastString = null;
+        string? lastArrayField = null;                                         // the array an element write lands in
         var delegateArgs = new List<string?>();                               // ldftn targets / ldnull since the last call
         (string type, string method)? original = null, pendingLookup = null;  // manual Harmony.Patch(original, prefix, postfix, …)
         var slot = 0;
@@ -269,7 +276,7 @@ public static class ModAnalysis
                 {
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     var target = ModCodeModel.MethodId(t, n);
-                    node.Calls.Add(target);
+                    node.Delegates.Add(target);
                     lastFtn = target;
                     delegateArgs.Add(target);
                     break;
@@ -284,8 +291,16 @@ public static class ModAnalysis
                 {
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     node.FieldReads.Add(t + "." + n);
+                    if (IlReader.IsArrayField(md, i.Operand)) lastArrayField = t + "." + n;
                     break;
                 }
+                case ILOpCode.Stelem or ILOpCode.Stelem_ref or ILOpCode.Stelem_i or ILOpCode.Stelem_i1 or ILOpCode.Stelem_i2
+                    or ILOpCode.Stelem_i4 or ILOpCode.Stelem_i8 or ILOpCode.Stelem_r4 or ILOpCode.Stelem_r8:
+                    // `holder.Array[i] = value`: credit the write to the array field most recently loaded (locals and
+                    // calls in the value expression do not load array fields, so they do not disturb it).
+                    if (lastArrayField is not null) node.FieldWrites.Add(lastArrayField);
+                    lastArrayField = null;
+                    break;
                 case ILOpCode.Newobj:
                 {
                     var (t, n) = IlReader.MemberName(md, i.Operand);
@@ -304,6 +319,7 @@ public static class ModAnalysis
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     var callee = ModCodeModel.MethodId(t, n);
                     node.Calls.Add(callee);
+                    if (i.OpCode == ILOpCode.Callvirt) node.VirtualCalls.Add(callee);
                     if (OpaqueCalls.Contains(callee)) node.Opaque = true;
 
                     if (t.EndsWith("CampaignEvents", StringComparison.Ordinal) && n.StartsWith("get_", StringComparison.Ordinal))
