@@ -341,6 +341,39 @@ which stay with the player. Step 1 reads what Coop itself already decides.
 - A mod whose DLLs all fail to parse is `NotAnalysable` (KingdomPlus: corrupt metadata tables).
 - Local probe results: TAOM 14,599 methods / 756 roots (Patch 197, Query 156, PlayerInput 103, Simulation 96);
   MyLittleWarband 29 roots; ImprovedGarrisons 88; RTSCamera 122 (52 manual patches).
+- `ldftn` targets are kept in `MethodNode.Delegates`, not `Calls`: registering a handler is not running it. Array element
+  writes (`holder.Array[i] = v`) count as writes to the most recently loaded array-typed field.
+
+## Authority classifier, step 3 (2026-09-14): verdicts, report, CLI
+
+- `AuthorityScan.Classify(model, coopCatalogue)` → `AuthorityReport` with one `RootVerdict` per entry point: verdict,
+  one-line reason, evidence path (≤5 methods ending in the deciding effect), and `Opaque` when reflection is reached.
+- The walk (BFS from the root, following interface/virtual dispatch and non-root delegates, capped at 5,000 methods)
+  collects: calls Coop blocks on clients (plus `Apply*` on action classes Coop gates), writes to members Coop syncs or
+  intercepts, other writes/setters on TaleWorlds/SandBox world types, `MBRandom`, UI/InformationManager calls, mod-owned
+  field writes/reads, and authority checks (`IsAuthority`, `IsServer`, `ShouldDeferToHost`, …) in the root or one call
+  below it.
+- A patch takes its trigger from its target: `*_on_consequence` → PlayerInput, `*_on_condition` → Query, `*_on_init/tick`,
+  VMs, views, screens → Presentation, `…Model` → Query, missions/agents/formations → Mission, otherwise unknown.
+- Verdicts: `ServerOnly`, `NeedsStateSync` (also writes mod state that a PlayerInput/Presentation/Query root reads),
+  `NeedsRelay` (player action that is blocked or changes world state locally), `LeakingPostfix` (postfix/finalizer on a
+  method Coop skips on clients), `AlreadyHandled` (self-checks authority, or the target's behaviour is gated), `Both`,
+  `Local`, `Review` (queries or mission code that change state, prefixes beside Coop's own gate, TargetMethods patches).
+- CLI: `authority --mod ID [--all] [--json] [--out PATH]` prints action-needed verdicts with reasons and paths.
+- Gotchas found building it: `System.Object::.ctor` must not dispatch (it fanned out to every constructor in the mod
+  and made every walk swallow the whole assembly); record all of a method's effects before queueing its callees, or
+  the visit cap can hide an authority check.
+- Golden probe (installed mods): TAOM TroopWeight shed postfix → AlreadyHandled; CultureConversionBehavior handlers →
+  AlreadyHandled; AllianceCampaignBehavior.StartAlliance postfix → LeakingPostfix. MyLittleWarband RecruitProductionPatch
+  → AlreadyHandled, CustomTroopWagePatch → Both, RecruitPatch2 (recruit menu consequence writing Hero.VolunteerTypes)
+  → NeedsRelay. KingdomPlus → not analysable.
+- Shared state for NeedsStateSync = a mod field read by PlayerInput/Presentation/Query roots, not written by them, and
+  written by at most max(5, roots/20) roots. Without the writer cap TAOM's logger fault flag made 56 handlers
+  NeedsStateSync and hid the ServerOnly ones (1 → 27 once capped). `TaleWorlds.CampaignSystem.GameMenus.*` counts as
+  presentation, so menu conditions setting `MenuCallbackArgs` are not Review.
+- Current results: TAOM ServerOnly 27, NeedsRelay 31, NeedsStateSync 3, LeakingPostfix 1, AlreadyHandled 61, Review 40
+  (e.g. FieldCamp's hourly tick calls Coop-blocked roster/party actions — TAOM hides Make Camp in co-op for this reason).
+  MyLittleWarband NeedsRelay 2, NeedsStateSync 1; ImprovedGarrisons ServerOnly 3, NeedsStateSync 7, NeedsRelay 17.
 
 ## Compat verification logging (2026-09-02)
 

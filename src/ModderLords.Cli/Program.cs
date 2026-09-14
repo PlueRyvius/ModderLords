@@ -1,3 +1,4 @@
+using ModderLords.Core.Compat.Authority;
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
 using ModderLords.Coop.Launch;
@@ -18,6 +19,7 @@ using ModderLords.Coop.Config;
 //            [--data-dir PATH] [--coop-data-dir PATH] [--world-log PATH]
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
+//   authority --mod ID [--all] [--json] [--out PATH]
 
 var opts = ParseArgs(args);
 if (opts.ContainsKey("data-dir") && opts.ContainsKey("profile"))
@@ -33,6 +35,7 @@ if (!opts.TryGetValue("cmd", out var cmd))
     Console.WriteLine("          play --profile NAME [--dry-run]   (start the player's own game with a profile's mods)");
     Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
+    Console.WriteLine("          authority --mod ID [--all] [--json] [--out PATH]   (which parts of a mod must be server-only, read from its code)");
     return 1;
 }
 
@@ -126,6 +129,33 @@ switch (cmd)
             Console.WriteLine($"[ModderLords] host it with: launch --mods ... --save {target}");
         }
         catch (Exception ex) { Console.Error.WriteLine("[ModderLords] import failed: " + ex.Message); return 2; }
+        return 0;
+    }
+
+    // Static authority analysis: nothing is loaded or launched.
+    case "authority":
+    {
+        var modId = opts.GetValueOrDefault("mod");
+        if (modId is null || modId == "true") { Console.Error.WriteLine("authority --mod ID [--all] [--json] [--out PATH]   (ID as listed by: catalog)"); return 2; }
+        var mod = catalog.Modules.FirstOrDefault(m => m.Id.Equals(modId, StringComparison.OrdinalIgnoreCase));
+        if (mod is null) { Console.Error.WriteLine($"No module '{modId}' in the catalog. Try: catalog"); return 2; }
+        var gameInterface = CoopSinks.FindGameInterface(libraries);
+        if (gameInterface is null) { Console.Error.WriteLine("Coop's GameInterface.dll was not found (game Modules\\Coop or a Workshop item)."); return 2; }
+        var coop = CoopSinks.Load(gameInterface);
+        var report = AuthorityScan.Classify(ModAnalysis.Analyse(mod), coop);
+        if (opts.GetValueOrDefault("out") is { } outPath && outPath != "true") File.WriteAllText(outPath, report.ToJson());
+        if (opts.ContainsKey("json")) { Console.WriteLine(report.ToJson()); return 0; }
+
+        Console.WriteLine($"coop   : {coop.Summary}");
+        Console.WriteLine($"{mod.Id} {mod.Version}: {report.Summary}");
+        foreach (var n in report.Notes.Take(5)) Console.WriteLine("  note: " + n);
+        var shown = opts.ContainsKey("all") ? report.Roots : report.ActionNeeded;
+        foreach (var r in shown.OrderBy(r => r.Verdict).ThenBy(r => r.Root.Method, StringComparer.Ordinal))
+        {
+            Console.WriteLine($"  {r.Verdict,-15} {r.Root.Trigger,-12} {r.Root.Method}{(r.Opaque ? "  (uses reflection)" : "")}");
+            Console.WriteLine($"      {r.Reason}");
+            if (r.Evidence.Count > 0) Console.WriteLine("      via " + string.Join(" -> ", r.Evidence));
+        }
         return 0;
     }
 

@@ -181,6 +181,32 @@ public static class IlReader
         catch (BadImageFormatException) { return ""; }
     }
 
+    /// <summary>True when a field token (FieldDef or field MemberRef) is declared as a single-dimension array.</summary>
+    public static bool IsArrayField(MetadataReader md, int token)
+    {
+        try
+        {
+            var h = MetadataTokens.EntityHandle(token);
+            BlobHandle sig;
+            switch (h.Kind)
+            {
+                case HandleKind.FieldDefinition: sig = md.GetFieldDefinition((FieldDefinitionHandle)h).Signature; break;
+                case HandleKind.MemberReference: sig = md.GetMemberReference((MemberReferenceHandle)h).Signature; break;
+                default: return false;
+            }
+            var r = md.GetBlobReader(sig);
+            if (r.ReadSignatureHeader().Kind != SignatureKind.Field) return false;
+            var code = r.ReadSignatureTypeCode();
+            while (code is SignatureTypeCode.RequiredModifier or SignatureTypeCode.OptionalModifier)
+            {
+                r.ReadTypeHandle();
+                code = r.ReadSignatureTypeCode();
+            }
+            return code == SignatureTypeCode.SZArray;
+        }
+        catch (BadImageFormatException) { return false; }
+    }
+
     /// <summary>True when the method signature's return type is bool.</summary>
     public static bool ReturnsBool(MetadataReader md, MethodDefinition m)
     {

@@ -14,18 +14,8 @@ public sealed class ModCodeProbe
     [Fact]
     public void Analyse_installed_mods()
     {
-        var libs = GamePaths.SteamLibraries().ToList();
-        var game = ModuleCatalog.FindGameRoot(libs);
-        if (game is null) { _out.WriteLine("no game; skipped"); return; }
-        var mods = new Dictionary<string, DiscoveredModule>(StringComparer.OrdinalIgnoreCase);
-        void Collect(string root, ModuleSourceKind kind)
-        {
-            if (!Directory.Exists(root)) return;
-            foreach (var dir in Directory.EnumerateDirectories(root))
-                if (ModuleCatalog.TryParse(dir, kind, out _) is { } m) mods.TryAdd(m.Id, m);
-        }
-        Collect(Path.Combine(game, "Modules"), ModuleSourceKind.GameModules);
-        foreach (var lib in libs) Collect(GamePaths.WorkshopRoot(lib), ModuleSourceKind.Workshop);
+        var mods = InstalledMods.Find();
+        if (mods is null) { _out.WriteLine("no game; skipped"); return; }
 
         var models = new Dictionary<string, ModCodeModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var id in new[] { "TAOM", "MyLittleWarband", "KingdomPlus", "ImprovedGarrisons", "HealOnKill", "RTSCamera" })
