@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using HarmonyLib;
 using ModderLords.CompatSync.Coop;
 using ModderLords.Core.Compat;
@@ -167,6 +167,25 @@ public sealed class RecipeGenerationTests
         Assert.NotNull(root);
         Assert.Contains("\"Unpatch\"", json);
         Assert.Contains("\"Target\": \"TaleWorlds.X.AllianceBehavior::StartAlliance\"", json);
+        Assert.DoesNotContain("TraceRoots", json);   // absent unless a mod is traced
+    }
+
+    [Fact]
+    public void TracedMod_GetsEveryRootListed_EvenWhenNotGated()
+    {
+        var reports = new Dictionary<string, AuthorityReport> { ["Mod"] = Report() };
+        var set = RecipeSet.Build([], "test", authority: reports, traceMods: ["mod", "Unknown"]);
+        var r = Assert.Single(set.Mods);
+        Assert.Equal("mod", r.Id);
+        Assert.Empty(r.Handlers);
+        Assert.Equal(Report().Roots.Count, r.TraceRoots!.Count);
+        Assert.Contains("Mod.Menus::Buy", r.TraceRoots);
+        var back = RecipeSet.FromJson(set.ToJson());
+        Assert.Equal(r.TraceRoots, back.Mods[0].TraceRoots);
+        // A gated mod that is also traced keeps both in one recipe.
+        var both = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: reports, traceMods: ["Mod"]).Mods.Single();
+        Assert.NotEmpty(both.Handlers);
+        Assert.Equal(r.TraceRoots.Count, both.TraceRoots!.Count);
     }
 }
 
@@ -295,5 +314,81 @@ public sealed class RecipeGatesTests
         Assert.Equal(0, gates.PendingCount);
         Assert.Single(warnings);
         s_client = false;
+    }
+}
+
+/// <summary>RootTracer with real Harmony: counts runs without changing outcomes, and tells a gated skip from a run.</summary>
+public sealed class RootTracerTests
+{
+    private static bool s_client;
+    private static int s_runs;
+
+    public abstract class Shape
+    {
+        public abstract void Draw();
+        [MethodImpl(MethodImplOptions.NoInlining)] public int Area() => s_runs++;
+        [MethodImpl(MethodImplOptions.NoInlining)] public T Pick<T>(T x) => x;
+    }
+
+    public sealed class Traced : Shape
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)] public override void Draw() => s_runs++;
+        [MethodImpl(MethodImplOptions.NoInlining)] public void Daily() => s_runs++;
+        [MethodImpl(MethodImplOptions.NoInlining)] public void Daily(int n) => s_runs += n;
+    }
+
+    [Fact]
+    public void CountsRuns_MergesOverloads_SkipsUnpatchable_ReportsMissing()
+    {
+        var warnings = new List<string>();
+        var tracer = new RootTracer("test.trace." + Guid.NewGuid().ToString("N"), () => s_client, warnings.Add);
+        var shape = typeof(Shape).FullName!;
+        var traced = typeof(Traced).FullName!;
+        var (applied, missing, failed) = tracer.Install([traced + "::Daily", shape + "::Area", shape + "::Draw", shape + "::Pick", "No.Such::Thing"]);
+        Assert.Equal(2, applied);                 // Daily (both overloads) and Area
+        Assert.Equal(3, missing);                 // abstract Draw has no body, Pick is only a generic definition, No.Such does not exist
+        Assert.Equal(0, failed);
+        Assert.Equal((0, 0, 0), tracer.Install([traced + "::Daily"]));   // idempotent
+
+        s_runs = 0;
+        s_client = false;
+        var t = new Traced();
+        t.Daily(); t.Daily(2); t.Area();
+        Assert.Equal(4, s_runs);                  // the prefix never changes what runs
+        var rec = RootTracer.Snapshot().Single(r => r.MethodId == traced + "::Daily");
+        Assert.Equal(2, rec.Ran);                 // overloads share the id
+        Assert.Equal(0, rec.GatedSkips);
+        Assert.True(rec.LastSeen >= rec.FirstSeen);
+        Assert.Contains("Traced.Daily 2/0", RootTracer.CountsSummary());
+    }
+
+    public sealed class Gated
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)] public void Hourly() => s_runs++;
+    }
+
+    [Fact]
+    public void ClientCallToAGatedHandler_CountsAsAGatedSkip_AndTheGateStillSkipsIt()
+    {
+        var id = typeof(Gated).FullName + "::Hourly";
+        var gates = new RecipeGates("test.tracegate." + Guid.NewGuid().ToString("N"), () => s_client, _ => { });
+        Assert.Equal((1, 0), gates.SkipHandlers([id]));
+        var tracer = new RootTracer("test.trace2." + Guid.NewGuid().ToString("N"), () => s_client, _ => { });
+        Assert.Equal((1, 0, 0), tracer.Install([id], [id]));
+
+        s_runs = 0;
+        var g = new Gated();
+        s_client = false; g.Hourly();
+        s_client = true; g.Hourly(); g.Hourly();
+        s_client = false;
+        Assert.Equal(1, s_runs);                  // the gate still skips the body on the client
+        var rec = RootTracer.Snapshot().Single(r => r.MethodId == id);
+        Assert.Equal((1L, 2L), (rec.Ran, rec.GatedSkips));
+
+        var lines = RootTracer.ToJsonLines([rec], 30.26).TrimEnd('\n').Split('\n');
+        var line = Assert.Single(lines);
+        Assert.StartsWith("{\"t\":30.3,\"method\":\"" + id + "\",\"ran\":1,\"gatedSkips\":2,", line);
+        var parsed = TraceDiff.ParseTrace(lines);
+        Assert.Equal(2, parsed[id].GatedSkips);   // the launcher reads what the module writes
     }
 }
