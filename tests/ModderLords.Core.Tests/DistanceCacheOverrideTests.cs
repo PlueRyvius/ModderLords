@@ -44,6 +44,28 @@ public class DistanceCacheOverrideTests : IDisposable
             new ModuleInfoExtended { Id = id, Name = id, Version = ApplicationVersion.Empty });
 
     [Fact]
+    public void Preflight_refuses_a_map_mod_cache_with_the_override_off()
+    {
+        var problem = DistanceCacheOverride.PreflightProblem([PlainMod("Bannerlord.Harmony"), ModWithCache("TAOM_Map", "taom")], enabled: false);
+        Assert.NotNull(problem);
+        Assert.StartsWith("TAOM_Map ships its own settlement distance cache", problem);
+        Assert.Contains("Use a map mod's distance cache", problem);
+    }
+
+    [Fact]
+    public void Preflight_is_quiet_when_the_override_is_on_or_no_mod_ships_a_cache()
+    {
+        Assert.Null(DistanceCacheOverride.PreflightProblem([ModWithCache("TAOM_Map", "taom")], enabled: true));
+        Assert.Null(DistanceCacheOverride.PreflightProblem([PlainMod("MyLittleWarband"), PlainMod("ImprovedGarrisons")], enabled: false));
+    }
+
+    [Fact]
+    public void Preflight_does_not_count_SandBox_itself_as_a_map_mod()
+    {
+        Assert.Null(DistanceCacheOverride.PreflightProblem([ModWithCache("SandBox", "vanilla")], enabled: false));
+    }
+
+    [Fact]
     public void Off_by_default_leaves_a_normal_server_completely_alone()
     {
         var target = Vanilla("vanilla");

@@ -253,6 +253,14 @@ switch (cmd)
             policy: opts.ContainsKey("manual-order") ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);
         foreach (var i in order.Issues) Console.WriteLine("[ModderLords] order: " + i);
 
+        // Same refusal as LaunchSession.Prepare, before the overlay or the server package is touched: a map mod's own
+        // distance cache without --mod-distance-cache means the server loads SandBox's vanilla cache and crashes.
+        if (DistanceCacheOverride.PreflightProblem(selections.Select(x => x.Module), opts.ContainsKey("mod-distance-cache")) is { } cacheProblem)
+        {
+            if (!opts.ContainsKey("dry-run")) { Console.Error.WriteLine("[ModderLords] " + cacheProblem); return 2; }
+            Console.WriteLine("[ModderLords] WARNING " + cacheProblem);
+        }
+
         // Overlay first (it decides the junction paths the hook's search dirs point at), then the plan.
         OverlayPlan? overlayPlan = null;
         var contentMessages = new List<string>();

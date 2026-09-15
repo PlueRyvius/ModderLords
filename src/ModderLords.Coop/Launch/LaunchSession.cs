@@ -137,6 +137,14 @@ public sealed class LaunchSession
                 messages.Add($"WARNING {s.Module.Id} is recorded as Broken on the Coop server" +
                              (string.IsNullOrWhiteSpace(broken.Notes) ? "." : ": " + broken.Notes));
 
+        // Refused before anything is written, unlike the verdict above: this is not a judgement call. With the override
+        // off, a map mod's own cache means the server loads SandBox's vanilla cache against that map and crashes.
+        if (DistanceCacheOverride.PreflightProblem(selections.Select(s => s.Module), profile.UseModDistanceCache) is { } cacheProblem)
+        {
+            if (applySideEffects) throw new InvalidOperationException(cacheProblem);
+            messages.Add("WARNING " + cacheProblem);
+        }
+
         var taomSaveMessage = TaomLaunchPolicy.MessageFor(selections.Select(s => s.Module.Id), profile.SaveName,
             name => SavePreparer.Exists(paths, name));
         if (taomSaveMessage is not null)

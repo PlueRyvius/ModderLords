@@ -49,6 +49,24 @@ public static class DistanceCacheOverride
         modules.Where(m => File.Exists(Path.Combine(m.FolderPath, RelativePath))).ToList();
 
     /// <summary>
+    /// The crash this class exists for, caught before launch instead of minutes into loading: a selected mod ships its
+    /// own settlement distance cache (it replaces the campaign map) while the override is off, so the server is certain
+    /// to read SandBox's vanilla cache against that map. Measured 2026-09-14: TAOM world creation died with 0xE0434352
+    /// right after the server logged reading SandBox's cache. Null when there is nothing to stop.
+    /// </summary>
+    public static string? PreflightProblem(IEnumerable<DiscoveredModule> selected, bool enabled)
+    {
+        if (enabled) return null;
+        var providers = Providers(selected.Where(m => !m.IsStock && !m.FolderName.Equals("SandBox", StringComparison.OrdinalIgnoreCase)));
+        if (providers.Count == 0) return null;
+        var one = providers.Count == 1;
+        return $"{string.Join(", ", providers.Select(p => p.Id))} {(one ? "ships its own" : "ship their own")} settlement distance cache, so "
+             + $"{(one ? "it replaces" : "they replace")} the campaign map, but this profile has \"Use a map mod's distance cache\" off. "
+             + "The server would read SandBox's vanilla cache against that map and crash while loading it. "
+             + "Tick \"Use a map mod's distance cache\" on the Server tab (CLI: --mod-distance-cache) and launch again.";
+    }
+
+    /// <summary>
     /// Applies or removes the override to match <paramref name="enabled"/>. Safe to call on every launch: it compares
     /// content before copying, so an unchanged setup does no I/O and the file is not touched needlessly.
     /// </summary>
