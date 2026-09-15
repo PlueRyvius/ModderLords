@@ -35,6 +35,8 @@ public sealed class ClientSettingsHandler : IHandler
         broker.Subscribe<NetworkSettingsSnapshot>(HandleSnapshot);
         broker.Subscribe<NetworkCompatRecipes>(HandleRecipes);
         broker.Subscribe<CampaignReady>(HandleCampaignReady);
+        broker.Subscribe<NetworkRelayResult>(HandleRelayResult);
+        RelayGates.Configure(() => { try { return Common.ModInformation.IsClient; } catch { return false; } }, SendRelay);
         Current = this;
         Log.Info("settings sync (client) armed; settings sources: " + SettingsSources.Summary());
         // A copy of the recipe may already ship with the module; apply it now, then ask the server for the live one.
@@ -73,6 +75,29 @@ public sealed class ClientSettingsHandler : IHandler
         Log.Info($"settings sync: '{msg.SettingsId}' from server: {report}");
     }
 
+    private int relaySequence;
+
+    /// <summary>From the relay prefix, on the game thread: the player just ran a relayed method; ask the server to run it as them.</summary>
+    private void SendRelay(string method, object?[] args)
+    {
+        var kinds = new List<string>();
+        var values = new List<string>();
+        if (!RelayCodec.TryEncode(args, kinds, values, out var why))
+        {
+            Log.Warn("relay not sent " + method + ": " + why);
+            return;
+        }
+        var seq = ++relaySequence;
+        network.SendAll(new NetworkRelayInvoke { Method = method, Kinds = kinds, Values = values, Sequence = seq, ProtocolVersion = Bridge.ProtocolVersion });
+        Log.Info($"relay sent {method} #{seq} ({string.Join(", ", values)})");
+    }
+
+    private void HandleRelayResult(MessagePayload<NetworkRelayResult> payload)
+    {
+        var r = payload.What;
+        Log.Info($"relay {(r.Ran ? "ran on the server" : "rejected by the server")}: {r.Method} #{r.Sequence} ({r.Reason})");
+    }
+
     private readonly Dictionary<string, string> received = new Dictionary<string, string>(StringComparer.Ordinal);
     private readonly HashSet<string> pending = new HashSet<string>(StringComparer.Ordinal);
     private int generation;
@@ -109,5 +134,6 @@ public sealed class ClientSettingsHandler : IHandler
         broker.Unsubscribe<NetworkSettingsSnapshot>(HandleSnapshot);
         broker.Unsubscribe<NetworkCompatRecipes>(HandleRecipes);
         broker.Unsubscribe<CampaignReady>(HandleCampaignReady);
+        broker.Unsubscribe<NetworkRelayResult>(HandleRelayResult);
     }
 }

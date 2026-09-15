@@ -31,7 +31,7 @@ public enum AuthorityVerdict
 /// also registers UI: the methods to skip on clients in its place, so the UI still registers there.
 /// </summary>
 public sealed record RootVerdict(AuthorityRoot Root, AuthorityVerdict Verdict, string Reason, IReadOnlyList<string> Evidence, bool Opaque,
-    IReadOnlyList<string>? Flags = null, IReadOnlyList<string>? GateInstead = null);
+    IReadOnlyList<string>? Flags = null, IReadOnlyList<string>? GateInstead = null, string? RelayVia = null);
 
 public sealed class AuthorityReport
 {
@@ -44,6 +44,8 @@ public sealed class AuthorityReport
     /// the server can rewrite to "is this any player's?" (<see cref="PlayerComparisonShapes"/>).
     /// </summary>
     public List<string> PlayerComparisonMethods { get; init; } = new();
+    /// <summary>Methods a player action is relayed through (<see cref="RootVerdict.RelayVia"/>): the server runs them as that player.</summary>
+    public List<string> RelayMethods { get; init; } = new();
 
     /// <summary>Verdicts that call for a gate, a relay, state sync, or a look.</summary>
     [JsonIgnore]
@@ -150,14 +152,19 @@ public static class AuthorityScan
             .Where(id => model.Methods.TryGetValue(id, out var n) && n.PlayerComparisons > 0)
             .OrderBy(id => id, StringComparer.Ordinal));
 
+        var relays = new RelayPoints(model, walker);
         foreach (var a in analysed)
         {
             var v = Decide(coop, a.root, a.fx, a.trigger, sharedState, serverReads);
             if (v.Verdict is AuthorityVerdict.ServerOnly or AuthorityVerdict.NeedsStateSync && a.root.Patch is null
                 && a.trigger is RootTrigger.Simulation or RootTrigger.Session)
                 v = Refine(v, a.fx, split);
+            if (v.Verdict is AuthorityVerdict.NeedsRelay or AuthorityVerdict.PlayerStateUnsynced && a.trigger == RootTrigger.PlayerInput
+                && relays.Find(a.root.Method, v.Verdict, serverReads) is { } via)
+                v = v with { RelayVia = via };
             report.Roots.Add(v);
         }
+        report.RelayMethods.AddRange(report.Roots.Select(r => r.RelayVia).OfType<string>().Distinct(StringComparer.Ordinal).OrderBy(m => m, StringComparer.Ordinal));
         return report;
     }
 
@@ -190,6 +197,75 @@ public static class AuthorityScan
                 };
         }
         return flags.Count > 0 ? v with { Flags = flags } : v;
+    }
+
+    /// <summary>
+    /// Where a player action can be relayed: the shallowest mod method under it that does the work and whose arguments can
+    /// be sent and checked — primitives, strings and game objects, at least one of them something a player owns (a town,
+    /// settlement, hero, clan or party), and an instance the server can find (static, a static Instance/Current, or a
+    /// campaign behaviour). The button's own lambda usually reads screen state; the method it calls takes plain inputs.
+    /// </summary>
+    private sealed class RelayPoints(ModCodeModel model, Walker walker)
+    {
+        private readonly HashSet<string> _roots = new(model.Roots.Select(r => r.Method), StringComparer.Ordinal);
+        private static readonly HashSet<string> Primitives = new(StringComparer.Ordinal)
+        {
+            "System.Boolean", "System.Int32", "System.Int64", "System.Single", "System.Double", "System.String",
+        };
+        private static readonly HashSet<string> Ownable = new(StringComparer.Ordinal) { "Town", "Settlement", "Hero", "Clan", "MobileParty" };
+        private static readonly HashSet<string> GameObjects = new(StringComparer.Ordinal)
+        {
+            "Town", "Settlement", "Hero", "Clan", "MobileParty", "CharacterObject", "ItemObject", "CultureObject",
+        };
+
+        public string? Find(string rootId, AuthorityVerdict verdict, HashSet<string> serverReads)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal) { rootId };
+            var queue = new Queue<(string id, int depth)>();
+            queue.Enqueue((rootId, 0));
+            while (queue.Count > 0)
+            {
+                var (id, depth) = queue.Dequeue();
+                if (!model.Methods.TryGetValue(id, out var node)) continue;
+                if (Relayable(id, node) && DoesTheWork(id, verdict, serverReads)) return id;
+                if (depth >= 6) continue;
+                foreach (var c in node.Calls.SelectMany(c => node.VirtualCalls.Contains(c) ? model.Dispatch(c) : [c])
+                             .Concat(node.Delegates.Where(d => !_roots.Contains(d))))
+                    if (model.Methods.ContainsKey(c) && seen.Add(c)) queue.Enqueue((c, depth + 1));
+            }
+            return null;
+        }
+
+        private bool Relayable(string id, MethodNode node)
+        {
+            var sep = id.IndexOf("::", StringComparison.Ordinal);
+            var type = id[..sep];
+            var name = id[(sep + 2)..];
+            if (name.Contains('<') || type.Contains('<') || name.StartsWith('.')
+                || name.StartsWith("get_", StringComparison.Ordinal) || name.StartsWith("set_", StringComparison.Ordinal)) return false;
+            if (node.Overloads != 1 || node.ParameterTypes.Count == 0) return false;
+            var owned = 0;
+            foreach (var p in node.ParameterTypes)
+            {
+                if (Primitives.Contains(p)) continue;
+                if (!p.StartsWith("TaleWorlds.", StringComparison.Ordinal) || !GameObjects.Contains(Simple(p))) return false;
+                if (Ownable.Contains(Simple(p))) owned++;
+            }
+            if (owned == 0) return false;
+            return node.IsStatic || model.Methods.ContainsKey(type + "::get_Instance") || model.Methods.ContainsKey(type + "::get_Current")
+                || model.BaseChain(type).Any(b => Simple(b) == "CampaignBehaviorBase");
+        }
+
+        private bool DoesTheWork(string id, AuthorityVerdict verdict, HashSet<string> serverReads)
+        {
+            var fx = walker.Walk(id);
+            // A method that opens a popup or registers UI only asks; the change happens in the popup's own callback, and
+            // running it on the server would show a dialog nobody sees.
+            if (fx.Has(Sink.ShowsPopup) || fx.Has(Sink.RegistersUI)) return false;
+            if (verdict == AuthorityVerdict.PlayerStateUnsynced) return fx.ModWrites.Any(serverReads.Contains);
+            return fx.Blocked.Keys.Any(k => k is not (CoopGateKind.Publishes or CoopGateKind.ClientDeny))
+                || fx.Has(Sink.SyncedWrite) || fx.Has(Sink.WorldWrite);
+        }
     }
 
     /// <summary>Finds the callees of a UI-registering handler that do its server work and can be skipped on their own.</summary>

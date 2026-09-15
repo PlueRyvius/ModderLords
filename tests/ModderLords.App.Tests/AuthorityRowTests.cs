@@ -65,7 +65,10 @@ public sealed class AuthorityRowTests
                     Flags = ["RegistersUI: registers CampaignGameStarter.AddGameMenuOption in MainMenu..ctor"],
                     GateInstead = ["IG.GarrisonPartyBehavior::OnGameStartSetAllIGParties"],
                 },
-                V("IG.RecruitmentUIVM+<>c::<Init>b__1", RootTrigger.PlayerInput, AuthorityVerdict.PlayerStateUnsynced),
+                V("IG.RecruitmentUIVM+<>c::<Init>b__1", RootTrigger.PlayerInput, AuthorityVerdict.PlayerStateUnsynced) with
+                {
+                    RelayVia = "IG.RecruitmentSettings::SetRecruitmentThreshold",
+                },
             ],
         };
         var rows = AuthorityRow.From(report);
@@ -73,6 +76,7 @@ public sealed class AuthorityRowTests
         Assert.Contains("flag: RegistersUI", split.Details);
         Assert.Contains("gated instead on clients: GarrisonPartyBehavior.OnGameStartSetAllIGParties", split.Details);
         Assert.True(rows.Single(r => r.Verdict == "PlayerStateUnsynced").ActionNeeded);
+        Assert.Contains("relayed to the server via RecruitmentSettings.SetRecruitmentThreshold", rows.Single(r => r.Verdict == "PlayerStateUnsynced").Details);
     }
 
     [Fact]

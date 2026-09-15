@@ -18,6 +18,11 @@ namespace TaleWorlds.CampaignSystem.GameState
     public sealed class QuestsState { }
 }
 
+namespace TaleWorlds.CampaignSystem.Settlements
+{
+    public class Town { }
+}
+
 namespace TaleWorlds.CampaignSystem
 {
     public class AuthHero { public int Gold; public int Renown; }
@@ -102,6 +107,23 @@ namespace ModderLords.Core.Tests.AuthFakes
         public AuthSettingsVM() { Options.Add(new AuthOption(x => AuthTownStore.Town.Max = x)); }
         public void ExecutePrompt() => _ = new InquiryData("sure?", Confirm, null);
         private void Confirm() => new AuthHero().Renown = 9;
+    }
+
+    // Improved Garrisons' "Order to patrol": the button's lambda reads screen state (the selected town) and calls a
+    // behaviour method that takes only the town. That method is where the action can be relayed.
+    public sealed class AuthGuardOrders : CampaignBehaviorBase
+    {
+        public override void RegisterEvents() { }
+        public override void SyncData(object store) { }
+        public void OrderPatrol(TaleWorlds.CampaignSystem.Settlements.Town town) => new AuthHero().Renown = 4;
+    }
+
+    public sealed class AuthGuardsVM : TaleWorlds.Library.ViewModel
+    {
+        public static TaleWorlds.CampaignSystem.Settlements.Town? SelectedTown;
+        private static readonly AuthGuardOrders Orders = new();
+        public readonly List<AuthOption> Buttons = new();
+        public AuthGuardsVM() { Buttons.Add(new AuthOption(_ => Orders.OrderPatrol(SelectedTown!))); }
     }
 
     public sealed class AuthSplitBehavior : CampaignBehaviorBase

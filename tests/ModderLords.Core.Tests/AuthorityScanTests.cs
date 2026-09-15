@@ -108,6 +108,19 @@ public sealed class AuthorityScanTests
     }
 
     [Fact]
+    public void PlayerAction_IsRelayedThroughTheFirstMethodWithSendableArguments()
+    {
+        var patrol = Self.Value.report.Roots.Single(r => r.Root.Detail == "UI callback" && r.Root.Method.StartsWith(P + "AuthGuardsVM", StringComparison.Ordinal));
+        Assert.Equal(AuthorityVerdict.NeedsRelay, patrol.Verdict);
+        Assert.Equal(P + "AuthGuardOrders::OrderPatrol", patrol.RelayVia);
+        Assert.Contains(P + "AuthGuardOrders::OrderPatrol", Self.Value.report.RelayMethods);
+        Assert.Equal(["TaleWorlds.CampaignSystem.Settlements.Town"], Self.Value.model.Methods[P + "AuthGuardOrders::OrderPatrol"].ParameterTypes);
+        // The slider writes its setting inside its own lambda, and nothing it calls takes a town: no relay point.
+        var slider = Self.Value.report.Roots.Single(r => r.Root.Detail == "UI callback" && r.Root.Method.StartsWith(P + "AuthSettingsVM", StringComparison.Ordinal));
+        Assert.Null(slider.RelayVia);
+    }
+
+    [Fact]
     public void ServerRunOwnershipCheck_IsListedForTheServerRewrite()
     {
         var methods = Self.Value.report.PlayerComparisonMethods;

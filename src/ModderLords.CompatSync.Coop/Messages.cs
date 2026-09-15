@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Common.Messaging;
 using ProtoBuf;
 
@@ -36,4 +37,28 @@ public sealed class NetworkSettingsSnapshot : IEvent
     /// <summary>Lines of <c>propertyId\tvalue</c>, invariant culture; only primitive, string and enum properties are carried.</summary>
     [ProtoMember(2)] public string Payload { get; set; } = "";
     [ProtoMember(3)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Client -> server: a player action the recipe relays — run this method as me, with these arguments.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkRelayInvoke : ICommand
+{
+    [ProtoMember(1)] public string Method { get; set; } = "";
+    /// <summary>One per argument: b/i/l/f/d/s for primitives, or a game type's simple name (Town, Settlement, Hero, ...).</summary>
+    [ProtoMember(2)] public List<string>? Kinds { get; set; }
+    /// <summary>Invariant-culture value, or the game object's StringId (a Town travels as its settlement's).</summary>
+    [ProtoMember(3)] public List<string>? Values { get; set; }
+    [ProtoMember(4)] public int Sequence { get; set; }
+    [ProtoMember(5)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Server -> the sending client: whether a relayed action ran, and why not.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkRelayResult : IEvent
+{
+    [ProtoMember(1)] public string Method { get; set; } = "";
+    [ProtoMember(2)] public int Sequence { get; set; }
+    [ProtoMember(3)] public bool Ran { get; set; }
+    [ProtoMember(4)] public string Reason { get; set; } = "";
+    [ProtoMember(5)] public int ProtocolVersion { get; set; }
 }

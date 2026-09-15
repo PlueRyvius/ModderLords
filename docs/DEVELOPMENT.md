@@ -455,6 +455,35 @@ host, so single-player mods treat every player's castle, clan or party as an NPC
 - Module version 0.1.2 (the server module behaves differently; clients auto-install on Launch client).
 - Installed mods (2026-09-14): ImprovedGarrisons 23 methods, TAOM 33, Europe1100 2, MyLittleWarband 0.
 
+## Authority classifier, step 7 (2026-09-14): player actions relayed to the server
+
+A player's click on a mod screen only changed their own game's copy of the mod (IG's "Order to patrol", every garrison
+setting). The server now runs the same call as that player.
+
+- **Relay point** (`AuthorityScan.RelayPoints`, `RootVerdict.RelayVia`, `AuthorityReport.RelayMethods`): for a
+  PlayerInput root that is NeedsRelay or PlayerStateUnsynced, the shallowest mod method under it that does the work and
+  can be sent: every parameter a primitive/string or a game object (Town, Settlement, Hero, Clan, MobileParty,
+  CharacterObject, ItemObject, CultureObject), at least one of them something a player owns, one overload, an instance
+  the server can find (static, static Instance/Current, or a CampaignBehaviorBase), not a lambda/ctor/accessor, and not
+  a method that opens a popup or registers UI (the popup's own callback is the real action). Parameter types come from
+  `MethodNode.ParameterTypes` (`SignatureTypeNames`). The button lambda itself reads screen state (IG's selected town);
+  the method it calls takes the town.
+- **Recipe schema 3** gains `Mods[].Relays[]`.
+- **Client** (`RelayGates`, Harmony only): a prefix on each relay method sends `NetworkRelayInvoke { Method, Kinds,
+  Values }` and still lets the player's game run it. Only the outermost relayed call on a thread is sent (IG's patrol
+  order reaches `SellPrisoners`, also a relay point); a finalizer unwinds the count on throw. `RelayCodec` encodes
+  primitives invariantly and game objects by StringId (a Town by its settlement's).
+- **Server** (`ServerRelay`, from `ServerSettingsHandler`): allow-list = this server's own recipe; 5 requests/s per
+  player; the sender's hero/party/clan from Coop's `IPlayerManager` + `IObjectManager`; every ownable argument must
+  belong to that clan, and at least one must be named; runs on `GameThread.RunSafe` inside a scope that sets
+  `Game.PlayerTroop` (so `Hero.MainHero`), the campaign's `MainParty` and `PlayerDefaultFaction` (`Clan.PlayerClan`,
+  internal, via reflection) and Coop's resolved main hero, restoring them in `Dispose`. Replies `NetworkRelayResult`.
+  Logs: client `relay sent <method> #n (args)` / `relay ran on the server: …` / `relay rejected by the server: … (why)`;
+  server `relay ran|rejected <method> #n: <reason>`.
+- IG: 43 actions relayed through 33 methods (guard orders, recruitment/training/guard settings); TAOM and
+  MyLittleWarband: none (their actions don't reach a sendable, ownable method).
+- Module version 0.1.3.
+
 ## Compat verification logging (2026-09-02)
 
 - `BehaviorGate` installs counting postfixes on each gated campaign behaviour's common event handlers

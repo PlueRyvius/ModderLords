@@ -73,6 +73,21 @@ public sealed class RecipeGenerationTests
     }
 
     [Fact]
+    public void RelayedActions_ReachTheRecipe()
+    {
+        var report = new AuthorityReport
+        {
+            ModuleId = "Mod",
+            Roots = [V("Mod.GuardsVM+<>c::<Init>b__0", RootTrigger.PlayerInput, AuthorityVerdict.NeedsRelay) with { RelayVia = "Mod.GuardOrders::OrderPatrol" }],
+        };
+        report.RelayMethods.Add("Mod.GuardOrders::OrderPatrol");
+        var r = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
+        Assert.Equal(["Mod.GuardOrders::OrderPatrol"], r.Relays);
+        Assert.Contains("1 player action(s) relayed to the server through 1 method(s)", r.Notes);
+        Assert.Contains("\"Relays\"", new RecipeSet { Mods = [r] }.ToJson());
+    }
+
+    [Fact]
     public void PlayerComparisons_ReachTheRecipe_EvenWithNothingToGate()
     {
         var report = new AuthorityReport { ModuleId = "Mod", Roots = [V("Mod.Settings::Tick", RootTrigger.Simulation, AuthorityVerdict.Both)] };
