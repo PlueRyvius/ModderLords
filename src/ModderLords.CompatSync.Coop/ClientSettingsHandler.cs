@@ -51,7 +51,11 @@ public sealed class ClientSettingsHandler : IHandler
     private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
     {
         network.SendAll(new NetworkRequestSettingsSnapshots { ProtocolVersion = Bridge.ProtocolVersion });
-        Log.Info("settings sync: requested the server's settings");
+        // Asked again here. The request made when this handler arms goes out before the connection exists and is lost:
+        // on 2026-09-14 the client armed and "Attempting connection" in the same second, and the server never logged
+        // sending recipes. Applying a recipe twice is harmless (gates are idempotent, pending postfixes get retried).
+        network.SendAll(new NetworkRequestCompatRecipes { ProtocolVersion = Bridge.ProtocolVersion });
+        Log.Info("settings sync: requested the server's settings and recipes");
     }
 
     private void HandleSnapshot(MessagePayload<NetworkSettingsSnapshot> payload)

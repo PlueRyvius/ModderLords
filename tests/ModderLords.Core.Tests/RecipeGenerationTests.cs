@@ -137,6 +137,7 @@ public sealed class RecipeGatesTests
         s_client = true;
         t.Tick();
         Assert.Equal(1, s_tickRuns);   // client skips it
+        Assert.Contains("Target.Tick ran 1, skipped 1", RecipeGates.CountsSummary());
 
         // Leaking postfix: attached by "the mod", removed on a client only.
         var mod = new Harmony("test.mod." + Guid.NewGuid().ToString("N"));
@@ -157,6 +158,43 @@ public sealed class RecipeGatesTests
         t.Act();
         Assert.Equal(2, s_postfixRuns);                         // no longer runs on the client
         Assert.Equal((0, 1), gates.RemovePostfixes([entry]));   // already gone: reported, not thrown
+        s_client = false;
+    }
+
+    private static int s_lateRuns;
+    public static void LatePostfix() => s_lateRuns++;
+
+    public sealed class LateTarget
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)] public int Late() => 2;
+    }
+
+    [Fact]
+    public void PostfixAttachedAfterTheRecipe_IsRemovedOnRetry()
+    {
+        s_client = true;
+        var warnings = new List<string>();
+        var infos = new List<string>();
+        var gates = new RecipeGates("test.late." + Guid.NewGuid().ToString("N"), () => s_client, warnings.Add, infos.Add);
+        var entry = (typeof(LateTarget).FullName + "::Late", typeof(RecipeGatesTests).FullName + "::LatePostfix");
+
+        // The recipe arrives before the mod has patched (TAOM attaches its diplomacy patches later).
+        Assert.Equal((0, 1), gates.RemovePostfixes([entry]));
+        Assert.Equal(1, gates.PendingCount);
+        Assert.Single(warnings, w => w.Contains("will retry"));
+        Assert.Equal((0, 1), gates.RemovePostfixes([entry]));   // asked again (recipe re-sent): still one pending, no second warning
+        Assert.Single(warnings);
+        Assert.Equal(0, gates.RetryPending());
+
+        var mod = new Harmony("test.latemod." + Guid.NewGuid().ToString("N"));
+        mod.Patch(AccessTools.Method(typeof(LateTarget), nameof(LateTarget.Late)), postfix: new HarmonyMethod(typeof(RecipeGatesTests), nameof(LatePostfix)));
+        Assert.Equal(1, gates.RetryPending());
+        Assert.Equal(0, gates.PendingCount);
+        Assert.Contains(infos, i => i.Contains("removed once attached"));
+
+        s_lateRuns = 0;
+        new LateTarget().Late();
+        Assert.Equal(0, s_lateRuns);
         s_client = false;
     }
 }

@@ -37,7 +37,15 @@ public static class BehaviorGate
 
     /// <summary>Applies a recipe set on this client. Returns a one-line report.</summary>
     private static readonly Lazy<RecipeGates> Gates = new Lazy<RecipeGates>(() =>
-        new RecipeGates("ModderLords.Compat.RecipeGates", IsClient, msg => Log.Warn(msg)));
+        new RecipeGates("ModderLords.Compat.RecipeGates", IsClient, msg => Log.Warn(msg), msg => Log.Info(msg)));
+
+    /// <summary>From the adapter tick: detach leaking postfixes whose mod attached them after the recipe arrived.</summary>
+    public static void RetryPendingPostfixes()
+    {
+        if (!Gates.IsValueCreated || Gates.Value.PendingCount == 0) return;
+        try { Gates.Value.RetryPending(); }
+        catch (Exception ex) { Log.Warn("recipe: postfix retry failed: " + ex.GetBaseException().Message); }
+    }
 
     public static string Apply(string json)
     {
@@ -158,8 +166,20 @@ public static class BehaviorGate
         lock (Counts) { Counts[key] = (Counts.TryGetValue(key, out var v) ? v : 0) + 1; }
     }
 
-    /// <summary>One line summarising how often gated behaviours actually ran on this side. Server should count; a client should stay at 0.</summary>
+    /// <summary>
+    /// One line for this side: whole-behaviour counters (server counts, a client stays at 0), then the generated handler
+    /// gates (a client's skips count up as handlers fire) and any leaking postfix still waiting to be removed.
+    /// </summary>
     public static string VerificationSummary()
+    {
+        var line = WholeBehaviourSummary();
+        if (!Gates.IsValueCreated) return line;
+        line += "; " + RecipeGates.CountsSummary();
+        if (Gates.Value.PendingCount > 0) line += $"; {Gates.Value.PendingCount} leaking postfix(es) not attached yet";
+        return line;
+    }
+
+    private static string WholeBehaviourSummary()
     {
         List<KeyValuePair<string, long>> snapshot;
         lock (Counts) { snapshot = Counts.Where(kv => kv.Value > 0).OrderBy(kv => kv.Key).ToList(); }
