@@ -1,4 +1,4 @@
-# Field battles crash the client — handoff
+﻿# Field battles crash the client — handoff
 
 **STATUS 2026-09-12: field battles work. One known gap remains.** Two independent faults were stacked.
 
@@ -558,3 +558,34 @@ What they established is worth keeping:
   world is being generated. Caveat to check first: Coop validates module lists between peers and the save
   records which modules made it, so dropping one during creation may produce a save whose header disagrees
   with the serving order.
+
+## 2026-09-15: the server's scene choice already reaches every client; sackless scenes are now skipped
+
+Planned as "every client accepts the server's battle scene choice" (Coop issue #1402, TAOM compat note
+`deterministic-battle-scene`). Read from the decompiled Coop 0.1.5 `GameInterface.dll` (facts only):
+
+- `BattleMissionStartHandler.Handle_NetworkBattleStartRequest` (server) builds the mission record **once** per MapEvent
+  (`GetOrCreateMissionInitializerSnapshot`) with its own `RollTerrainSeed()`, and sends the whole record, **scene name
+  included**, in `NetworkStartAttackMission` (`MissionInitializerRecordSurrogate.SceneName`). The client's
+  `OpenAttackMission` opens `OpenCoopFieldBattle(missionInitializer)` from that record and never calls `Create` itself.
+  So on 0.1.5 the client already loads the server's scene; #1402 is fixed upstream and the TAOM note is stale.
+- What remains: `FieldBattleMissionInitializer.GetBattleSceneForMapPatch` narrows the candidates (map-patch index, then
+  terrain, then land/sea) and ends in a local `GetRandomElement()`. When that lands on a scene shipped without
+  `ShaderCache\D3D11\compressed_shader_cache.sack`, **every** client crashes the same way (the server is headless and
+  does not care). Vanilla SandBoxCore ships 98 `battle_terrain_*` scenes and exactly two without a sack
+  (`battle_terrain_020`, `battle_terrain_a`; `battle_terrain_020` has the `ShaderCache\D3D11` folder but only the header
+  file, so the *sack file* is the test, not the folder). TAOM_Map ships no battle scenes of its own.
+- The server install (`DedicatedServer\engine\Modules\SandBoxCore`) has **no `SceneObj` at all**, so the server module
+  cannot check this itself.
+
+Fix (`fix/deterministic-battle-scene`): the launcher's `BattleSceneCache.Scan` walks every selected module's `SceneObj`
+in load order (the last module that ships a scene folder is the copy the game uses) and lists the sackless scenes in
+`recipes.json` `ExcludedBattleScenes` (off with `MODDERLORDS_BATTLE_SCENE_PICK=0`). The server module's
+`BattleScenePick` postfixes `FieldBattleMissionInitializer.Create`: if Coop's pick is listed, `BattleScenePolicy.Replace`
+takes the first non-empty tier (same map-patch index → same terrain → same land/sea → all) with the excluded scenes
+removed, orders it by id and indexes it by an FNV-1a hash of the battle's terrain seed, so the swap is stable per
+battle. If every candidate is excluded the pick is kept and a warning logged. Server log lines:
+`battle scene pick: N scene(s) without a terrain shader cache will not be chosen`, then per battle
+`battle scene for <MapEvent>: <scene>` or `...: <old> has no terrain shader cache; <new> chosen instead (seed S)`. The
+client's `Coop_client.log` shows the scene it opened (`Attack mission opened ... scene=`) for comparison.
+

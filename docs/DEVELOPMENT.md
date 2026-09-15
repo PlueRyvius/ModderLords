@@ -203,6 +203,7 @@ variables, marked, so "was it actually set?" is answerable from the log):
 | `MODDERLORDS_TERRAIN_PROBE` | off | Samples the map scene to a CSV; `scripts/Compare-TerrainProbe.ps1` diffs a server's against a client's. |
 | `MODDERLORDS_MAPSCENE_CENSUS` | off | Counts which map-scene members are actually called, and names those never called. |
 | `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` | off | Keeps the scene's `<terrain>` descriptor. Measured safe; not currently needed. |
+| `MODDERLORDS_BATTLE_SCENE_PICK` | on | The launcher lists scenes shipped without a terrain shader cache in `recipes.json` (`ExcludedBattleScenes`), and the server never chooses one for a field battle (every client loads the server's choice and crashes on those; vanilla ships `battle_terrain_020` and `battle_terrain_a` that way). `0` disables. Details: `docs/FIELD-BATTLE-TERRAIN.md`, 2026-09-15. |
 | `MODDERLORDS_TRACE_MODS` | off | Ground truth for the authority classifier: `TAOM;ImprovedGarrisons` makes the launcher list every entry point of those mods in `recipes.json` (`TraceRoots`); both the server and every client then count how often each one runs and write `ModLogs\ModderLords.Compat-trace-{server,client}.jsonl` every 30 s. Compare with `trace-diff`. Read by the launcher (the recipe carries it to clients), so set it in the launcher's environment. |
 
 ### Smoke-testing a server without the GUI
@@ -562,6 +563,15 @@ Step 8 measures it from one host + client session.
   `trace-diff` and read the contradicted rows first. **Record the totals here.** They decide how much further analysis
   work is worth; the target tier is behaviour-plus-settings mods (ImprovedGarrisons), not TAOM's screen-driven actions.
 - Not yet run live (2026-09-15).
+## Field battles (2026-09-15): the server never chooses a scene without a terrain shader cache
+
+Follow-up "every client accepts the server's battle scene choice" from 2026-09-14, resolved by reading Coop 0.1.5:
+the server already builds the mission record once and sends it, scene name included, to every client, so the
+remaining crash is the server picking a sackless scene. `BattleSceneCache.Scan` (Core) lists them from the selected
+modules' `SceneObj` folders at launch (last module in load order wins), `RecipeSet.ExcludedBattleScenes` carries the
+list, `BattleScenePick` (server module) postfixes Coop's `FieldBattleMissionInitializer.Create` and swaps a listed pick
+for one of the same candidate tier via `BattleScenePolicy.Replace` (FNV-1a of the battle's terrain seed; tests in
+`BattleSceneTests`). Module version 0.1.6. Full account in `docs/FIELD-BATTLE-TERRAIN.md`. Not yet run live.
 
 ## Compat verification logging (2026-09-02)
 
