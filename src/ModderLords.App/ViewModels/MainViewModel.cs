@@ -743,6 +743,14 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void ShowAuthority()
+    {
+        if (SelectedMod is null) { Status = "Select a mod first"; return; }
+        if (!SelectedMod.Module.HasCode) { Status = $"{SelectedMod.Id} has no code to analyse"; return; }
+        new AuthorityWindow(SelectedMod.Module) { Owner = Application.Current.MainWindow }.Show();
+    }
+
     // ---- compat database ---------------------------------------------------------------------------
 
     /// <summary>Coop's version from the last scan (recorded as TestedCoopVersion); null when the server was not found.</summary>

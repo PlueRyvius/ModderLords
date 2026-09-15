@@ -197,6 +197,8 @@
                                        Text="Drag to reorder within Frameworks / Game / Mods" />
                             <Button Content="Behaviours…" Command="{Binding EditBehaviorsCommand}" ToolTip="Choose which of the selected mod's behaviours run on the server only"
                                     Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                            <Button Content="Authority…" Command="{Binding ShowAuthorityCommand}" ToolTip="Read the selected mod's code and show which parts must run on the server only, which need nothing, and which need a closer look"
+                                    Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Record…" Command="{Binding RecordCompatCommand}" Margin="12,0,0,0" ToolTip="Record how the selected mod behaves under Coop (verdict, notes, defaults). Saved to your local compat database."
                                     Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Export…" Command="{Binding ExportCompatCommand}" ToolTip="Write the selected mod's record (or all your local records) to a file you can share"
