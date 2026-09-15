@@ -433,6 +433,28 @@ Proven on ImprovedGarrisons (IG), whose player GUI sets per-castle options the s
 - Whole-behaviour fallback recipes say that menus they register are hidden on clients.
 - CLI `authority` and the Authority window list flags and "gated instead" methods.
 
+## Authority classifier, step 6 (2026-09-14): "is this the player's?" asks about any player on the server
+
+Follows `docs/PLAYER-CONTEXT-SPIKE.md`. On a Coop server `Hero.MainHero`, `Clan.PlayerClan` and `MainParty` are the
+host, so single-player mods treat every player's castle, clan or party as an NPC's.
+
+- **Analysis** (`PlayerComparisonShapes`, counted per method in `ModAnalysis.ReadMethod` → `MethodNode.PlayerComparisons`):
+  a player getter, optionally one property step (`Hero.Clan`, `Hero.PartyBelongedTo`, `MobileParty.Party/LeaderHero/
+  ActualClan`, `PartyBase.MobileParty/LeaderHero`), then `ceq`, `beq`, `bne_un`, `op_Equality`, `op_Inequality`,
+  `Equals` or `ReferenceEquals`. The other operand must already be on the stack (`owner == Hero.MainHero`); the
+  getter-first form, null checks and Kingdom/MapFaction comparisons are left alone.
+- `AuthorityReport.PlayerComparisonMethods`: such methods reached from Simulation, Session or Query (game model) roots.
+- **Recipe schema 3**: `Mods[].PlayerComparisons[]`. Clients ignore it.
+- **Server module** (`ServerSettingsHandler.Wire` → `ServerPlayerChecks.Apply`): `PlayerComparisonRewriter` (Harmony
+  only, same shape table) transpiles each listed method, replacing the getter(+step)+comparison with a call answering
+  "does this belong to any player?": Coop's public `IsPlayerHero` / `IsPlayerParty`; clans by "any hero in the clan
+  is a player's" (Coop's `IsPlayerClan` is internal). Labels on replaced instructions move to the new call. Log line:
+  `player checks: N method(s) now ask about any player (M comparison(s) rewritten), K not found`.
+- `PlayerComparisonTests` runs the analysis and the real-Harmony rewrite on the same fixtures and checks the counts
+  agree and the rewritten methods answer for any player.
+- Module version 0.1.2 (the server module behaves differently; clients auto-install on Launch client).
+- Installed mods (2026-09-14): ImprovedGarrisons 23 methods, TAOM 33, Europe1100 2, MyLittleWarband 0.
+
 ## Compat verification logging (2026-09-02)
 
 - `BehaviorGate` installs counting postfixes on each gated campaign behaviour's common event handlers

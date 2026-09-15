@@ -108,6 +108,14 @@ public sealed class AuthorityScanTests
     }
 
     [Fact]
+    public void ServerRunOwnershipCheck_IsListedForTheServerRewrite()
+    {
+        var methods = Self.Value.report.PlayerComparisonMethods;
+        Assert.Contains(P + "AuthSplitBehavior::TickOwner", methods);
+        Assert.DoesNotContain(P + "AuthSplitBehavior::TickHost", methods);   // a null check, not a comparison
+    }
+
+    [Fact]
     public void TickReadingMainHero_IsFlagged()
     {
         Assert.Contains(For("AuthSplitBehavior::TickOffer").Flags!, f => f.StartsWith("PopupLost", StringComparison.Ordinal));

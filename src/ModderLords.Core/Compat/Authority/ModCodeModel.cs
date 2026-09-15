@@ -50,6 +50,8 @@ public sealed class MethodNode
     public bool Opaque { get; set; }
     /// <summary>Every overload sharing this id returns void, so a client-skip prefix can drop its body safely.</summary>
     public bool IsVoid { get; set; } = true;
+    /// <summary>"Is this the player's?" comparisons a server can ask of any player instead (<see cref="PlayerComparisonShapes"/>).</summary>
+    public int PlayerComparisons { get; set; }
 }
 
 /// <summary>A mod's call graph and entry points, read from IL metadata only (nothing is loaded or run).</summary>
@@ -382,6 +384,7 @@ public static class ModAnalysis
                 }
             }
         }
+        node.PlayerComparisons += PlayerComparisonShapes.Count(md, il);
     }
 
     private static void AddTypeRoots(ModCodeModel model, List<(string type, string method, MethodAttributes attrs)> methods)
