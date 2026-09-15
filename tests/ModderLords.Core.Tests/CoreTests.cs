@@ -336,6 +336,57 @@ public class VersionOrderTests
 }
 
 /// <summary>
+/// A machine that hosts and plays has ModderLords.Compat installed in the game's Modules too; if a profile ticks that copy
+/// the server must still load the launcher's own, which is where recipes.json is written.
+/// </summary>
+public class CompatSelectionTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "mc-compatsel-" + Guid.NewGuid().ToString("N"));
+
+    public CompatSelectionTests() => Directory.CreateDirectory(_dir);
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    private DiscoveredModule Module(string where, string id)
+    {
+        var dir = Path.Combine(_dir, where, id);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "SubModule.xml"),
+            $"<Module><Name value=\"{id}\" /><Id value=\"{id}\" /><Version value=\"v0.1.1\" /><SubModules /></Module>");
+        return ModuleCatalog.TryParse(dir, ModuleSourceKind.Custom, out _)!;
+    }
+
+    [Fact]
+    public void A_ticked_installed_copy_is_replaced_by_the_launchers_own()
+    {
+        var installed = Module("game", LaunchSession.SyncModuleId);
+        var bundled = Module("compat", LaunchSession.SyncModuleId);
+        var other = Module("game", "ImprovedGarrisons");
+        var messages = new List<string>();
+        var profile = new Profile { SettingsSync = true, CompatGuards = false };
+
+        var list = LaunchSession.WithCompat(profile,
+            [new ModSelection(other, ServerRole.AsShipped), new ModSelection(installed, ServerRole.AsShipped)], messages,
+            id => id == LaunchSession.SyncModuleId ? bundled : null);
+
+        var sync = Assert.Single(list, s => s.Module.Id == LaunchSession.SyncModuleId);
+        Assert.Equal(bundled.FolderPath, sync.Module.FolderPath);
+        Assert.Contains(list, s => s.Module.Id == "ImprovedGarrisons");
+        Assert.Contains(messages, m => m.Contains("launcher's own copy", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Settings_sync_adds_the_launchers_copy_once_and_quietly()
+    {
+        var bundled = Module("compat", LaunchSession.SyncModuleId);
+        var messages = new List<string>();
+        var list = LaunchSession.WithCompat(new Profile { SettingsSync = true, CompatGuards = false }, [], messages,
+            id => id == LaunchSession.SyncModuleId ? bundled : null);
+        Assert.Equal(bundled.FolderPath, Assert.Single(list).Module.FolderPath);
+        Assert.Empty(messages);
+    }
+}
+
+/// <summary>
 /// The installer writes into the player's game folder, so these cover exactly when it does and does not, on temp
 /// directories shaped like a module (SubModule.xml + a bin folder).
 /// </summary>

@@ -389,6 +389,11 @@ which stay with the player. Step 1 reads what Coop itself already decides.
   NeedsRelay/Review are only reported in `Notes` ("… need a server relay (details: authority --mod X)").
 - Fallback to whole-behaviour gating when Coop's GameInterface.dll is not found, analysis throws, or the mod is not
   analysable (KingdomPlus) — the recipe note says so.
+- The server always loads the launcher's own `compat\ModderLords.Compat` and `compat\DedicatedServer.ModderLordsCompat`
+  (`LaunchSession.WithCompat`), because `recipes.json` is written into that copy. Found 2026-09-14: on a PC that hosts
+  and plays, the Nicks profile had ticked the copy Launch client installs into the game's Modules; the server junctioned
+  that one, logged "no recipes.json", and gated nothing. A ticked copy is now swapped for the bundled one with a console
+  note.
 - Client module: `RecipeGates` (Harmony only, no game/Coop types) — `SkipHandlers` prefixes each handler with
   "return false on a client"; `RemovePostfixes` on a client detaches the named postfix/finalizer from its target via
   `Harmony.GetPatchInfo` + `Unpatch`. `BehaviorGate.Apply` calls both and appends counts to its log line.

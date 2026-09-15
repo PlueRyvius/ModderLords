@@ -82,22 +82,42 @@ public sealed class LaunchSession
 
     /// <summary>Adds the bundled compat modules to the selections when the profile asks for them and they are installed.</summary>
     public static IReadOnlyList<ModSelection> WithCompat(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
+        => WithCompat(profile, selections, messages, LocateBundled);
+
+    /// <summary>
+    /// As above, with the bundled-module lookup supplied (tests). The launcher's own modules always come from compat\ next
+    /// to the exe: recipes.json is written there, so a copy a profile ticked — usually the one Launch client installed
+    /// into the game's Modules on a machine that also hosts — would load on the server without the recipe.
+    /// </summary>
+    public static IReadOnlyList<ModSelection> WithCompat(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages,
+        Func<string, DiscoveredModule?> locateBundled)
     {
-        var list = selections.ToList();
+        var list = new List<ModSelection>();
+        foreach (var s in selections)
+        {
+            var own = BundledIds.Contains(s.Module.Id) ? locateBundled(s.Module.Id) : null;
+            if (own is null) { list.Add(s); continue; }
+            if (!SameFolder(own.FolderPath, s.Module.FolderPath))
+                messages.Add($"{s.Module.Id}: the server uses the launcher's own copy, not the one ticked in the profile ({s.Module.FolderPath})");
+            list.Add(new ModSelection(own, ServerRole.AsShipped));
+        }
         if (profile.CompatGuards && !list.Any(s => s.Module.Id.Equals(CompatModuleId, StringComparison.OrdinalIgnoreCase)))
         {
-            var compat = LocateCompatModule();
+            var compat = locateBundled(CompatModuleId);
             if (compat is null) messages.Add("server guards requested but the compat module is missing next to the launcher; continuing without it");
             else list.Add(new ModSelection(compat, ServerRole.AsShipped));
         }
         if (profile.SettingsSync && !list.Any(s => s.Module.Id.Equals(SyncModuleId, StringComparison.OrdinalIgnoreCase)))
         {
-            var sync = LocateSyncModule();
+            var sync = locateBundled(SyncModuleId);
             if (sync is null) messages.Add("settings sync requested but the ModderLords.Compat module is missing next to the launcher; continuing without it");
             else list.Add(new ModSelection(sync, ServerRole.AsShipped));
         }
         return list;
     }
+
+    private static bool SameFolder(string a, string b) =>
+        string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Everything except starting the process. Applies the overlay and writes server-config.json.</summary>
     /// <param name="scanned">
