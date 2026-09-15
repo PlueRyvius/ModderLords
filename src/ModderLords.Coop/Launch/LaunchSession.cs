@@ -158,6 +158,15 @@ public sealed class LaunchSession
             else messages.Add("TAOM: " + taomSaveMessage);
         }
 
+        // Refused, not warned: the old warning was one line in a long console, and on 2026-09-14 a TAOM host and join ran
+        // with a generated recipe that no peer ever loaded. Ticking Server-only logic asks for gating; without Settings sync
+        // it silently does nothing.
+        if (ServerOnlyLogicProblem(profile, selections.Select(s => s.Module.Id)) is { } serverOnlyProblem)
+        {
+            if (applySideEffects) throw new InvalidOperationException(serverOnlyProblem);
+            messages.Add("WARNING " + serverOnlyProblem);
+        }
+
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
             policy: profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);
@@ -377,6 +386,23 @@ public sealed class LaunchSession
         return new OverlayApplier { KeepForDependencyOnly = KeepForDependencyOnly }.Apply(plan);
     }
 
+    /// <summary>
+    /// Server-only logic is ticked for a mod that will run, but Settings sync is off. The shared ModderLords.Compat module
+    /// is what carries the recipe to players and applies it, so without it nothing is gated and players keep running
+    /// that code themselves. Null when there is nothing to stop.
+    /// </summary>
+    public static string? ServerOnlyLogicProblem(Profile profile, IEnumerable<string> selectedModIds)
+    {
+        if (profile.SettingsSync) return null;
+        var selected = new HashSet<string>(selectedModIds, StringComparer.OrdinalIgnoreCase);
+        var flagged = profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative && selected.Contains(m.Id)).Select(m => m.Id).ToList();
+        if (flagged.Count == 0) return null;
+        return $"Server-only logic is ticked for {string.Join(", ", flagged)}, but Settings sync is off. Settings sync loads the shared "
+             + "ModderLords.Compat module, which sends the recipe to players and applies it; without it nothing is gated and players "
+             + "keep running that code themselves. Turn on Settings sync (each player also needs this build's compat\\ModderLords.Compat "
+             + "in their Modules), or untick Server-only logic for those mods.";
+    }
+
     /// <summary>Layer 1: recipes.json inside the bundled sync module, built from the scan of every mod flagged server-authoritative.</summary>
     public static void WriteRecipes(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
     {
@@ -399,7 +425,6 @@ public sealed class LaunchSession
             .Select(r => (r!.Id, (IReadOnlyList<string>)r.SettingsTypes, (IReadOnlyList<string>)r.IgnoreSettingsTypes)).ToList();
         var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, authority);
         set.WriteInto(sync.FolderPath);
-        if (flagged.Count > 0 && !profile.SettingsSync) messages.Add("server-only logic is flagged for " + string.Join(", ", flagged) + " but Settings sync (the shared module) is off, so clients will not receive the recipe");
         foreach (var r in set.Mods)
         {
             if (r.CampaignBehaviors.Count + r.MissionBehaviors.Count > 0) messages.Add($"recipe {r.Id}: {r.CampaignBehaviors.Count} campaign behaviour(s), {r.MissionBehaviors.Count} mission behaviour(s) server-only");
