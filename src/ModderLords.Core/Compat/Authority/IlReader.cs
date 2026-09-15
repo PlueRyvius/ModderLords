@@ -221,5 +221,19 @@ public static class IlReader
         catch (BadImageFormatException) { return false; }
     }
 
+    /// <summary>True when the method signature's return type is void.</summary>
+    public static bool ReturnsVoid(MetadataReader md, MethodDefinition m)
+    {
+        try
+        {
+            var r = md.GetBlobReader(m.Signature);
+            var header = r.ReadSignatureHeader();
+            if (header.IsGeneric) r.ReadCompressedInteger();
+            r.ReadCompressedInteger();                                         // parameter count
+            return r.ReadSignatureTypeCode() == SignatureTypeCode.Void;
+        }
+        catch (BadImageFormatException) { return false; }
+    }
+
     private static string Join(string ns, string name) => ns.Length == 0 ? name : ns + "." + name;
 }

@@ -24,6 +24,7 @@ namespace ModderLords.Core.Tests.CoopFakes
     public static class ModInformation { public static bool IsServer => false; public static bool IsClient => true; }
     public static class CallOriginalPolicy { public static bool IsOriginalAllowed() => true; }
     public sealed class AutoSyncRegistry { public void AddField(object? field) { } public void AddProperty(object? property) { } }
+    public sealed class MessageBroker { public static MessageBroker Instance { get; } = new(); public void Publish(object? source, object message) { } }
 
     // "Vanilla" targets.
     public class VanillaUpgrader { public void RegisterEvents() { } public void UpgradeReadyTroops() { } }
@@ -79,6 +80,54 @@ namespace ModderLords.Core.Tests.CoopFakes
             if (CallOriginalPolicy.IsOriginalAllowed()) return true;
             return false;
         }
+    }
+
+    public class VanillaLeave { public static void ApplyForParty(object party) { } }
+    public class VanillaCheats { public static bool CheckCheatUsage(ref string error) => true; }
+    public class VanillaRoster { public int AddToCounts(int n) => n; }
+
+    // Publishes: the client's call becomes Coop's own request (LeaveSettlementAction's form).
+    [HarmonyPatch(typeof(VanillaLeave), "ApplyForParty")]
+    internal class PublishGate
+    {
+        private static bool Prefix(object party)
+        {
+            if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+            MessageBroker.Instance.Publish(party, "leave");
+            return ModInformation.IsServer;
+        }
+    }
+
+    // ClientDeny: refused on clients, nothing published (CheatsOnClientsPatch's form).
+    [HarmonyPatch(typeof(VanillaCheats), "CheckCheatUsage")]
+    internal class DenyGate
+    {
+        private static bool Prefix(ref string error)
+        {
+            if (ModInformation.IsClient)
+            {
+                error = "disabled";
+                return false;
+            }
+            return true;
+        }
+    }
+
+    // ClientLocal: runs locally on clients, nothing published (ItemRosterPatch.AddToCountsPrefix's form).
+    [HarmonyPatch(typeof(VanillaRoster), "AddToCounts")]
+    internal class LocalGate
+    {
+        private static bool Prefix(VanillaRoster __instance)
+        {
+            if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+            if (ModInformation.IsClient)
+            {
+                if (__instance.AddToCounts(0) > 0) Log("client changed a managed roster");
+                return true;
+            }
+            return true;
+        }
+        private static void Log(string s) { }
     }
 
     internal class SyncDeclarations

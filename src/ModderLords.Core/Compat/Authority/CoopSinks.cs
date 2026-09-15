@@ -15,6 +15,12 @@ public enum CoopGateKind
     Conditional,
     /// <summary>The prefix defers to <c>CallOriginalPolicy</c>: the original runs only on the server or inside an allowed scope.</summary>
     Policy,
+    /// <summary>The prefix publishes a Coop message: a client's call becomes Coop's own request (or change) to the server.</summary>
+    Publishes,
+    /// <summary>On a client the prefix returns false without publishing anything: Coop refuses it there on purpose (cheats).</summary>
+    ClientDeny,
+    /// <summary>On a client the prefix lets the original run locally and publishes nothing: the change never reaches the server.</summary>
+    ClientLocal,
 }
 
 /// <summary>One vanilla method whose behaviour on a client Coop changes, and the Coop prefix that does it.</summary>
@@ -27,7 +33,7 @@ public sealed record CoopGate(string TargetType, string TargetMethod, CoopGateKi
 /// </summary>
 public sealed class CoopSinkCatalogue
 {
-    public const int CurrentSchema = 1;
+    public const int CurrentSchema = 2;
     public int SchemaVersion { get; set; } = CurrentSchema;
     public string SourceSha256 { get; set; } = "";
     public List<CoopGate> Gates { get; set; } = new();
@@ -184,16 +190,19 @@ public static class CoopSinks
     /// <summary>Null when the prefix does not consult Coop's authority at all (e.g. a plain <c>return true</c>).</summary>
     private static CoopGateKind? Classify(MetadataReader md, IReadOnlyList<IlInstruction> il)
     {
-        bool server = false, client = false, policy = false, otherCalls = false, logic = false;
-        foreach (var i in il)
+        bool server = false, client = false, policy = false, otherCalls = false, logic = false, publish = false;
+        var clientCheck = -1;
+        for (var k = 0; k < il.Count; k++)
         {
+            var i = il[k];
             switch (i.OpCode)
             {
                 case ILOpCode.Call or ILOpCode.Callvirt:
                 {
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     if (t.EndsWith("ModInformation", StringComparison.Ordinal) && n == "get_IsServer") server = true;
-                    else if (t.EndsWith("ModInformation", StringComparison.Ordinal) && n == "get_IsClient") client = true;
+                    else if (t.EndsWith("ModInformation", StringComparison.Ordinal) && n == "get_IsClient") { client = true; if (clientCheck < 0) clientCheck = k; }
+                    else if (t.EndsWith("MessageBroker", StringComparison.Ordinal) && n == "Publish") { publish = true; otherCalls = true; }
                     else if (t.EndsWith("CallOriginalPolicy", StringComparison.Ordinal)) policy = true;
                     else otherCalls = true;
                     break;
@@ -206,7 +215,37 @@ public static class CoopSinks
         }
         if (!server && !client && !policy) return null;
         if (server && !client && !policy && !otherCalls && !logic) return CoopGateKind.ClientSkip;
+        if (publish) return CoopGateKind.Publishes;
+        if (clientCheck >= 0 && ClientBranchResult(il, clientCheck) is { } allowed)
+            return allowed ? CoopGateKind.ClientLocal : CoopGateKind.ClientDeny;
         return server || client ? CoopGateKind.Conditional : CoopGateKind.Policy;
+    }
+
+    /// <summary>
+    /// For <c>if (ModInformation.IsClient) { … return X; }</c>: X as a bool, read from the constant the fall-through block
+    /// loads before leaving (a direct <c>ret</c> or a jump to the shared return). Null for any other shape.
+    /// </summary>
+    private static bool? ClientBranchResult(IReadOnlyList<IlInstruction> il, int clientCheck)
+    {
+        // Debug builds store the condition in a local first: call get_IsClient; stloc.0; ldloc.0; brfalse.
+        var b = clientCheck + 1;
+        while (b < il.Count && il[b].OpCode is ILOpCode.Nop or ILOpCode.Stloc_0 or ILOpCode.Stloc_1 or ILOpCode.Stloc_2 or ILOpCode.Stloc_3
+                   or ILOpCode.Stloc_s or ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1 or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s)
+            b++;
+        if (b >= il.Count || il[b].OpCode is not (ILOpCode.Brfalse or ILOpCode.Brfalse_s)) return null;
+        var branch = il[b];
+        var end = (b + 1 < il.Count ? il[b + 1].Offset : branch.Offset) + branch.Operand;
+        bool? last = null;
+        for (var k = b + 1; k < il.Count && il[k].Offset < end; k++)
+        {
+            switch (il[k].OpCode)
+            {
+                case ILOpCode.Ldc_i4_0: last = false; break;
+                case ILOpCode.Ldc_i4_1: last = true; break;
+                case ILOpCode.Ret or ILOpCode.Br or ILOpCode.Br_s or ILOpCode.Leave or ILOpCode.Leave_s: return last;
+            }
+        }
+        return null;
     }
 
     private static bool CallsAny(MetadataReader md, List<IlInstruction> il, string typeSuffix, params string[] names)

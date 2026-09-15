@@ -93,7 +93,7 @@ public sealed class RecipeSet
                     MissionBehaviors = scan.MissionBehaviors.Where(b => !keep.Contains(b)).ToList(),
                 };
                 var notes = new List<string>();
-                if (authority is not null) notes.Add("code not analysable; whole behaviours gated");
+                if (authority is not null) notes.Add("code not analysable; whole behaviours gated, so menus and dialogs they register are hidden on clients");
                 if (keep.Count > 0) notes.Add("kept client-side: " + string.Join(", ", keep));
                 recipe.Notes = notes.Count > 0 ? string.Join("; ", notes) : null;
             }
@@ -121,10 +121,15 @@ public sealed class RecipeSet
             return keep.Any(k => type == k || type.StartsWith(k + "+", StringComparison.Ordinal));
         }
 
-        var handlers = report.Roots
+        var gated = report.Roots
             .Where(r => r.Verdict is AuthorityVerdict.ServerOnly or AuthorityVerdict.NeedsStateSync
-                && r.Root.Patch is null && r.Root.Trigger is RootTrigger.Simulation or RootTrigger.Session)
-            .Select(r => r.Root.Method).Where(m => !Kept(m)).Distinct(StringComparer.Ordinal).OrderBy(m => m, StringComparer.Ordinal).ToList();
+                && r.Root.Patch is null && r.Root.Trigger is RootTrigger.Simulation or RootTrigger.Session && !Kept(r.Root.Method))
+            .ToList();
+        // A handler that also registers UI keeps running on clients; only the server work under it is skipped there.
+        var split = gated.Where(r => r.GateInstead is { Count: > 0 }).ToList();
+        var handlers = gated.SelectMany(r => r.GateInstead is { Count: > 0 } g ? g : [r.Root.Method])
+            .Distinct(StringComparer.Ordinal).OrderBy(m => m, StringComparer.Ordinal).ToList();
+        var uiReview = report.Roots.Count(r => r.Verdict == AuthorityVerdict.Review && r.Flags?.Any(f => f.StartsWith("RegistersUI", StringComparison.Ordinal)) == true);
         var unpatch = report.Roots
             .Where(r => r.Verdict == AuthorityVerdict.LeakingPostfix && r.Root.Patch is not null && !Kept(r.Root.Method))
             .Select(r => new ModRecipePatch { Target = r.Root.Patch!.TargetType + "::" + r.Root.Patch.TargetMethod, Patch = r.Root.Method })
@@ -134,7 +139,11 @@ public sealed class RecipeSet
         var relay = report.Count(AuthorityVerdict.NeedsRelay);
         var state = report.Count(AuthorityVerdict.NeedsStateSync);
         var review = report.Count(AuthorityVerdict.Review);
+        var unsynced = report.Count(AuthorityVerdict.PlayerStateUnsynced);
+        if (split.Count > 0) notes.Add($"kept {split.Count} UI-registering handler(s) running on clients; their server work is gated instead");
+        if (uiReview > 0) notes.Add($"{uiReview} handler(s) register UI but could not be split, so they are not gated");
         if (relay > 0) notes.Add($"{relay} player action(s) need a server relay");
+        if (unsynced > 0) notes.Add($"{unsynced} player setting(s) never reach the server");
         if (state > 0) notes.Add($"{state} handler(s) also write mod state players see");
         if (review > 0) notes.Add($"{review} to review");
         if (keep.Count > 0) notes.Add("kept client-side: " + string.Join(", ", keep));

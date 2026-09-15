@@ -2,13 +2,20 @@
 // "world state" and "display" by namespace; this test project references no real TaleWorlds assembly, so nothing clashes.
 namespace TaleWorlds.Library
 {
-    public static class InformationManager { public static void DisplayMessage(string message) { } }
+    public static class InformationManager { public static void DisplayMessage(string message) { } public static void ShowInquiry(object data) { } }
     public class ViewModel { public void ExecuteCommand(string command) { } }
+    public sealed class InquiryData { public InquiryData(string title, Action? affirmative, Action? negative) { } }
 }
 
 namespace TaleWorlds.Core
 {
     public static class MBRandom { public static float RandomFloat => 0.5f; }
+    public sealed class GameStateManager { public static GameStateManager Current { get; } = new(); public void PushState(object state) { } }
+}
+
+namespace TaleWorlds.CampaignSystem.GameState
+{
+    public sealed class QuestsState { }
 }
 
 namespace TaleWorlds.CampaignSystem
@@ -23,6 +30,11 @@ namespace TaleWorlds.CampaignSystem
     public class AuthVanillaAlliance { public void StartAlliance() { } }
     public class AuthPartyWageModel { public virtual int GetWage() => 0; }
     public class AuthTownVisit { public void game_menu_recruit_on_consequence() { } }
+    public class Hero { public static Hero? MainHero => null; }
+    // Engine setters are not mod code; an empty body keeps the walker from following into a fake backing field.
+    public static class PlayerEncounter { public static bool LeaveEncounter { get => false; set { } } }
+    public static class AuthLeaveAction { public static void ApplyForParty(object? party) { } }
+    public static class AuthCheats { public static bool CheckCheatUsage() => true; }
 }
 
 namespace ModderLords.Core.Tests.AuthFakes
@@ -73,6 +85,75 @@ namespace ModderLords.Core.Tests.AuthFakes
         private void SayHi() { _ = AuthLog.Dropped; InformationManager.DisplayMessage("hi"); }
 
         public static void FillSlots() => Slots[0] = 1;
+    }
+
+    // Improved Garrisons' shape: session handlers that register menus beside server work, a ViewModel whose slider
+    // callback writes a setting the server's tick reads, and a tick that asks for "the" player's hero.
+    // Not named *Settings: AssemblyScanTests counts settings-shaped classes in this assembly. Like IG's GarrisonSettings,
+    // the constructor fills in a default, and several entry points create one; that is initialisation, not a writer.
+    public sealed class AuthTownLimits { public int Max { get; set; } public AuthTownLimits() { Max = 5; } }
+    public static class AuthTownStore { public static AuthTownLimits Town = new(); }
+    public sealed class AuthOption { public AuthOption(Action<int> onChange) { } }
+
+    public sealed class AuthSettingsVM : TaleWorlds.Library.ViewModel
+    {
+        public readonly List<AuthOption> Options = new();
+        public AuthSettingsVM() { Options.Add(new AuthOption(x => AuthTownStore.Town.Max = x)); }
+        public void ExecutePrompt() => _ = new InquiryData("sure?", Confirm, null);
+        private void Confirm() => new AuthHero().Renown = 9;
+    }
+
+    public sealed class AuthSplitBehavior : CampaignBehaviorBase
+    {
+        public override void RegisterEvents()
+        {
+            CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, Split);
+            CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, Mixed);
+            CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, NonVoid);
+            CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, Shared);
+            CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, PlayerMenus);
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickSettings);
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickHost);
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickResetA);
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickResetB);
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickOffer);
+        }
+        public override void SyncData(object store) { }
+
+        private void Split(CampaignGameStarter s) { AddSettingsMenu(s); SetupParties(); }
+        private void AddSettingsMenu(CampaignGameStarter s) => s.AddGameMenuOption("town", "settings", "t", null, OpenSettings);
+        private void OpenSettings() => GameStateManager.Current.PushState(new object());
+        private void SetupParties() => AuthGoldAction.ApplyBetweenCharacters(null, null, 1);
+
+        private void Mixed(CampaignGameStarter s)
+        {
+            s.AddGameMenuOption("town", "mixed", "t", null, null);
+            AuthGoldAction.ApplyBetweenCharacters(null, null, 1);
+        }
+
+        private void NonVoid(CampaignGameStarter s) { s.AddPlayerLine("a", "b", "c", "t", null, null); _ = CountParties(); }
+        private int CountParties() { AuthGoldAction.ApplyBetweenCharacters(null, null, 1); return 1; }
+
+        private void Shared(CampaignGameStarter s) { s.AddGameMenuOption("town", "shared", "t", null, () => SharedWork()); SharedWork(); }
+        private void SharedWork() => AuthGoldAction.ApplyBetweenCharacters(null, null, 2);
+
+        private void PlayerMenus(CampaignGameStarter s)
+        {
+            s.AddGameMenuOption("town", "leave", "t", null, LeaveTown);
+            s.AddGameMenuOption("town", "cheat", "t", null, Cheat);
+            s.AddGameMenuOption("town", "quests", "t", null, OpenQuests);
+            s.AddGameMenuOption("town", "bye", "t", null, Bye);
+        }
+        private void LeaveTown() => AuthLeaveAction.ApplyForParty(null);
+        private void Cheat() => _ = AuthCheats.CheckCheatUsage();
+        private void OpenQuests() => GameStateManager.Current.PushState(new TaleWorlds.CampaignSystem.GameState.QuestsState());
+
+        private void TickSettings(object? party) { if (AuthTownStore.Town.Max > 0) AuthGoldAction.ApplyBetweenCharacters(null, null, AuthTownStore.Town.Max); }
+        private void TickResetA(object? party) => _ = new AuthTownLimits();
+        private void TickResetB(object? party) => _ = new AuthTownLimits();
+        private void TickOffer(object? party) { InformationManager.ShowInquiry("join?"); AuthGoldAction.ApplyBetweenCharacters(null, null, 1); }
+        private void Bye() => PlayerEncounter.LeaveEncounter = true;
+        private void TickHost(object? party) { if (Hero.MainHero != null) AuthGoldAction.ApplyBetweenCharacters(null, null, 1); }
     }
 
     [CoopFakes.HarmonyPatch(typeof(AuthVanillaBehavior), "UpgradeReadyTroops")]

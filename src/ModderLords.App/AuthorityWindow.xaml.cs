@@ -49,6 +49,8 @@ public sealed record AuthorityRow(string Verdict, string Trigger, string Entry, 
         if (r.Root.Patch is { } p) lines.Add($"patches {p.TargetType}.{p.TargetMethod} ({p.Kind}{(p.Manual ? ", applied in code" : "")})");
         if (r.Evidence.Count > 0) lines.Add("via " + string.Join(" -> ", r.Evidence));
         if (r.Opaque) lines.Add("uses reflection, so some of what it calls is not visible to the analysis");
+        foreach (var f in r.Flags ?? []) lines.Add("flag: " + f);
+        if (r.GateInstead is { Count: > 0 } g) lines.Add("gated instead on clients: " + string.Join(", ", g.Select(ShortName)));
         return string.Join(Environment.NewLine, lines);
     }
 }
