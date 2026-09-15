@@ -38,6 +38,11 @@ public sealed class ServerSettingsHandler : IHandler
         Current = this;
         var recipes = BehaviorGate.ReadLocalRecipes();
         Log.Info("settings sync (server) armed" + (recipes is null ? "; no recipes.json (no server-only behaviours)" : "; recipes.json loaded"));
+        if (recipes is not null)
+        {
+            try { Log.Info("player checks: " + ServerPlayerChecks.Apply(recipes)); }
+            catch (Exception ex) { Log.Warn("player checks failed: " + ex.GetBaseException().Message); }
+        }
     }
 
     private void HandleRecipeRequest(MessagePayload<NetworkRequestCompatRecipes> payload)

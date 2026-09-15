@@ -73,6 +73,18 @@ public sealed class RecipeGenerationTests
     }
 
     [Fact]
+    public void PlayerComparisons_ReachTheRecipe_EvenWithNothingToGate()
+    {
+        var report = new AuthorityReport { ModuleId = "Mod", Roots = [V("Mod.Settings::Tick", RootTrigger.Simulation, AuthorityVerdict.Both)] };
+        report.PlayerComparisonMethods.Add("Mod.Garrison::IsMine");
+        var r = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
+        Assert.Equal(["Mod.Garrison::IsMine"], r.PlayerComparisons);
+        Assert.Empty(r.Handlers);
+        Assert.Contains("the server asks about any player instead", r.Notes);
+        Assert.Contains("\"PlayerComparisons\"", new RecipeSet { Mods = [r] }.ToJson());
+    }
+
+    [Fact]
     public void KeptBehaviour_AlsoExcludesItsLambdaHandlers()
     {
         var set = RecipeSet.Build([("Mod", Scan, new[] { "Mod.TickBehavior" })], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
@@ -133,7 +145,7 @@ public sealed class RecipeGenerationTests
         var set = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
         var json = set.ToJson();
         var back = RecipeSet.FromJson(json);
-        Assert.Equal(2, back.SchemaVersion);
+        Assert.Equal(RecipeSet.CurrentSchema, back.SchemaVersion);
         Assert.Equal(set.Mods[0].Handlers, back.Mods[0].Handlers);
         // The module parses with its own reader: Mods[].Handlers[] and Mods[].Unpatch[].Target/Patch.
         var root = ModderLords.CompatSync.MiniJson.ParseObject(json);

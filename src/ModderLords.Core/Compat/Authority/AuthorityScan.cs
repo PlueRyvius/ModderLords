@@ -39,6 +39,11 @@ public sealed class AuthorityReport
     public bool NotAnalysable { get; init; }
     public List<RootVerdict> Roots { get; init; } = new();
     public List<string> Notes { get; init; } = new();
+    /// <summary>
+    /// Methods the server runs (simulation, load-time handlers, game models) that ask "is this the player's?" in a shape
+    /// the server can rewrite to "is this any player's?" (<see cref="PlayerComparisonShapes"/>).
+    /// </summary>
+    public List<string> PlayerComparisonMethods { get; init; } = new();
 
     /// <summary>Verdicts that call for a gate, a relay, state sync, or a look.</summary>
     [JsonIgnore]
@@ -137,6 +142,13 @@ public static class AuthorityScan
             StringComparer.Ordinal);
         var playerReached = new HashSet<string>(analysed.Where(a => PlayerFacing(a.trigger)).SelectMany(a => a.fx.Parent.Keys), StringComparer.Ordinal);
         var split = new HandlerSplit(model, walker, playerReached);
+        // On a Coop server "the player" is the host; code the server runs should ask about any player instead.
+        report.PlayerComparisonMethods.AddRange(analysed
+            .Where(a => a.trigger is RootTrigger.Simulation or RootTrigger.Session or RootTrigger.Query)
+            .SelectMany(a => a.fx.Parent.Keys)
+            .Distinct(StringComparer.Ordinal)
+            .Where(id => model.Methods.TryGetValue(id, out var n) && n.PlayerComparisons > 0)
+            .OrderBy(id => id, StringComparer.Ordinal));
 
         foreach (var a in analysed)
         {

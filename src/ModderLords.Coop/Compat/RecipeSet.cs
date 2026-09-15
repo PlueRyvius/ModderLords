@@ -37,6 +37,11 @@ public sealed class ModRecipe
     public List<string> Handlers { get; set; } = new();
     /// <summary>v2, generated from the code: postfixes/finalizers removed from their target on clients, where Coop skips the target.</summary>
     public List<ModRecipePatch> Unpatch { get; set; } = new();
+    /// <summary>
+    /// v3, generated from the code: "Type::Method" the server runs whose "is this the player's?" comparisons it rewrites
+    /// to "is this any player's?". Applied by the server's module only; clients ignore it.
+    /// </summary>
+    public List<string> PlayerComparisons { get; set; } = new();
     public string? Notes { get; set; }
     /// <summary>Hints for the module's static-settings discovery (full type names or trailing-* globs); null = none.</summary>
     public ModRecipeSettings? Settings { get; set; }
@@ -58,7 +63,7 @@ public sealed class ModRecipeSettings
 public sealed class RecipeSet
 {
     public const string FileName = "recipes.json";
-    public const int CurrentSchema = 2;
+    public const int CurrentSchema = 3;
     public int SchemaVersion { get; set; } = CurrentSchema;
     public string GeneratedBy { get; set; } = "";
     public List<ModRecipe> Mods { get; set; } = new();
@@ -97,7 +102,7 @@ public sealed class RecipeSet
                 if (keep.Count > 0) notes.Add("kept client-side: " + string.Join(", ", keep));
                 recipe.Notes = notes.Count > 0 ? string.Join("; ", notes) : null;
             }
-            if (recipe.CampaignBehaviors.Count + recipe.MissionBehaviors.Count + recipe.Handlers.Count + recipe.Unpatch.Count == 0) continue;
+            if (recipe.CampaignBehaviors.Count + recipe.MissionBehaviors.Count + recipe.Handlers.Count + recipe.Unpatch.Count + recipe.PlayerComparisons.Count == 0) continue;
             set.Mods.Add(recipe);
         }
         // Settings hints ride along for any mod that has them, gated or not (the module reads Mods[].Settings only).
@@ -140,6 +145,8 @@ public sealed class RecipeSet
         var state = report.Count(AuthorityVerdict.NeedsStateSync);
         var review = report.Count(AuthorityVerdict.Review);
         var unsynced = report.Count(AuthorityVerdict.PlayerStateUnsynced);
+        if (report.PlayerComparisonMethods.Count > 0)
+            notes.Add($"{report.PlayerComparisonMethods.Count} method(s) ask \"is this the player's?\"; the server asks about any player instead");
         if (split.Count > 0) notes.Add($"kept {split.Count} UI-registering handler(s) running on clients; their server work is gated instead");
         if (uiReview > 0) notes.Add($"{uiReview} handler(s) register UI but could not be split, so they are not gated");
         if (relay > 0) notes.Add($"{relay} player action(s) need a server relay");
@@ -147,7 +154,10 @@ public sealed class RecipeSet
         if (state > 0) notes.Add($"{state} handler(s) also write mod state players see");
         if (review > 0) notes.Add($"{review} to review");
         if (keep.Count > 0) notes.Add("kept client-side: " + string.Join(", ", keep));
-        return new ModRecipe { Id = id, Handlers = handlers, Unpatch = unpatch, Notes = string.Join("; ", notes) };
+        return new ModRecipe
+        {
+            Id = id, Handlers = handlers, Unpatch = unpatch, PlayerComparisons = report.PlayerComparisonMethods.ToList(), Notes = string.Join("; ", notes),
+        };
     }
 
     /// <summary>Writes recipes.json into the module folder atomically; returns the path. An empty set still writes (clears an old one).</summary>

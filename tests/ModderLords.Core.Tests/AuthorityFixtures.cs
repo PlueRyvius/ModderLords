@@ -30,7 +30,8 @@ namespace TaleWorlds.CampaignSystem
     public class AuthVanillaAlliance { public void StartAlliance() { } }
     public class AuthPartyWageModel { public virtual int GetWage() => 0; }
     public class AuthTownVisit { public void game_menu_recruit_on_consequence() { } }
-    public class Hero { public static Hero? MainHero => null; }
+    public class Hero { public static Hero? MainHero => null; public Clan? Clan => null; }
+    public class Clan { public static Clan? PlayerClan => null; }
     // Engine setters are not mod code; an empty body keeps the walker from following into a fake backing field.
     public static class PlayerEncounter { public static bool LeaveEncounter { get => false; set { } } }
     public static class AuthLeaveAction { public static void ApplyForParty(object? party) { } }
@@ -117,6 +118,7 @@ namespace ModderLords.Core.Tests.AuthFakes
             CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickResetA);
             CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickResetB);
             CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickOffer);
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickOwner);
         }
         public override void SyncData(object store) { }
 
@@ -153,6 +155,8 @@ namespace ModderLords.Core.Tests.AuthFakes
         private void TickResetB(object? party) => _ = new AuthTownLimits();
         private void TickOffer(object? party) { InformationManager.ShowInquiry("join?"); AuthGoldAction.ApplyBetweenCharacters(null, null, 1); }
         private void Bye() => PlayerEncounter.LeaveEncounter = true;
+        private void TickOwner(object? party) { if (OwnerOf(party) == Hero.MainHero) AuthGoldAction.ApplyBetweenCharacters(null, null, 1); }
+        private static Hero? OwnerOf(object? party) => null;
         private void TickHost(object? party) { if (Hero.MainHero != null) AuthGoldAction.ApplyBetweenCharacters(null, null, 1); }
     }
 

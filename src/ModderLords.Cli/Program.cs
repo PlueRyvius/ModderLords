@@ -148,6 +148,8 @@ switch (cmd)
 
         Console.WriteLine($"coop   : {coop.Summary}");
         Console.WriteLine($"{mod.Id} {mod.Version}: {report.Summary}");
+        if (report.PlayerComparisonMethods.Count > 0)
+            Console.WriteLine($"  player checks: {report.PlayerComparisonMethods.Count} server-run method(s) ask \"is this the player's?\" (rewritten to any player on the server)");
         foreach (var n in report.Notes.Take(5)) Console.WriteLine("  note: " + n);
         var shown = opts.ContainsKey("all") ? report.Roots : report.ActionNeeded;
         foreach (var r in shown.OrderBy(r => r.Verdict).ThenBy(r => r.Root.Method, StringComparer.Ordinal))

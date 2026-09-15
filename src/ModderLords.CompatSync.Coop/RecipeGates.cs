@@ -50,7 +50,7 @@ public sealed class RecipeGates
     }
 
     /// <summary>Every non-abstract method of that name declared on the type (overloads share an id).</summary>
-    private static List<MethodBase> Resolve(string id)
+    internal static List<MethodBase> Resolve(string id)
     {
         if (!Split(id, out var typeName, out var name)) return new List<MethodBase>();
         var type = AccessTools.TypeByName(typeName);
