@@ -52,6 +52,11 @@ public sealed class MethodNode
     public bool IsVoid { get; set; } = true;
     /// <summary>"Is this the player's?" comparisons a server can ask of any player instead (<see cref="PlayerComparisonShapes"/>).</summary>
     public int PlayerComparisons { get; set; }
+    /// <summary>Parameter type full names of the first overload read ("" where not decodable).</summary>
+    public List<string> ParameterTypes { get; } = new();
+    public bool IsStatic { get; set; }
+    /// <summary>How many methods share this id; a relay has to name exactly one.</summary>
+    public int Overloads { get; set; }
 }
 
 /// <summary>A mod's call graph and entry points, read from IL metadata only (nothing is loaded or run).</summary>
@@ -231,6 +236,12 @@ public static class ModAnalysis
         var node = Node(model, id);
         typeMethods.Add((typeName, name, m.Attributes));
         node.IsVoid &= IlReader.ReturnsVoid(md, m);
+        if (node.Overloads++ == 0)
+        {
+            node.IsStatic = m.Attributes.HasFlag(MethodAttributes.Static);
+            try { node.ParameterTypes.AddRange(m.DecodeSignature(new SignatureTypeNames(), null).ParameterTypes); }
+            catch (BadImageFormatException) { }
+        }
 
         // Attribute-declared patches and console commands.
         var methodPatch = new PatchTarget(null, null, 0);

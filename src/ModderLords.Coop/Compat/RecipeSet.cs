@@ -42,6 +42,11 @@ public sealed class ModRecipe
     /// to "is this any player's?". Applied by the server's module only; clients ignore it.
     /// </summary>
     public List<string> PlayerComparisons { get; set; } = new();
+    /// <summary>
+    /// v3, generated from the code: "Type::Method" a player action is relayed through. Clients send the call to the
+    /// server (and still run it); the server runs it as that player after checking they own what it names.
+    /// </summary>
+    public List<string> Relays { get; set; } = new();
     public string? Notes { get; set; }
     /// <summary>Hints for the module's static-settings discovery (full type names or trailing-* globs); null = none.</summary>
     public ModRecipeSettings? Settings { get; set; }
@@ -102,7 +107,7 @@ public sealed class RecipeSet
                 if (keep.Count > 0) notes.Add("kept client-side: " + string.Join(", ", keep));
                 recipe.Notes = notes.Count > 0 ? string.Join("; ", notes) : null;
             }
-            if (recipe.CampaignBehaviors.Count + recipe.MissionBehaviors.Count + recipe.Handlers.Count + recipe.Unpatch.Count + recipe.PlayerComparisons.Count == 0) continue;
+            if (recipe.CampaignBehaviors.Count + recipe.MissionBehaviors.Count + recipe.Handlers.Count + recipe.Unpatch.Count + recipe.PlayerComparisons.Count + recipe.Relays.Count == 0) continue;
             set.Mods.Add(recipe);
         }
         // Settings hints ride along for any mod that has them, gated or not (the module reads Mods[].Settings only).
@@ -145,6 +150,8 @@ public sealed class RecipeSet
         var state = report.Count(AuthorityVerdict.NeedsStateSync);
         var review = report.Count(AuthorityVerdict.Review);
         var unsynced = report.Count(AuthorityVerdict.PlayerStateUnsynced);
+        var relayed = report.Roots.Count(r => r.RelayVia is not null);
+        if (relayed > 0) notes.Add($"{relayed} player action(s) relayed to the server through {report.RelayMethods.Count} method(s)");
         if (report.PlayerComparisonMethods.Count > 0)
             notes.Add($"{report.PlayerComparisonMethods.Count} method(s) ask \"is this the player's?\"; the server asks about any player instead");
         if (split.Count > 0) notes.Add($"kept {split.Count} UI-registering handler(s) running on clients; their server work is gated instead");
@@ -156,7 +163,8 @@ public sealed class RecipeSet
         if (keep.Count > 0) notes.Add("kept client-side: " + string.Join(", ", keep));
         return new ModRecipe
         {
-            Id = id, Handlers = handlers, Unpatch = unpatch, PlayerComparisons = report.PlayerComparisonMethods.ToList(), Notes = string.Join("; ", notes),
+            Id = id, Handlers = handlers, Unpatch = unpatch, PlayerComparisons = report.PlayerComparisonMethods.ToList(),
+            Relays = report.RelayMethods.ToList(), Notes = string.Join("; ", notes),
         };
     }
 

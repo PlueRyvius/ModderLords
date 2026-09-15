@@ -42,7 +42,24 @@ public sealed class ServerSettingsHandler : IHandler
         {
             try { Log.Info("player checks: " + ServerPlayerChecks.Apply(recipes)); }
             catch (Exception ex) { Log.Warn("player checks failed: " + ex.GetBaseException().Message); }
+            try { Log.Info("relays: " + ServerRelay.LoadAllowList(recipes)); }
+            catch (Exception ex) { Log.Warn("relays failed to load: " + ex.GetBaseException().Message); }
         }
+        broker.Subscribe<NetworkRelayInvoke>(HandleRelay);
+    }
+
+    private int relayLogged;
+
+    private void HandleRelay(MessagePayload<NetworkRelayInvoke> payload)
+    {
+        if (payload.Who is not NetPeer peer) return;
+        var msg = payload.What;
+        ServerRelay.Handle(peer, msg.Method, msg.Kinds, msg.Values, (ran, reason) =>
+        {
+            if (relayLogged++ < 200) Log.Info($"relay {(ran ? "ran" : "rejected")} {msg.Method} #{msg.Sequence}: {reason}");
+            try { network.Send(peer, new NetworkRelayResult { Method = msg.Method, Sequence = msg.Sequence, Ran = ran, Reason = reason, ProtocolVersion = ProtocolVersion }); }
+            catch (Exception ex) { Log.Warn("relay result not sent: " + ex.GetBaseException().Message); }
+        });
     }
 
     private void HandleRecipeRequest(MessagePayload<NetworkRequestCompatRecipes> payload)
@@ -87,6 +104,7 @@ public sealed class ServerSettingsHandler : IHandler
         if (!active) return;
         broker.Unsubscribe<NetworkRequestSettingsSnapshots>(HandleRequest);
         broker.Unsubscribe<NetworkRequestCompatRecipes>(HandleRecipeRequest);
+        broker.Unsubscribe<NetworkRelayInvoke>(HandleRelay);
         if (ReferenceEquals(Current, this)) Current = null;
     }
 

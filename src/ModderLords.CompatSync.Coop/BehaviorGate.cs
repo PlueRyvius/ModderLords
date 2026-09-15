@@ -53,6 +53,7 @@ public static class BehaviorGate
         var mission = new List<string>();
         var handlers = new List<string>();
         var unpatch = new List<(string target, string patch)>();
+        var relays = new List<string>();
         try
         {
             var root = JObject.Parse(json);
@@ -62,6 +63,8 @@ public static class BehaviorGate
                 mission.AddRange((mod["MissionBehaviors"] as JArray ?? new JArray()).Select(t => t.ToString()));
                 // Schema v2: generated from the code analysis.
                 handlers.AddRange((mod["Handlers"] as JArray ?? new JArray()).Select(t => t.ToString()));
+                // Schema v3: player actions sent to the server.
+                relays.AddRange((mod["Relays"] as JArray ?? new JArray()).Select(t => t.ToString()));
                 foreach (var u in mod["Unpatch"] as JArray ?? new JArray())
                     unpatch.Add((u["Target"]?.ToString() ?? "", u["Patch"]?.ToString() ?? ""));
             }
@@ -74,6 +77,11 @@ public static class BehaviorGate
             var (applied, handlersMissing) = Gates.Value.SkipHandlers(handlers);
             var (removed, notAttached) = Gates.Value.RemovePostfixes(unpatch);
             generated = $"; {applied} handler(s) gated ({handlersMissing} not found), {removed} leaking postfix(es) removed ({notAttached} not attached)";
+        }
+        if (relays.Count > 0 && IsClient())
+        {
+            var (armed, relaysMissing) = RelayGates.Apply(Harmony, relays, msg => Log.Warn(msg));
+            generated += $"; {armed} relayed action(s) armed ({relaysMissing} not found)";
         }
 
         int patched = 0, missing = 0, already = 0;
@@ -173,6 +181,7 @@ public static class BehaviorGate
     public static string VerificationSummary()
     {
         var line = WholeBehaviourSummary();
+        if (RelayGates.SentCount > 0) line += "; " + RelayGates.CountsSummary();
         if (!Gates.IsValueCreated) return line;
         line += "; " + RecipeGates.CountsSummary();
         if (Gates.Value.PendingCount > 0) line += $"; {Gates.Value.PendingCount} leaking postfix(es) not attached yet";

@@ -159,6 +159,7 @@ switch (cmd)
             if (r.Evidence.Count > 0) Console.WriteLine("      via " + string.Join(" -> ", r.Evidence));
             foreach (var f in r.Flags ?? []) Console.WriteLine("      flag: " + f);
             if (r.GateInstead is { Count: > 0 } g) Console.WriteLine("      gated instead on clients: " + string.Join(", ", g));
+            if (r.RelayVia is { } via) Console.WriteLine("      relayed to the server via " + via);
         }
         return 0;
     }
