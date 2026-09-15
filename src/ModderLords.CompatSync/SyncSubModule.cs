@@ -14,13 +14,15 @@ namespace ModderLords.CompatSync;
 /// </summary>
 public sealed class SyncSubModule : MBSubModuleBase
 {
-    public const string Version = "0.1.3";
+    public const string Version = "0.1.4";
     private const string AdapterFileName = "ModderLords.CompatSync.Coop.dll";
 
     private float _sinceTick;
     private float _sinceVerify;
+    private float _sinceRelay;
     private bool _adapterTried;
     private MethodInfo? _adapterTick;
+    private MethodInfo? _adapterRelayTick;
     private MethodInfo? _adapterVerify;
 
     protected override void OnSubModuleLoad()
@@ -47,6 +49,14 @@ public sealed class SyncSubModule : MBSubModuleBase
         base.OnApplicationTick(dt);
         _sinceTick += dt;
         _sinceVerify += dt;
+        _sinceRelay += dt;
+        // Relayed player actions go out soon after the control settles, not on the 3 s settings tick.
+        if (_sinceRelay >= 0.25f && _adapterRelayTick is not null)
+        {
+            _sinceRelay = 0f;
+            try { _adapterRelayTick.Invoke(null, null); }
+            catch (Exception ex) { Log.Warn("relay tick failed: " + ex.GetBaseException().Message); }
+        }
         if (_sinceTick >= 3f)
         {
             _sinceTick = 0f;
@@ -90,6 +100,7 @@ public sealed class SyncSubModule : MBSubModuleBase
             var asm = Assembly.LoadFrom(path);
             var bridge = asm.GetType("ModderLords.CompatSync.Coop.Bridge", throwOnError: false);
             _adapterTick = bridge?.GetMethod("Tick", BindingFlags.Public | BindingFlags.Static);
+            _adapterRelayTick = bridge?.GetMethod("RelayTick", BindingFlags.Public | BindingFlags.Static);
             _adapterVerify = bridge?.GetMethod("VerificationSummary", BindingFlags.Public | BindingFlags.Static);
             var typeCount = asm.GetTypes().Length;   // forces the type load now, inside our try, not in some other mod's scan
             Log.Info($"coop adapter loaded ({typeCount} types); handlers will arm when a session starts");

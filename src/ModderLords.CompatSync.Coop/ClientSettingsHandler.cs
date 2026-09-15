@@ -87,9 +87,21 @@ public sealed class ClientSettingsHandler : IHandler
             Log.Warn("relay not sent " + method + ": " + why);
             return;
         }
-        var seq = ++relaySequence;
-        network.SendAll(new NetworkRelayInvoke { Method = method, Kinds = kinds, Values = values, Sequence = seq, ProtocolVersion = Bridge.ProtocolVersion });
-        Log.Info($"relay sent {method} #{seq} ({string.Join(", ", values)})");
+        relays.Add(method, kinds, values, DateTime.UtcNow);
+    }
+
+    private readonly RelayCoalescer relays = new RelayCoalescer(TimeSpan.FromMilliseconds(300));
+
+    /// <summary>From the submodule tick on clients: sends each relayed call whose control has settled (latest value only).</summary>
+    public void FlushRelays()
+    {
+        if (relays.PendingCount == 0) return;
+        foreach (var (method, kinds, values) in relays.Due(DateTime.UtcNow))
+        {
+            var seq = ++relaySequence;
+            network.SendAll(new NetworkRelayInvoke { Method = method, Kinds = kinds, Values = values, Sequence = seq, ProtocolVersion = Bridge.ProtocolVersion });
+            Log.Info($"relay sent {method} #{seq} ({string.Join(", ", values)})");
+        }
     }
 
     private void HandleRelayResult(MessagePayload<NetworkRelayResult> payload)

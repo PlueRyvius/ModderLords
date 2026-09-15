@@ -41,6 +41,7 @@
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RecipeGates.cs" Link="Module\RecipeGates.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\PlayerComparisonRewriter.cs" Link="Module\PlayerComparisonRewriter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayGates.cs" Link="Module\RelayGates.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayCoalescer.cs" Link="Module\RelayCoalescer.cs" />
   </ItemGroup>
 
 </Project>

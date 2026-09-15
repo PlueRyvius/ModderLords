@@ -28,7 +28,8 @@ public static class ServerRelay
 {
     private static readonly HashSet<string> Allowed = new HashSet<string>(StringComparer.Ordinal);
     private static readonly Dictionary<NetPeer, Queue<DateTime>> Recent = new Dictionary<NetPeer, Queue<DateTime>>();
-    private const int PerSecond = 5;
+    // A backstop: clients already send only a control's settled value (RelayCoalescer).
+    private const int PerSecond = 20;
 
     public static string LoadAllowList(string recipesJson)
     {

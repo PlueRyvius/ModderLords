@@ -480,9 +480,16 @@ setting). The server now runs the same call as that player.
   internal, via reflection) and Coop's resolved main hero, restoring them in `Dispose`. Replies `NetworkRelayResult`.
   Logs: client `relay sent <method> #n (args)` / `relay ran on the server: …` / `relay rejected by the server: … (why)`;
   server `relay ran|rejected <method> #n: <reason>`.
+- **Coalescing** (`RelayCoalescer`, flushed every 0.25 s by `SyncSubModule` → `Bridge.RelayTick` →
+  `ClientSettingsHandler.FlushRelays`, not the 3 s settings tick): live test
+  2026-09-14 — dragging IG's max-upgrade-tier slider fired its setter 15 times in a second, the server's 5/s limit
+  rejected the last value (10) and kept 5. Clients now hold relays per action + game-object arguments and send only the
+  latest once it has been still for 300 ms; the server limit is 20/s as a backstop.
+- Not relayed, and not detected as unsynced either: IG's template edits (`ExecuteAdd/Remove/Delete` change
+  `TrainingTemplate` through dictionary calls, not field writes, and name no town). Template changes stay on the client.
 - IG: 43 actions relayed through 33 methods (guard orders, recruitment/training/guard settings); TAOM and
   MyLittleWarband: none (their actions don't reach a sendable, ownable method).
-- Module version 0.1.3.
+- Module version 0.1.4 (0.1.3 was the first live test; bumped so Launch client replaces it with the coalescing build).
 
 ## Compat verification logging (2026-09-02)
 

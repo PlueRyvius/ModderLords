@@ -15,6 +15,10 @@ public static class Bridge
         BehaviorGate.RetryPendingPostfixes();
     }
 
+    /// <summary>Client, every quarter second: sends relayed player actions whose control has settled. Cheap when none are waiting.</summary>
+    public static void RelayTick() =>
+        global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.ClientSettingsHandler.Current?.FlushRelays();
+
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
     public static string VerificationSummary() => BehaviorGate.VerificationSummary();
 }
