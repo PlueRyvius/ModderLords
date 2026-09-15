@@ -157,7 +157,9 @@ public sealed class RecipeGatesTests
         Assert.Equal((1, 0), gates.RemovePostfixes([entry]));
         t.Act();
         Assert.Equal(2, s_postfixRuns);                         // no longer runs on the client
-        Assert.Equal((0, 1), gates.RemovePostfixes([entry]));   // already gone: reported, not thrown
+        // Asked again (the server re-sends the recipe): already removed, so nothing is reported or queued.
+        Assert.Equal((0, 0), gates.RemovePostfixes([entry]));
+        Assert.Equal(0, gates.PendingCount);
         s_client = false;
     }
 
@@ -195,6 +197,11 @@ public sealed class RecipeGatesTests
         s_lateRuns = 0;
         new LateTarget().Late();
         Assert.Equal(0, s_lateRuns);
+
+        // The recipe arrives again after removal: not re-queued, no "not attached yet" warning.
+        Assert.Equal((0, 0), gates.RemovePostfixes([entry]));
+        Assert.Equal(0, gates.PendingCount);
+        Assert.Single(warnings);
         s_client = false;
     }
 }
