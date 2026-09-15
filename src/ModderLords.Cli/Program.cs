@@ -20,6 +20,7 @@ using ModderLords.Coop.Config;
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
 //   authority --mod ID [--all] [--json] [--out PATH]
+//   trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]
 
 var opts = ParseArgs(args);
 if (opts.ContainsKey("data-dir") && opts.ContainsKey("profile"))
@@ -36,6 +37,7 @@ if (!opts.TryGetValue("cmd", out var cmd))
     Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
     Console.WriteLine("          authority --mod ID [--all] [--json] [--out PATH]   (which parts of a mod must be server-only, read from its code)");
+    Console.WriteLine("          trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]   (verdicts vs what ran; traces from MODDERLORDS_TRACE_MODS)");
     return 1;
 }
 
@@ -160,6 +162,59 @@ switch (cmd)
             foreach (var f in r.Flags ?? []) Console.WriteLine("      flag: " + f);
             if (r.GateInstead is { Count: > 0 } g) Console.WriteLine("      gated instead on clients: " + string.Join(", ", g));
             if (r.RelayVia is { } via) Console.WriteLine("      relayed to the server via " + via);
+        }
+        return 0;
+    }
+
+    // Ground truth: the verdicts of `authority` against the trace files one host + client session wrote.
+    case "trace-diff":
+    {
+        var modId = opts.GetValueOrDefault("mod");
+        var serverPath = opts.GetValueOrDefault("trace-server");
+        var clientPath = opts.GetValueOrDefault("trace-client");
+        if (modId is null or "true" || serverPath is null or "true" || clientPath is null or "true")
+        {
+            Console.Error.WriteLine("trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]");
+            Console.Error.WriteLine("  FILEs are Documents\\Mount and Blade II Bannerlord\\Configs\\ModLogs\\ModderLords.Compat-trace-{server,client}.jsonl, written when MODDERLORDS_TRACE_MODS named the mod at launch.");
+            return 2;
+        }
+        var mod = catalog.Modules.FirstOrDefault(m => m.Id.Equals(modId, StringComparison.OrdinalIgnoreCase));
+        if (mod is null) { Console.Error.WriteLine($"No module '{modId}' in the catalog. Try: catalog"); return 2; }
+        if (!File.Exists(serverPath)) { Console.Error.WriteLine("server trace not found: " + serverPath); return 2; }
+        if (!File.Exists(clientPath)) { Console.Error.WriteLine("client trace not found: " + clientPath); return 2; }
+        var gameInterface = CoopSinks.FindGameInterface(libraries);
+        if (gameInterface is null) { Console.Error.WriteLine("Coop's GameInterface.dll was not found (game Modules\\Coop or a Workshop item)."); return 2; }
+        var report = AuthorityScan.Classify(ModAnalysis.Analyse(mod), CoopSinks.Load(gameInterface));
+        var serverTrace = TraceDiff.ParseTraceFile(serverPath);
+        var clientTrace = TraceDiff.ParseTraceFile(clientPath);
+        var diff = TraceDiff.Compare(report, serverTrace, clientTrace);
+        if (opts.GetValueOrDefault("coop-client-log") is { } coopLog && coopLog != "true" && File.Exists(coopLog))
+        {
+            // The client trace clock starts when the module loads; the compat client log's first line is stamped at that moment.
+            var startedAt = TimeSpan.Zero;
+            var compatLog = Path.Combine(Path.GetDirectoryName(clientPath) ?? ".", "ModderLords.Compat-client.log");
+            if (File.Exists(compatLog) && File.ReadLines(compatLog).FirstOrDefault() is { } first && first.Length >= 19
+                && DateTime.TryParseExact(first[..19], "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var started))
+                startedAt = started.TimeOfDay;
+            else Console.WriteLine("  note: ModderLords.Compat-client.log not found next to the client trace; error windows are counted from midnight");
+            diff = TraceDiff.AnnotateErrorBursts(diff, File.ReadLines(coopLog), startedAt, clientTrace);
+        }
+        if (opts.GetValueOrDefault("out") is { } outPath && outPath != "true") File.WriteAllText(outPath, diff.ToJson());
+        if (opts.ContainsKey("json")) { Console.WriteLine(diff.ToJson()); return 0; }
+
+        Console.WriteLine($"{mod.Id} {mod.Version}: {diff.Summary}");
+        foreach (var kv in diff.Totals.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        {
+            var t = kv.Value;
+            Console.WriteLine($"  {kv.Key,-20} predicted {t.Expected,4}  contradicted {t.FalseNegativeCandidates,4}  untestable {t.Untestable,4}  never exercised {t.NeverExercised,4}  soundness {t.SoundnessText}");
+        }
+        if (diff.Unmatched.Count > 0) Console.WriteLine($"  {diff.Unmatched.Count} traced method(s) are not roots of this report (stale recipe?): {string.Join(", ", diff.Unmatched.Take(5))}");
+        var rows = opts.ContainsKey("all") ? diff.Joins : diff.Joins.Where(j => j.Outcome == TraceOutcome.FalseNegativeCandidate).ToList();
+        if (rows.Count > 0) Console.WriteLine(opts.ContainsKey("all") ? "  every root:" : "  contradicted (read these first):");
+        foreach (var j in rows)
+        {
+            Console.WriteLine($"  {j.Outcome,-22} {j.Verdict,-19} {j.Trigger,-12} {j.Method}");
+            Console.WriteLine($"      {j.Reason}" + (j.ErrorsNearby > 0 ? $"; {j.ErrorsNearby} Coop client error(s) in the same 30 s window" : ""));
         }
         return 0;
     }

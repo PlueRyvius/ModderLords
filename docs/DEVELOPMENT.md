@@ -204,6 +204,7 @@ variables, marked, so "was it actually set?" is answerable from the log):
 | `MODDERLORDS_MAPSCENE_CENSUS` | off | Counts which map-scene members are actually called, and names those never called. |
 | `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` | off | Keeps the scene's `<terrain>` descriptor. Measured safe; not currently needed. |
 | `MODDERLORDS_BATTLE_SCENE_PICK` | on | The launcher lists scenes shipped without a terrain shader cache in `recipes.json` (`ExcludedBattleScenes`), and the server never chooses one for a field battle (every client loads the server's choice and crashes on those; vanilla ships `battle_terrain_020` and `battle_terrain_a` that way). `0` disables. Details: `docs/FIELD-BATTLE-TERRAIN.md`, 2026-09-15. |
+| `MODDERLORDS_TRACE_MODS` | off | Ground truth for the authority classifier: `TAOM;ImprovedGarrisons` makes the launcher list every entry point of those mods in `recipes.json` (`TraceRoots`); both the server and every client then count how often each one runs and write `ModLogs\ModderLords.Compat-trace-{server,client}.jsonl` every 30 s. Compare with `trace-diff`. Read by the launcher (the recipe carries it to clients), so set it in the launcher's environment. |
 
 ### Smoke-testing a server without the GUI
 
@@ -305,6 +306,25 @@ which is what it was built for.
 - Verified server side with profile `layer1` (IG: 6 campaign behaviours, HealOnKill: 1 mission behaviour). Client side
   needs a player: expect `[ModderLords.Compat] server recipes: 6 campaign behaviour(s) gated ...` in
   `Configs\ModLogs\ModderLords.Compat-client.log`, then `RegisterEvents skipped on client: ...` lines.
+
+## Supported tier (decided 2026-09-15)
+
+Full generalisation is not the target. The tier the automatic fixes promise: **campaign behaviours plus settings**,
+whose player actions call a behaviour method with a town, party or hero (ImprovedGarrisons is the archetype). Screen-
+driven actions (view models, services), console commands, mission code and per-object mod state are **report only**
+and need a per-mod adapter. Judge new analysis work by whether it raises the `trace-diff` numbers for tier-one mods
+(step 8), not by TAOM coverage.
+
+**Two-player gate.** Nothing that widens server-side player semantics (PlayerScope, "any player's" rewrites) proceeds
+until this has passed once with a real second player in a **different clan**: profile1 with IG + TAOM, each player
+owning a castle. (a) An IG per-castle setting set by player A applies only to A's castle on the server, B's unchanged;
+(b) B's relay for A's town is rejected (`relay rejected ... does not own`); (c) state sync reaches both clients;
+(d) `trace-diff` run with two clients. No second player was available on 2026-09-15.
+
+**Fragility note.** The module reaches two Coop internals by reflection (`ResolvedMainHeroContext.ResolvedMainHero`,
+the `Campaign.PlayerDefaultFaction` setter) and transpiles mod methods under Coop's gates. A Coop update can disable
+compat silently (the probe pattern degrades to "disabled" in the log); check the compat logs after every Coop update.
+Raising this with the Coop maintainers was deferred by the maintainer on 2026-09-15.
 
 ## Authority classifier, step 1 (2026-09-14): Coop sink catalogue
 
@@ -492,6 +512,57 @@ setting). The server now runs the same call as that player.
   MyLittleWarband: none (their actions don't reach a sendable, ownable method).
 - Module version 0.1.4 (0.1.3 was the first live test; bumped so Launch client replaces it with the coalescing build).
 
+## Authority classifier, step 8 (2026-09-15): ground truth, verdicts against what actually ran
+
+The review of steps 1–7 found the classifier tuned on two mods with nothing measuring its recall: its default verdict
+(Local, "no world change found") hides false negatives, and in game a false negative is silent divergence, not a crash.
+Step 8 measures it from one host + client session.
+
+- **Launcher.** `MODDERLORDS_TRACE_MODS=TAOM;ImprovedGarrisons` at launch makes `LaunchSession.WriteRecipes` analyse those
+  mods (ticked Server-only or not) and write every root's id into `Mods[].TraceRoots` (`RecipeSet`, additive; schema stays
+  3). The recipe is what already reaches both sides, so no client-side switch is needed. Console line:
+  `trace <id>: N entry point(s) counted on both sides`.
+- **Module, both sides** (`RootTracer`, Harmony-only like `RecipeGates`, unit-tested with real Harmony): a prefix at
+  `Priority.First` on every listed method counts the call and always returns true. A client call to a method that a
+  handler gate skips is counted as a gated skip, not a run (the gate's prefix returns false after ours). Abstract,
+  generic-definition and bodiless methods are skipped and counted as not found; per-method patch failures are counted, not
+  thrown. Installed from `BehaviorGate.InstallTrace` (client: `Apply`; server: `ServerSettingsHandler.Wire`), log line
+  `trace: N entry point(s) traced (M not found, K not patchable) in X ms`. Counters are keyed by `MethodBase`, no strings
+  in the hot path; overloads merge into one id at snapshot time, as the classifier's ids do. Every 30 s (and at
+  unload) `Bridge.TraceFlush` appends cumulative lines to
+  `Documents\Mount and Blade II Bannerlord\Configs\ModLogs\ModderLords.Compat-trace-{client|server}.jsonl`:
+  `{"t":123.4,"method":"Type::Method","ran":42,"gatedSkips":0,"firstSeen":3.1,"lastSeen":118.9}`; the last line per method
+  wins. The 30 s verification line gains `trace: N method(s) fired, R run(s), S gated skip(s) (...)`. Counters are per game
+  process: restart between measured runs.
+- **CLI** `trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]`
+  (`TraceDiff` in Core, pure). Each root is judged by the claim its verdict makes per side:
+
+  | Verdict | Trigger | Server | Client |
+  |---|---|---|---|
+  | ServerOnly, NeedsStateSync | Simulation, Session | ran | not ran (`GateInstead` roots: the gated methods are judged instead) |
+  | ServerOnly, NeedsStateSync | other | ran | no claim |
+  | NeedsRelay | any | no claim | ran |
+  | PlayerStateUnsynced | any | not ran | ran |
+  | LeakingPostfix | Patch | ran | not ran (still firing = the unpatch did not hold) |
+  | Both | any | ran | ran |
+  | Local, AlreadyHandled, Review | any | no claim | no claim, except Simulation/Session code that ran on a client and never on the server |
+
+  Outcomes: `Expected`, `FalseNegativeCandidate` (the trace contradicts the claim), `Untestable` (an action-needed
+  verdict whose root never fired), `NeverExercised`. Per verdict: soundness = expected / (expected + contradicted), with
+  untestable reported beside it, never folded in (TAOM's 756 roots will not all fire in one session). Traced methods that
+  are not roots of the report are listed as stale. `--coop-client-log` buckets `Coop_client.log` error lines into 30 s
+  windows (clock zero = the first line of `ModderLords.Compat-client.log` next to the client trace) and shows how many
+  errors landed in the window a root last fired in, to line the residual ~3,700 errors per session up with the code
+  that ran.
+- Tests: `RootTracerTests` (real Harmony: counts, overload merge, unpatchable skipped, gated-skip split, jsonl round-trip
+  into `TraceDiff.ParseTrace`), `TraceDiffTests` (one case per matrix cell, totals, error windows), recipe round-trip.
+  Smoke: `trace-diff` on the installed ImprovedGarrisons with a fabricated trace produced the expected contradiction.
+- Module version 0.1.5.
+- **Live procedure:** set `MODDERLORDS_TRACE_MODS` (User env; remove it afterwards, the launch log marks inherited
+  switches), host, join, play 15 min without field battles, copy `Coop_client.log` before relaunching, then run
+  `trace-diff` and read the contradicted rows first. **Record the totals here.** They decide how much further analysis
+  work is worth; the target tier is behaviour-plus-settings mods (ImprovedGarrisons), not TAOM's screen-driven actions.
+- Not yet run live (2026-09-15).
 ## Field battles (2026-09-15): the server never chooses a scene without a terrain shader cache
 
 Follow-up "every client accepts the server's battle scene choice" from 2026-09-14, resolved by reading Coop 0.1.5:

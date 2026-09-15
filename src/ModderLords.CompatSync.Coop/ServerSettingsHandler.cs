@@ -46,6 +46,9 @@ public sealed class ServerSettingsHandler : IHandler
             catch (Exception ex) { Log.Warn("relays failed to load: " + ex.GetBaseException().Message); }
             try { Log.Info("battle scene pick: " + BattleScenePick.Load(recipes)); }
             catch (Exception ex) { Log.Warn("battle scene pick failed to load: " + ex.GetBaseException().Message); }
+            // Ground truth for the classifier: only present when the launcher was asked to trace a mod.
+            try { if (BehaviorGate.InstallTrace(recipes) is { } trace) Log.Info(trace); }
+            catch (Exception ex) { Log.Warn("trace failed to install: " + ex.GetBaseException().Message); }
         }
         broker.Subscribe<NetworkRelayInvoke>(HandleRelay);
     }
