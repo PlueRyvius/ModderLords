@@ -305,6 +305,25 @@ which is what it was built for.
   needs a player: expect `[ModderLords.Compat] server recipes: 6 campaign behaviour(s) gated ...` in
   `Configs\ModLogs\ModderLords.Compat-client.log`, then `RegisterEvents skipped on client: ...` lines.
 
+## Supported tier (decided 2026-09-15)
+
+Full generalisation is not the target. The tier the automatic fixes promise: **campaign behaviours plus settings**,
+whose player actions call a behaviour method with a town, party or hero (ImprovedGarrisons is the archetype). Screen-
+driven actions (view models, services), console commands, mission code and per-object mod state are **report only**
+and need a per-mod adapter. Judge new analysis work by whether it raises the `trace-diff` numbers for tier-one mods
+(step 8), not by TAOM coverage.
+
+**Two-player gate.** Nothing that widens server-side player semantics (PlayerScope, "any player's" rewrites) proceeds
+until this has passed once with a real second player in a **different clan**: profile1 with IG + TAOM, each player
+owning a castle. (a) An IG per-castle setting set by player A applies only to A's castle on the server, B's unchanged;
+(b) B's relay for A's town is rejected (`relay rejected ... does not own`); (c) state sync reaches both clients;
+(d) `trace-diff` run with two clients. No second player was available on 2026-09-15.
+
+**Fragility note.** The module reaches two Coop internals by reflection (`ResolvedMainHeroContext.ResolvedMainHero`,
+the `Campaign.PlayerDefaultFaction` setter) and transpiles mod methods under Coop's gates. A Coop update can disable
+compat silently (the probe pattern degrades to "disabled" in the log); check the compat logs after every Coop update.
+Raising this with the Coop maintainers was deferred by the maintainer on 2026-09-15.
+
 ## Authority classifier, step 1 (2026-09-14): Coop sink catalogue
 
 Goal of the classifier: decide from IL, without game launches, which parts of a mod must run only on the server and
