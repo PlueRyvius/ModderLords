@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using ModderLords.Core.Compat.Authority;
@@ -91,9 +91,13 @@ public partial class AuthorityWindow : Window
             _report = report;
             _rows = AuthorityRow.From(report);
             Header.Text = $"{_module.Id} {_module.Version}: {report.Summary}";
+            var actions = report.Roots.Where(r => r.Verdict is AuthorityVerdict.NeedsRelay or AuthorityVerdict.PlayerStateUnsynced).ToList();
+            var relayed = actions.Count(r => r.RelayVia is not null);
             SubHeader.Text = report.NotAnalysable
                 ? "The mod's code could not be read, so recipes for it fall back to gating whole behaviours."
-                : $"{_rows.Count(r => r.ActionNeeded)} of {_rows.Count} entry point(s) need attention. Against Coop: {coopSummary}.";
+                : $"{_rows.Count(r => r.ActionNeeded)} of {_rows.Count} entry point(s) need attention. "
+                  + (actions.Count == 0 ? "" : $"Player actions: {relayed} relayed to the server, {actions.Count - relayed} report only. ")
+                  + $"Against Coop: {coopSummary}.";
             ShowAll.IsEnabled = _rows.Count > 0;
             CopyButton.IsEnabled = true;
             ApplyFilter();

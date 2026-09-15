@@ -468,8 +468,21 @@ receive the recipe before their campaign loads and their copy of the mod stops r
 the host's copy acts and the results reach players through Coop's normal sync. The **Behaviours** column shows what a
 mod has to gate. Players need `ModderLords.Compat` installed for this (see the section above).
 
-When a mod also has a client-side screen (ImprovedGarrisons' management UI, for example), that screen is one of the
-gated behaviours and will not appear on players' clients; that is the trade-off until per-behaviour recipes are editable.
+When a mod's code can be analysed, the launcher gates individual handlers rather than whole behaviours, so a handler
+that also registers a screen or a menu keeps running on players' clients and only its server work is skipped. The
+**Authority…** button on the Mods tab shows the verdict for every entry point.
+
+### What co-op compatibility can and cannot fix
+
+The automatic fixes cover one shape of mod well: **campaign behaviours plus settings**, where player actions call a
+behaviour method with a town, party or hero (ImprovedGarrisons is the model case). For those the launcher gates the
+simulation to the server, rewrites "is this the player's?" checks to "is this any player's?", syncs settings, relays
+button actions to the server, and keeps the server from choosing a battle scene that crashes clients.
+
+It does **not** rewrite screen-driven actions (view models calling a service with screen state), console commands, or
+mission code. Those show as *report only* in the Authority window and need a small per-mod adapter. Neither can it
+sync mod state held in per-object fields yet; the Authority window names those fields so an adapter knows what to carry.
+Full generality is not the goal: a mod outside this shape gets an accurate report, not a promise.
 
 ## Checking that server-only logic worked
 
