@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 
 namespace ModderLords.CompatSync;
@@ -23,15 +23,17 @@ public static class SettingsHints
         var root = MiniJson.ParseObject(File.ReadAllText(path));
         var mods = MiniJson.GetArray(root, "Mods");
         if (mods == null) return;
-        var inc = 0; var exc = 0;
+        var inc = 0; var exc = 0; var state = 0;
         foreach (var m in mods)
         {
             if (m is not Dictionary<string, object?> mod) continue;
+            foreach (var f in MiniJson.GetArray(mod, "SyncState") ?? new List<object?>()) if (f is string id && SettingsSources.State.Add(id)) state++;
             var settings = MiniJson.GetObject(mod, "Settings");
             if (settings == null) continue;
             foreach (var s in MiniJson.GetArray(settings, "Include") ?? new List<object?>()) if (s is string i) { StaticSettingsSource.Include.Add(i); inc++; }
             foreach (var s in MiniJson.GetArray(settings, "Exclude") ?? new List<object?>()) if (s is string e) { StaticSettingsSource.Exclude.Add(e); exc++; }
         }
         if (inc + exc > 0) Log.Info($"settings hints: {inc} include, {exc} exclude pattern(s) from recipes.json");
+        if (state > 0) Log.Info($"state sync: {state} static field(s) listed in recipes.json");
     }
 }

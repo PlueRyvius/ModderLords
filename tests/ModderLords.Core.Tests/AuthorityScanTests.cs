@@ -1,4 +1,4 @@
-using ModderLords.Core.Compat.Authority;
+﻿using ModderLords.Core.Compat.Authority;
 using Xunit.Abstractions;
 
 namespace ModderLords.Core.Tests;
@@ -41,6 +41,9 @@ public sealed class AuthorityScanTests
     }
 
     private static RootVerdict For(string method) => Self.Value.report.Roots.Single(r => r.Root.Method == P + method);
+
+    /// <summary>The fixture analysis, for other test classes (StateSyncTests).</summary>
+    internal static (ModCodeModel model, AuthorityReport report) Analysed => Self.Value;
 
     [Theory]
     [InlineData("AuthBehavior::TickGold", AuthorityVerdict.ServerOnly)]      // Apply* on an action class Coop gates

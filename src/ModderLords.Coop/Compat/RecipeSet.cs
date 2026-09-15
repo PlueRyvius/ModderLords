@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ModderLords.Core.Compat;
@@ -47,6 +47,12 @@ public sealed class ModRecipe
     /// server (and still run it); the server runs it as that player after checking they own what it names.
     /// </summary>
     public List<string> Relays { get; set; } = new();
+    /// <summary>
+    /// v3, generated from the code: static mod fields ("Ns.Type.field") that server-only code writes and player-facing
+    /// code reads (or a relayed player action writes). The server's module broadcasts their values to clients through
+    /// the settings-sync channel; clients apply them and never send them back.
+    /// </summary>
+    public List<string> SyncState { get; set; } = new();
     public string? Notes { get; set; }
     /// <summary>Hints for the module's static-settings discovery (full type names or trailing-* globs); null = none.</summary>
     public ModRecipeSettings? Settings { get; set; }
@@ -120,7 +126,7 @@ public sealed class RecipeSet
                 if (keep.Count > 0) notes.Add("kept client-side: " + string.Join(", ", keep));
                 recipe.Notes = notes.Count > 0 ? string.Join("; ", notes) : null;
             }
-            if (recipe.CampaignBehaviors.Count + recipe.MissionBehaviors.Count + recipe.Handlers.Count + recipe.Unpatch.Count + recipe.PlayerComparisons.Count + recipe.Relays.Count == 0) continue;
+            if (recipe.CampaignBehaviors.Count + recipe.MissionBehaviors.Count + recipe.Handlers.Count + recipe.Unpatch.Count + recipe.PlayerComparisons.Count + recipe.Relays.Count + recipe.SyncState.Count == 0) continue;
             set.Mods.Add(recipe);
         }
         // Settings hints ride along for any mod that has them, gated or not (the module reads Mods[].Settings only).
@@ -174,6 +180,7 @@ public sealed class RecipeSet
         var unsynced = report.Count(AuthorityVerdict.PlayerStateUnsynced);
         var relayed = report.Roots.Count(r => r.RelayVia is not null);
         if (relayed > 0) notes.Add($"{relayed} player action(s) relayed to the server through {report.RelayMethods.Count} method(s)");
+        if (report.SyncStateMembers.Count > 0) notes.Add($"{report.SyncStateMembers.Count} static field(s) of mod state sent from the server to clients");
         if (report.PlayerComparisonMethods.Count > 0)
             notes.Add($"{report.PlayerComparisonMethods.Count} method(s) ask \"is this the player's?\"; the server asks about any player instead");
         if (split.Count > 0) notes.Add($"kept {split.Count} UI-registering handler(s) running on clients; their server work is gated instead");
@@ -186,7 +193,7 @@ public sealed class RecipeSet
         return new ModRecipe
         {
             Id = id, Handlers = handlers, Unpatch = unpatch, PlayerComparisons = report.PlayerComparisonMethods.ToList(),
-            Relays = report.RelayMethods.ToList(), Notes = string.Join("; ", notes),
+            Relays = report.RelayMethods.ToList(), SyncState = report.SyncStateMembers.ToList(), Notes = string.Join("; ", notes),
         };
     }
 

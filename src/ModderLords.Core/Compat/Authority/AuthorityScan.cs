@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace ModderLords.Core.Compat.Authority;
@@ -31,7 +31,14 @@ public enum AuthorityVerdict
 /// also registers UI: the methods to skip on clients in its place, so the UI still registers there.
 /// </summary>
 public sealed record RootVerdict(AuthorityRoot Root, AuthorityVerdict Verdict, string Reason, IReadOnlyList<string> Evidence, bool Opaque,
-    IReadOnlyList<string>? Flags = null, IReadOnlyList<string>? GateInstead = null, string? RelayVia = null);
+    IReadOnlyList<string>? Flags = null, IReadOnlyList<string>? GateInstead = null, string? RelayVia = null)
+{
+    /// <summary>
+    /// NeedsStateSync: the mod fields ("Ns.Type.field") this server-only code writes and player-facing code reads.
+    /// PlayerStateUnsynced: the fields this player action writes and the server's simulation reads. Null otherwise.
+    /// </summary>
+    public IReadOnlyList<string>? SharedState { get; init; }
+}
 
 public sealed class AuthorityReport
 {
@@ -46,6 +53,11 @@ public sealed class AuthorityReport
     public List<string> PlayerComparisonMethods { get; init; } = new();
     /// <summary>Methods a player action is relayed through (<see cref="RootVerdict.RelayVia"/>): the server runs them as that player.</summary>
     public List<string> RelayMethods { get; init; } = new();
+    /// <summary>
+    /// Shared mod state the module can carry from the server to clients: the <see cref="RootVerdict.SharedState"/> fields
+    /// that are static and of a value kind the settings sync serialises (bool, number, string, enum). "Ns.Type.field".
+    /// </summary>
+    public List<string> SyncStateMembers { get; init; } = new();
 
     /// <summary>Verdicts that call for a gate, a relay, state sync, or a look.</summary>
     [JsonIgnore]
@@ -165,6 +177,8 @@ public static class AuthorityScan
             report.Roots.Add(v);
         }
         report.RelayMethods.AddRange(report.Roots.Select(r => r.RelayVia).OfType<string>().Distinct(StringComparer.Ordinal).OrderBy(m => m, StringComparer.Ordinal));
+        report.SyncStateMembers.AddRange(report.Roots.Where(r => r.SharedState is not null).SelectMany(r => r.SharedState!)
+            .Distinct(StringComparer.Ordinal).Where(f => Syncable(model, f)).OrderBy(f => f, StringComparer.Ordinal));
         return report;
     }
 
@@ -365,7 +379,8 @@ public static class AuthorityScan
 
         if (fx.AuthorityCheck && trigger is not RootTrigger.Presentation) return V(AuthorityVerdict.AlreadyHandled, "checks authority itself");
 
-        var shared = fx.ModWrites.Where(playerFacingReads.Contains).Select(Short).OrderBy(x => x, StringComparer.Ordinal).Take(3).ToList();
+        var sharedFull = fx.ModWrites.Where(playerFacingReads.Contains).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        var shared = sharedFull.Select(Short).Take(3).ToList();
         switch (trigger)
         {
             case RootTrigger.Simulation or RootTrigger.Session:
@@ -376,11 +391,11 @@ public static class AuthorityScan
                 {
                     var why = who + fx.Sinks[d].text;
                     return shared.Count > 0
-                        ? V(AuthorityVerdict.NeedsStateSync, why + "; also writes " + string.Join(", ", shared) + ", which player-facing code reads", d)
+                        ? V(AuthorityVerdict.NeedsStateSync, why + "; also writes " + string.Join(", ", shared) + ", which player-facing code reads", d) with { SharedState = sharedFull }
                         : V(AuthorityVerdict.ServerOnly, why, d);
                 }
                 if (trigger == RootTrigger.Simulation && shared.Count > 0)
-                    return V(AuthorityVerdict.NeedsStateSync, who + "writes " + string.Join(", ", shared) + ", which player-facing code reads");
+                    return V(AuthorityVerdict.NeedsStateSync, who + "writes " + string.Join(", ", shared) + ", which player-facing code reads") with { SharedState = sharedFull };
                 if (fx.Has(Sink.Presentation)) return V(AuthorityVerdict.Local, "display only", Sink.Presentation);
                 return V(AuthorityVerdict.Local, trigger == RootTrigger.Session ? "setup only; no world change found" : "no world change found");
             }
@@ -393,10 +408,11 @@ public static class AuthorityScan
                     var outcome = kind == CoopGateKind.ClientLocal ? "; the change stays on that client" : "; on a client it silently does nothing";
                     return V(AuthorityVerdict.NeedsRelay, "player action " + hit.text + outcome, hit: hit);
                 }
-                var unsynced = fx.ModWrites.Where(serverReads.Contains).Select(Short).OrderBy(x => x, StringComparer.Ordinal).Take(3).ToList();
+                var unsyncedFull = fx.ModWrites.Where(serverReads.Contains).OrderBy(x => x, StringComparer.Ordinal).ToList();
+                var unsynced = unsyncedFull.Select(Short).Take(3).ToList();
                 if (unsynced.Count > 0)
                     return V(AuthorityVerdict.PlayerStateUnsynced,
-                        "player changes " + string.Join(", ", unsynced) + ", which server-side simulation reads; done on a client, the server never sees it");
+                        "player changes " + string.Join(", ", unsynced) + ", which server-side simulation reads; done on a client, the server never sees it") with { SharedState = unsyncedFull };
                 Sink? world = fx.Has(Sink.SyncedWrite) ? Sink.SyncedWrite : fx.Has(Sink.WorldWrite) ? Sink.WorldWrite : null;
                 if (world is { } pc)
                     return V(AuthorityVerdict.NeedsRelay, "player action " + fx.Sinks[pc].text + "; done on a client, the server never hears of it", pc);
@@ -628,6 +644,19 @@ public static class AuthorityScan
     {
         var i = type.LastIndexOf('.');
         return i >= 0 ? type[(i + 1)..] : type;
+    }
+
+    private static readonly HashSet<string> SyncableTypes = new(StringComparer.Ordinal)
+    {
+        "System.Boolean", "System.String", "System.Byte", "System.SByte", "System.Int16", "System.UInt16", "System.Int32", "System.UInt32",
+        "System.Int64", "System.UInt64", "System.Single", "System.Double", "System.Decimal",
+    };
+
+    /// <summary>A static field of a kind the module's ValueConverter serialises: bool, number, string, or an enum the mod defines.</summary>
+    internal static bool Syncable(ModCodeModel model, string field)
+    {
+        if (!model.Fields.TryGetValue(field, out var f) || !f.IsStatic) return false;
+        return SyncableTypes.Contains(f.Type) || (model.BaseTypes.TryGetValue(f.Type, out var b) && b == "System.Enum");
     }
 
     /// <summary>"Ns.Type::Method" → "Type.Method"; "Ns.Type.field" → "Type.field"; an auto-property's backing field → "Type.Property".</summary>

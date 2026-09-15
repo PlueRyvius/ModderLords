@@ -1,4 +1,4 @@
-using ModderLords.Core.Compat.Authority;
+﻿using ModderLords.Core.Compat.Authority;
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
 using ModderLords.Coop.Launch;
@@ -152,6 +152,8 @@ switch (cmd)
         Console.WriteLine($"{mod.Id} {mod.Version}: {report.Summary}");
         if (report.PlayerComparisonMethods.Count > 0)
             Console.WriteLine($"  player checks: {report.PlayerComparisonMethods.Count} server-run method(s) ask \"is this the player's?\" (rewritten to any player on the server)");
+        if (report.SyncStateMembers.Count > 0)
+            Console.WriteLine($"  state sync: {report.SyncStateMembers.Count} static field(s) sent from the server to clients");
         foreach (var n in report.Notes.Take(5)) Console.WriteLine("  note: " + n);
         var shown = opts.ContainsKey("all") ? report.Roots : report.ActionNeeded;
         foreach (var r in shown.OrderBy(r => r.Verdict).ThenBy(r => r.Root.Method, StringComparer.Ordinal))
@@ -162,6 +164,7 @@ switch (cmd)
             foreach (var f in r.Flags ?? []) Console.WriteLine("      flag: " + f);
             if (r.GateInstead is { Count: > 0 } g) Console.WriteLine("      gated instead on clients: " + string.Join(", ", g));
             if (r.RelayVia is { } via) Console.WriteLine("      relayed to the server via " + via);
+            if (r.SharedState is { Count: > 0 } st) Console.WriteLine("      shared state: " + string.Join(", ", st.Select(f => report.SyncStateMembers.Contains(f) ? f + " (synced)" : f + " (not syncable: instance or unsupported type)")));
         }
         return 0;
     }

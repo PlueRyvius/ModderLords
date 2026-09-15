@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -54,6 +54,7 @@ public static class BehaviorGate
         var handlers = new List<string>();
         var unpatch = new List<(string target, string patch)>();
         var relays = new List<string>();
+        var stateAdded = 0;
         try
         {
             var root = JObject.Parse(json);
@@ -65,6 +66,8 @@ public static class BehaviorGate
                 handlers.AddRange((mod["Handlers"] as JArray ?? new JArray()).Select(t => t.ToString()));
                 // Schema v3: player actions sent to the server.
                 relays.AddRange((mod["Relays"] as JArray ?? new JArray()).Select(t => t.ToString()));
+                // Schema v3: static mod state the server broadcasts (a client learns the list from the server's recipe).
+                foreach (var f in mod["SyncState"] as JArray ?? new JArray()) if (SettingsSources.State.Add(f.ToString())) stateAdded++;
                 foreach (var u in mod["Unpatch"] as JArray ?? new JArray())
                     unpatch.Add((u["Target"]?.ToString() ?? "", u["Patch"]?.ToString() ?? ""));
             }
@@ -72,6 +75,7 @@ public static class BehaviorGate
         catch (Exception ex) { return "recipe parse failed: " + ex.Message; }
 
         var generated = "";
+        if (stateAdded > 0) { SettingsSources.State.Refresh(); generated += $"; {stateAdded} static field(s) of mod state follow the server ({SettingsSources.State.Summary()})"; }
         if (handlers.Count + unpatch.Count > 0)
         {
             var (applied, handlersMissing) = Gates.Value.SkipHandlers(handlers);
