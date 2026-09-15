@@ -203,6 +203,7 @@ variables, marked, so "was it actually set?" is answerable from the log):
 | `MODDERLORDS_TERRAIN_PROBE` | off | Samples the map scene to a CSV; `scripts/Compare-TerrainProbe.ps1` diffs a server's against a client's. |
 | `MODDERLORDS_MAPSCENE_CENSUS` | off | Counts which map-scene members are actually called, and names those never called. |
 | `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` | off | Keeps the scene's `<terrain>` descriptor. Measured safe; not currently needed. |
+| `MODDERLORDS_BATTLE_SCENE_PICK` | on | The launcher lists scenes shipped without a terrain shader cache in `recipes.json` (`ExcludedBattleScenes`), and the server never chooses one for a field battle (every client loads the server's choice and crashes on those; vanilla ships `battle_terrain_020` and `battle_terrain_a` that way). `0` disables. Details: `docs/FIELD-BATTLE-TERRAIN.md`, 2026-09-15. |
 
 ### Smoke-testing a server without the GUI
 
@@ -490,6 +491,16 @@ setting). The server now runs the same call as that player.
 - IG: 43 actions relayed through 33 methods (guard orders, recruitment/training/guard settings); TAOM and
   MyLittleWarband: none (their actions don't reach a sendable, ownable method).
 - Module version 0.1.4 (0.1.3 was the first live test; bumped so Launch client replaces it with the coalescing build).
+
+## Field battles (2026-09-15): the server never chooses a scene without a terrain shader cache
+
+Follow-up "every client accepts the server's battle scene choice" from 2026-09-14, resolved by reading Coop 0.1.5:
+the server already builds the mission record once and sends it, scene name included, to every client, so the
+remaining crash is the server picking a sackless scene. `BattleSceneCache.Scan` (Core) lists them from the selected
+modules' `SceneObj` folders at launch (last module in load order wins), `RecipeSet.ExcludedBattleScenes` carries the
+list, `BattleScenePick` (server module) postfixes Coop's `FieldBattleMissionInitializer.Create` and swaps a listed pick
+for one of the same candidate tier via `BattleScenePolicy.Replace` (FNV-1a of the battle's terrain seed; tests in
+`BattleSceneTests`). Module version 0.1.6. Full account in `docs/FIELD-BATTLE-TERRAIN.md`. Not yet run live.
 
 ## Compat verification logging (2026-09-02)
 

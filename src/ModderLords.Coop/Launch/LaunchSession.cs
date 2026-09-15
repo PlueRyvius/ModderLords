@@ -443,7 +443,17 @@ public sealed class LaunchSession
         var db = CompatDb.Current;
         var hints = selections.Select(s => db.Find(s.Module.Id)).Where(r => r is not null)
             .Select(r => (r!.Id, (IReadOnlyList<string>)r.SettingsTypes, (IReadOnlyList<string>)r.IgnoreSettingsTypes)).ToList();
-        var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, authority);
+        // Field battles: the server's scene choice is what every client loads, so scenes without a terrain shader cache
+        // must not be chosen. The server install ships no scene content; the launcher sees the game's and the mods'.
+        IReadOnlyList<string>? excludedScenes = null;
+        if (Environment.GetEnvironmentVariable("MODDERLORDS_BATTLE_SCENE_PICK") != "0")
+        {
+            excludedScenes = global::ModderLords.Core.Compat.BattleSceneCache.Scan(selections.Select(s => s.Module.FolderPath));
+            if (excludedScenes.Count > 0)
+                messages.Add($"battle scenes: {excludedScenes.Count} scene(s) ship without a terrain shader cache and will not be chosen for field battles"
+                    + (excludedScenes.Any(s => s.StartsWith("battle_terrain", StringComparison.Ordinal)) ? $" ({string.Join(", ", excludedScenes.Where(s => s.StartsWith("battle_terrain", StringComparison.Ordinal)).Take(4))})" : ""));
+        }
+        var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, authority, excludedScenes);
         set.WriteInto(sync.FolderPath);
         foreach (var r in set.Mods)
         {

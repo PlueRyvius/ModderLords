@@ -44,6 +44,8 @@ public sealed class ServerSettingsHandler : IHandler
             catch (Exception ex) { Log.Warn("player checks failed: " + ex.GetBaseException().Message); }
             try { Log.Info("relays: " + ServerRelay.LoadAllowList(recipes)); }
             catch (Exception ex) { Log.Warn("relays failed to load: " + ex.GetBaseException().Message); }
+            try { Log.Info("battle scene pick: " + BattleScenePick.Load(recipes)); }
+            catch (Exception ex) { Log.Warn("battle scene pick failed to load: " + ex.GetBaseException().Message); }
         }
         broker.Subscribe<NetworkRelayInvoke>(HandleRelay);
     }

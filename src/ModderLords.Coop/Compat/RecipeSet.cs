@@ -72,6 +72,12 @@ public sealed class RecipeSet
     public int SchemaVersion { get; set; } = CurrentSchema;
     public string GeneratedBy { get; set; } = "";
     public List<ModRecipe> Mods { get; set; } = new();
+    /// <summary>
+    /// Scenes shipped without a terrain shader cache (see <see cref="ModderLords.Core.Compat.BattleSceneCache"/>): the
+    /// server never chooses them for a field battle, because every client loads the server's choice and crashes on
+    /// these. Null when the check is switched off (MODDERLORDS_BATTLE_SCENE_PICK=0).
+    /// </summary>
+    public List<string>? ExcludedBattleScenes { get; set; }
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
@@ -86,9 +92,9 @@ public sealed class RecipeSet
     /// </summary>
     public static RecipeSet Build(IEnumerable<(string id, ScanResult scan, IReadOnlyCollection<string> keepClientSide)> serverAuthoritative, string generatedBy,
         IEnumerable<(string id, IReadOnlyList<string> include, IReadOnlyList<string> exclude)>? settingsHints = null,
-        IReadOnlyDictionary<string, AuthorityReport>? authority = null)
+        IReadOnlyDictionary<string, AuthorityReport>? authority = null, IReadOnlyList<string>? excludedBattleScenes = null)
     {
-        var set = new RecipeSet { GeneratedBy = generatedBy };
+        var set = new RecipeSet { GeneratedBy = generatedBy, ExcludedBattleScenes = excludedBattleScenes?.ToList() };
         foreach (var (id, scan, keep) in serverAuthoritative)
         {
             ModRecipe recipe;

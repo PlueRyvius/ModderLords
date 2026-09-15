@@ -12,6 +12,7 @@ public static class Bridge
         global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.ClientSettingsHandler.Current?.ApplyPending();
         EncounterOptionGate.EnsureInstalled();
         EncounterOptionGate.Tick();
+        BattleScenePick.EnsureInstalled();
         BehaviorGate.RetryPendingPostfixes();
     }
 
