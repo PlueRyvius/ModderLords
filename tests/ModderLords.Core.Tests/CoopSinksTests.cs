@@ -42,6 +42,15 @@ public sealed class CoopSinksTests
     }
 
     [Fact]
+    public void ConditionalGates_SplitByWhatTheClientBranchDoes()
+    {
+        var c = Self.Value;
+        Assert.Equal(CoopGateKind.Publishes, c.GateFor(P + "VanillaLeave", "ApplyForParty")!.Kind);
+        Assert.Equal(CoopGateKind.ClientDeny, c.GateFor(P + "VanillaCheats", "CheckCheatUsage")!.Kind);
+        Assert.Equal(CoopGateKind.ClientLocal, c.GateFor(P + "VanillaRoster", "AddToCounts")!.Kind);
+    }
+
+    [Fact]
     public void SyncedAndInterceptedMembers_AndTargetMethods()
     {
         var c = Self.Value;
@@ -106,6 +115,10 @@ public sealed class CoopSinksProbe
         Assert.True(c.IsBehaviourGated("TaleWorlds.CampaignSystem.CampaignBehaviors.RecruitmentCampaignBehavior"));
         Assert.True(c.IsBlocked("TaleWorlds.CampaignSystem.Actions.GiveGoldAction", "ApplyInternal"));
         Assert.Contains("TaleWorlds.CampaignSystem.Hero.VolunteerTypes", c.InterceptedMembers);
+        Assert.Equal(CoopGateKind.Publishes, c.GateFor("TaleWorlds.CampaignSystem.Actions.LeaveSettlementAction", "ApplyForParty")!.Kind);
+        Assert.Equal(CoopGateKind.ClientDeny, c.GateFor("TaleWorlds.CampaignSystem.CampaignCheats", "CheckCheatUsage")!.Kind);
+        Assert.Equal(CoopGateKind.ClientLocal, c.GateFor("TaleWorlds.CampaignSystem.Roster.ItemRoster", "AddToCounts")!.Kind);
+        foreach (var k in Enum.GetValues<CoopGateKind>()) _out.WriteLine($"{k}: {c.Gates.Count(g => g.Kind == k)}");
         Assert.NotEmpty(c.SyncedMembers);
     }
 }

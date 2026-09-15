@@ -15,6 +15,9 @@ public sealed class AuthorityScanTests
             new CoopGate(W + "AuthGoldAction", "ApplyInternal", CoopGateKind.ClientSkip, "fake"),
             new CoopGate(W + "AuthVanillaBehavior", "RegisterEvents", CoopGateKind.ClientSkip, "fake"),
             new CoopGate(W + "AuthVanillaAlliance", "StartAlliance", CoopGateKind.Conditional, "fake"),
+            new CoopGate(W + "AuthLeaveAction", "ApplyForParty", CoopGateKind.Publishes, "fake"),
+            new CoopGate(W + "AuthCheats", "CheckCheatUsage", CoopGateKind.ClientDeny, "fake"),
+            new CoopGate("TaleWorlds.Core.GameStateManager", "PushState", CoopGateKind.Conditional, "fake"),
         ],
         SyncedMembers = [W + "AuthHero.Gold"],
     };
@@ -57,6 +60,17 @@ public sealed class AuthorityScanTests
     [InlineData("AuthMissionA::OnAgentRemoved", AuthorityVerdict.Both)]      // base call does not dispatch to a sibling
     [InlineData("AuthMissionB::OnAgentRemoved", AuthorityVerdict.Review)]
     [InlineData("AuthCareerPatch::Open", AuthorityVerdict.NeedsRelay)]       // ViewModel command = player input
+    [InlineData("AuthSplitBehavior::Split", AuthorityVerdict.ServerOnly)]    // registers UI; split, still gated by parts
+    [InlineData("AuthSplitBehavior::Mixed", AuthorityVerdict.Review)]        // UI and server work in one method
+    [InlineData("AuthSplitBehavior::NonVoid", AuthorityVerdict.Review)]      // server work in a callee that returns a value
+    [InlineData("AuthSplitBehavior::Shared", AuthorityVerdict.Review)]       // server work a menu consequence also uses
+    [InlineData("AuthSplitBehavior::OpenSettings", AuthorityVerdict.Local)]  // opening a screen is navigation
+    [InlineData("AuthSplitBehavior::LeaveTown", AuthorityVerdict.AlreadyHandled)] // Coop publishes its own request
+    [InlineData("AuthSplitBehavior::Cheat", AuthorityVerdict.Local)]         // Coop refuses cheats on clients on purpose
+    [InlineData("AuthSplitBehavior::OpenQuests", AuthorityVerdict.Review)]   // a screen Coop never opens
+    [InlineData("AuthSettingsVM::Confirm", AuthorityVerdict.NeedsRelay)]     // popup callback changing the world
+    [InlineData("AuthSplitBehavior::Bye", AuthorityVerdict.Local)]           // leaving the conversation is navigation
+    [InlineData("AuthSplitBehavior::TickOffer", AuthorityVerdict.ServerOnly)] // a popup in a tick doesn't stop gating
     public void Verdicts(string method, AuthorityVerdict expected)
     {
         var v = For(method);
@@ -70,6 +84,35 @@ public sealed class AuthorityScanTests
         Assert.Equal("AuthBehavior.TickGold", gold.Evidence[0]);
         Assert.Contains("AuthGoldAction.ApplyBetweenCharacters", gold.Evidence[^1]);
         Assert.Contains("which Coop blocks on clients", gold.Reason);
+    }
+
+    [Fact]
+    public void UiRegisteringHandler_GatesOnlyItsServerWork()
+    {
+        var split = For("AuthSplitBehavior::Split");
+        Assert.Equal([P + "AuthSplitBehavior::SetupParties"], split.GateInstead);
+        Assert.Contains(split.Flags!, f => f.StartsWith("RegistersUI", StringComparison.Ordinal));
+        Assert.Null(For("AuthSplitBehavior::TickSettings").GateInstead);
+        Assert.Contains("returns a value", For("AuthSplitBehavior::NonVoid").Reason);
+        Assert.Contains("player-facing", For("AuthSplitBehavior::Shared").Reason);
+    }
+
+    [Fact]
+    public void SliderCallback_IsARoot_AndItsSettingNeverReachesTheServer()
+    {
+        var root = Self.Value.report.Roots.Single(r => r.Root.Detail == "UI callback" && r.Root.Method.StartsWith(P + "AuthSettingsVM", StringComparison.Ordinal));
+        Assert.Equal(AuthorityVerdict.PlayerStateUnsynced, root.Verdict);
+        Assert.Contains("AuthTownLimits.Max", root.Reason);   // constructor defaults don't make it plumbing
+        Assert.Contains(Self.Value.report.ActionNeeded, r => r == root);
+        Assert.Equal("popup callback", For("AuthSettingsVM::Confirm").Root.Detail);
+    }
+
+    [Fact]
+    public void TickReadingMainHero_IsFlagged()
+    {
+        Assert.Contains(For("AuthSplitBehavior::TickOffer").Flags!, f => f.StartsWith("PopupLost", StringComparison.Ordinal));
+        Assert.Null(For("AuthSplitBehavior::TickOffer").GateInstead);
+        Assert.Contains(For("AuthSplitBehavior::TickHost").Flags!, f => f.StartsWith("HostIsOnlyPlayer: reads Hero.MainHero", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -154,5 +197,15 @@ public sealed class AuthorityProbe
             Assert.Contains(Find(mlw, "MyLittleWarband.RecruitPatch2::Prefix")!.Verdict, new[] { AuthorityVerdict.NeedsRelay, AuthorityVerdict.Review });
         }
         if (reports.TryGetValue("KingdomPlus", out var kp)) Assert.True(kp.NotAnalysable);
+        if (reports.TryGetValue("ImprovedGarrisons", out var ig))
+        {
+            // The recruitment screen's "Maximum number of troops to recruit" slider: a setting the server's tick reads.
+            Assert.Contains(ig.Roots, r => r.Verdict == AuthorityVerdict.PlayerStateUnsynced && r.Root.Detail == "UI callback"
+                && r.Reason.Contains("GarrisonSettings.MaxRecruitThreshold", StringComparison.Ordinal));
+            Assert.Contains(ig.Roots, r => r.Root.Method == "ImprovedGarrisons.SaveSystem.GarrisonBehavior::HourlyEvent"
+                && r.Flags?.Any(f => f.StartsWith("HostIsOnlyPlayer", StringComparison.Ordinal)) == true);
+        }
+        if (reports.TryGetValue("TAOM", out var taomCheats))
+            Assert.DoesNotContain(taomCheats.Roots, r => r.Verdict == AuthorityVerdict.NeedsRelay && r.Reason.Contains("CheckCheatUsage", StringComparison.Ordinal));
     }
 }

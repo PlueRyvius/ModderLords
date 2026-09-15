@@ -395,6 +395,39 @@ which stay with the player. Step 1 reads what Coop itself already decides.
 - `RecipeGatesTests` run that file against real Harmony (Lib.Harmony 2.4.2 in the test project) with NoInlining targets:
   handler skipped on client only, postfix kept on server and removed on client, missing ids reported not thrown.
 
+## Authority classifier, step 5 (2026-09-14): accuracy pass, UI kept on clients
+
+Proven on ImprovedGarrisons (IG), whose player GUI sets per-castle options the server's ticks read.
+
+- **Coop gate kinds split by the prefix's IL** (`CoopSinks.Classify`, catalogue schema 2): `Publishes` (calls
+  `MessageBroker.Publish`: Coop sends its own request), `ClientDeny` (client branch returns false: cheats),
+  `ClientLocal` (client branch returns true, nothing published: the change stays on that client). Debug-build IL
+  (`stloc/ldloc` before the branch) is handled. On Coop 0.1.5: LeaveSettlementAction = Publishes,
+  CheckCheatUsage = ClientDeny, ItemRoster.AddToCounts = ClientLocal.
+- **Player actions** (`Decide`): a Publishes gate → AlreadyHandled, ClientDeny → Local ("players cannot use it");
+  `GameStateManager.PushState`, `GameMenu.ActivateGameMenu/SwitchToMenu/ExitToLast`, `PlayerEncounter.LeaveEncounter/
+  Finish` are navigation, not world changes; pushing `QuestsState` (which Coop never opens) → Review. TAOM's cheat
+  commands no longer show as NeedsRelay.
+- **New roots**: delegates created in ViewModel types ("UI callback": IG's slider/toggle lambdas) and delegates passed
+  to `InquiryData`/`MultiSelectionInquiryData`/`TextInquiryData` ("popup callback": IG's fortify/escort choices).
+- **New verdict `PlayerStateUnsynced`**: a player action writes mod state that Simulation/Session code reads (plumbing
+  limit applies; view-model/screen fields excluded). A constructor filling in its own fields (directly or through its
+  own setters) is initialisation, not a writer — otherwise every settings object with defaults looks like plumbing.
+  IG: every Recruitment/Training/Guards option (e.g. `GarrisonSettings.MaxRecruitThreshold`).
+- **Flags** on gated handlers (`RootVerdict.Flags`): `HostIsOnlyPlayer` (reads `Hero.MainHero`, `Clan.PlayerClan`,
+  `MainParty`: on a Coop server that is the host; IG's `GetTownSettings` treats every player castle as an NPC's),
+  `PopupLost` (shows an inquiry from server-only code, so no player sees it), `RegistersUI`.
+- **UI-preserving gates** (maintainer's choice: keep UI, split the handler): a ServerOnly/NeedsStateSync handler that
+  calls `CampaignGameStarter.AddGameMenu*/AddPlayerLine/AddDialogLine`, `ScreenManager.PushScreen/AddGlobalLayer` or
+  creates a `GauntletLayer` is not gated. `HandlerSplit` descends its callees and puts the ones doing server work in
+  `RootVerdict.GateInstead` when each is void, not an entry point, not a ctor/property, and not reached by
+  player-facing code; otherwise the handler becomes Review and keeps running on clients. `RecipeSet` writes
+  `GateInstead` into `Handlers[]` in place of the handler (no schema or client-module change: `SkipHandlers` gates any
+  method id). Before this, IG's `GarrisonPartyBehavior.OnGameOpen` was skipped on clients, which removed the keep's
+  "Improved Garrison" option and the garrison dialog lines; now only `OnGameStartSetAllIGParties` is skipped.
+- Whole-behaviour fallback recipes say that menus they register are hidden on clients.
+- CLI `authority` and the Authority window list flags and "gated instead" methods.
+
 ## Compat verification logging (2026-09-02)
 
 - `BehaviorGate` installs counting postfixes on each gated campaign behaviour's common event handlers

@@ -48,6 +48,8 @@ public sealed class MethodNode
     public HashSet<string> FieldReads { get; } = new(StringComparer.Ordinal);
     /// <summary>Uses reflection invocation, so its real callees are not visible statically.</summary>
     public bool Opaque { get; set; }
+    /// <summary>Every overload sharing this id returns void, so a client-skip prefix can drop its body safely.</summary>
+    public bool IsVoid { get; set; } = true;
 }
 
 /// <summary>A mod's call graph and entry points, read from IL metadata only (nothing is loaded or run).</summary>
@@ -63,6 +65,8 @@ public sealed class ModCodeModel
     /// <summary>Base class or interface full name → mod types that directly derive from or implement it.</summary>
     public Dictionary<string, HashSet<string>> Implementers { get; } = new(StringComparer.Ordinal);
     public List<AuthorityRoot> Roots { get; } = new();
+    /// <summary>(declaring type, ldftn target) for every delegate created; ViewModel ones become UI-callback roots.</summary>
+    internal List<(string Owner, string Target)> DelegateSites { get; } = new();
 
     public static string MethodId(string type, string method) => type + "::" + method;
 
@@ -132,6 +136,8 @@ public static class ModAnalysis
         ["AddWaitGameMenu"] = [RootTrigger.Presentation, RootTrigger.Query, RootTrigger.PlayerInput, RootTrigger.Presentation],
     };
 
+    private static readonly HashSet<string> InquiryTypes = new(StringComparer.Ordinal) { "InquiryData", "MultiSelectionInquiryData", "TextInquiryData" };
+
     private static readonly HashSet<string> OpaqueCalls = new(StringComparer.Ordinal)
     {
         "System.Reflection.MethodBase::Invoke", "System.Reflection.MethodInfo::Invoke", "System.Reflection.ConstructorInfo::Invoke",
@@ -164,6 +170,7 @@ public static class ModAnalysis
         }
         model.NotAnalysable = dlls.Count > 0 && readable == 0;
         AddTypeRoots(model, typeMethods);
+        AddUiCallbackRoots(model);
         var distinct = model.Roots.Distinct().ToList();
         model.Roots.Clear();
         model.Roots.AddRange(distinct);
@@ -221,6 +228,7 @@ public static class ModAnalysis
         var id = ModCodeModel.MethodId(typeName, name);
         var node = Node(model, id);
         typeMethods.Add((typeName, name, m.Attributes));
+        node.IsVoid &= IlReader.ReturnsVoid(md, m);
 
         // Attribute-declared patches and console commands.
         var methodPatch = new PatchTarget(null, null, 0);
@@ -277,6 +285,7 @@ public static class ModAnalysis
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     var target = ModCodeModel.MethodId(t, n);
                     node.Delegates.Add(target);
+                    model.DelegateSites.Add((typeName, target));
                     lastFtn = target;
                     delegateArgs.Add(target);
                     break;
@@ -305,6 +314,13 @@ public static class ModAnalysis
                 {
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     node.Calls.Add(ModCodeModel.MethodId(t, n));
+                    if (InquiryTypes.Contains(t[(t.LastIndexOf('.') + 1)..]))
+                    {
+                        // A popup's buttons run when the player answers it.
+                        foreach (var cb in delegateArgs)
+                            if (cb is not null) model.Roots.Add(new AuthorityRoot(cb, RootTrigger.PlayerInput, "popup callback"));
+                        delegateArgs.Clear();
+                    }
                     if (t.EndsWith("HarmonyMethod", StringComparison.Ordinal) && original is not null)
                     {
                         var patchMethod = pendingLookup ?? (lastType is not null && lastString is not null ? (lastType, lastString) : null);
@@ -382,6 +398,25 @@ public static class ModAnalysis
             }
             else if (attrs.HasFlag(MethodAttributes.Virtual) && !attrs.HasFlag(MethodAttributes.NewSlot))
                 model.Roots.Add(new AuthorityRoot(ModCodeModel.MethodId(type, method), family.Value, "override"));
+        }
+    }
+
+    /// <summary>
+    /// Delegates a ViewModel hands to its controls (slider, toggle and button callbacks) run when the player uses that
+    /// control, so each becomes a PlayerInput root. Lambdas live in closure types; the ViewModel is the outer type.
+    /// </summary>
+    private static void AddUiCallbackRoots(ModCodeModel model)
+    {
+        var rooted = new HashSet<string>(model.Roots.Select(r => r.Method), StringComparer.Ordinal);
+        foreach (var (owner, target) in model.DelegateSites)
+        {
+            var plus = owner.IndexOf('+');
+            var outer = plus > 0 ? owner[..plus] : owner;
+            var simple = outer[(outer.LastIndexOf('.') + 1)..];
+            var isViewModel = simple.EndsWith("VM", StringComparison.Ordinal) || simple.EndsWith("ViewModel", StringComparison.Ordinal)
+                || Family(model.BaseChain(outer)) == RootTrigger.PlayerInput;
+            if (!isViewModel || !model.Methods.ContainsKey(target) || !rooted.Add(target)) continue;
+            model.Roots.Add(new AuthorityRoot(target, RootTrigger.PlayerInput, "UI callback"));
         }
     }
 

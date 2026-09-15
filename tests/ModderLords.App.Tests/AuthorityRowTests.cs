@@ -53,6 +53,29 @@ public sealed class AuthorityRowTests
     }
 
     [Fact]
+    public void Details_list_flags_and_split_gates_and_player_settings_need_action()
+    {
+        var report = new AuthorityReport
+        {
+            ModuleId = "IG",
+            Roots =
+            [
+                V("IG.GarrisonPartyBehavior::OnGameOpen", RootTrigger.Session, AuthorityVerdict.NeedsStateSync) with
+                {
+                    Flags = ["RegistersUI: registers CampaignGameStarter.AddGameMenuOption in MainMenu..ctor"],
+                    GateInstead = ["IG.GarrisonPartyBehavior::OnGameStartSetAllIGParties"],
+                },
+                V("IG.RecruitmentUIVM+<>c::<Init>b__1", RootTrigger.PlayerInput, AuthorityVerdict.PlayerStateUnsynced),
+            ],
+        };
+        var rows = AuthorityRow.From(report);
+        var split = rows.Single(r => r.Verdict == "NeedsStateSync");
+        Assert.Contains("flag: RegistersUI", split.Details);
+        Assert.Contains("gated instead on clients: GarrisonPartyBehavior.OnGameStartSetAllIGParties", split.Details);
+        Assert.True(rows.Single(r => r.Verdict == "PlayerStateUnsynced").ActionNeeded);
+    }
+
+    [Fact]
     public void A_report_with_no_entry_points_gives_no_rows()
     {
         Assert.Empty(AuthorityRow.From(new AuthorityReport { ModuleId = "Data", NotAnalysable = true }));

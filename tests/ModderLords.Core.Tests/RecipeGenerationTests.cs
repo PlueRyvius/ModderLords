@@ -49,6 +49,30 @@ public sealed class RecipeGenerationTests
     }
 
     [Fact]
+    public void UiRegisteringHandler_IsReplacedByItsServerWork_AndUnsplittableOnesAreNotGated()
+    {
+        var report = Report();
+        report.Roots.Add(V("Mod.GarrisonBehavior::OnGameOpen", RootTrigger.Session, AuthorityVerdict.NeedsStateSync) with
+        {
+            Flags = ["RegistersUI: registers CampaignGameStarter.AddGameMenuOption in MainMenu..ctor"],
+            GateInstead = ["Mod.GarrisonBehavior::SetAllParties", "Mod.PartyManager::Reset"],
+        });
+        report.Roots.Add(V("Mod.GarrisonBehavior::OnMixed", RootTrigger.Session, AuthorityVerdict.Review) with
+        {
+            Flags = ["RegistersUI: registers CampaignGameStarter.AddPlayerLine in GarrisonBehavior.OnMixed"],
+        });
+        report.Roots.Add(V("Mod.SettingsVM+<>c::<Init>b__0", RootTrigger.PlayerInput, AuthorityVerdict.PlayerStateUnsynced));
+        var r = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
+        Assert.Contains("Mod.GarrisonBehavior::SetAllParties", r.Handlers);
+        Assert.Contains("Mod.PartyManager::Reset", r.Handlers);
+        Assert.DoesNotContain("Mod.GarrisonBehavior::OnGameOpen", r.Handlers);
+        Assert.DoesNotContain("Mod.GarrisonBehavior::OnMixed", r.Handlers);
+        Assert.Contains("kept 1 UI-registering handler(s) running on clients", r.Notes);
+        Assert.Contains("1 handler(s) register UI but could not be split", r.Notes);
+        Assert.Contains("1 player setting(s) never reach the server", r.Notes);
+    }
+
+    [Fact]
     public void KeptBehaviour_AlsoExcludesItsLambdaHandlers()
     {
         var set = RecipeSet.Build([("Mod", Scan, new[] { "Mod.TickBehavior" })], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
@@ -70,6 +94,22 @@ public sealed class RecipeGenerationTests
         Assert.Contains("TAOM.Features.FieldCamp.Hooks.FieldCampCampaignBehavior::OnHourlyTick", r.Handlers);
         Assert.Contains(r.Unpatch, u => u.Target == "TaleWorlds.CampaignSystem.CampaignBehaviors.AllianceCampaignBehavior::StartAlliance");
         Assert.DoesNotContain("TAOM.Features.CultureConversion.Hooks.CultureConversionBehavior::OnDailyTick", r.Handlers);   // self-gated
+    }
+
+    [Fact]
+    public void Probe_ImprovedGarrisonsRecipe_KeepsItsMenusAndDialogsOnClients()
+    {
+        var mods = InstalledMods.Find();
+        var gi = CoopSinks.FindGameInterface(ModderLords.Core.Launch.GamePaths.SteamLibraries());
+        if (mods is null || gi is null || !mods.TryGetValue("ImprovedGarrisons", out var ig)) return;
+        var report = AuthorityScan.Classify(ModAnalysis.Analyse(ig), CoopSinks.ScanDll(gi));
+        var set = RecipeSet.Build([("ImprovedGarrisons", AssemblyScan.Scan(ig), Array.Empty<string>())], "probe",
+            authority: new Dictionary<string, AuthorityReport> { ["ImprovedGarrisons"] = report });
+        var r = set.Mods.Single();
+        // OnGameOpen adds the keep's "Improved Garrison" option and the garrison dialog lines: it must run on clients.
+        Assert.DoesNotContain("ImprovedGarrisons.Behaviours.GarrisonPartyBehavior::OnGameOpen", r.Handlers);
+        Assert.Contains("ImprovedGarrisons.Behaviours.GarrisonPartyBehavior::OnGameStartSetAllIGParties", r.Handlers);
+        Assert.Contains("UI-registering handler(s) running on clients", r.Notes);
     }
 
     [Fact]
@@ -117,6 +157,31 @@ public sealed class RecipeGatesTests
     }
 
     public static void ActPostfix() => s_postfixRuns++;
+
+    private static int s_menuRuns;
+    private static int s_workRuns;
+
+    public sealed class SplitHandler
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)] public void OnGameOpen() { AddMenus(); SetupParties(); }
+        [MethodImpl(MethodImplOptions.NoInlining)] private void AddMenus() => s_menuRuns++;
+        [MethodImpl(MethodImplOptions.NoInlining)] private void SetupParties() => s_workRuns++;
+    }
+
+    [Fact]
+    public void GatingTheServerWorkCallee_LeavesTheMenusRunningOnAClient()
+    {
+        var gates = new RecipeGates("test.split." + Guid.NewGuid().ToString("N"), () => s_client, _ => { });
+        Assert.Equal((1, 0), gates.SkipHandlers([typeof(SplitHandler).FullName + "::SetupParties"]));
+        s_menuRuns = s_workRuns = 0;
+        s_client = true;
+        new SplitHandler().OnGameOpen();
+        s_client = false;
+        Assert.Equal(1, s_menuRuns);
+        Assert.Equal(0, s_workRuns);
+        new SplitHandler().OnGameOpen();
+        Assert.Equal(1, s_workRuns);   // the server still does the work
+    }
 
     [Fact]
     public void HandlerSkipped_OnClientOnly_AndMissingOnesReported()
