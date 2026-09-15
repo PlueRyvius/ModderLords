@@ -203,6 +203,7 @@ variables, marked, so "was it actually set?" is answerable from the log):
 | `MODDERLORDS_TERRAIN_PROBE` | off | Samples the map scene to a CSV; `scripts/Compare-TerrainProbe.ps1` diffs a server's against a client's. |
 | `MODDERLORDS_MAPSCENE_CENSUS` | off | Counts which map-scene members are actually called, and names those never called. |
 | `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` | off | Keeps the scene's `<terrain>` descriptor. Measured safe; not currently needed. |
+| `MODDERLORDS_TRACE_MODS` | off | Ground truth for the authority classifier: `TAOM;ImprovedGarrisons` makes the launcher list every entry point of those mods in `recipes.json` (`TraceRoots`); both the server and every client then count how often each one runs and write `ModLogs\ModderLords.Compat-trace-{server,client}.jsonl` every 30 s. Compare with `trace-diff`. Read by the launcher (the recipe carries it to clients), so set it in the launcher's environment. |
 
 ### Smoke-testing a server without the GUI
 
@@ -509,6 +510,58 @@ setting). The server now runs the same call as that player.
 - IG: 43 actions relayed through 33 methods (guard orders, recruitment/training/guard settings); TAOM and
   MyLittleWarband: none (their actions don't reach a sendable, ownable method).
 - Module version 0.1.4 (0.1.3 was the first live test; bumped so Launch client replaces it with the coalescing build).
+
+## Authority classifier, step 8 (2026-09-15): ground truth, verdicts against what actually ran
+
+The review of steps 1–7 found the classifier tuned on two mods with nothing measuring its recall: its default verdict
+(Local, "no world change found") hides false negatives, and in game a false negative is silent divergence, not a crash.
+Step 8 measures it from one host + client session.
+
+- **Launcher.** `MODDERLORDS_TRACE_MODS=TAOM;ImprovedGarrisons` at launch makes `LaunchSession.WriteRecipes` analyse those
+  mods (ticked Server-only or not) and write every root's id into `Mods[].TraceRoots` (`RecipeSet`, additive; schema stays
+  3). The recipe is what already reaches both sides, so no client-side switch is needed. Console line:
+  `trace <id>: N entry point(s) counted on both sides`.
+- **Module, both sides** (`RootTracer`, Harmony-only like `RecipeGates`, unit-tested with real Harmony): a prefix at
+  `Priority.First` on every listed method counts the call and always returns true. A client call to a method that a
+  handler gate skips is counted as a gated skip, not a run (the gate's prefix returns false after ours). Abstract,
+  generic-definition and bodiless methods are skipped and counted as not found; per-method patch failures are counted, not
+  thrown. Installed from `BehaviorGate.InstallTrace` (client: `Apply`; server: `ServerSettingsHandler.Wire`), log line
+  `trace: N entry point(s) traced (M not found, K not patchable) in X ms`. Counters are keyed by `MethodBase`, no strings
+  in the hot path; overloads merge into one id at snapshot time, as the classifier's ids do. Every 30 s (and at
+  unload) `Bridge.TraceFlush` appends cumulative lines to
+  `Documents\Mount and Blade II Bannerlord\Configs\ModLogs\ModderLords.Compat-trace-{client|server}.jsonl`:
+  `{"t":123.4,"method":"Type::Method","ran":42,"gatedSkips":0,"firstSeen":3.1,"lastSeen":118.9}`; the last line per method
+  wins. The 30 s verification line gains `trace: N method(s) fired, R run(s), S gated skip(s) (...)`. Counters are per game
+  process: restart between measured runs.
+- **CLI** `trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]`
+  (`TraceDiff` in Core, pure). Each root is judged by the claim its verdict makes per side:
+
+  | Verdict | Trigger | Server | Client |
+  |---|---|---|---|
+  | ServerOnly, NeedsStateSync | Simulation, Session | ran | not ran (`GateInstead` roots: the gated methods are judged instead) |
+  | ServerOnly, NeedsStateSync | other | ran | no claim |
+  | NeedsRelay | any | no claim | ran |
+  | PlayerStateUnsynced | any | not ran | ran |
+  | LeakingPostfix | Patch | ran | not ran (still firing = the unpatch did not hold) |
+  | Both | any | ran | ran |
+  | Local, AlreadyHandled, Review | any | no claim | no claim, except Simulation/Session code that ran on a client and never on the server |
+
+  Outcomes: `Expected`, `FalseNegativeCandidate` (the trace contradicts the claim), `Untestable` (an action-needed
+  verdict whose root never fired), `NeverExercised`. Per verdict: soundness = expected / (expected + contradicted), with
+  untestable reported beside it, never folded in (TAOM's 756 roots will not all fire in one session). Traced methods that
+  are not roots of the report are listed as stale. `--coop-client-log` buckets `Coop_client.log` error lines into 30 s
+  windows (clock zero = the first line of `ModderLords.Compat-client.log` next to the client trace) and shows how many
+  errors landed in the window a root last fired in, to line the residual ~3,700 errors per session up with the code
+  that ran.
+- Tests: `RootTracerTests` (real Harmony: counts, overload merge, unpatchable skipped, gated-skip split, jsonl round-trip
+  into `TraceDiff.ParseTrace`), `TraceDiffTests` (one case per matrix cell, totals, error windows), recipe round-trip.
+  Smoke: `trace-diff` on the installed ImprovedGarrisons with a fabricated trace produced the expected contradiction.
+- Module version 0.1.5.
+- **Live procedure:** set `MODDERLORDS_TRACE_MODS` (User env; remove it afterwards, the launch log marks inherited
+  switches), host, join, play 15 min without field battles, copy `Coop_client.log` before relaunching, then run
+  `trace-diff` and read the contradicted rows first. **Record the totals here.** They decide how much further analysis
+  work is worth; the target tier is behaviour-plus-settings mods (ImprovedGarrisons), not TAOM's screen-driven actions.
+- Not yet run live (2026-09-15).
 
 ## Compat verification logging (2026-09-02)
 

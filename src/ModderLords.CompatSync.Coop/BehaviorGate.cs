@@ -83,6 +83,8 @@ public static class BehaviorGate
             var (armed, relaysMissing) = RelayGates.Apply(Harmony, relays, msg => Log.Warn(msg));
             generated += $"; {armed} relayed action(s) armed ({relaysMissing} not found)";
         }
+        var trace = InstallTrace(json);
+        if (trace is not null) generated += "; " + trace;
 
         int patched = 0, missing = 0, already = 0;
         foreach (var typeName in campaign)
@@ -117,6 +119,48 @@ public static class BehaviorGate
     private static bool IsClient()
     {
         try { return Common.ModInformation.IsClient; } catch { return false; }
+    }
+
+    // ---- ground-truth trace ---------------------------------------------------------------------------------
+
+    private static readonly Lazy<RootTracer> Tracer = new Lazy<RootTracer>(() =>
+        new RootTracer("ModderLords.Compat.RootTracer", IsClient, msg => Log.Warn(msg)));
+    private static bool _traceInstalled;
+
+    /// <summary>
+    /// Both sides: traces every entry point listed in <c>Mods[].TraceRoots</c> (present only when the launcher was
+    /// asked to trace a mod). Null when the recipe traces nothing; otherwise a one-line report. Idempotent per id.
+    /// </summary>
+    public static string? InstallTrace(string json)
+    {
+        var roots = new List<string>();
+        var handlers = new List<string>();
+        try
+        {
+            foreach (var mod in JObject.Parse(json)["Mods"] as JArray ?? new JArray())
+            {
+                roots.AddRange((mod["TraceRoots"] as JArray ?? new JArray()).Select(t => t.ToString()));
+                handlers.AddRange((mod["Handlers"] as JArray ?? new JArray()).Select(t => t.ToString()));
+            }
+        }
+        catch { return null; }
+        if (roots.Count == 0) return null;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var (applied, missing, failed) = Tracer.Value.Install(roots, handlers);
+        _traceInstalled = true;
+        return $"trace: {applied} entry point(s) traced ({missing} not found, {failed} not patchable) in {sw.ElapsedMilliseconds} ms";
+    }
+
+    /// <summary>Appends the cumulative counters to ModderLords.Compat-trace-{side}.jsonl. Returns how many methods were written.</summary>
+    public static int TraceFlush()
+    {
+        if (!_traceInstalled) return 0;
+        var records = RootTracer.Snapshot();
+        if (records.Count == 0) return 0;
+        var path = Log.SideFilePath("ModderLords.Compat-trace-", ".jsonl");
+        if (path is null) return 0;
+        File.AppendAllText(path, RootTracer.ToJsonLines(records, RootTracer.Now));
+        return records.Count;
     }
 
     public static bool SkipOnClientPrefix(object __instance)
@@ -182,6 +226,7 @@ public static class BehaviorGate
     {
         var line = WholeBehaviourSummary();
         if (RelayGates.SentCount > 0) line += "; " + RelayGates.CountsSummary();
+        if (_traceInstalled) line += "; " + RootTracer.CountsSummary();
         if (!Gates.IsValueCreated) return line;
         line += "; " + RecipeGates.CountsSummary();
         if (Gates.Value.PendingCount > 0) line += $"; {Gates.Value.PendingCount} leaking postfix(es) not attached yet";

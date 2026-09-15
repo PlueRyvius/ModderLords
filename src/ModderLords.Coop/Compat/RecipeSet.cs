@@ -50,6 +50,12 @@ public sealed class ModRecipe
     public string? Notes { get; set; }
     /// <summary>Hints for the module's static-settings discovery (full type names or trailing-* globs); null = none.</summary>
     public ModRecipeSettings? Settings { get; set; }
+    /// <summary>
+    /// Ground truth for the classifier: every entry point ("Type::Method") of a mod the launcher was asked to trace
+    /// (MODDERLORDS_TRACE_MODS). Both sides count how often each one runs and write ModderLords.Compat-trace-{side}.jsonl;
+    /// <c>trace-diff</c> compares the counts with the verdicts. Null when the mod is not traced.
+    /// </summary>
+    public List<string>? TraceRoots { get; set; }
 }
 
 /// <summary>A patch method ("Type::Method") attached to a target ("Type::Method").</summary>
@@ -86,7 +92,7 @@ public sealed class RecipeSet
     /// </summary>
     public static RecipeSet Build(IEnumerable<(string id, ScanResult scan, IReadOnlyCollection<string> keepClientSide)> serverAuthoritative, string generatedBy,
         IEnumerable<(string id, IReadOnlyList<string> include, IReadOnlyList<string> exclude)>? settingsHints = null,
-        IReadOnlyDictionary<string, AuthorityReport>? authority = null)
+        IReadOnlyDictionary<string, AuthorityReport>? authority = null, IReadOnlyCollection<string>? traceMods = null)
     {
         var set = new RecipeSet { GeneratedBy = generatedBy };
         foreach (var (id, scan, keep) in serverAuthoritative)
@@ -117,6 +123,15 @@ public sealed class RecipeSet
             var recipe = set.Mods.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
             if (recipe is null) { recipe = new ModRecipe { Id = id }; set.Mods.Add(recipe); }
             recipe.Settings = new ModRecipeSettings { Include = include.ToList(), Exclude = exclude.ToList() };
+        }
+        // Trace roots ride along the same way: a traced mod need not be gated at all.
+        foreach (var id in traceMods ?? [])
+        {
+            var report = authority?.FirstOrDefault(kv => kv.Key.Equals(id, StringComparison.OrdinalIgnoreCase)).Value;
+            if (report is null || report.NotAnalysable || report.Roots.Count == 0) continue;
+            var recipe = set.Mods.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (recipe is null) { recipe = new ModRecipe { Id = id }; set.Mods.Add(recipe); }
+            recipe.TraceRoots = report.Roots.Select(r => r.Root.Method).Distinct(StringComparer.Ordinal).OrderBy(m => m, StringComparer.Ordinal).ToList();
         }
         return set;
     }
