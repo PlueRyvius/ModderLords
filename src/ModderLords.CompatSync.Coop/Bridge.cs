@@ -12,6 +12,7 @@ public static class Bridge
         global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.ClientSettingsHandler.Current?.ApplyPending();
         EncounterOptionGate.EnsureInstalled();
         EncounterOptionGate.Tick();
+        BehaviorGate.RetryPendingPostfixes();
     }
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
