@@ -30,6 +30,8 @@
     <Compile Include="..\..\src\ModderLords.CompatSync\MiniJson.cs" Link="Module\MiniJson.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\ValueConverter.cs" Link="Module\ValueConverter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\PropertyRef.cs" Link="Module\PropertyRef.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync\ISettingsSource.cs" Link="Module\ISettingsSource.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync\RecipeStateSource.cs" Link="Module\RecipeStateSource.cs" />
     <!-- World creation's decision-making, kept free of TaleWorlds types precisely so it can be compiled in
          here. The compat module has no other test coverage, and the spike harness greps the strings this
          file emits, so both ends of that contract are asserted from one source. -->

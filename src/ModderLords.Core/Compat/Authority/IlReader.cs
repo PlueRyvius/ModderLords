@@ -207,6 +207,23 @@ public static class IlReader
         catch (BadImageFormatException) { return false; }
     }
 
+    /// <summary>
+    /// For a field defined in this assembly: whether it is static and its declared type's full name (primitives as
+    /// System.*, generic instantiations as "Type&lt;&gt;"). Null for fields of other assemblies (MemberRef) or on bad metadata.
+    /// </summary>
+    public static (bool isStatic, string type)? FieldFacts(MetadataReader md, int token)
+    {
+        try
+        {
+            var h = MetadataTokens.EntityHandle(token);
+            if (h.Kind != HandleKind.FieldDefinition) return null;
+            var f = md.GetFieldDefinition((FieldDefinitionHandle)h);
+            var type = f.DecodeSignature(new SignatureTypeNames(), null);
+            return ((f.Attributes & System.Reflection.FieldAttributes.Static) != 0, type);
+        }
+        catch (BadImageFormatException) { return null; }
+    }
+
     /// <summary>True when the method signature's return type is bool.</summary>
     public static bool ReturnsBool(MetadataReader md, MethodDefinition m)
     {

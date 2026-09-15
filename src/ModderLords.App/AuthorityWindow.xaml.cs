@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using ModderLords.Core.Compat.Authority;
@@ -52,6 +52,7 @@ public sealed record AuthorityRow(string Verdict, string Trigger, string Entry, 
         foreach (var f in r.Flags ?? []) lines.Add("flag: " + f);
         if (r.GateInstead is { Count: > 0 } g) lines.Add("gated instead on clients: " + string.Join(", ", g.Select(ShortName)));
         if (r.RelayVia is { } via) lines.Add("relayed to the server via " + ShortName(via));
+        if (r.SharedState is { Count: > 0 } st) lines.Add("shared mod state: " + string.Join(", ", st.Select(ShortName)) + " (static bool/number/string/enum fields are sent from the server to clients)");
         return string.Join(Environment.NewLine, lines);
     }
 }

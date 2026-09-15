@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using ModderLords.Core.Modules;
@@ -72,6 +72,8 @@ public sealed class ModCodeModel
     /// <summary>Base class or interface full name → mod types that directly derive from or implement it.</summary>
     public Dictionary<string, HashSet<string>> Implementers { get; } = new(StringComparer.Ordinal);
     public List<AuthorityRoot> Roots { get; } = new();
+    /// <summary>"Type.field" of every field the mod defines and touches -> whether it is static, and its declared type's full name.</summary>
+    public Dictionary<string, (bool IsStatic, string Type)> Fields { get; } = new(StringComparer.Ordinal);
     /// <summary>(declaring type, ldftn target) for every delegate created; ViewModel ones become UI-callback roots.</summary>
     internal List<(string Owner, string Target)> DelegateSites { get; } = new();
 
@@ -307,12 +309,14 @@ public static class ModAnalysis
                 {
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     node.FieldWrites.Add(t + "." + n);
+                    if (!model.Fields.ContainsKey(t + "." + n) && IlReader.FieldFacts(md, i.Operand) is { } facts) model.Fields[t + "." + n] = facts;
                     break;
                 }
                 case ILOpCode.Ldfld or ILOpCode.Ldsfld or ILOpCode.Ldflda or ILOpCode.Ldsflda:
                 {
                     var (t, n) = IlReader.MemberName(md, i.Operand);
                     node.FieldReads.Add(t + "." + n);
+                    if (!model.Fields.ContainsKey(t + "." + n) && IlReader.FieldFacts(md, i.Operand) is { } facts) model.Fields[t + "." + n] = facts;
                     if (IlReader.IsArrayField(md, i.Operand)) lastArrayField = t + "." + n;
                     break;
                 }

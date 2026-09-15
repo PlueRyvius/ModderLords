@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -14,7 +14,7 @@ namespace ModderLords.CompatSync;
 /// </summary>
 public sealed class SyncSubModule : MBSubModuleBase
 {
-    public const string Version = "0.1.4";
+    public const string Version = "0.1.7";
     private const string AdapterFileName = "ModderLords.CompatSync.Coop.dll";
 
     private float _sinceTick;

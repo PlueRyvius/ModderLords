@@ -491,6 +491,31 @@ setting). The server now runs the same call as that player.
   MyLittleWarband: none (their actions don't reach a sendable, ownable method).
 - Module version 0.1.4 (0.1.3 was the first live test; bumped so Launch client replaces it with the coalescing build).
 
+## Authority classifier, step 9 (2026-09-15): static mod state follows the server
+
+NeedsStateSync and PlayerStateUnsynced named the shared fields only in their reason text; nothing carried the values.
+A relayed setting reached the server, but no other client ever saw it, and server-only code's results stayed invisible
+to players.
+
+- **Analysis.** `ModCodeModel.Fields` records, for every mod-defined field touched, whether it is static and its
+  declared type (`IlReader.FieldFacts`, FieldDef signature decoded with `SignatureTypeNames`). `RootVerdict.SharedState`
+  lists the fields behind a NeedsStateSync / PlayerStateUnsynced verdict in full ("Ns.Type.field").
+  `AuthorityReport.SyncStateMembers` = those that are **static** and of a kind `ValueConverter` serialises (bool, number,
+  string, or an enum the mod defines). Instance fields (IG's per-town settings objects) are named but not synced: they
+  need Coop's AutoSync seam (phase 2, `docs/COMPAT-PLAN.md`).
+- **Recipe** `Mods[].SyncState[]` (schema stays 3, additive; a mod with only SyncState is kept). CLI `authority` prints
+  `state sync: N static field(s)` and per root `shared state: ... (synced | not syncable)`; the Authority window shows
+  the fields in the details pane.
+- **Module.** `RecipeStateSource : ISettingsSource` (CompatSync, no game/Coop/Log dependency, unit-tested) exposes the
+  listed static fields as one settings object per declaring type, id `state:<Ns.Type>`, through the existing
+  settings-sync channel: the server's 3 s diff broadcast and the join-time snapshot carry them unchanged
+  (`NetworkSettingsSnapshot`), clients apply them (`ClientSettingsHandler.HandleSnapshot` / `ApplyPending`) and never
+  send them back. The list reaches the server from its own recipes.json (`SettingsHints.Load`) and the client from the
+  server's recipe (`BehaviorGate.Apply`, log `N static field(s) of mod state follow the server (...)`). Read-only,
+  unsupported or missing fields are counted as "not found yet" and retried on the tick. Never persisted: the save is
+  the truth. Module version 0.1.7.
+- Installed mods (2026-09-15): ImprovedGarrisons 1 static field (ImprovedGarrisons.Main._configurationSettingsIsOpen), TAOM 0, MyLittleWarband 0. Nearly all shared state is instance fields on mod objects (IG per-town GarrisonSettings, MLW CustomUnit, TAOM registries), so this step ships the channel and proves the shape; the value needs the AutoSync seam for instance fields. Not yet run live.
+
 ## Compat verification logging (2026-09-02)
 
 - `BehaviorGate` installs counting postfixes on each gated campaign behaviour's common event handlers
