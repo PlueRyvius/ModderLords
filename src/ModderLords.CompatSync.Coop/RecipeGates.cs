@@ -27,6 +27,9 @@ public sealed class RecipeGates
     private readonly Action<string> _info;
     private readonly HashSet<string> _gated = new HashSet<string>(StringComparer.Ordinal);
     private readonly List<(string target, string patch)> _pending = new List<(string target, string patch)>();
+    // Removed entries are remembered: the server re-sends the recipe at CampaignReady, and a postfix that is already gone
+    // must not be queued again (measured 2026-09-14: it was, and every verification line then reported it as pending).
+    private readonly HashSet<(string target, string patch)> _removed = new HashSet<(string target, string patch)>();
 
     public RecipeGates(string harmonyId, Func<bool> isClient, Action<string> warn, Action<string>? info = null)
     {
@@ -116,8 +119,9 @@ public sealed class RecipeGates
         int removed = 0, notAttached = 0;
         foreach (var entry in entries)
         {
+            if (_removed.Contains(entry)) continue;
             var n = TryRemove(entry.target, entry.patch);
-            if (n > 0) { removed += n; _pending.Remove(entry); continue; }
+            if (n > 0) { removed += n; _pending.Remove(entry); _removed.Add(entry); continue; }
             notAttached++;
             if (!_pending.Contains(entry))
             {
@@ -139,6 +143,7 @@ public sealed class RecipeGates
             if (n == 0) continue;
             removed += n;
             _pending.Remove(entry);
+            _removed.Add(entry);
             _info("recipe: leaking postfix removed once attached: " + entry.patch + " on " + entry.target);
         }
         return removed;
