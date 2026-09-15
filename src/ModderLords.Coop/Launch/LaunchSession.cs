@@ -428,25 +428,45 @@ public sealed class LaunchSession
     {
         var sync = LocateSyncModule();
         var flagged = profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Ground-truth tracing (docs/DEVELOPMENT.md, "Authority classifier, step 8"): both sides count every traced entry point.
+        var traced = (Environment.GetEnvironmentVariable("MODDERLORDS_TRACE_MODS") ?? "")
+            .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(id => selections.Any(s => s.Module.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
+            .Select(id => selections.First(s => s.Module.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).Module.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (sync is null)
         {
             if (flagged.Count > 0) messages.Add("server-only logic requested but the ModderLords.Compat module is missing; recipes not written");
             return;
         }
         var flaggedSelections = selections.Where(s => flagged.Contains(s.Module.Id)).ToList();
+        var analysed = selections.Where(s => flagged.Contains(s.Module.Id) || traced.Contains(s.Module.Id)).ToList();
         var entries = flaggedSelections.Select(s =>
         {
             var pm = profile.Mods.First(m => m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase));
             return (s.Module.Id, AssemblyScan.Scan(s.Module), (IReadOnlyCollection<string>)pm.ClientSideBehaviors);
         }).ToList();
-        var authority = BuildAuthorityReports(flaggedSelections, messages);
+        var authority = BuildAuthorityReports(analysed, messages);
         var db = CompatDb.Current;
         var hints = selections.Select(s => db.Find(s.Module.Id)).Where(r => r is not null)
             .Select(r => (r!.Id, (IReadOnlyList<string>)r.SettingsTypes, (IReadOnlyList<string>)r.IgnoreSettingsTypes)).ToList();
-        var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, authority);
+        // Field battles: the server's scene choice is what every client loads, so scenes without a terrain shader cache
+        // must not be chosen. The server install ships no scene content; the launcher sees the game's and the mods'.
+        IReadOnlyList<string>? excludedScenes = null;
+        if (Environment.GetEnvironmentVariable("MODDERLORDS_BATTLE_SCENE_PICK") != "0")
+        {
+            excludedScenes = global::ModderLords.Core.Compat.BattleSceneCache.Scan(selections.Select(s => s.Module.FolderPath));
+            if (excludedScenes.Count > 0)
+                messages.Add($"battle scenes: {excludedScenes.Count} scene(s) ship without a terrain shader cache and will not be chosen for field battles"
+                    + (excludedScenes.Any(s => s.StartsWith("battle_terrain", StringComparison.Ordinal)) ? $" ({string.Join(", ", excludedScenes.Where(s => s.StartsWith("battle_terrain", StringComparison.Ordinal)).Take(4))})" : ""));
+        }
+        var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, authority, excludedScenes, traced);
         set.WriteInto(sync.FolderPath);
+        if (traced.Count > 0 && (authority is null || traced.Any(t => !set.Mods.Any(m => m.Id.Equals(t, StringComparison.OrdinalIgnoreCase) && m.TraceRoots is { Count: > 0 }))))
+            messages.Add("trace: MODDERLORDS_TRACE_MODS names a mod that could not be analysed; it is not traced");
         foreach (var r in set.Mods)
         {
+            if (r.TraceRoots is { Count: > 0 }) messages.Add($"trace {r.Id}: {r.TraceRoots.Count} entry point(s) counted on both sides (MODDERLORDS_TRACE_MODS); compare with: trace-diff --mod {r.Id}");
             if (r.CampaignBehaviors.Count + r.MissionBehaviors.Count > 0) messages.Add($"recipe {r.Id}: {r.CampaignBehaviors.Count} campaign behaviour(s), {r.MissionBehaviors.Count} mission behaviour(s) server-only");
             if (r.Handlers.Count + r.Unpatch.Count > 0) messages.Add($"recipe {r.Id}: {r.Handlers.Count} handler(s) server-only, {r.Unpatch.Count} leaking postfix(es) removed on clients");
             if (r.Notes is { } notes) messages.Add($"recipe {r.Id}: {notes}" + (notes.Contains("relay", StringComparison.Ordinal) || notes.Contains("review", StringComparison.Ordinal) ? $" (details: authority --mod {r.Id})" : ""));

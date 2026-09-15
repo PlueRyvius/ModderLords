@@ -24,6 +24,21 @@ public sealed class SyncSubModule : MBSubModuleBase
     private MethodInfo? _adapterTick;
     private MethodInfo? _adapterRelayTick;
     private MethodInfo? _adapterVerify;
+    private MethodInfo? _adapterTraceFlush;
+
+    protected override void OnSubModuleUnloaded()
+    {
+        base.OnSubModuleUnloaded();
+        TraceFlush("final ");
+    }
+
+    /// <summary>Writes the ground-truth trace counters, if the recipe traces anything. Logs once per flush that wrote something.</summary>
+    private void TraceFlush(string what = "")
+    {
+        if (_adapterTraceFlush is null) return;
+        try { if (_adapterTraceFlush.Invoke(null, null) is int n && n > 0) Log.Info($"trace: {what}flush wrote {n} method(s)"); }
+        catch (Exception ex) { Log.Warn("trace flush failed: " + ex.GetBaseException().Message); }
+    }
 
     protected override void OnSubModuleLoad()
     {
@@ -77,6 +92,7 @@ public sealed class SyncSubModule : MBSubModuleBase
             _sinceVerify = 0f;
             try { if (_adapterVerify.Invoke(null, null) is string s) Log.Info(s); }
             catch (Exception ex) { Log.Warn("verification summary failed: " + ex.GetBaseException().Message); }
+            TraceFlush();
         }
     }
 
@@ -102,6 +118,7 @@ public sealed class SyncSubModule : MBSubModuleBase
             _adapterTick = bridge?.GetMethod("Tick", BindingFlags.Public | BindingFlags.Static);
             _adapterRelayTick = bridge?.GetMethod("RelayTick", BindingFlags.Public | BindingFlags.Static);
             _adapterVerify = bridge?.GetMethod("VerificationSummary", BindingFlags.Public | BindingFlags.Static);
+            _adapterTraceFlush = bridge?.GetMethod("TraceFlush", BindingFlags.Public | BindingFlags.Static);
             var typeCount = asm.GetTypes().Length;   // forces the type load now, inside our try, not in some other mod's scan
             Log.Info($"coop adapter loaded ({typeCount} types); handlers will arm when a session starts");
         }
@@ -124,6 +141,21 @@ public static class Log
     public static void Info(string msg) => Write(Prefix + msg);
     public static void Warn(string msg) => Write(Prefix + "WARNING " + msg);
 
+    /// <summary>A sidecar file next to this side's log: ModLogs\{prefix}{client|server}{suffix}. Null when the folder cannot be made.</summary>
+    public static string? SideFilePath(string prefix, string suffix)
+    {
+        try
+        {
+            var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var dir = Path.Combine(docs, "Mount and Blade II Bannerlord", "Configs", "ModLogs");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, prefix + Side + suffix);
+        }
+        catch { return null; }
+    }
+
+    private static string Side => Directory.GetCurrentDirectory().EndsWith("Win64_Shipping_Server", StringComparison.OrdinalIgnoreCase) ? "server" : "client";
+
     private static void Write(string line)
     {
         Console.WriteLine(line);
@@ -137,8 +169,7 @@ public static class Log
                     var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                     var dir = Path.Combine(docs, "Mount and Blade II Bannerlord", "Configs", "ModLogs");
                     Directory.CreateDirectory(dir);
-                    var side = Directory.GetCurrentDirectory().EndsWith("Win64_Shipping_Server", StringComparison.OrdinalIgnoreCase) ? "server" : "client";
-                    _file = Path.Combine(dir, "ModderLords.Compat-" + side + ".log");
+                    _file = Path.Combine(dir, "ModderLords.Compat-" + Side + ".log");
                     File.WriteAllText(_file, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} log started (pid {System.Diagnostics.Process.GetCurrentProcess().Id}){Environment.NewLine}");
                 }
                 if (_file != null) File.AppendAllText(_file, $"{DateTime.Now:HH:mm:ss.fff} {line}{Environment.NewLine}");

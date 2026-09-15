@@ -1,4 +1,4 @@
-<Window x:Class="ModderLords.App.MainWindow"
+﻿<Window x:Class="ModderLords.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:ModderLords.App.ViewModels"
@@ -289,7 +289,7 @@
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <CheckBox IsChecked="{Binding ServerAuthoritative, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0"
-                                                      ToolTip="Run this mod's campaign/mission behaviours on the server only; players' copies skip them and receive the results through Coop. Needs Settings sync (the shared module) on.">
+                                                      ToolTip="Run this mod's campaign/mission behaviours on the server only; players' copies skip them and receive the results through Coop. Needs Settings sync (the shared module) on. Works best for behaviour-plus-settings mods; the Authority window lists what stays report-only.">
                                                 <CheckBox.Style>
                                                     <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
                                                         <Style.Triggers>

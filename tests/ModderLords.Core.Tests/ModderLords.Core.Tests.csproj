@@ -41,6 +41,8 @@
     <!-- The encounter option gate's decisions, TaleWorlds- and Coop-free for the same reason. -->
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\EncounterOptionGatePolicy.cs" Link="Module\EncounterOptionGatePolicy.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RecipeGates.cs" Link="Module\RecipeGates.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\BattleScenePolicy.cs" Link="Module\BattleScenePolicy.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RootTracer.cs" Link="Module\RootTracer.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\PlayerComparisonRewriter.cs" Link="Module\PlayerComparisonRewriter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayGates.cs" Link="Module\RelayGates.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayCoalescer.cs" Link="Module\RelayCoalescer.cs" />

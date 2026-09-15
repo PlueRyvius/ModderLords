@@ -12,6 +12,7 @@ public static class Bridge
         global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.ClientSettingsHandler.Current?.ApplyPending();
         EncounterOptionGate.EnsureInstalled();
         EncounterOptionGate.Tick();
+        BattleScenePick.EnsureInstalled();
         BehaviorGate.RetryPendingPostfixes();
     }
 
@@ -21,4 +22,7 @@ public static class Bridge
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
     public static string VerificationSummary() => BehaviorGate.VerificationSummary();
+
+    /// <summary>Both sides, every 30 s and at unload: writes the ground-truth trace counters. Returns how many methods were written (0 when not tracing).</summary>
+    public static int TraceFlush() => BehaviorGate.TraceFlush();
 }

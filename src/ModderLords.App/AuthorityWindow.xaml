@@ -1,4 +1,4 @@
-<Window x:Class="ModderLords.App.AuthorityWindow"
+﻿<Window x:Class="ModderLords.App.AuthorityWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
@@ -7,7 +7,7 @@
         <TextBlock DockPanel.Dock="Top" x:Name="Header" FontWeight="Bold" Margin="0,0,0,2" TextWrapping="Wrap" />
         <TextBlock DockPanel.Dock="Top" x:Name="SubHeader" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,6" TextWrapping="Wrap" />
         <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
-                   Text="Read from the mod's code, nothing is run. ServerOnly and NeedsStateSync: skipped on players' clients when Server-only logic is ticked. LeakingPostfix: removed on clients. NeedsRelay: a player action that silently does nothing for players. Review: the code alone does not decide it. AlreadyHandled, Both and Local need nothing." />
+                   Text="Read from the mod's code, nothing is run. Fixed automatically: campaign behaviours and their settings, and buttons that call a behaviour method with a town, party or hero (server-only gates, player checks, settings sync, relays). Report only: screen-driven actions (view models, services), console commands and mission code; those need a per-mod adapter. ServerOnly and NeedsStateSync: skipped on players' clients when Server-only logic is ticked. LeakingPostfix: removed on clients. NeedsRelay: a player action that silently does nothing for players; with a relay point it is sent to the server. Review: the code alone does not decide it. AlreadyHandled, Both and Local need nothing." />
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
             <CheckBox x:Name="ShowAll" Content="Show every entry point" VerticalAlignment="Center" Checked="Filter_Changed" Unchecked="Filter_Changed" IsEnabled="False" />
             <TextBlock x:Name="CopyStatus" VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MutedForeground}" />
