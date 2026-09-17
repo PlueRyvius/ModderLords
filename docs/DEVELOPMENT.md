@@ -1,3 +1,5 @@
+> Release 1.0.2 runtime boundary: the classifier/recipe development history below includes experimental schema-v2/v3 machinery. Those generated transformations are now diagnostic only, including SyncState; neither the Experimental switch nor a schema-v1 label authorizes them. `RecipeSet.Build` emits explicit legacy gates plus settings/scene/trace data; `BuildDiagnostic` is study output. New transformations require validated compiled operation contracts. See [OPERATION-COMPATIBILITY.md](OPERATION-COMPATIBILITY.md).
+
 ﻿# ModderLords: developer notes
 
 A launcher for the **Bannerlord Coop dedicated server** that lets you run it with community mods,

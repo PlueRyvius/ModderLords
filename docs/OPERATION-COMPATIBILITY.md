@@ -45,12 +45,10 @@ Pending acceptance: real server/client resource awards and configured amount com
 
 Analysis remains conservative and incomplete for dynamic reflection, uncertain aliases, unrecognized loaders and dispatch. Engine effects are an explicit initial rule set, not complete engine semantic coverage. Direct guard evidence applies to the witnessed mutation, not every transitive mutation. Runtime plan agreement currently validates the shipped active contract and its required assembly hashes; full configuration fingerprint attestation still needs integration validation. No release was published.
 
-## Simple and Advanced host compatibility
+## Experimental compatibility switch
 
-Host profiles default to Simple compatibility, including older profiles without a mode field. On the Mods tab, leave Advanced compatibility unchecked for Simple mode. Enable it to restore manual controls. Simple mode hides compatibility role/behavior controls, compatibility record editing, the Mod settings tab, and the server compatibility toggles. Read-only operation analysis remains available.
+Server tab → Advanced → Experimental compatibility is off by default (PR #78). Turning it off ignores saved Server-only logic selections and tracing requests while keeping their values for later. Normal server guards, settings synchronization, roles, compatibility records, and battle-scene exclusions retain their configured behavior. Read-only operation analysis remains available independently.
 
-Simple launches use a detached effective profile: shipped role defaults, server guards enabled, settings sync disabled, automatic validated contracts enabled, no server-authoritative behavior recipes or client-side exceptions, and no manual map-distance-cache override. Local compatibility database overrides are excluded from server preparation. Mod selection, selected module copies, load order, saves and network settings remain intact. Simple does not mean every mod is multiplayer compatible; prerequisites and unresolved findings still apply.
+Turning it on enables explicit legacy schema-v1 behavior gates and opt-in entry-point tracing. Generated handler gates, player comparison rewrites, relay proposals, and static-state transformations remain diagnostic even when experimental compatibility is enabled. Only separately shipped, fingerprint-matched and validated compiled operation contracts may authorize new transformations.
 
-Saved Advanced choices and settings sidecars are preserved. Switching back restores them. Server previews, host-side client launch, and profile-based server preparation use the effective mode; an already-running session retains its captured profile. Changes take effect on the next launch.
-
-Verified 2026-09-17: 600 Core and 33 App tests pass, including old-profile defaults, saved override preservation, mode switching, effective host/client settings, and existing running-session snapshot tests. Actual UI inspection confirmed Simple/Advanced controls and paired Server settings hide/restore correctly. No game/server was launched during this UI check.
+This replaces the earlier broad Simple-mode projection. Existing profile values are preserved; no mode resets user roles or settings-sync choices. Running sessions retain their captured profile and operation plan.

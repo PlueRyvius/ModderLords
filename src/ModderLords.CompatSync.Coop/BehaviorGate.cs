@@ -60,7 +60,7 @@ public static class BehaviorGate
         {
             var root = JObject.Parse(json);
             if ((root["Mods"] as JArray ?? new JArray()).Any(mod =>
-                new[] { "Handlers", "Unpatch", "PlayerComparisons", "Relays" }.Any(field => (mod[field] as JArray)?.Count > 0)))
+                new[] { "Handlers", "Unpatch", "PlayerComparisons", "Relays", "SyncState" }.Any(field => (mod[field] as JArray)?.Count > 0)))
                 return "Recipe refused: generated transformations require a validated operation contract; regenerate legacy recipes with this launcher.";
             foreach (var mod in root["Mods"] as JArray ?? new JArray())
             {

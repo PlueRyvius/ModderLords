@@ -386,6 +386,7 @@ public partial class HostViewModel : ObservableObject
         ProfileStore.Save(Profile);
         Main.IsDirty = false;
         var launchProfile = ProfileStore.Snapshot(Profile);
+        var experimentalCompat = Main.ExperimentalCompat;
         Console.Clear();
         Status = "Checking…";
         var autoTaomCreate = false;
@@ -418,7 +419,7 @@ public partial class HostViewModel : ObservableObject
             }
 
             Status = "Preparing…";
-            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowTaomWorldCreation: autoTaomCreate, experimentalCompat: Main.ExperimentalCompat));
+            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowTaomWorldCreation: autoTaomCreate, experimentalCompat: experimentalCompat));
             _prepared = prepared;
             // Preparing can take long enough for the user to save more edits. Merge observations into
             // the latest saved document instead of overwriting it with the launch snapshot.
@@ -504,7 +505,7 @@ public partial class HostViewModel : ObservableObject
                 if (creationCode != 11 || !creationSaveExists)
                     throw new InvalidOperationException($"TAOM world creation stopped with exit code {creationCode}; no usable save was written.");
                 AddLine(LogCategory.Milestone, $"[ModderLords] TAOM world '{launchProfile.SaveName}' saved; starting the server");
-                prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, experimentalCompat: Main.ExperimentalCompat));
+                prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, experimentalCompat: experimentalCompat));
                 _prepared = prepared;
                 foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
                 // The serve phase is a second, independently prepared plan with its own environment. Describing

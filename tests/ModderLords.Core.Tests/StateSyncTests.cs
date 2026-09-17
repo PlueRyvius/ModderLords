@@ -86,7 +86,7 @@ public sealed class StateSyncTests
             SyncStateMembers = ["Mod.B.Count"],
         };
         var scan = new ModderLords.Core.Compat.ScanResult("Mod", ModderLords.Core.Compat.ServerVerdict.ServerSafe, [], [], [], [], [], [], [], false);
-        var set = RecipeSet.Build([("Mod", scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report });
+        var set = RecipeSet.BuildDiagnostic([("Mod", scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report });
         var r = Assert.Single(set.Mods);
         Assert.Equal(["Mod.B.Count"], r.SyncState);
         Assert.Contains("1 static field(s) of mod state sent from the server to clients", r.Notes);

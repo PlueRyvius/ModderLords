@@ -126,11 +126,11 @@ public partial class MainWindow : Window
     private void ApplyModeToColumns(bool host)
     {
         var v = host ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var c in new System.Windows.Controls.DataGridColumn[] { RoleColumn, CompatColumn, BinsColumn, NotesColumn })
+        foreach (var c in new System.Windows.Controls.DataGridColumn[] { RoleColumn, CompatColumn, BinsColumn, NotesColumn, ServerVerdictColumn })
             c.Visibility = v;
         // Experimental compatibility (Server tab, Advanced) owns these; hidden unless it is on.
         var x = host && ViewModel.ExperimentalCompat ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var c in new System.Windows.Controls.DataGridColumn[] { ServerOnlyColumn, BehavioursColumn, ServerVerdictColumn })
+        foreach (var c in new System.Windows.Controls.DataGridColumn[] { ServerOnlyColumn, BehavioursColumn })
             c.Visibility = x;
     }
 

@@ -109,6 +109,15 @@ public sealed class RecipeSet
     {
         // Existing explicit choices remain schema-v1 gates. Heuristic reports never authorize a transformation.
         var set = BuildDiagnostic(serverAuthoritative, generatedBy, settingsHints, authority: null, excludedBattleScenes: excludedBattleScenes, traceMods: traceMods);
+        // Tracing observes entry points without authorizing the report's proposed transformations.
+        foreach (var id in traceMods ?? [])
+        {
+            var report = authority?.FirstOrDefault(kv => kv.Key.Equals(id, StringComparison.OrdinalIgnoreCase)).Value;
+            if (report is null || report.NotAnalysable || report.Roots.Count == 0) continue;
+            var recipe = set.Mods.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (recipe is null) { recipe = new ModRecipe { Id = id }; set.Mods.Add(recipe); }
+            recipe.TraceRoots = report.Roots.Select(r => r.Root.Method).Distinct(StringComparer.Ordinal).OrderBy(m => m, StringComparer.Ordinal).ToList();
+        }
         set.SchemaVersion = 1;
         return set;
     }

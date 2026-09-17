@@ -18,7 +18,7 @@ public static class LegacyRecipePolicy
             foreach (var item in mods)
             {
                 if (item is not Dictionary<string, object?> mod) return false;
-                foreach (var key in new[] { "Handlers", "Unpatch", "PlayerComparisons", "Relays" })
+                foreach (var key in new[] { "Handlers", "Unpatch", "PlayerComparisons", "Relays", "SyncState" })
                     if (mod.TryGetValue(key, out var actions) && actions != null && !(actions is List<object?> list && list.Count == 0)) return false;
             }
             reason = ""; return true;

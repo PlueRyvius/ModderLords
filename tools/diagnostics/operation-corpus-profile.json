@@ -1,14 +1,26 @@
 {
   "Name": "operation-corpus",
-  "GameRoot": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord",
-  "DedicatedServerRoot": "D:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\261550\\3770450698\\DedicatedServer",
   "Mods": [
-    { "Id": "TAOM", "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\TAOM" },
-    { "Id": "TAOM.CoopCompat", "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\TAOM.CoopCompat" },
-    { "Id": "ImprovedGarrisons" },
-    { "Id": "MyLittleWarband" },
-    { "Id": "CoopModPatch" },
-    { "Id": "Europe1100" },
-    { "Id": "KingdomPlus" }
+    {
+      "Id": "TAOM"
+    },
+    {
+      "Id": "TAOM.CoopCompat"
+    },
+    {
+      "Id": "ImprovedGarrisons"
+    },
+    {
+      "Id": "MyLittleWarband"
+    },
+    {
+      "Id": "CoopModPatch"
+    },
+    {
+      "Id": "Europe1100"
+    },
+    {
+      "Id": "KingdomPlus"
+    }
   ]
 }

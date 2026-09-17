@@ -184,12 +184,14 @@ public sealed class RecipeGenerationTests
         Assert.Equal(r.TraceRoots, back.Mods[0].TraceRoots);
         // A gated mod that is also traced keeps both in one recipe.
         var both = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: reports, traceMods: ["Mod"]).Mods.Single();
-        Assert.NotEmpty(both.Handlers);
+        Assert.Empty(both.Handlers); // Runtime recipes never apply generated handler gates.
+        Assert.NotEmpty(both.CampaignBehaviors);
         Assert.Equal(r.TraceRoots.Count, both.TraceRoots!.Count);
     }
 }
 
 /// <summary>RecipeGates with real Harmony: what the client module does with a v2 recipe, without a game.</summary>
+[Collection("Process-wide Harmony diagnostics")]
 public sealed class RecipeGatesTests
 {
     private static int s_tickRuns;
@@ -318,6 +320,7 @@ public sealed class RecipeGatesTests
 }
 
 /// <summary>RootTracer with real Harmony: counts runs without changing outcomes, and tells a gated skip from a run.</summary>
+[Collection("Process-wide Harmony diagnostics")]
 public sealed class RootTracerTests
 {
     private static bool s_client;

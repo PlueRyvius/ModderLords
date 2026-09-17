@@ -11,7 +11,7 @@ public static class SettingsSources
     public static readonly StaticSettingsSource Static = new StaticSettingsSource();
     public static readonly RecipeStateSource State = new RecipeStateSource();
 
-    public static ISettingsSource[] All { get; private set; } = { Mcm, Static, State };
+    public static ISettingsSource[] All { get; private set; } = { Mcm, Static };
 
     /// <summary>Adds a source (the static-settings source registers itself once it exists).</summary>
     public static void Register(ISettingsSource source)

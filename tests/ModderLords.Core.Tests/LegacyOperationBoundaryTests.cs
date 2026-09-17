@@ -12,6 +12,7 @@ public sealed class LegacyOperationBoundaryTests
     [InlineData("Unpatch")]
     [InlineData("PlayerComparisons")]
     [InlineData("Relays")]
+    [InlineData("SyncState")]
     public void StaleGeneratedActionsCannotEnterLegacyRuntimeEvenWhenSchemaIsSpoofed(string field)
     {
         var json = "{\"SchemaVersion\":1,\"Mods\":[{\"CampaignBehaviors\":[\"Legacy\"]},{\"" + field + "\":[\"Unsafe\"]}]}";

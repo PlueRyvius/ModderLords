@@ -462,7 +462,7 @@
                     <Expander Header="Advanced" Margin="0,16,0,0">
                         <StackPanel Margin="4,6,0,0">
                             <CheckBox Content="Experimental compatibility" IsChecked="{Binding Main.ExperimentalCompat}"
-                                      ToolTip="Per-mod code handling under Coop: Server-only logic, the Behaviours and Authority windows, relayed player actions, player-check rewrites, state sync. Works for some behaviour-plus-settings mods only (ImprovedGarrisons is the tested case)." />
+                                      ToolTip="Enables explicit legacy Server-only logic selections and diagnostic tracing. Generated rewrites, relays and state transformations remain inactive. Applies to the next launch." />
                             <TextBlock Margin="20,6,0,0" Foreground="{DynamicResource WarningForeground}" TextWrapping="Wrap"
                                        Text="Experimental. It changes how a mod's own code runs, and works for some mods only. When off, Server-only logic ticks are kept but ignored at launch." />
                         </StackPanel>

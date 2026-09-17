@@ -498,6 +498,7 @@ public sealed class LaunchSession
             var pm = profile.Mods.First(m => m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase));
             return (s.Module.Id, AssemblyScan.Scan(s.Module), (IReadOnlyCollection<string>)pm.ClientSideBehaviors);
         }).ToList();
+        var authority = traced.Count > 0 ? BuildAuthorityReports(analysed.Where(s => traced.Contains(s.Module.Id)).ToList(), messages) : null;
         var db = CompatDb.Current;
         var hints = selections.Select(s => db.Find(s.Module.Id)).Where(r => r is not null)
             .Select(r => (r!.Id, (IReadOnlyList<string>)r.SettingsTypes, (IReadOnlyList<string>)r.IgnoreSettingsTypes)).ToList();
@@ -511,7 +512,7 @@ public sealed class LaunchSession
                 messages.Add($"battle scenes: {excludedScenes.Count} scene(s) ship without a terrain shader cache and will not be chosen for field battles"
                     + (excludedScenes.Any(s => s.StartsWith("battle_terrain", StringComparison.Ordinal)) ? $" ({string.Join(", ", excludedScenes.Where(s => s.StartsWith("battle_terrain", StringComparison.Ordinal)).Take(4))})" : ""));
         }
-        var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, null, excludedScenes, traced);
+        var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, authority, excludedScenes, traced);
         set.WriteInto(sync.FolderPath);
         if (traced.Count > 0 && (authority is null || traced.Any(t => !set.Mods.Any(m => m.Id.Equals(t, StringComparison.OrdinalIgnoreCase) && m.TraceRoots is { Count: > 0 }))))
             messages.Add("trace: MODDERLORDS_TRACE_MODS names a mod that could not be analysed; it is not traced");

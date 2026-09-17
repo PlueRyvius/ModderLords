@@ -264,7 +264,7 @@ public partial class MainViewModel : ObservableObject
     public bool IsHost => Mode == AppMode.Host;
 
     /// <summary>
-    /// App-wide, off by default: per-mod code gating, relays, player-check rewrites, state sync and tracing. It works
+    /// App-wide, off by default: explicit legacy behavior gating and diagnostic tracing. It works
     /// for some behaviour-plus-settings mods only, so it is hidden and, when off, not applied at launch either.
     /// </summary>
     [ObservableProperty] private bool _experimentalCompat;
@@ -272,7 +272,12 @@ public partial class MainViewModel : ObservableObject
     /// <summary>The experimental columns and buttons are shown only in Host mode with experimental compatibility on.</summary>
     public bool ShowExperimentalCompat => IsHost && ExperimentalCompat;
 
-    partial void OnExperimentalCompatChanged(bool value) => OnPropertyChanged(nameof(ShowExperimentalCompat));
+    partial void OnExperimentalCompatChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowExperimentalCompat));
+        Host?.InvalidatePreview();
+        RefreshPreview();
+    }
 
     partial void OnModeChanged(AppMode value)
     {
