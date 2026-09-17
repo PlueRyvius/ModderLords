@@ -326,6 +326,23 @@ the `Campaign.PlayerDefaultFaction` setter) and transpiles mod methods under Coo
 compat silently (the probe pattern degrades to "disabled" in the log); check the compat logs after every Coop update.
 Raising this with the Coop maintainers was deferred by the maintainer on 2026-09-15.
 
+## Experimental compatibility behind a switch (2026-09-16)
+
+The maintainer paused the per-mod work on 2026-09-16: steps 4–9 fit one installed mod shape (ImprovedGarrisons), which
+is chasing specific solutions rather than general ones. Everything that changes how a mod's own code runs is now behind
+**Server tab → Advanced → Experimental compatibility**, app-wide (`UiState.ExperimentalCompat`), **off by default**.
+
+- **Off means off at launch, not only hidden.** `LaunchSession.ServerOnlyMods` is empty, so `recipes.json` carries no
+  gates, postfix removals, player-check rewrites, relays or state sync, and `MODDERLORDS_TRACE_MODS` is ignored.
+  Server-only logic ticks stay in the profile and a launch prints `experimental compatibility is off: Server-only logic
+  for ... is ignored`; the Settings-sync refusal does not fire for ignored ticks.
+- **Hidden when off:** the Server-only logic, Behaviours and Server verdict columns and the Behaviours… / Authority…
+  buttons (`MainViewModel.ShowExperimentalCompat` = Host mode and the switch).
+- **Unchanged (general):** server guards, MCM settings sync, battle-scene exclusion, the Compat column and records.
+- Parked until the maintainer resumes it: Phase B (instance-field state through Coop's AutoSync) and the two-player gate.
+  A first IG trace run on 2026-09-15 (Server-only logic on) showed gates holding (5,549 client skips, 0 runs), 8/8 relays
+  confirmed and trace install in 233 ms; totals not written up.
+
 ## Authority classifier, step 1 (2026-09-14): Coop sink catalogue
 
 Goal of the classifier: decide from IL, without game launches, which parts of a mod must run only on the server and
