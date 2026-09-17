@@ -36,6 +36,9 @@ public sealed class UiState
     /// <summary>A release the user chose "Skip this version" on. A later release is offered again.</summary>
     public string? SkippedVersion { get; set; }
 
+    /// <summary>Experimental compatibility (Server tab, Advanced). Off by default; see MainViewModel.ExperimentalCompat.</summary>
+    public bool ExperimentalCompat { get; set; }
+
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }

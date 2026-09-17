@@ -16,6 +16,24 @@ namespace ModderLords.App.Tests;
 public class WorkflowTests
 {
     [Fact]
+    public void ExperimentalSwitchPreservesSettingsAndManualChoices() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("TestMod");
+        var vm = fixture.ViewModel(); vm.Rescan(); vm.Mode = AppMode.Host;
+        vm.Profile.SettingsSync = true;
+        var row = vm.Mods.Single(m => m.Id == "TestMod");
+        row.ServerAuthoritative = true;
+        Assert.False(vm.ExperimentalCompat);
+        Assert.False(vm.ShowExperimentalCompat);
+        Assert.True(vm.Host!.ClientProfile.SettingsSync);
+        vm.ExperimentalCompat = true;
+        Assert.True(vm.ShowExperimentalCompat);
+        vm.ExperimentalCompat = false;
+        Assert.True(vm.Profile.SettingsSync);
+        Assert.True(row.ServerAuthoritative);
+    });
+
+    [Fact]
     public void EmbeddedWindowIconDecodesAtEveryOriginalSize() => Sta(() =>
     {
         var resources = new System.Resources.ResourceManager("ModderLords.g", typeof(MainViewModel).Assembly);

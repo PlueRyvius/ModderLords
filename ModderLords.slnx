@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/ModderLords.Analysis/ModderLords.Analysis.csproj" />
+    <Project Path="src/ModderLords.Operations/ModderLords.Operations.csproj" />
     <Project Path="src/ModderLords.App/ModderLords.App.csproj" />
     <Project Path="src/ModderLords.Cli/ModderLords.Cli.csproj" />
     <Project Path="src/ModderLords.Compat/ModderLords.Compat.csproj" />

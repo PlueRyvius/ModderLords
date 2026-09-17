@@ -1,3 +1,5 @@
+> Release 1.0.2 runtime boundary: the classifier/recipe development history below includes experimental schema-v2/v3 machinery. Those generated transformations are now diagnostic only, including SyncState; neither the Experimental switch nor a schema-v1 label authorizes them. `RecipeSet.Build` emits explicit legacy gates plus settings/scene/trace data; `BuildDiagnostic` is study output. New transformations require validated compiled operation contracts. See [OPERATION-COMPATIBILITY.md](OPERATION-COMPATIBILITY.md).
+
 ﻿# ModderLords: developer notes
 
 A launcher for the **Bannerlord Coop dedicated server** that lets you run it with community mods,
@@ -325,6 +327,23 @@ owning a castle. (a) An IG per-castle setting set by player A applies only to A'
 the `Campaign.PlayerDefaultFaction` setter) and transpiles mod methods under Coop's gates. A Coop update can disable
 compat silently (the probe pattern degrades to "disabled" in the log); check the compat logs after every Coop update.
 Raising this with the Coop maintainers was deferred by the maintainer on 2026-09-15.
+
+## Experimental compatibility behind a switch (2026-09-16)
+
+The maintainer paused the per-mod work on 2026-09-16: steps 4–9 fit one installed mod shape (ImprovedGarrisons), which
+is chasing specific solutions rather than general ones. Everything that changes how a mod's own code runs is now behind
+**Server tab → Advanced → Experimental compatibility**, app-wide (`UiState.ExperimentalCompat`), **off by default**.
+
+- **Off means off at launch, not only hidden.** `LaunchSession.ServerOnlyMods` is empty, so `recipes.json` carries no
+  gates, postfix removals, player-check rewrites, relays or state sync, and `MODDERLORDS_TRACE_MODS` is ignored.
+  Server-only logic ticks stay in the profile and a launch prints `experimental compatibility is off: Server-only logic
+  for ... is ignored`; the Settings-sync refusal does not fire for ignored ticks.
+- **Hidden when off:** the Server-only logic, Behaviours and Server verdict columns and the Behaviours… / Authority…
+  buttons (`MainViewModel.ShowExperimentalCompat` = Host mode and the switch).
+- **Unchanged (general):** server guards, MCM settings sync, battle-scene exclusion, the Compat column and records.
+- Parked until the maintainer resumes it: Phase B (instance-field state through Coop's AutoSync) and the two-player gate.
+  A first IG trace run on 2026-09-15 (Server-only logic on) showed gates holding (5,549 client skips, 0 runs), 8/8 relays
+  confirmed and trace install in 233 ms; totals not written up.
 
 ## Authority classifier, step 1 (2026-09-14): Coop sink catalogue
 

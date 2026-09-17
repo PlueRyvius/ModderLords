@@ -74,9 +74,9 @@ public sealed class AuthorityRowTests
         var rows = AuthorityRow.From(report);
         var split = rows.Single(r => r.Verdict == "NeedsStateSync");
         Assert.Contains("flag: RegistersUI", split.Details);
-        Assert.Contains("gated instead on clients: GarrisonPartyBehavior.OnGameStartSetAllIGParties", split.Details);
+        Assert.Contains("diagnostic gate candidates (inactive): GarrisonPartyBehavior.OnGameStartSetAllIGParties", split.Details);
         Assert.True(rows.Single(r => r.Verdict == "PlayerStateUnsynced").ActionNeeded);
-        Assert.Contains("relayed to the server via RecruitmentSettings.SetRecruitmentThreshold", rows.Single(r => r.Verdict == "PlayerStateUnsynced").Details);
+        Assert.Contains("diagnostic relay candidate (inactive): RecruitmentSettings.SetRecruitmentThreshold", rows.Single(r => r.Verdict == "PlayerStateUnsynced").Details);
     }
 
     [Fact]

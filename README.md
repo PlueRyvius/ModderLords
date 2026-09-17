@@ -461,6 +461,9 @@ Both bundled modules only ever load code from the launcher folder; nothing of Co
 
 ## Server-only logic (Layer 1, needs Settings sync on)
 
+**Experimental, off by default.** Turn it on under **Server tab → Advanced → Experimental compatibility**; until then the
+column is hidden and ticks are ignored at launch. It works for some behaviour-plus-settings mods only.
+
 On the Mods tab, tick **Server-only logic** for a mod whose gameplay should be decided by the host: garrison managers,
 economy tweaks, battle effects. The launcher scans the mod's DLL for its campaign behaviours and mission behaviours and
 writes a recipe into the shared `ModderLords.Compat` module. On the server everything runs as before. Joining players
@@ -468,21 +471,18 @@ receive the recipe before their campaign loads and their copy of the mod stops r
 the host's copy acts and the results reach players through Coop's normal sync. The **Behaviours** column shows what a
 mod has to gate. Players need `ModderLords.Compat` installed for this (see the section above).
 
-When a mod's code can be analysed, the launcher gates individual handlers rather than whole behaviours, so a handler
-that also registers a screen or a menu keeps running on players' clients and only its server work is skipped. The
-**Authority…** button on the Mods tab shows the verdict for every entry point.
+Operation analysis is available through **Analyze operations…** and the CLI. It reports authority, player interaction,
+provider coverage, replication gaps, and separate offline/runtime verification. Recognition of an installed provider
+is not proof that its patches installed. TAOM Make Camp remains suppressed by its existing provider.
 
-### What co-op compatibility can and cannot fix
+Experimental compatibility enables explicit legacy whole-behavior gates and opt-in tracing only. Generated handler
+gates, player-check rewrites, relays, and static-state synchronization are diagnostic proposals, never automatic
+runtime transformations. Whole-behavior gates may hide UI registered by that behavior; choose them deliberately.
 
-The automatic fixes cover one shape of mod well: **campaign behaviours plus settings**, where player actions call a
-behaviour method with a town, party or hero (ImprovedGarrisons is the model case). For those the launcher gates the
-simulation to the server, rewrites "is this the player's?" checks to "is this any player's?", syncs settings, relays
-button actions to the server, and keeps the server from choosing a battle scene that crashes clients.
-
-It does **not** rewrite screen-driven actions (view models calling a service with screen state), console commands, or
-mission code. Those show as *report only* in the Authority window and need a small per-mod adapter. Neither can it
-sync mod state held in per-object fields yet; the Authority window names those fields so an adapter knows what to carry.
-Full generality is not the goal: a mod outside this shape gets an accurate report, not a promise.
+New automatic support requires a shipped compiled contract matching the selected binaries and passing offline and
+native validation. The Europe1100 resource-adder adapter remains inactive pending native acceptance; this release
+does not claim Europe1100-wide support. Existing TAOM.CoopCompat and CoopModPatch adapters remain in control of
+features they already provide. See [operation compatibility](docs/OPERATION-COMPATIBILITY.md).
 
 ## Checking that server-only logic worked
 

@@ -1,0 +1,26 @@
+{
+  "Name": "operation-corpus",
+  "Mods": [
+    {
+      "Id": "TAOM"
+    },
+    {
+      "Id": "TAOM.CoopCompat"
+    },
+    {
+      "Id": "ImprovedGarrisons"
+    },
+    {
+      "Id": "MyLittleWarband"
+    },
+    {
+      "Id": "CoopModPatch"
+    },
+    {
+      "Id": "Europe1100"
+    },
+    {
+      "Id": "KingdomPlus"
+    }
+  ]
+}

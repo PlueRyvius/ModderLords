@@ -16,25 +16,30 @@ using ModderLords.Coop.Config;
 //   launch   [--mods ...] [--save NAME] [--port 7210] [--join-port 4200] [--region EU] [--dry-run] [--quiet-engine] [--stop-after SECONDS]
 //            [--manual-order] [--stall-seconds N|off] [--mod-distance-cache]
 //            [--create-world NAME] [--create-world-timeout SECONDS]
-//            [--data-dir PATH] [--coop-data-dir PATH] [--world-log PATH]
+//            [--data-dir PATH] [--coop-data-dir PATH] [--world-log PATH] [--bundle-root PATH]
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
 //   authority --mod ID [--all] [--json] [--out PATH]
 //   trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]
 
 var opts = ParseArgs(args);
+// Diagnostics can run the shared launch path with the exact hook/compat payload from a packaged release. Normal
+// launches leave this unset and continue resolving modules beside the current executable.
+ModderLords.Coop.Launch.LaunchSession.BundledRoot = opts.GetValueOrDefault("bundle-root") is { Length: > 0 } bundleRoot
+    ? Path.GetFullPath(bundleRoot) : null;
 if (opts.ContainsKey("data-dir") && opts.ContainsKey("profile"))
 {
     Console.Error.WriteLine("[ModderLords] --data-dir diagnostics cannot use saved profiles; pass --mods explicitly.");
     return 2;
 }
 // Diagnostic invocations must not migrate or touch the user's launcher data.
-if (!opts.ContainsKey("data-dir")) DataDirMigration.RunIfNeeded();
+if (!opts.ContainsKey("data-dir") && opts.GetValueOrDefault("cmd") != "analyze") DataDirMigration.RunIfNeeded();
 if (!opts.TryGetValue("cmd", out var cmd))
 {
     Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--join-port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
     Console.WriteLine("          play --profile NAME [--dry-run]   (start the player's own game with a profile's mods)");
-    Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH]   (generate, save, exit)");
+    Console.WriteLine("          analyze --profile NAME [--root DedicatedServer] [--json] [--cache-dir PATH]   (read-only operation analysis)");
+    Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH] [--bundle-root PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
     Console.WriteLine("          authority --mod ID [--all] [--json] [--out PATH]   (which parts of a mod must be server-only, read from its code)");
     Console.WriteLine("          trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]   (verdicts vs what ran; traces from MODDERLORDS_TRACE_MODS)");
@@ -42,6 +47,41 @@ if (!opts.TryGetValue("cmd", out var cmd))
 }
 
 // The player-side launch needs no dedicated server at all, so it runs before the server package is resolved.
+if (cmd == "analyze")
+{
+    try
+    {
+        var profileFile = opts.GetValueOrDefault("profile-file");
+        var name = opts.GetValueOrDefault("profile");
+        var profile = profileFile != null ? System.Text.Json.JsonSerializer.Deserialize<Profile>(File.ReadAllText(profileFile), ModderLords.Analysis.AnalysisJson.Options)
+            : name != null ? ProfileStore.Load(name) : null;
+        if (profile == null) throw new ArgumentException("analyze requires --profile NAME or --profile-file PATH");
+        if (opts.TryGetValue("root", out var analysisRoot)) profile.DedicatedServerRoot = analysisRoot;
+        ModderLords.Analysis.AnalysisRequest request;
+        if (profile.DedicatedServerRoot is not null)
+            request = ModderLords.Coop.Compat.OperationPreparation.Resolve(profile);
+        else
+        {
+            var prepared = ClientLaunchSession.Prepare(profile);
+            request = ModderLords.Core.Compat.OperationAnalysisService.CreateRequest(profile, prepared.Modules, prepared.GameRoot);
+        }
+        using var cancellation = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
+        var report = ModderLords.Core.Compat.OperationAnalysisService.Analyze(request, cancellation.Token, opts.GetValueOrDefault("cache-dir"));
+        if (opts.ContainsKey("json")) Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, ModderLords.Analysis.AnalysisJson.Options));
+        else
+        {
+            Console.WriteLine(report.Summary);
+            foreach (var decision in report.Plan.Contracts) Console.WriteLine($"{decision.Contract.Operation}: {decision.Decision} — {decision.Reason}");
+            foreach (var operation in report.Operations) Console.WriteLine($"{operation.Module} [{operation.Side}] {operation.EntryPoint}: {operation.Authority}; {string.Join(", ", operation.Effects)}");
+            foreach (var gap in report.Gaps) Console.WriteLine($"INCOMPLETE {gap.Module}: {gap.Code}: {gap.Detail}");
+        }
+        return 0;
+    }
+    catch (OperationCanceledException) { Console.Error.WriteLine("Analysis cancelled"); return 130; }
+    catch (Exception ex) { Console.Error.WriteLine("Analysis failed: " + ex.Message); return 2; }
+}
+
 if (cmd == "play")
 {
     var profileName = opts.GetValueOrDefault("profile") ?? "default";
@@ -162,9 +202,9 @@ switch (cmd)
             Console.WriteLine($"      {r.Reason}");
             if (r.Evidence.Count > 0) Console.WriteLine("      via " + string.Join(" -> ", r.Evidence));
             foreach (var f in r.Flags ?? []) Console.WriteLine("      flag: " + f);
-            if (r.GateInstead is { Count: > 0 } g) Console.WriteLine("      gated instead on clients: " + string.Join(", ", g));
-            if (r.RelayVia is { } via) Console.WriteLine("      relayed to the server via " + via);
-            if (r.SharedState is { Count: > 0 } st) Console.WriteLine("      shared state: " + string.Join(", ", st.Select(f => report.SyncStateMembers.Contains(f) ? f + " (synced)" : f + " (not syncable: instance or unsupported type)")));
+            if (r.GateInstead is { Count: > 0 } g) Console.WriteLine("      diagnostic gate candidates (inactive): " + string.Join(", ", g));
+            if (r.RelayVia is { } via) Console.WriteLine("      diagnostic relay candidate (inactive): " + via);
+            if (r.SharedState is { Count: > 0 } st) Console.WriteLine("      shared state: " + string.Join(", ", st.Select(f => report.SyncStateMembers.Contains(f) ? f + " (diagnostic candidate, inactive)" : f + " (not syncable: instance or unsupported type)")));
         }
         return 0;
     }
@@ -271,7 +311,7 @@ switch (cmd)
         return 0;
     }
 
-    case "launch" when opts.ContainsKey("profile"):    case "launch" when opts.ContainsKey("profile"):
+    case "launch" when opts.ContainsKey("profile"):
     {
         // Same path the app uses: profile -> overlay -> config -> recipes -> engine.
         var profile = ProfileStore.Load(opts["profile"]);
@@ -433,7 +473,13 @@ switch (cmd)
         // so the creation process cannot accidentally load an unrelated campaign.
         var configuredSave = createWorld is not null ? "" : plan.SaveName ?? configured?.SaveName ?? "";
         ServerConfig.Write(paths, configuredSave, adHocSettings);
-        return await RunEngine(plan, opts);
+        CreationDiagnostics? creationDiagnostics = null;
+        if (createWorld is not null)
+        {
+            creationDiagnostics = CreationDiagnostics.Start(paths.LogsDir, plan, createWorld);
+            Console.WriteLine($"[ModderLords] creation diagnostics -> {creationDiagnostics.ManifestPath}");
+        }
+        return await RunEngine(plan, opts, creationDiagnostics);
     }
 
     default:
@@ -486,8 +532,10 @@ static List<ModSelection> ParseSelections(string? spec, ModuleCatalog catalog, o
     return list;
 }
 
-static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opts)
+static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opts, CreationDiagnostics? creationDiagnostics = null)
 {
+    using (creationDiagnostics)
+    {
     var quietEngine = opts.ContainsKey("quiet-engine");
     var stopAfter = int.TryParse(opts.GetValueOrDefault("stop-after"), out var s) ? s : 0;
     var logPath = Path.Combine(Path.GetTempPath(), $"modderlords-launch-{DateTime.Now:yyyyMMdd-HHmmss}.log");
@@ -495,6 +543,7 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
     Console.WriteLine($"[ModderLords] full output -> {logPath}");
 
     using var engine = EngineProcess.Start(plan);
+    creationDiagnostics?.Attach(engine.ProcessId);
     Console.WriteLine($"[ModderLords] engine pid {engine.ProcessId}. Type a command and Enter to send it; 'quit' stops the server.");
     var serving = new TaskCompletionSource();
     // A campaign load that repeats one state forever exits with nothing and logs nothing fatal. Call it out rather
@@ -514,8 +563,12 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
         Console.WriteLine("[ModderLords] " + message);
         Console.ForegroundColor = c0;
     }
+    var timedOut = false;
     engine.LineReceived += line =>
     {
+        creationDiagnostics?.Record(line);
+        if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase) &&
+            line.Text.Contains("timed out", StringComparison.OrdinalIgnoreCase)) timedOut = true;
         var c = LogClassifier.Classify(line.Text);
         log.WriteLine($"{line.At:HH:mm:ss.fff} {line.Stream,-6} {c.Category,-10} {line.Text}");
         if (line.Text.Contains("SERVING", StringComparison.Ordinal)) serving.TrySetResult();
@@ -549,6 +602,7 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
             var completed = await Task.WhenAny(serving.Task, Task.Delay(TimeSpan.FromSeconds(stopAfter)));
             var reason = completed == serving.Task ? "serving reached" : "timeout reached";
             await Task.Delay(TimeSpan.FromSeconds(5));
+            creationDiagnostics?.RecordEvent($"launcher-stop-after reason={reason} seconds={stopAfter}");
             Console.WriteLine($"[ModderLords] auto-stop: {reason}; sending 'stop' over stdin");
             await engine.StopAsync(TimeSpan.FromSeconds(30));
         });
@@ -569,9 +623,11 @@ static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opt
 
     var code = await engine.Exited;
     var uptime = DateTimeOffset.Now - engine.StartedAt;
+    creationDiagnostics?.Complete(code, timedOut, File.Exists(Path.Combine(plan.Paths.SavesDir, (creationDiagnostics?.SaveName ?? "") + ".sav")));
     Console.WriteLine($"[ModderLords] engine exit code {code} after {uptime:hh\\:mm\\:ss}. {ExitCodeExplainer.Explain(code)}");
     log.WriteLine($"[ModderLords] exit {code}: {ExitCodeExplainer.Explain(code)}");
     return code;
+    }
 }
 
 static Dictionary<string, string> ParseArgs(string[] a)

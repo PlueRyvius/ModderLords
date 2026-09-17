@@ -74,6 +74,9 @@
                     <Button Content="Re-sync junctions" Command="{Binding Host.ResyncCommand}" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
                             ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
                 </WrapPanel>
+                <TextBlock Text="{Binding Host.CreationProgressText}" VerticalAlignment="Center" Margin="8,0" FontStyle="Italic"
+                           Foreground="{DynamicResource MutedForeground}" TextWrapping="NoWrap"
+                           Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
             </DockPanel>
         </Border>
 
@@ -185,6 +188,8 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
+                            <Button Content="Analyze operations…" Command="{Binding AnalyzeOperationsCommand}" Margin="8,0,0,0" ToolTip="Inspect operation authority, player interaction, provider contracts, and unresolved replication" />
+                            <CheckBox Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" Content="Automatic validated contracts" IsChecked="{Binding Profile.AutomaticCompatibility}" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip="Only matching contracts that passed offline and integration validation can activate" />
                             <Button Content="Use engine order" Command="{Binding UseEngineOrderCommand}"
                                     ToolTip="Sort this list into the order the engine actually loads (shown on the right). Only mods that a manifest forces to move are moved; the rest keep the place you gave them." />
                             <!-- The computed order is assembled from module metadata, and metadata is sometimes wrong
@@ -196,9 +201,9 @@
                                        ToolTip="Frameworks declare that the game's own modules load after them, so they sit above the game and cannot be moved below it. The game's own modules are placed by the engine."
                                        Text="Drag to reorder within Frameworks / Game / Mods" />
                             <Button Content="Behaviours…" Command="{Binding EditBehaviorsCommand}" ToolTip="Choose which of the selected mod's behaviours run on the server only"
-                                    Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                                    Visibility="{Binding ShowExperimentalCompat, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Authority…" Command="{Binding ShowAuthorityCommand}" ToolTip="Read the selected mod's code and show which parts must run on the server only, which need nothing, and which need a closer look"
-                                    Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                                    Visibility="{Binding ShowExperimentalCompat, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Record…" Command="{Binding RecordCompatCommand}" Margin="12,0,0,0" ToolTip="Record how the selected mod behaves under Coop (verdict, notes, defaults). Saved to your local compat database."
                                     Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Export…" Command="{Binding ExportCompatCommand}" ToolTip="Write the selected mod's record (or all your local records) to a file you can share"
@@ -328,9 +333,9 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Server verdict" x:Name="ServerVerdictColumn" Binding="{Binding ServerVerdict}" IsReadOnly="True" Width="190">
+                                <DataGridTextColumn Header="Operation compatibility" x:Name="ServerVerdictColumn" Binding="{Binding OperationSummary}" IsReadOnly="True" Width="190">
                                     <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding ServerVerdictDetail}" /></Style>
+                                        <Style TargetType="TextBlock"><Setter Property="ToolTip" Value="Use Analyze operations for evidence. A recognized provider is not a runtime verification." /></Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Header="Notes" x:Name="NotesColumn" Binding="{Binding Notes}" IsReadOnly="True" Width="150" />
@@ -452,6 +457,16 @@
                                Text="Leave the Trace switches off for normal play. They make the engine print hundreds of thousands of lines a second: the launch log grows by gigabytes a minute and the machine slows down. They are for chasing a specific bug, then turning back off." />
                     <TextBlock Margin="0,12,0,0" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap"
                                Text="Gameplay settings (difficulty, fast forward, cheats) live in CoopData\mod-config.json and are owned by the Coop mod; edit that file directly for now." />
+                    <!-- App-wide, not per profile. Off means off at launch too, not just hidden: ticks stay in the profile
+                         but no gates, relays, rewrites, state sync or tracing are written into recipes.json. -->
+                    <Expander Header="Advanced" Margin="0,16,0,0">
+                        <StackPanel Margin="4,6,0,0">
+                            <CheckBox Content="Experimental compatibility" IsChecked="{Binding Main.ExperimentalCompat}"
+                                      ToolTip="Enables explicit legacy Server-only logic selections and diagnostic tracing. Generated rewrites, relays and state transformations remain inactive. Applies to the next launch." />
+                            <TextBlock Margin="20,6,0,0" Foreground="{DynamicResource WarningForeground}" TextWrapping="Wrap"
+                                       Text="Experimental. It changes how a mod's own code runs, and works for some mods only. When off, Server-only logic ticks are kept but ignored at launch." />
+                        </StackPanel>
+                    </Expander>
                 </StackPanel>
             </TabItem>
 

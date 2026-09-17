@@ -36,6 +36,7 @@ public partial class MainWindow : Window
         // A state file with no mode is a first run (or a fresh data dir): ask, once, and remember the answer.
         var mode = _ui.Mode;
         if (mode is null) mode = AskForMode();
+        ViewModel.ExperimentalCompat = _ui.ExperimentalCompat;
         ViewModel.ApplyMode(mode.Value);
         _baseTitle = Title;
         ViewModel.Update = new UpdateViewModel(ViewModel, _ui);
@@ -86,6 +87,12 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.IsDirty)) Title = ViewModel.IsDirty ? "* " + _baseTitle : _baseTitle;
         if (e.PropertyName == nameof(MainViewModel.Host)) AttachHost();
+        if (e.PropertyName == nameof(MainViewModel.ExperimentalCompat))
+        {
+            ApplyModeToColumns(ViewModel.Mode == AppMode.Host);
+            _ui.ExperimentalCompat = ViewModel.ExperimentalCompat;
+            UiStateStore.Save(_ui);
+        }
         if (e.PropertyName != nameof(MainViewModel.Mode)) return;
         UpdateModeButton();
         _ui.Mode = ViewModel.Mode;
@@ -119,9 +126,12 @@ public partial class MainWindow : Window
     private void ApplyModeToColumns(bool host)
     {
         var v = host ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var c in new System.Windows.Controls.DataGridColumn[]
-                 { RoleColumn, ServerOnlyColumn, BehavioursColumn, CompatColumn, ServerVerdictColumn, BinsColumn, NotesColumn })
+        foreach (var c in new System.Windows.Controls.DataGridColumn[] { RoleColumn, CompatColumn, BinsColumn, NotesColumn, ServerVerdictColumn })
             c.Visibility = v;
+        // Experimental compatibility (Server tab, Advanced) owns these; hidden unless it is on.
+        var x = host && ViewModel.ExperimentalCompat ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var c in new System.Windows.Controls.DataGridColumn[] { ServerOnlyColumn, BehavioursColumn })
+            c.Visibility = x;
     }
 
     private void UpdateModeButton()

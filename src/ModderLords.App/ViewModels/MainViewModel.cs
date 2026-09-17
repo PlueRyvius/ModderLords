@@ -24,6 +24,7 @@ namespace ModderLords.App.ViewModels;
 
 public partial class ModRow : ObservableObject
 {
+    [ObservableProperty] private string _operationSummary = "Not analyzed";
     public required DiscoveredModule Module { get; init; }
     public bool IsMissing { get; init; }
     [ObservableProperty] private bool _enabled;
@@ -262,12 +263,29 @@ public partial class MainViewModel : ObservableObject
 
     public bool IsHost => Mode == AppMode.Host;
 
+    /// <summary>
+    /// App-wide, off by default: explicit legacy behavior gating and diagnostic tracing. It works
+    /// for some behaviour-plus-settings mods only, so it is hidden and, when off, not applied at launch either.
+    /// </summary>
+    [ObservableProperty] private bool _experimentalCompat;
+
+    /// <summary>The experimental columns and buttons are shown only in Host mode with experimental compatibility on.</summary>
+    public bool ShowExperimentalCompat => IsHost && ExperimentalCompat;
+
+    partial void OnExperimentalCompatChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowExperimentalCompat));
+        Host?.InvalidatePreview();
+        RefreshPreview();
+    }
+
     partial void OnModeChanged(AppMode value)
     {
         // Built once and kept: switching back to Host must not lose the console scrollback or, far worse, orphan a
         // running server. HostViewModel disposes nothing on the way out because nothing about it is per-session.
         if (value == AppMode.Host) Host ??= new HostViewModel(this);
         OnPropertyChanged(nameof(IsHost));
+        OnPropertyChanged(nameof(ShowExperimentalCompat));
         Rescan();
         if (IsHost) Host?.OnProfileSelected();
     }
@@ -305,6 +323,7 @@ public partial class MainViewModel : ObservableObject
         var changed = Mode != mode;
         Mode = mode;
         OnPropertyChanged(nameof(IsHost));
+        OnPropertyChanged(nameof(ShowExperimentalCompat));
         if (!changed)
         {
             Rescan();               // OnModeChanged did not fire, but the first scan still has to happen
@@ -1052,6 +1071,37 @@ public partial class MainViewModel : ObservableObject
     public sealed record PreviewResult(ModuleCatalog Catalog, LoadOrder.Result Order, ModuleSelectionResult Modules, IReadOnlyList<string> Messages);
 
     private PreviewResult? _preview;
+    private long _previewRevision;
+    [RelayCommand]
+    private async Task AnalyzeOperations(CancellationToken cancellationToken)
+    {
+        try
+        {
+            CollectProfileFromRows();
+            var snapshot = ProfileStore.Snapshot(Profile);
+            var revision = _previewRevision;
+            var request = IsHost ? OperationPreparation.Resolve(snapshot) : CreateClientAnalysisRequest(snapshot);
+            Status = "Analyzing selected operations…";
+            var report = await Task.Run(() => OperationAnalysisService.Analyze(request, cancellationToken), cancellationToken);
+            // Details remain tied to the captured request. Do not annotate a newly selected profile with old results.
+            if (Profile.Name == snapshot.Name && revision == _previewRevision)
+                foreach (var row in Mods.Where(r => request.Modules.Any(m => m.Id == r.Module.Id && m.Folder == r.Module.FolderPath)))
+                {
+                    var contracts = report.Plan.Contracts.Where(c => c.Contract.Module == row.Module.Id).ToArray();
+                    row.OperationSummary = contracts.Length > 0 ? string.Join(", ", contracts.Select(c => c.Decision).Distinct())
+                        : $"{report.Operations.Count(o => o.Module == row.Module.Id)} operations; coverage unverified";
+                }
+            Status = report.Summary;
+            new OperationAnalysisWindow(report) { Owner = Application.Current.MainWindow }.Show();
+        }
+        catch (OperationCanceledException) { Status = "Analysis cancelled"; }
+        catch (Exception ex) { Status = "Operation analysis failed: " + ex.Message; }
+    }
+    private static ModderLords.Analysis.AnalysisRequest CreateClientAnalysisRequest(Profile profile)
+    {
+        var prepared = ClientLaunchSession.Prepare(profile);
+        return OperationAnalysisService.CreateRequest(profile, prepared.Modules, prepared.GameRoot);
+    }
 
     /// <summary>
     /// Whether this list is the load order or merely a request. Wraps the profile flag so toggling it re-runs the
@@ -1072,11 +1122,16 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Switching profile changes the flag without anything assigning to it.</summary>
-    partial void OnProfileChanged(Profile value) => OnPropertyChanged(nameof(ManualLoadOrder));
+    partial void OnProfileChanged(Profile value)
+    {
+        OnPropertyChanged(nameof(ManualLoadOrder));
+    }
 
     [RelayCommand]
     public void RefreshPreview()
     {
+        _previewRevision++;
+        foreach (var row in Mods) row.OperationSummary = "Not analyzed";
         try
         {
             CollectProfileFromRows();

@@ -49,7 +49,7 @@ public sealed class AuthorityScanTests
     [InlineData("AuthBehavior::TickGold", AuthorityVerdict.ServerOnly)]      // Apply* on an action class Coop gates
     [InlineData("AuthBehavior::TickSynced", AuthorityVerdict.ServerOnly)]    // writes a member Coop syncs
     [InlineData("AuthBehavior::TickRandom", AuthorityVerdict.ServerOnly)]    // MBRandom in simulation
-    [InlineData("AuthBehavior::TickGuarded", AuthorityVerdict.AlreadyHandled)]
+    [InlineData("AuthBehavior::TickGuarded", AuthorityVerdict.Review)]
     [InlineData("AuthBehavior::TickMessage", AuthorityVerdict.Local)]
     [InlineData("AuthBehavior::TickMomentum", AuthorityVerdict.NeedsStateSync)] // mod state a menu condition reads
     [InlineData("AuthBehavior::Menus", AuthorityVerdict.Local)]              // registering a consequence is not running it
@@ -204,7 +204,7 @@ public sealed class AuthorityProbe
                 _out.WriteLine($"  culture: {r.Root.Trigger} {r.Root.Method} [{r.Root.Detail}] -> {r.Verdict} ({r.Reason})");
             Assert.Equal(AuthorityVerdict.AlreadyHandled, Find(taom, "TAOM.Features.TroopWeight.Hooks.PartyUpgraderUpgradeReadyTroops_Patch::Postfix")!.Verdict);
             Assert.Contains(taom.Roots, r => r.Root.Method.StartsWith("TAOM.Features.CultureConversion.Hooks.CultureConversionBehavior::", StringComparison.Ordinal)
-                && r.Verdict == AuthorityVerdict.AlreadyHandled);
+                && r.Verdict == AuthorityVerdict.Review && r.Reason.Contains("branch protection"));
             const string alliance = "TaleWorlds.CampaignSystem.CampaignBehaviors.AllianceCampaignBehavior";
             foreach (var r in taom.Roots.Where(r => r.Root.Patch?.TargetType == alliance || r.Verdict == AuthorityVerdict.LeakingPostfix))
                 _out.WriteLine($"  alliance/leak: {r.Root.Method} {r.Root.Patch} -> {r.Verdict} ({r.Reason}) via {string.Join(" -> ", r.Evidence)}");

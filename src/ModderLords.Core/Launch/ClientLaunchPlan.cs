@@ -18,6 +18,7 @@ public sealed record ClientLaunchPlan
     public IReadOnlyList<Modules.DiscoveredModule> SelectedModules { get; init; } = [];
     public IReadOnlyList<string> MissingModules { get; init; } = [];
     public bool RequiresIsolatedView { get; init; }
+    public ModderLords.Analysis.AnalysisRequest? OperationInputs { get; init; }
 
     public string WorkingDirectory => GamePaths.ClientBin(GameRoot);
     public string Exe => Path.Combine(WorkingDirectory, ClientLauncher.GameExeName);

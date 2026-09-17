@@ -46,6 +46,8 @@ public partial class HostViewModel : ObservableObject
         _flushTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
         _flushTimer.Tick += (_, _) => FlushConsole();
         _flushTimer.Start();
+        _creationTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+        _creationTimer.Tick += (_, _) => RefreshCreationProgress();
     }
 
     // Passed through so the coop tabs, whose DataContext is this object, can still bind the profile and the
@@ -83,7 +85,7 @@ public partial class HostViewModel : ObservableObject
     private LaunchSession.Prepared? _runningPrepared;
     private Profile? _runningProfile;
     internal LaunchSession.Prepared? ClientTarget => _runningPrepared ?? _prepared;
-    internal Profile ClientProfile => _runningProfile ?? Profile;
+    internal Profile ClientProfile => _runningProfile ?? ProfileStore.Snapshot(Profile);
     internal void InvalidatePreview() => _prepared = null;
 
     internal void RecordRunningSession(LaunchSession.Prepared prepared, Profile profile)
@@ -109,6 +111,10 @@ public partial class HostViewModel : ObservableObject
     /// <summary>Per launch: keeps an endlessly repeated engine line from burying the console. The log keeps them all.</summary>
     private RepeatCollapser _repeats = new();
     private long _totalDropped;
+    private EngineProcess? _creationEngine;
+    private readonly System.Windows.Threading.DispatcherTimer _creationTimer;
+    private DateTimeOffset? _creationStartedAt;
+    private string _creationPhase = "starting";
 
     public ObservableCollection<SaveRow> Saves { get; } = new();
     public BulkObservableCollection<ConsoleLine> Console { get; } = new();
@@ -136,6 +142,8 @@ public partial class HostViewModel : ObservableObject
     [ObservableProperty] private SaveRow? _selectedSave;
     [ObservableProperty] private string _saveDiff = "";
     [ObservableProperty] private string _clientCheckText = "";
+    /// <summary>Visible creation phase and elapsed time. Unlike the normal launch log this starts before the engine.</summary>
+    [ObservableProperty] private string _creationProgressText = "";
 
     /// <summary>Points the live-settings channel at the newly selected profile. Called by
     /// <see cref="MainViewModel.LoadProfile"/>, and only in Host mode: mod settings are a channel to a running
@@ -156,9 +164,58 @@ public partial class HostViewModel : ObservableObject
     internal MainViewModel.PreviewResult PrepareServerPreview()
     {
         _prepared = null;
-        var p = LaunchSession.Prepare(Profile, applySideEffects: false, scanned: Main.ScannedCatalog);
+        var p = LaunchSession.Prepare(Profile, applySideEffects: false, scanned: Main.ScannedCatalog, experimentalCompat: Main.ExperimentalCompat);
         _prepared = p;
         return new MainViewModel.PreviewResult(p.Catalog, p.Order, p.Modules, p.Messages);
+    }
+
+    private void BeginCreationProgress(DateTimeOffset startedAt)
+    {
+        _creationStartedAt = startedAt;
+        _creationPhase = "starting";
+        RefreshCreationProgress();
+        _creationTimer.Start();
+    }
+
+    private void RefreshCreationProgress()
+    {
+        if (_creationStartedAt is not { } started) return;
+        var elapsed = DateTimeOffset.Now - started;
+        CreationProgressText = $"World creation: {_creationPhase} · elapsed {elapsed:hh\\:mm\\:ss}";
+    }
+
+    private void ObserveCreationLine(string text)
+    {
+        const string phase = "worldcreate: phase=";
+        const string failure = "worldcreate: fail phase=";
+        var index = text.IndexOf(phase, StringComparison.OrdinalIgnoreCase);
+        var start = index >= 0 ? index + phase.Length : -1;
+        if (start < 0)
+        {
+            index = text.IndexOf(failure, StringComparison.OrdinalIgnoreCase);
+            start = index >= 0 ? index + failure.Length : -1;
+        }
+        if (start < 0) return;
+        var value = text[start..].Trim();
+        var end = value.IndexOfAny([' ', '\t', '\r', '\n', ';', ',']);
+        if (end >= 0) value = value[..end];
+        if (value.Length == 0) return;
+        _creationPhase = value;
+        RefreshCreationProgress();
+    }
+
+    private void FinishCreationProgress(int exitCode, bool timedOut, bool saveExists)
+    {
+        _creationTimer.Stop();
+        if (timedOut) _creationPhase = "timed out";
+        else if (exitCode == 11 && saveExists) _creationPhase = "saved";
+        else _creationPhase = $"failed (exit {exitCode})";
+        if (_creationStartedAt is { } started)
+        {
+            var elapsed = DateTimeOffset.Now - started;
+            CreationProgressText = $"World creation: {_creationPhase} · elapsed {elapsed:hh\\:mm\\:ss}";
+        }
+        _creationStartedAt = null;
     }
 
     // ---- saves ----------------------------------------------------------------------------------------
@@ -329,6 +386,7 @@ public partial class HostViewModel : ObservableObject
         ProfileStore.Save(Profile);
         Main.IsDirty = false;
         var launchProfile = ProfileStore.Snapshot(Profile);
+        var experimentalCompat = Main.ExperimentalCompat;
         Console.Clear();
         Status = "Checking…";
         var autoTaomCreate = false;
@@ -361,7 +419,7 @@ public partial class HostViewModel : ObservableObject
             }
 
             Status = "Preparing…";
-            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowTaomWorldCreation: autoTaomCreate));
+            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowTaomWorldCreation: autoTaomCreate, experimentalCompat: experimentalCompat));
             _prepared = prepared;
             // Preparing can take long enough for the user to save more edits. Merge observations into
             // the latest saved document instead of overwriting it with the launch snapshot.
@@ -405,9 +463,17 @@ public partial class HostViewModel : ObservableObject
                 // The creation phase must start with no configured save. Otherwise a stale server-config.json can
                 // make the official host begin loading an older campaign before the creation hook gets control.
                 ServerConfig.Write(prepared.Paths, "", launchProfile.Server);
-                using var creation = EngineProcess.Start(LaunchSession.CreateWorldPlan(prepared, launchProfile.SaveName));
+                var creationPlan = LaunchSession.CreateWorldPlan(prepared, launchProfile.SaveName);
+                using var creationDiagnostics = CreationDiagnostics.Start(logDir, creationPlan, launchProfile.SaveName);
+                AddLine(LogCategory.Tool, $"[ModderLords] TAOM creation diagnostics -> {creationDiagnostics.ManifestPath}");
+                using var creation = EngineProcess.Start(creationPlan);
+                _creationEngine = creation;
+                IsRunning = true;
+                creationDiagnostics.Attach(creation.ProcessId);
+                BeginCreationProgress(creation.StartedAt);
                 creation.LineReceived += line =>
                 {
+                    creationDiagnostics.Record(line);
                     // Everything the creation process says goes to the log and the console, exactly as the run
                     // phase does. Only the worldcreate milestones were kept before, so when creation failed the
                     // engine's own explanation — the one line that says why — had already been thrown away.
@@ -417,7 +483,7 @@ public partial class HostViewModel : ObservableObject
                     _mapIdentity.ObserveCreation(line.Text);
                     if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase) ||
                         line.Text.Contains("phase=", StringComparison.OrdinalIgnoreCase))
-                        Application.Current.Dispatcher.BeginInvoke(() => AddLine(LogCategory.Milestone, "[ModderLords] " + line.Text));
+                        Application.Current.Dispatcher.BeginInvoke(() => { ObserveCreationLine(line.Text); AddLine(LogCategory.Milestone, "[ModderLords] " + line.Text); });
                 };
                 // The compat module normally exits at the same deadline. Keep a launcher-side watchdog as well so
                 // a native hang cannot leave a half-started creation process behind indefinitely.
@@ -428,11 +494,18 @@ public partial class HostViewModel : ObservableObject
                     ? await creationExit
                     : await creation.StopAsync(TimeSpan.FromSeconds(20));
                 if (completed != creationExit)
+                {
+                    creationDiagnostics.RecordEvent($"launcher-watchdog timeout seconds={LaunchSession.DefaultCreateWorldTimeoutSeconds + 30}; process-stop-requested");
                     AddLine(LogCategory.Error, "[ModderLords] TAOM world creation exceeded its 15-minute limit; the creation process was stopped");
-                if (creationCode != 11 || !SavePreparer.Exists(prepared.Paths, launchProfile.SaveName))
+                }
+                var creationSaveExists = SavePreparer.Exists(prepared.Paths, launchProfile.SaveName);
+                creationDiagnostics.Complete(creationCode, completed != creationExit, creationSaveExists);
+                FinishCreationProgress(creationCode, completed != creationExit, creationSaveExists);
+                _creationEngine = null;
+                if (creationCode != 11 || !creationSaveExists)
                     throw new InvalidOperationException($"TAOM world creation stopped with exit code {creationCode}; no usable save was written.");
                 AddLine(LogCategory.Milestone, $"[ModderLords] TAOM world '{launchProfile.SaveName}' saved; starting the server");
-                prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile));
+                prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, experimentalCompat: experimentalCompat));
                 _prepared = prepared;
                 foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
                 // The serve phase is a second, independently prepared plan with its own environment. Describing
@@ -511,6 +584,7 @@ public partial class HostViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            _creationEngine = null;
             IsRunning = false;
             Status = ex.Message;
             AddLine(LogCategory.Error, "[ModderLords] " + ex);
@@ -646,9 +720,10 @@ public partial class HostViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private async Task Stop()
     {
-        if (_engine is null) return;
+        var process = _creationEngine ?? _engine;
+        if (process is null) return;
         Status = "Stopping…";
-        await _engine.StopAsync(TimeSpan.FromSeconds(30));
+        await process.StopAsync(TimeSpan.FromSeconds(30));
     }
 
     [RelayCommand]

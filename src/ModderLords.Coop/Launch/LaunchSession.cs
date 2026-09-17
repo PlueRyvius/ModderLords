@@ -26,6 +26,12 @@ public sealed class LaunchSession
 {
     public const int DefaultCreateWorldTimeoutSeconds = 900;
 
+    /// <summary>
+    /// Optional bundle root used by diagnostics to run the shared launch code with a packaged release's hook and
+    /// compatibility modules. Normal app and CLI launches leave this null, which keeps the existing AppContext lookup.
+    /// </summary>
+    public static string? BundledRoot { get; set; }
+
     public sealed record Prepared(
         ServerPaths Paths,
         ModuleCatalog Catalog,
@@ -37,6 +43,7 @@ public sealed class LaunchSession
     {
         /// <summary>The engine-agnostic half of this launch, for the code shared with the client path.</summary>
         public ModuleSelectionResult Modules => new(Catalog, Selections, Order);
+        public ModderLords.Analysis.CompatibilityPlan? OperationPlan { get; init; }
     }
 
     public sealed record HeadlessContent(IReadOnlyDictionary<string, string> AssetPaths, IReadOnlyDictionary<string, string> MapPaths);
@@ -75,7 +82,7 @@ public sealed class LaunchSession
 
     private static DiscoveredModule? LocateBundled(string id)
     {
-        var dir = Path.Combine(AppContext.BaseDirectory, "compat", id);
+        var dir = Path.Combine(BundledRoot ?? AppContext.BaseDirectory, "compat", id);
         if (!File.Exists(Path.Combine(dir, "SubModule.xml"))) return null;
         return ModuleCatalog.TryParse(dir, ModuleSourceKind.Custom, out _);
     }
@@ -125,8 +132,9 @@ public sealed class LaunchSession
     /// false). A real launch ignores it and scans fresh, so it can never act on a folder that has since changed.
     /// </param>
     public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowTaomWorldCreation = false,
-        (ModuleCatalog Catalog, string? GameRoot)? scanned = null)
+        (ModuleCatalog Catalog, string? GameRoot)? scanned = null, bool experimentalCompat = false)
     {
+        var compatDb = CompatDb.Current;
         var messages = new List<string>();
         var paths = ResolvePaths(profile);
         var problems = paths.Validate().ToList();
@@ -153,7 +161,7 @@ public sealed class LaunchSession
         // two fifteen-minute stalls before anyone connected the two. A warning, not a refusal: the verdict is a
         // record of what was observed, and overruling it is the user's call.
         foreach (var s in selections)
-            if (CompatDb.Current.Find(s.Module.Id) is { Verdict: CompatVerdict.Broken } broken)
+            if (compatDb.Find(s.Module.Id) is { Verdict: CompatVerdict.Broken } broken)
                 messages.Add($"WARNING {s.Module.Id} is recorded as Broken on the Coop server" +
                              (string.IsNullOrWhiteSpace(broken.Notes) ? "." : ": " + broken.Notes));
 
@@ -181,11 +189,13 @@ public sealed class LaunchSession
         // Refused, not warned: the old warning was one line in a long console, and on 2026-09-14 a TAOM host and join ran
         // with a generated recipe that no peer ever loaded. Ticking Server-only logic asks for gating; without Settings sync
         // it silently does nothing.
-        if (ServerOnlyLogicProblem(profile, selections.Select(s => s.Module.Id)) is { } serverOnlyProblem)
+        if (ServerOnlyLogicProblem(profile, selections.Select(s => s.Module.Id), experimentalCompat) is { } serverOnlyProblem)
         {
             if (applySideEffects) throw new InvalidOperationException(serverOnlyProblem);
             messages.Add("WARNING " + serverOnlyProblem);
         }
+        if (IgnoredServerOnlyTicks(profile, selections.Select(s => s.Module.Id), experimentalCompat) is { Count: > 0 } ignored)
+            messages.Add($"experimental compatibility is off: Server-only logic for {string.Join(", ", ignored)} is ignored (Server tab, Advanced)");
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
@@ -197,7 +207,7 @@ public sealed class LaunchSession
         var headlessAssets = content.AssetPaths;
         var headlessMaps = content.MapPaths;
         var overlayPlan = OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections,
-            headlessAssetPaths: headlessAssets, headlessMapPaths: headlessMaps);
+            headlessAssetPaths: headlessAssets, headlessMapPaths: headlessMaps, record: compatDb.Find);
         // The planner's warnings (a Run mod that declares itself client-only and reaches for the render stack) have to
         // reach the launch messages: the CLI prints plan notes itself, the app only ever sees this list.
         foreach (var e in overlayPlan.Entries)
@@ -225,7 +235,7 @@ public sealed class LaunchSession
             if (applySideEffects)
             {
                 Live.LiveProtocol.Reset(liveDir);
-                var (overrides, compatDefaults) = Live.CompatSettingsDefaults.Merge(Live.SettingsOverridesStore.Load(profile.Name), ModDefaultSettings(selections));
+                var (overrides, compatDefaults) = Live.CompatSettingsDefaults.Merge(Live.SettingsOverridesStore.Load(profile.Name), ModDefaultSettings(selections, compatDb));
                 foreach (var d in compatDefaults)
                     messages.Add($"{d.ModId}: compat database sets {d.SettingsId}.{d.PropId} = {d.Value} for co-op (override it in Mod settings to change)");
                 if (!overrides.IsEmpty)
@@ -238,7 +248,7 @@ public sealed class LaunchSession
         else
         {
             // The defaults travel through settings sync; without it the server would get them and clients would not.
-            foreach (var (modId, defaults) in ModDefaultSettings(selections))
+            foreach (var (modId, defaults) in ModDefaultSettings(selections, compatDb))
                 messages.Add($"WARNING {modId}: the compat database needs settings sync for {string.Join(", ", defaults.SelectMany(o => o.Value.Keys.Select(p => o.Key + "." + p)))}; turn Settings sync on");
         }
 
@@ -253,14 +263,14 @@ public sealed class LaunchSession
                 [EnsureLinesApplier.CoopModuleIdToken] = catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop")?.Id ?? "CoopNightly",
             };
             foreach (var s in selections)
-                if (CompatDb.Current.Find(s.Module.Id) is { EnsureLines.Count: > 0 } rec)
+                if (compatDb.Find(s.Module.Id) is { EnsureLines.Count: > 0 } rec)
                     foreach (var m in EnsureLinesApplier.Apply(s.Module.FolderPath, rec.EnsureLines, tokens))
                         messages.Add($"{s.Module.Id}: {m}");
         }
 
         if (applySideEffects)
         {
-            var applier = new OverlayApplier { KeepForDependencyOnly = KeepForDependencyOnly };
+            var applier = new OverlayApplier { KeepForDependencyOnly = compatDb.KeepForDependencyOnly() };
             var result = applier.Apply(overlayPlan);
             foreach (var a in result.Applied) foreach (var c in a.ManifestChanges) messages.Add($"{a.ModuleId}: {c}");
             foreach (var r in result.Removed) messages.Add("removed stale junction " + r);
@@ -276,7 +286,7 @@ public sealed class LaunchSession
             messages.AddRange(cache.Messages);
 
             ServerConfig.Write(paths, profile.SaveName, profile.Server);
-            WriteRecipes(profile, selections, messages);
+            WriteRecipes(profile, selections, messages, experimentalCompat);
             if (!string.IsNullOrWhiteSpace(profile.SaveName) && !(allowTaomWorldCreation &&
                 TaomLaunchPolicy.HasCompleteRecipe(selections.Select(s => s.Module.Id)) && !SavePreparer.Exists(paths, profile.SaveName)))
             {
@@ -289,6 +299,27 @@ public sealed class LaunchSession
         // outside applySideEffects too, so --dry-run reports it without the save having to be created first.
         messages.AddRange(SaveModuleCheck.MessagesForLaunch(paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections)));
 
+        ModderLords.Analysis.CompatibilityPlan? operationPlan = null;
+        // Full operation analysis is explicit in the UI. Launch performs it when an approved managed adapter
+        // is relevant; unvalidated contracts cannot alter a running game merely by being discovered.
+        var eligibleOperations = ModderLords.Analysis.CompatibilityPlanner.BundledContracts().Any(c => c.Provider == "ModderLords" && c.OfflineValidated && c.RuntimeValidated && selections.Any(s => s.Module.Id == c.Module));
+        if (profile.AutomaticCompatibility && eligibleOperations)
+        {
+            var request = OperationAnalysisService.CreateRequest(profile, new(catalog, selections, order), gameRoot ?? "", paths.ServerBin);
+            var operationReport = OperationAnalysisService.Analyze(request);
+            operationPlan = operationReport.Plan;
+            foreach (var decision in operationPlan.Contracts) messages.Add($"operations: {decision.Contract.Operation}: {decision.Decision} — {decision.Reason}");
+            if (operationPlan.RequiresRuntime)
+            {
+                if (!profile.SettingsSync) throw new InvalidOperationException("Validated operations require the shared compatibility module. Enable Settings sync or disable Automatic validated contracts for diagnostic-only launching.");
+                if (applySideEffects)
+                {
+                    var operationPath = OperationPreparation.Stage(operationPlan, Path.Combine(paths.DataDir, "operation-sessions"));
+                    extraEnv[OperationPreparation.PlanEnvironmentVariable] = operationPath;
+                    extraEnv[OperationPreparation.InputsEnvironmentVariable] = OperationPreparation.StageInputs(operationReport, Path.GetDirectoryName(operationPath)!);
+                }
+            }
+        }
         var plan = new LaunchPlan
         {
             Paths = paths,
@@ -300,7 +331,7 @@ public sealed class LaunchSession
             Visibility = profile.Server.Visibility,
             ExtraEnvironment = extraEnv,
         };
-        return new Prepared(paths, catalog, selections, order, overlayPlan, plan, messages);
+        return new Prepared(paths, catalog, selections, order, overlayPlan, plan, messages) { OperationPlan = operationPlan };
     }
 
     /// <summary>Stages safe server assets and a render-free map under the profile overlay. It never writes into an
@@ -389,21 +420,22 @@ public sealed class LaunchSession
     }
 
     /// <summary>The compat database's setting defaults for every selected mod that has any.</summary>
-    private static IEnumerable<(string ModId, IReadOnlyDictionary<string, Dictionary<string, string>> Defaults)> ModDefaultSettings(IEnumerable<ModSelection> selections)
+    private static IEnumerable<(string ModId, IReadOnlyDictionary<string, Dictionary<string, string>> Defaults)> ModDefaultSettings(IEnumerable<ModSelection> selections, CompatDb compatDb)
     {
         foreach (var s in selections)
-            if (CompatDb.Current.Find(s.Module.Id) is { DefaultSettings.Count: > 0 } rec)
+            if (compatDb.Find(s.Module.Id) is { DefaultSettings.Count: > 0 } rec)
                 yield return (s.Module.Id, rec.DefaultSettings);
     }
 
     /// <summary>Re-creates the junctions/shadow folders for the profile without touching configs or saves (after a workshop update or Steam re-download).</summary>
     public static OverlayApplier.ApplyResult Resync(Profile profile)
     {
+        var compatDb = CompatDb.Current;
         var paths = ResolvePaths(profile);
         var catalog = Scan(profile, paths, out _);
         var selections = WithCompat(profile, Select(profile, catalog, new List<string>()), new List<string>());
-        var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections);
-        return new OverlayApplier { KeepForDependencyOnly = KeepForDependencyOnly }.Apply(plan);
+        var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections, record: compatDb.Find);
+        return new OverlayApplier { KeepForDependencyOnly = compatDb.KeepForDependencyOnly() }.Apply(plan);
     }
 
     /// <summary>
@@ -411,9 +443,9 @@ public sealed class LaunchSession
     /// is what carries the recipe to players and applies it, so without it nothing is gated and players keep running
     /// that code themselves. Null when there is nothing to stop.
     /// </summary>
-    public static string? ServerOnlyLogicProblem(Profile profile, IEnumerable<string> selectedModIds)
+    public static string? ServerOnlyLogicProblem(Profile profile, IEnumerable<string> selectedModIds, bool experimentalCompat = true)
     {
-        if (profile.SettingsSync) return null;
+        if (profile.SettingsSync || !experimentalCompat) return null;
         var selected = new HashSet<string>(selectedModIds, StringComparer.OrdinalIgnoreCase);
         var flagged = profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative && selected.Contains(m.Id)).Select(m => m.Id).ToList();
         if (flagged.Count == 0) return null;
@@ -423,13 +455,33 @@ public sealed class LaunchSession
              + "in their Modules), or untick Server-only logic for those mods.";
     }
 
+    /// <summary>
+    /// Ticked Server-only logic that this launch will not act on because experimental compatibility is off. The ticks
+    /// stay in the profile, so turning it back on restores them. Empty when it is on.
+    /// </summary>
+    public static IReadOnlyList<string> IgnoredServerOnlyTicks(Profile profile, IEnumerable<string> selectedModIds, bool experimentalCompat)
+    {
+        if (experimentalCompat) return [];
+        var selected = new HashSet<string>(selectedModIds, StringComparer.OrdinalIgnoreCase);
+        return profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative && selected.Contains(m.Id)).Select(m => m.Id).ToList();
+    }
+
+    /// <summary>
+    /// The mods whose code the recipe may gate, rewrite or relay. Experimental compatibility (per-mod gates, relays,
+    /// player-check rewrites, state sync, tracing) is off unless the user turned it on: then this is empty, and
+    /// recipes.json carries only the general parts (settings hints, battle scene exclusions).
+    /// </summary>
+    public static HashSet<string> ServerOnlyMods(Profile profile, bool experimentalCompat) => experimentalCompat
+        ? profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase)
+        : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Layer 1: recipes.json inside the bundled sync module, built from the scan of every mod flagged server-authoritative.</summary>
-    public static void WriteRecipes(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
+    public static void WriteRecipes(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages, bool experimentalCompat = false)
     {
         var sync = LocateSyncModule();
-        var flagged = profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var flagged = ServerOnlyMods(profile, experimentalCompat);
         // Ground-truth tracing (docs/DEVELOPMENT.md, "Authority classifier, step 8"): both sides count every traced entry point.
-        var traced = (Environment.GetEnvironmentVariable("MODDERLORDS_TRACE_MODS") ?? "")
+        var traced = (experimentalCompat ? Environment.GetEnvironmentVariable("MODDERLORDS_TRACE_MODS") ?? "" : "")
             .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(id => selections.Any(s => s.Module.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
             .Select(id => selections.First(s => s.Module.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).Module.Id)
@@ -446,7 +498,7 @@ public sealed class LaunchSession
             var pm = profile.Mods.First(m => m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase));
             return (s.Module.Id, AssemblyScan.Scan(s.Module), (IReadOnlyCollection<string>)pm.ClientSideBehaviors);
         }).ToList();
-        var authority = BuildAuthorityReports(analysed, messages);
+        var authority = traced.Count > 0 ? BuildAuthorityReports(analysed.Where(s => traced.Contains(s.Module.Id)).ToList(), messages) : null;
         var db = CompatDb.Current;
         var hints = selections.Select(s => db.Find(s.Module.Id)).Where(r => r is not null)
             .Select(r => (r!.Id, (IReadOnlyList<string>)r.SettingsTypes, (IReadOnlyList<string>)r.IgnoreSettingsTypes)).ToList();

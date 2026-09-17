@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><PackageReference Include="Mono.Cecil" Version="0.11.6" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="..\ModderLords.Operations\ModderLords.Operations.csproj" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="provider-contracts.json" /></ItemGroup>
+</Project>

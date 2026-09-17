@@ -62,6 +62,8 @@ public sealed class Profile
     public bool CompatGuards { get; set; } = true;
     /// <summary>Also load the shared ModderLords.Compat module (settings sync). Players must install it too; it is part of the handshake.</summary>
     public bool SettingsSync { get; set; } = false;
+    /// <summary>Only shipped, fingerprint-matched and validated operation contracts may activate automatically.</summary>
+    public bool AutomaticCompatibility { get; set; } = true;
     /// <summary>
     /// Skip the confirmation when Launch client brings this PC's LauncherData.xml in line with the server. Set by
     /// ticking "don't ask again" in that dialog; warnings the sync cannot fix are still reported either way.
