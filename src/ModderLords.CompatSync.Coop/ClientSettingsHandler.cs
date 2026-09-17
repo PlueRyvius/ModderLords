@@ -36,7 +36,7 @@ public sealed class ClientSettingsHandler : IHandler
         broker.Subscribe<NetworkCompatRecipes>(HandleRecipes);
         broker.Subscribe<CampaignReady>(HandleCampaignReady);
         broker.Subscribe<NetworkRelayResult>(HandleRelayResult);
-        RelayGates.Configure(() => { try { return Common.ModInformation.IsClient; } catch { return false; } }, SendRelay);
+        // Generic relays are diagnostic only; the operation channel owns validated commands.
         Current = this;
         Log.Info("settings sync (client) armed; settings sources: " + SettingsSources.Summary());
         // A copy of the recipe may already ship with the module; apply it now, then ask the server for the live one.

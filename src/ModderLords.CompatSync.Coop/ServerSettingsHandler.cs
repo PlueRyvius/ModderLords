@@ -19,6 +19,7 @@ public sealed class ServerSettingsHandler : IHandler
     private readonly IMessageBroker broker;
     private readonly INetwork network;
     private readonly bool active;
+    private string sessionRecipes = "{\"SchemaVersion\":1,\"Mods\":[]}";
     private readonly Dictionary<string, string> lastSent = new Dictionary<string, string>(StringComparer.Ordinal);
     private readonly Dictionary<string, int> broadcastCount = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -37,40 +38,23 @@ public sealed class ServerSettingsHandler : IHandler
         broker.Subscribe<NetworkRequestCompatRecipes>(HandleRecipeRequest);
         Current = this;
         var recipes = BehaviorGate.ReadLocalRecipes();
+        sessionRecipes = recipes ?? sessionRecipes;
         Log.Info("settings sync (server) armed" + (recipes is null ? "; no recipes.json (no server-only behaviours)" : "; recipes.json loaded"));
+        // Generated transformations remain diagnostic; settings, scene exclusions and opt-in tracing remain available.
         if (recipes is not null)
         {
-            try { Log.Info("player checks: " + ServerPlayerChecks.Apply(recipes)); }
-            catch (Exception ex) { Log.Warn("player checks failed: " + ex.GetBaseException().Message); }
-            try { Log.Info("relays: " + ServerRelay.LoadAllowList(recipes)); }
-            catch (Exception ex) { Log.Warn("relays failed to load: " + ex.GetBaseException().Message); }
             try { Log.Info("battle scene pick: " + BattleScenePick.Load(recipes)); }
             catch (Exception ex) { Log.Warn("battle scene pick failed to load: " + ex.GetBaseException().Message); }
             // Ground truth for the classifier: only present when the launcher was asked to trace a mod.
             try { if (BehaviorGate.InstallTrace(recipes) is { } trace) Log.Info(trace); }
             catch (Exception ex) { Log.Warn("trace failed to install: " + ex.GetBaseException().Message); }
         }
-        broker.Subscribe<NetworkRelayInvoke>(HandleRelay);
-    }
-
-    private int relayLogged;
-
-    private void HandleRelay(MessagePayload<NetworkRelayInvoke> payload)
-    {
-        if (payload.Who is not NetPeer peer) return;
-        var msg = payload.What;
-        ServerRelay.Handle(peer, msg.Method, msg.Kinds, msg.Values, (ran, reason) =>
-        {
-            if (relayLogged++ < 200) Log.Info($"relay {(ran ? "ran" : "rejected")} {msg.Method} #{msg.Sequence}: {reason}");
-            try { network.Send(peer, new NetworkRelayResult { Method = msg.Method, Sequence = msg.Sequence, Ran = ran, Reason = reason, ProtocolVersion = ProtocolVersion }); }
-            catch (Exception ex) { Log.Warn("relay result not sent: " + ex.GetBaseException().Message); }
-        });
     }
 
     private void HandleRecipeRequest(MessagePayload<NetworkRequestCompatRecipes> payload)
     {
         if (payload.Who is not NetPeer peer) return;
-        var json = BehaviorGate.ReadLocalRecipes() ?? "{\"SchemaVersion\":1,\"Mods\":[]}";
+        var json = sessionRecipes;
         network.Send(peer, new NetworkCompatRecipes { Json = json, ProtocolVersion = ProtocolVersion });
         Log.Info("recipes sent to a joining client");
     }
@@ -109,7 +93,7 @@ public sealed class ServerSettingsHandler : IHandler
         if (!active) return;
         broker.Unsubscribe<NetworkRequestSettingsSnapshots>(HandleRequest);
         broker.Unsubscribe<NetworkRequestCompatRecipes>(HandleRecipeRequest);
-        broker.Unsubscribe<NetworkRelayInvoke>(HandleRelay);
+
         if (ReferenceEquals(Current, this)) Current = null;
     }
 

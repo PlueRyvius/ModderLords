@@ -10,6 +10,7 @@
     <PackageReference Include="Bannerlord.ModuleManager" Version="6.0.249" />
     <!-- UpdateInstaller's failure seam (BeforeCopy) is for tests only. -->
     <InternalsVisibleTo Include="ModderLords.Core.Tests" />
+    <ProjectReference Include="..\ModderLords.Analysis\ModderLords.Analysis.csproj" />
   </ItemGroup>
 
   <ItemGroup>

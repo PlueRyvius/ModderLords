@@ -50,9 +50,9 @@ public sealed record AuthorityRow(string Verdict, string Trigger, string Entry, 
         if (r.Evidence.Count > 0) lines.Add("via " + string.Join(" -> ", r.Evidence));
         if (r.Opaque) lines.Add("uses reflection, so some of what it calls is not visible to the analysis");
         foreach (var f in r.Flags ?? []) lines.Add("flag: " + f);
-        if (r.GateInstead is { Count: > 0 } g) lines.Add("gated instead on clients: " + string.Join(", ", g.Select(ShortName)));
-        if (r.RelayVia is { } via) lines.Add("relayed to the server via " + ShortName(via));
-        if (r.SharedState is { Count: > 0 } st) lines.Add("shared mod state: " + string.Join(", ", st.Select(ShortName)) + " (static bool/number/string/enum fields are sent from the server to clients)");
+        if (r.GateInstead is { Count: > 0 } g) lines.Add("diagnostic gate candidates (inactive): " + string.Join(", ", g.Select(ShortName)));
+        if (r.RelayVia is { } via) lines.Add("diagnostic relay candidate (inactive): " + ShortName(via));
+        if (r.SharedState is { Count: > 0 } st) lines.Add("diagnostic shared-state candidates (inactive): " + string.Join(", ", st.Select(ShortName)));
         return string.Join(Environment.NewLine, lines);
     }
 }

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net472</TargetFramework><LangVersion>latest</LangVersion><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><Compile Include="..\ModderLords.OperationFixture.Shared\FixtureCheckpoint.cs" Link="FixtureCheckpoint.cs" />
+    <ProjectReference Include="..\ModderLords.OperationFixture.Bootstrap\ModderLords.OperationFixture.Bootstrap.csproj" />
+    <ProjectReference Include="..\..\src\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj" />
+    <PackageReference Include="Bannerlord.ReferenceAssemblies.Core" Version="1.4.8.119303" ExcludeAssets="runtime" />
+    <Reference Include="Coop.Core" HintPath="$(CoopRefDir)\Coop.Core.dll" Private="false" />
+    <Reference Include="GameInterface" HintPath="$(CoopRefDir)\GameInterface.dll" Private="false" />
+    <Reference Include="Common" HintPath="$(CoopRefDir)\Common.dll" Private="false" />
+    <Content Include="SubModule.xml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

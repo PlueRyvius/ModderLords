@@ -107,6 +107,18 @@ public sealed class RecipeSet
         IReadOnlyDictionary<string, AuthorityReport>? authority = null, IReadOnlyList<string>? excludedBattleScenes = null,
         IReadOnlyCollection<string>? traceMods = null)
     {
+        // Existing explicit choices remain schema-v1 gates. Heuristic reports never authorize a transformation.
+        var set = BuildDiagnostic(serverAuthoritative, generatedBy, settingsHints, authority: null, excludedBattleScenes: excludedBattleScenes, traceMods: traceMods);
+        set.SchemaVersion = 1;
+        return set;
+    }
+
+    /// <summary>Study output only. Generated proposals are not accepted by the runtime recipe channel.</summary>
+    public static RecipeSet BuildDiagnostic(IEnumerable<(string id, ScanResult scan, IReadOnlyCollection<string> keepClientSide)> serverAuthoritative, string generatedBy,
+        IEnumerable<(string id, IReadOnlyList<string> include, IReadOnlyList<string> exclude)>? settingsHints = null,
+        IReadOnlyDictionary<string, AuthorityReport>? authority = null, IReadOnlyList<string>? excludedBattleScenes = null,
+        IReadOnlyCollection<string>? traceMods = null)
+    {
         var set = new RecipeSet { GeneratedBy = generatedBy, ExcludedBattleScenes = excludedBattleScenes?.ToList() };
         foreach (var (id, scan, keep) in serverAuthoritative)
         {

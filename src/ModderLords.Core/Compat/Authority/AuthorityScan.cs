@@ -368,7 +368,7 @@ public static class AuthorityScan
                 var target = $"{Simple(p.TargetType)}.{p.TargetMethod}";
                 return p.Kind switch
                 {
-                    PatchKind.Postfix or PatchKind.Finalizer when fx.AuthorityCheck => V(AuthorityVerdict.AlreadyHandled, "checks authority itself"),
+                    PatchKind.Postfix or PatchKind.Finalizer when fx.AuthorityCheck => V(AuthorityVerdict.Review, "references an authority predicate; branch protection is not established by this diagnostic scan"),
                     PatchKind.Postfix or PatchKind.Finalizer => V(AuthorityVerdict.LeakingPostfix,
                         $"Coop skips {target} on clients, but Harmony still runs this {p.Kind.ToString().ToLowerInvariant()} there", change),
                     PatchKind.Transpiler => V(AuthorityVerdict.AlreadyHandled, $"rewrites {target}, which Coop already gates on clients"),
@@ -377,7 +377,7 @@ public static class AuthorityScan
             }
         }
 
-        if (fx.AuthorityCheck && trigger is not RootTrigger.Presentation) return V(AuthorityVerdict.AlreadyHandled, "checks authority itself");
+        if (fx.AuthorityCheck && trigger is not RootTrigger.Presentation) return V(AuthorityVerdict.Review, "references an authority predicate; branch protection is not established by this diagnostic scan");
 
         var sharedFull = fx.ModWrites.Where(playerFacingReads.Contains).OrderBy(x => x, StringComparer.Ordinal).ToList();
         var shared = sharedFull.Select(Short).Take(3).ToList();

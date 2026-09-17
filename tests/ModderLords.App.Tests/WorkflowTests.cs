@@ -16,6 +16,27 @@ namespace ModderLords.App.Tests;
 public class WorkflowTests
 {
     [Fact]
+    public void HostModeUsesEffectiveClientSettingsAndPreservesAdvancedChoices() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("TestMod");
+        var vm = fixture.ViewModel(); vm.Rescan(); vm.Mode = AppMode.Host;
+        vm.Profile.SettingsSync = true;
+        var row = vm.Mods.Single(m => m.Id == "TestMod");
+        row.ServerAuthoritative = true;
+        Assert.False(vm.AdvancedCompatibility);
+        Assert.False(vm.ShowAdvancedCompatibility);
+        Assert.False(vm.Host!.ClientProfile.SettingsSync);
+        vm.AdvancedCompatibility = true;
+        Assert.True(vm.ShowAdvancedCompatibility);
+        Assert.True(vm.Host.ClientProfile.SettingsSync);
+        Assert.True(row.ServerAuthoritative);
+        vm.AdvancedCompatibility = false;
+        Assert.False(vm.Host.ClientProfile.SettingsSync);
+        Assert.True(vm.Profile.SettingsSync);
+        Assert.True(row.ServerAuthoritative);
+    });
+
+    [Fact]
     public void EmbeddedWindowIconDecodesAtEveryOriginalSize() => Sta(() =>
     {
         var resources = new System.Resources.ResourceManager("ModderLords.g", typeof(MainViewModel).Assembly);

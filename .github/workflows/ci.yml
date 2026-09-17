@@ -45,6 +45,11 @@ jobs:
       - name: Test desktop workflows
         run: dotnet test tests/ModderLords.App.Tests/ModderLords.App.Tests.csproj -c Release --nologo
 
+      - name: Test peer harness without Bannerlord or Steam
+        shell: pwsh
+        timeout-minutes: 3
+        run: ./tools/PeerHarness/Test-PeerHarness.ps1
+
       # A runner has no Coop workshop item, so this must be exactly what a player-only build looks like.
       - name: Assert the app built without Coop's assemblies
         shell: pwsh

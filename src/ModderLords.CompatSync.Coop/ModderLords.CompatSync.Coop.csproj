@@ -16,9 +16,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\ModderLords.Analysis\provider-contracts.json" LogicalName="ModderLords.OperationContracts" />
+    <ProjectReference Include="..\ModderLords.Operations\ModderLords.Operations.csproj" Private="true" />
     <PackageReference Include="Bannerlord.ReferenceAssemblies.Core" Version="1.4.8.119303" ExcludeAssets="runtime" />
     <ProjectReference Include="..\ModderLords.CompatSync\ModderLords.CompatSync.csproj" Private="false" />
     <Reference Include="Common" HintPath="$(CoopRefDir)\Common.dll" Private="false" />
+    <Reference Include="Coop.Core" HintPath="$(CoopRefDir)\Coop.Core.dll" Private="false" />
     <Reference Include="GameInterface" HintPath="$(CoopRefDir)\GameInterface.dll" Private="false" />
     <Reference Include="LiteNetLib" HintPath="$(CoopRefDir)\LiteNetLib.dll" Private="false" />
     <Reference Include="protobuf-net" HintPath="$(CoopRefDir)\protobuf-net.dll" Private="false" />
@@ -30,6 +33,7 @@
   </ItemGroup>
 
   <Target Name="CopyServerBin" AfterTargets="Build">
+    <Copy SourceFiles="$(OutDir)ModderLords.Operations.dll" DestinationFolder="..\ModderLords.CompatSync\_Module\bin\Win64_Shipping_Server\" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb" DestinationFolder="..\ModderLords.CompatSync\_Module\bin\Win64_Shipping_Server\" SkipUnchangedFiles="true" ContinueOnError="true" />
   </Target>
 

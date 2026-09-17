@@ -40,6 +40,16 @@ public sealed class SyncSubModule : MBSubModuleBase
         catch (Exception ex) { Log.Warn("trace flush failed: " + ex.GetBaseException().Message); }
     }
 
+    private MethodInfo? _beforeCampaign;
+    protected override void OnGameStart(TaleWorlds.Core.Game game, TaleWorlds.Core.IGameStarter gameStarterObject)
+    {
+        base.OnGameStart(game, gameStarterObject);
+        TryLoadAdapter();
+        if (_beforeCampaign == null && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("MODDERLORDS_OPERATION_PLAN")))
+            throw new InvalidOperationException("Required operation plan cannot activate: Coop adapter unavailable.");
+        _beforeCampaign?.Invoke(null, null);
+    }
+
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();
@@ -119,6 +129,8 @@ public sealed class SyncSubModule : MBSubModuleBase
             _adapterRelayTick = bridge?.GetMethod("RelayTick", BindingFlags.Public | BindingFlags.Static);
             _adapterVerify = bridge?.GetMethod("VerificationSummary", BindingFlags.Public | BindingFlags.Static);
             _adapterTraceFlush = bridge?.GetMethod("TraceFlush", BindingFlags.Public | BindingFlags.Static);
+            _beforeCampaign = bridge?.GetMethod("BeforeCampaign", BindingFlags.Public | BindingFlags.Static);
+            bridge?.GetMethod("InitializeOperations", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null);
             var typeCount = asm.GetTypes().Length;   // forces the type load now, inside our try, not in some other mod's scan
             Log.Info($"coop adapter loaded ({typeCount} types); handlers will arm when a session starts");
         }

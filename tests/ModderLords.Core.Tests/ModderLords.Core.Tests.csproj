@@ -22,12 +22,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ModderLords.Core\ModderLords.Core.csproj" />
+    <ProjectReference Include="..\..\src\ModderLords.Operations\ModderLords.Operations.csproj" />
     <ProjectReference Include="..\..\src\ModderLords.Coop\ModderLords.Coop.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- The engine-side JSON used for the live-settings files, compiled in so the tests prove both ends read the same bytes. -->
     <Compile Include="..\..\src\ModderLords.CompatSync\MiniJson.cs" Link="Module\MiniJson.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync\LegacyRecipePolicy.cs" Link="Module\LegacyRecipePolicy.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\ValueConverter.cs" Link="Module\ValueConverter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\PropertyRef.cs" Link="Module\PropertyRef.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\ISettingsSource.cs" Link="Module\ISettingsSource.cs" />

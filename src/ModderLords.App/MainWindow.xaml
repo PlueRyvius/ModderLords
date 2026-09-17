@@ -74,6 +74,9 @@
                     <Button Content="Re-sync junctions" Command="{Binding Host.ResyncCommand}" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
                             ToolTip="Recreate the links under engine\Modules (after a workshop update or a Steam re-download of the server)" />
                 </WrapPanel>
+                <TextBlock Text="{Binding Host.CreationProgressText}" VerticalAlignment="Center" Margin="8,0" FontStyle="Italic"
+                           Foreground="{DynamicResource MutedForeground}" TextWrapping="NoWrap"
+                           Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
             </DockPanel>
         </Border>
 
@@ -185,6 +188,10 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
+                            <TextBlock Text="{Binding CompatibilityModeText}" VerticalAlignment="Center" Margin="8,0" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                            <CheckBox Content="Advanced compatibility" IsChecked="{Binding AdvancedCompatibility}" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" ToolTip="Off: Simple mode uses shipped defaults and ignores saved manual compatibility overrides. On: restore manual controls. Applies to the next launch." />
+                            <Button Content="Analyze operations…" Command="{Binding AnalyzeOperationsCommand}" Margin="8,0,0,0" ToolTip="Inspect operation authority, player interaction, provider contracts, and unresolved replication" />
+                            <CheckBox Visibility="{Binding ShowAdvancedCompatibility, Converter={StaticResource BoolToVis}}" Content="Automatic validated contracts" IsChecked="{Binding Profile.AutomaticCompatibility}" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip="Only matching contracts that passed offline and integration validation can activate" />
                             <Button Content="Use engine order" Command="{Binding UseEngineOrderCommand}"
                                     ToolTip="Sort this list into the order the engine actually loads (shown on the right). Only mods that a manifest forces to move are moved; the rest keep the place you gave them." />
                             <!-- The computed order is assembled from module metadata, and metadata is sometimes wrong
@@ -196,17 +203,17 @@
                                        ToolTip="Frameworks declare that the game's own modules load after them, so they sit above the game and cannot be moved below it. The game's own modules are placed by the engine."
                                        Text="Drag to reorder within Frameworks / Game / Mods" />
                             <Button Content="Behaviours…" Command="{Binding EditBehaviorsCommand}" ToolTip="Choose which of the selected mod's behaviours run on the server only"
-                                    Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                                    Visibility="{Binding ShowAdvancedCompatibility, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Authority…" Command="{Binding ShowAuthorityCommand}" ToolTip="Read the selected mod's code and show which parts must run on the server only, which need nothing, and which need a closer look"
-                                    Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                                    Visibility="{Binding ShowAdvancedCompatibility, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Record…" Command="{Binding RecordCompatCommand}" Margin="12,0,0,0" ToolTip="Record how the selected mod behaves under Coop (verdict, notes, defaults). Saved to your local compat database."
-                                    Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                                    Visibility="{Binding ShowAdvancedCompatibility, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Export…" Command="{Binding ExportCompatCommand}" ToolTip="Write the selected mod's record (or all your local records) to a file you can share"
-                                    Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                                    Visibility="{Binding ShowAdvancedCompatibility, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Import…" Command="{Binding ImportCompatCommand}" ToolTip="Merge a shared record file into your local compat database (newer records win)"
-                                    Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                                    Visibility="{Binding ShowAdvancedCompatibility, Converter={StaticResource BoolToVis}}" />
                             <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MutedForeground}"
-                                       Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
+                                       Visibility="{Binding ShowAdvancedCompatibility, Converter={StaticResource BoolToVis}}"
                                        Text="Run = load its code on the server. DependencyOnly = listed for the handshake, no code (UI frameworks). AsShipped = let the engine decide." />
                         </WrapPanel>
                         <!-- CanUserSortColumns is OFF and must stay off. This list IS the load order: the row order
@@ -328,9 +335,9 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Server verdict" x:Name="ServerVerdictColumn" Binding="{Binding ServerVerdict}" IsReadOnly="True" Width="190">
+                                <DataGridTextColumn Header="Operation compatibility" x:Name="ServerVerdictColumn" Binding="{Binding OperationSummary}" IsReadOnly="True" Width="190">
                                     <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding ServerVerdictDetail}" /></Style>
+                                        <Style TargetType="TextBlock"><Setter Property="ToolTip" Value="Use Analyze operations for evidence. A recognized provider is not a runtime verification." /></Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Header="Notes" x:Name="NotesColumn" Binding="{Binding Notes}" IsReadOnly="True" Width="150" />
@@ -423,14 +430,14 @@
                         <ComboBox ItemsSource="{Binding Visibilities}" SelectedItem="{Binding Profile.Server.Visibility}" />
                         <TextBlock Text="Autosave minutes (0 = off)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.AutosaveMinutes}" />
-                        <TextBlock Text="Server guards (Compat module)" VerticalAlignment="Center" ToolTip="Loads the launcher's DedicatedServer.ModderLordsCompat module on the server: answers inquiries and swallows screen pushes so single-player mods do not crash the headless host. Server-only; players need nothing." />
-                        <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" />
-                        <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compat\ModderLords.Compat from the launcher folder into their game Modules folder) and enable it." />
-                        <CheckBox IsChecked="{Binding Profile.SettingsSync}" HorizontalAlignment="Left" />
+                        <TextBlock Visibility="{Binding DataContext.ShowAdvancedCompatibility, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}" Text="Server guards (Compat module)" VerticalAlignment="Center" ToolTip="Loads the launcher's DedicatedServer.ModderLordsCompat module on the server: answers inquiries and swallows screen pushes so single-player mods do not crash the headless host. Server-only; players need nothing." />
+                        <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" Visibility="{Binding DataContext.ShowAdvancedCompatibility, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compat\ModderLords.Compat from the launcher folder into their game Modules folder) and enable it." Visibility="{Binding DataContext.ShowAdvancedCompatibility, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}" />
+                        <CheckBox IsChecked="{Binding Profile.SettingsSync}" HorizontalAlignment="Left" Visibility="{Binding DataContext.ShowAdvancedCompatibility, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}" />
                         <!-- The one thing this launcher writes inside the DedicatedServer package, so it is opt-in and
                              says so. Turning it off restores SandBox's file on the next launch. -->
-                        <TextBlock Text="Use a map mod's distance cache" VerticalAlignment="Center" ToolTip="A map mod replaces the campaign map but the server always reads SandBox's settlement distance cache, which was built for the vanilla map — the mismatch crashes world loading in a loop that never ends. This replaces that file with the one your map mod ships (TAOM_Map ships a rebuilt 10 MB cache). It is the only file the launcher writes inside the DedicatedServer folder; the original is backed up and put back when you untick this. Leave off unless you are running a map-replacing mod." />
-                        <CheckBox IsChecked="{Binding Profile.UseModDistanceCache}" HorizontalAlignment="Left" />
+                        <TextBlock Text="Use a map mod's distance cache" VerticalAlignment="Center" ToolTip="A map mod replaces the campaign map but the server always reads SandBox's settlement distance cache, which was built for the vanilla map — the mismatch crashes world loading in a loop that never ends. This replaces that file with the one your map mod ships (TAOM_Map ships a rebuilt 10 MB cache). It is the only file the launcher writes inside the DedicatedServer folder; the original is backed up and put back when you untick this. Leave off unless you are running a map-replacing mod." Visibility="{Binding DataContext.ShowAdvancedCompatibility, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}" />
+                        <CheckBox IsChecked="{Binding Profile.UseModDistanceCache}" HorizontalAlignment="Left" Visibility="{Binding DataContext.ShowAdvancedCompatibility, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}" />
                         <TextBlock Text="Warn if loading stalls (seconds)" VerticalAlignment="Center" ToolTip="How long the launch console waits with no loading progress before saying so. Empty uses the default (5 minutes); 0 turns the warning off. Heavy mods can legitimately load for a very long time — TAOM's authors quote up to two hours — so raise it or set 0 for those rather than being nagged." />
                         <TextBox Text="{Binding Profile.StallWarningSeconds, TargetNullValue=''}" />
                         <TextBlock Text="Server log file" VerticalAlignment="Center" />
@@ -485,7 +492,7 @@
             </TabItem>
 
             <!-- MOD SETTINGS (live MCM edits on the running server) -->
-            <TabItem Header="Mod settings" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
+            <TabItem Header="Mod settings" DataContext="{Binding Host}" Visibility="{Binding DataContext.ShowAdvancedCompatibility, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
                      IsEnabled="{Binding LiveSettings.IsEnabled}" ToolTip="{Binding LiveSettings.GateHint}" ToolTipService.ShowOnDisabled="True">
                 <DockPanel DataContext="{Binding LiveSettings}">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">

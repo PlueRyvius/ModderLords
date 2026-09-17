@@ -1,4 +1,5 @@
 using ModderLords.Core.Modules;
+using System.Collections.Immutable;
 using ModderLords.Core.Profiles;
 
 namespace ModderLords.Core.Launch;
@@ -88,6 +89,13 @@ public static class ClientLaunchSession
         };
         var problems = plan.Validate().ToList();
         if (problems.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, problems));
+        if (profile.AutomaticCompatibility && ModderLords.Analysis.CompatibilityPlanner.BundledContracts().Any(c =>
+            c.Provider == "ModderLords" && c.OfflineValidated && c.RuntimeValidated && mods.Any(m => m.Id == c.Module)))
+        {
+            var inputs = Compat.OperationAnalysisService.CreateRequest(profile,
+                new(catalog, mods.Select(m => new Overlay.ModSelection(m, Overlay.ServerRole.AsShipped)).ToList(), order), gameRoot);
+            plan = plan with { OperationInputs = inputs with { Modules = inputs.Modules.Select(m => m with { RunsOnServer = false }).ToImmutableArray() } };
+        }
 
         return new Prepared(gameRoot, catalog, officials, mods, order, plan, messages);
     }
@@ -109,8 +117,21 @@ public static class ClientLaunchSession
         {
             FileName = plan.Exe,
             WorkingDirectory = plan.WorkingDirectory,
-            UseShellExecute = true,
+            UseShellExecute = plan.OperationInputs == null,
         };
+        if (plan.OperationInputs != null)
+        {
+            var report = Compat.OperationAnalysisService.Analyze(plan.OperationInputs);
+            var directory = Path.Combine(Profiles.ProfileStore.RootDir, "operation-client-sessions", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "local-inputs.json");
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
+                System.Text.Json.JsonSerializer.Serialize(stream, new { report.Plan.ModuleOrder, report.Gaps,
+                    Files = report.LocalFiles, Values = report.Fingerprints.Where(f => f.Module == "$environment") }, ModderLords.Analysis.AnalysisJson.Options);
+            psi.Environment["MODDERLORDS_OPERATION_INPUTS"] = path;
+            // A server plan must arrive through the authenticated operation channel, not an inherited environment.
+            psi.Environment.Remove("MODDERLORDS_OPERATION_PLAN");
+        }
         psi.ArgumentList.Add(plan.ModuleToken);
         return System.Diagnostics.Process.Start(psi) ?? throw new InvalidOperationException("Windows did not start " + plan.Exe);
     }

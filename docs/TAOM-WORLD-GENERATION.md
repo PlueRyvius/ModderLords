@@ -149,3 +149,46 @@ game data and extracted game assets are local artifacts, not included in this re
 The projection and runtime bounds patch remain diagnostic. Multiplayer clients, battles,
 long-running simulation and distribution of a production server package are untested.
 Early native failures have exit codes and engine logs; they do not have captured dumps.
+
+## Comparing a release run with the maintainer proof
+
+When the packaged launcher stays on **Creating TAOM World**, use the comparison tool. It first takes a read-only
+snapshot of the release, profile, installed server, selected mod sources, current data and running processes. It then
+creates a new isolated session under `-Workspace`; the live server, its ports, saves, profiles and overlay are never
+stopped, deleted or rewritten.
+
+```powershell
+pwsh -File tools/diagnostics/Compare-ReleaseRun.ps1 -Stage Capture
+pwsh -File tools/diagnostics/Compare-ReleaseRun.ps1 -Stage All -Case ExactUser `
+    -SaveName release094_exact -EnginePort 7368 -JoinPort 4368
+pwsh -File tools/diagnostics/Compare-ReleaseRun.ps1 -Stage All -Case ComputedOrder `
+    -SaveName release094_computed -EnginePort 7369 -JoinPort 4369
+```
+
+`-SaveName` is also accepted as the legacy `-Name` alias. Omit `-EnginePort` and `-JoinPort` to have the tool pick
+unused private ports; supplying them makes the run reproducible and fails early if either is occupied.
+
+`ExactUser` copies the selected profile data and preserves its configured manual order. `ComputedOrder` holds every
+other input constant and lets the module manifests choose the order. `CleanState` omits existing saves, crash-loop
+markers and the generated overlay. `Baseline`/`Version` use the copies under `-BaselineWorkspace` when available.
+`ExistingSave` reloads `-ExistingSaveName` from the copied server data. `Package` records release hashes without
+starting the engine. `Vanilla` is an optional stock-module creation/reload control. `Version` is marked unsupported
+when `-BaselineWorkspace` does not contain both pinned `DedicatedServer` and `Game` trees; it never silently substitutes
+the installed version. `-Stage Matrix` runs all seven TAOM cases and writes `comparison.json`. The `Package` case also
+compares the release hook, server compatibility DLL, recipes and compatibility database with the corresponding
+baseline payload when it is present.
+
+Each creation attempt uses a unique save, private Steam visibility, alternate ports, a 15-minute world-creation
+deadline and a 45-second cleanup margin. It records `stdout.log`, `stderr.log`, `worldcreate.log`, the engine logs,
+the creation manifest, process information, module order, input hashes, save hash and the exact reload result. Native
+exit codes remain visible. A failed case is retained so the matrix can continue; the script exits 1 if any case fails.
+
+The desktop launcher writes the same creation manifest and three capped logs to
+`%LOCALAPPDATA%\ModderLords\logs\creation-<session>.{json,log,stdout.log,stderr.log}` and shows the current phase and
+elapsed time beside its status. The release payload can be selected for a diagnostic CLI run with `--bundle-root`;
+ordinary launches keep their existing lookup defaults.
+
+The capture stage may run while the desktop launcher is open. Engine stages refuse to start while any
+`ModderLords.exe` is running because Bannerlord's native crash watchdog uses a global named event; concurrent engines
+can otherwise fail before the first world-creation phase with `0xC0000409`. Close the launcher (and any server it owns)
+before `Create`, `Reload` or `Matrix`; the tool never closes it for you.

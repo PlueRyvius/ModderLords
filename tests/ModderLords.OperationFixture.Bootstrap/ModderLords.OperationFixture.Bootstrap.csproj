@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net472</TargetFramework><LangVersion>latest</LangVersion><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><Compile Include="..\ModderLords.OperationFixture.Shared\FixtureCheckpoint.cs" Link="FixtureCheckpoint.cs" /><PackageReference Include="Bannerlord.ReferenceAssemblies.Core" Version="1.4.8.119303" ExcludeAssets="runtime" /></ItemGroup>
+</Project>

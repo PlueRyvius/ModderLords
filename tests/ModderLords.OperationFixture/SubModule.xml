@@ -1,0 +1,8 @@
+<Module>
+  <Name value="Modderlords operation fixture (test only)" />
+  <Id value="ModderLords.OperationFixture" />
+  <Version value="v0.0.1" />
+  <SingleplayerModule value="true" />
+  <DependedModules><DependedModule Id="ModderLords.Compat" /></DependedModules>
+  <SubModules><SubModule><Name value="Operation fixture" /><DLLName value="ModderLords.OperationFixture.Bootstrap.dll" /><SubModuleClassType value="ModderLords.OperationFixture.FixtureSubModule" /><Tags /></SubModule></SubModules>
+</Module>

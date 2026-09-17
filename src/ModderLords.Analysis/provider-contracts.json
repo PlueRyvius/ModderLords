@@ -1,0 +1,335 @@
+[
+  {
+    "Id": "taom.careers",
+    "Version": "1",
+    "Module": "TAOM",
+    "Operation": "Career choices and switching",
+    "Provider": "TAOM.CoopCompat",
+    "Authority": "Campaign",
+    "ActorBinding": "Authenticated Coop player registry; operation-specific ownership",
+    "Effects": [
+      "campaign-mutation"
+    ],
+    "Transport": "External provider protocol",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "TAOM",
+        "Name": "TAOM.dll",
+        "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
+        "Side": "Client"
+      },
+      {
+        "Module": "TAOM",
+        "Name": "TAOM.dll",
+        "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
+        "Side": "Server"
+      },
+      {
+        "Module": "TAOM.CoopCompat",
+        "Name": "TAOM.CoopCompat.dll",
+        "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
+        "Side": "Client"
+      },
+      {
+        "Module": "TAOM.CoopCompat",
+        "Name": "TAOM.CoopCompat.dll",
+        "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
+        "Side": "Server"
+      }
+    ],
+    "Targets": [
+      "TAOM.Features.CareerSystem.CareerDataService::TryAddChoice",
+      "TAOM.Features.CareerSystem.CareerSwitchService::SwitchCareer"
+    ],
+    "Suppressed": false,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": null
+  },
+  {
+    "Id": "taom.emissary",
+    "Version": "1",
+    "Module": "TAOM",
+    "Operation": "Elite emissary purchases",
+    "Provider": "TAOM.CoopCompat",
+    "Authority": "Campaign",
+    "ActorBinding": "Authenticated Coop player registry; operation-specific ownership",
+    "Effects": [
+      "campaign-mutation"
+    ],
+    "Transport": "External provider protocol",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "TAOM",
+        "Name": "TAOM.dll",
+        "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
+        "Side": "Client"
+      },
+      {
+        "Module": "TAOM",
+        "Name": "TAOM.dll",
+        "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
+        "Side": "Server"
+      },
+      {
+        "Module": "TAOM.CoopCompat",
+        "Name": "TAOM.CoopCompat.dll",
+        "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
+        "Side": "Client"
+      },
+      {
+        "Module": "TAOM.CoopCompat",
+        "Name": "TAOM.CoopCompat.dll",
+        "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
+        "Side": "Server"
+      }
+    ],
+    "Targets": [
+      "TAOM.Features.EliteEmissary.EliteEmissaryInquiryPresenter::OpenTroopList"
+    ],
+    "Suppressed": false,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": null
+  },
+  {
+    "Id": "taom.camp-suppressed",
+    "Version": "1",
+    "Module": "TAOM",
+    "Operation": "Make Camp",
+    "Provider": "TAOM.CoopCompat",
+    "Authority": "Campaign",
+    "ActorBinding": "Authenticated Coop player registry; operation-specific ownership",
+    "Effects": [
+      "campaign-mutation"
+    ],
+    "Transport": "External provider protocol",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "TAOM",
+        "Name": "TAOM.dll",
+        "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
+        "Side": "Client"
+      },
+      {
+        "Module": "TAOM",
+        "Name": "TAOM.dll",
+        "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
+        "Side": "Server"
+      },
+      {
+        "Module": "TAOM.CoopCompat",
+        "Name": "TAOM.CoopCompat.dll",
+        "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
+        "Side": "Client"
+      },
+      {
+        "Module": "TAOM.CoopCompat",
+        "Name": "TAOM.CoopCompat.dll",
+        "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
+        "Side": "Server"
+      }
+    ],
+    "Targets": [
+      "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM::ExecuteOpenCampMenu"
+    ],
+    "Suppressed": true,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": null
+  },
+  {
+    "Id": "ig.management",
+    "Version": "1",
+    "Module": "ImprovedGarrisons",
+    "Operation": "Garrison management",
+    "Provider": "CoopModPatch",
+    "Authority": "Campaign",
+    "ActorBinding": "Authenticated Coop player registry; operation-specific ownership",
+    "Effects": [
+      "campaign-mutation"
+    ],
+    "Transport": "External provider protocol",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "ImprovedGarrisons",
+        "Name": "ImprovedGarrisons.dll",
+        "Sha256": "C1845966BE591FCF2C35D07BF93348ABB6F50F8D5FF1B512E7FDC0FF8757B122",
+        "Side": "Client"
+      },
+      {
+        "Module": "ImprovedGarrisons",
+        "Name": "ImprovedGarrisons.dll",
+        "Sha256": "C1845966BE591FCF2C35D07BF93348ABB6F50F8D5FF1B512E7FDC0FF8757B122",
+        "Side": "Server"
+      },
+      {
+        "Module": "CoopModPatch",
+        "Name": "CoopModPatch.dll",
+        "Sha256": "53D9C25A2000A2F48A122456B92BED340BC53BDAFCF8B0D6540580F5344F1181",
+        "Side": "Client"
+      },
+      {
+        "Module": "CoopModPatch",
+        "Name": "CoopModPatch.dll",
+        "Sha256": "53D9C25A2000A2F48A122456B92BED340BC53BDAFCF8B0D6540580F5344F1181",
+        "Side": "Server"
+      },
+      {
+        "Module": "CoopModPatch",
+        "Name": "Adapter.ImprovedGarrisons.dll",
+        "Sha256": "E707F4D301788603091DB1235C36C30718DB1D5B12918D3AC5027DE4B603D141",
+        "Side": "Client"
+      },
+      {
+        "Module": "CoopModPatch",
+        "Name": "Adapter.ImprovedGarrisons.dll",
+        "Sha256": "E707F4D301788603091DB1235C36C30718DB1D5B12918D3AC5027DE4B603D141",
+        "Side": "Server"
+      }
+    ],
+    "Targets": [
+      "ImprovedGarrisons.SaveSystem.GarrisonBehavior::HourlyEvent",
+      "ImprovedGarrisons.SaveSystem.GarrisonBehavior::DailyEvent"
+    ],
+    "Suppressed": false,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": null
+  },
+  {
+    "Id": "mlw.editing",
+    "Version": "1",
+    "Module": "MyLittleWarband",
+    "Operation": "Troop editing and snapshots",
+    "Provider": "CoopModPatch",
+    "Authority": "Campaign",
+    "ActorBinding": "Authenticated Coop player registry; operation-specific ownership",
+    "Effects": [
+      "campaign-mutation"
+    ],
+    "Transport": "External provider protocol",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "MyLittleWarband",
+        "Name": "MyLittleWarband.dll",
+        "Sha256": "5B0F99156A40B0A8F7112B8406BB41CFD7F8653CB2506833BE1696A60AF69521",
+        "Side": "Client"
+      },
+      {
+        "Module": "MyLittleWarband",
+        "Name": "MyLittleWarband.dll",
+        "Sha256": "5B0F99156A40B0A8F7112B8406BB41CFD7F8653CB2506833BE1696A60AF69521",
+        "Side": "Server"
+      },
+      {
+        "Module": "CoopModPatch",
+        "Name": "CoopModPatch.dll",
+        "Sha256": "53D9C25A2000A2F48A122456B92BED340BC53BDAFCF8B0D6540580F5344F1181",
+        "Side": "Client"
+      },
+      {
+        "Module": "CoopModPatch",
+        "Name": "CoopModPatch.dll",
+        "Sha256": "53D9C25A2000A2F48A122456B92BED340BC53BDAFCF8B0D6540580F5344F1181",
+        "Side": "Server"
+      },
+      {
+        "Module": "CoopModPatch",
+        "Name": "Adapter.MyLittleWarband.dll",
+        "Sha256": "B3BE139E51D535BE19B533F90FCEBED9C3BF4B0648FF50DD038EA6DA4D670107",
+        "Side": "Client"
+      },
+      {
+        "Module": "CoopModPatch",
+        "Name": "Adapter.MyLittleWarband.dll",
+        "Sha256": "B3BE139E51D535BE19B533F90FCEBED9C3BF4B0648FF50DD038EA6DA4D670107",
+        "Side": "Server"
+      }
+    ],
+    "Targets": [
+      "MyLittleWarband.CustomUnitsBehavior::UpdateSelectedUnitEquipment"
+    ],
+    "Suppressed": false,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": null
+  },
+  {
+    "Id": "clans-resource-adder.daily",
+    "Version": "1",
+    "Module": "Europe1100",
+    "Operation": "Daily AI clan resources",
+    "Provider": "ModderLords",
+    "Authority": "Campaign",
+    "ActorBinding": "Authenticated Coop player registry; operation-specific ownership",
+    "Effects": [
+      "campaign-mutation"
+    ],
+    "Transport": "Coop Hero.Gold and Clan._influence AutoSync; integration validation required",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "Europe1100",
+        "Name": "ClansResourceAdder.dll",
+        "Sha256": "339D5C2FF7D1E01823B063135E41F31B79B8EDC0B9ECFD75AB1CD648AB78F93A",
+        "Side": "Client"
+      },
+      {
+        "Module": "Europe1100",
+        "Name": "ClansResourceAdder.dll",
+        "Sha256": "339D5C2FF7D1E01823B063135E41F31B79B8EDC0B9ECFD75AB1CD648AB78F93A",
+        "Side": "Server"
+      },
+      {
+        "Module": "CoopNightly",
+        "Name": "GameInterface.dll",
+        "Sha256": "216233E7739380DD4954C9766F875A32078EC8F6927785CF85B6FB76017ED27A",
+        "Side": "Client"
+      },
+      {
+        "Module": "CoopNightly",
+        "Name": "GameInterface.dll",
+        "Sha256": "216233E7739380DD4954C9766F875A32078EC8F6927785CF85B6FB76017ED27A",
+        "Side": "Server"
+      },
+      {
+        "Module": "CoopNightly",
+        "Name": "Common.dll",
+        "Sha256": "4D69296C41B16E5ED87F6BA453A1B420FA42BF8D43A8EF49680C06A06665233D",
+        "Side": "Client"
+      },
+      {
+        "Module": "CoopNightly",
+        "Name": "Common.dll",
+        "Sha256": "4D69296C41B16E5ED87F6BA453A1B420FA42BF8D43A8EF49680C06A06665233D",
+        "Side": "Server"
+      },
+      {
+        "Module": "CoopNightly",
+        "Name": "Coop.Core.dll",
+        "Sha256": "90121C59FF8B6D379933CE01D9A4C4BB842FCFE730CD5131C1072D4332A47CF1",
+        "Side": "Client"
+      },
+      {
+        "Module": "CoopNightly",
+        "Name": "Coop.Core.dll",
+        "Sha256": "90121C59FF8B6D379933CE01D9A4C4BB842FCFE730CD5131C1072D4332A47CF1",
+        "Side": "Server"
+      }
+    ],
+    "Targets": [
+      "ClansResourceAdder.ResourcesAdderEvents::AddResources",
+      "ClansResourceAdder.ResourcesAdderEvents::is_ai_clan"
+    ],
+    "Suppressed": false,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": "clans-resource-adder.v1"
+  }
+]

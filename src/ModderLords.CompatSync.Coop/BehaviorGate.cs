@@ -49,6 +49,7 @@ public static class BehaviorGate
 
     public static string Apply(string json)
     {
+        if (!LegacyRecipePolicy.Accept(json, out var refusal)) return refusal;
         var campaign = new List<string>();
         var mission = new List<string>();
         var handlers = new List<string>();
@@ -58,6 +59,9 @@ public static class BehaviorGate
         try
         {
             var root = JObject.Parse(json);
+            if ((root["Mods"] as JArray ?? new JArray()).Any(mod =>
+                new[] { "Handlers", "Unpatch", "PlayerComparisons", "Relays" }.Any(field => (mod[field] as JArray)?.Count > 0)))
+                return "Recipe refused: generated transformations require a validated operation contract; regenerate legacy recipes with this launcher.";
             foreach (var mod in root["Mods"] as JArray ?? new JArray())
             {
                 campaign.AddRange((mod["CampaignBehaviors"] as JArray ?? new JArray()).Select(t => t.ToString()));

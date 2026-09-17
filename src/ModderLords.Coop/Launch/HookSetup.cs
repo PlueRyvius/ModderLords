@@ -43,7 +43,7 @@ public static class HookSetup
     /// leaves it next to the exe, so both are checked. It has to stay a real file either way: the engine loads it
     /// through DOTNET_STARTUP_HOOKS, in a different process, so it can never be bundled into our exe.
     /// </summary>
-    public static string? LocateHook() => LocateHookIn(AppContext.BaseDirectory);
+    public static string? LocateHook() => LocateHookIn(LaunchSession.BundledRoot ?? AppContext.BaseDirectory);
 
     /// <summary>The same lookup against a given folder, so the order of preference can be tested.</summary>
     public static string? LocateHookIn(string baseDir)

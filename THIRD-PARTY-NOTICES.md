@@ -11,6 +11,8 @@ Nothing in this project's licence grants any rights over them.
 | .NET runtime and WPF (`System.*`, `Microsoft.*`, `Presentation*`, `coreclr`, `hostfxr`, …) | .NET 10 | MIT (Microsoft) | Bundled because the app publishes self-contained, so testers need no .NET install. |
 | Bannerlord.ModuleManager / .Models | 6.0.249 | MIT | Reads and validates Bannerlord module manifests. |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM source generators used by the WPF app. |
+| Mono.Cecil | 0.11.6 | MIT | Reads managed metadata and IL for operation analysis without executing mod assemblies. |
+| Newtonsoft.Json | 13.0.3 | MIT | Shared plan integrity parsing in launcher and protocol code; the Coop adapter also resolves Newtonsoft from the Coop installation. |
 
 ## Build-time only, never redistributed
 

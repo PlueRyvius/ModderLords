@@ -36,7 +36,7 @@ public sealed class RecipeGenerationTests
     [Fact]
     public void AnalysableReport_GivesHandlersAndUnpatch_NotWholeBehaviours()
     {
-        var set = RecipeSet.Build([("Mod", Scan, new[] { "Mod.UiBehavior" })], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
+        var set = RecipeSet.BuildDiagnostic([("Mod", Scan, new[] { "Mod.UiBehavior" })], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
         var r = Assert.Single(set.Mods);
         Assert.Empty(r.CampaignBehaviors);
         Assert.Empty(r.MissionBehaviors);
@@ -62,7 +62,7 @@ public sealed class RecipeGenerationTests
             Flags = ["RegistersUI: registers CampaignGameStarter.AddPlayerLine in GarrisonBehavior.OnMixed"],
         });
         report.Roots.Add(V("Mod.SettingsVM+<>c::<Init>b__0", RootTrigger.PlayerInput, AuthorityVerdict.PlayerStateUnsynced));
-        var r = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
+        var r = RecipeSet.BuildDiagnostic([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
         Assert.Contains("Mod.GarrisonBehavior::SetAllParties", r.Handlers);
         Assert.Contains("Mod.PartyManager::Reset", r.Handlers);
         Assert.DoesNotContain("Mod.GarrisonBehavior::OnGameOpen", r.Handlers);
@@ -81,7 +81,7 @@ public sealed class RecipeGenerationTests
             Roots = [V("Mod.GuardsVM+<>c::<Init>b__0", RootTrigger.PlayerInput, AuthorityVerdict.NeedsRelay) with { RelayVia = "Mod.GuardOrders::OrderPatrol" }],
         };
         report.RelayMethods.Add("Mod.GuardOrders::OrderPatrol");
-        var r = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
+        var r = RecipeSet.BuildDiagnostic([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
         Assert.Equal(["Mod.GuardOrders::OrderPatrol"], r.Relays);
         Assert.Contains("1 player action(s) relayed to the server through 1 method(s)", r.Notes);
         Assert.Contains("\"Relays\"", new RecipeSet { Mods = [r] }.ToJson());
@@ -92,7 +92,7 @@ public sealed class RecipeGenerationTests
     {
         var report = new AuthorityReport { ModuleId = "Mod", Roots = [V("Mod.Settings::Tick", RootTrigger.Simulation, AuthorityVerdict.Both)] };
         report.PlayerComparisonMethods.Add("Mod.Garrison::IsMine");
-        var r = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
+        var r = RecipeSet.BuildDiagnostic([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = report }).Mods.Single();
         Assert.Equal(["Mod.Garrison::IsMine"], r.PlayerComparisons);
         Assert.Empty(r.Handlers);
         Assert.Contains("the server asks about any player instead", r.Notes);
@@ -102,7 +102,7 @@ public sealed class RecipeGenerationTests
     [Fact]
     public void KeptBehaviour_AlsoExcludesItsLambdaHandlers()
     {
-        var set = RecipeSet.Build([("Mod", Scan, new[] { "Mod.TickBehavior" })], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
+        var set = RecipeSet.BuildDiagnostic([("Mod", Scan, new[] { "Mod.TickBehavior" })], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
         // TickBehavior's own handlers and its closure's lambda are kept; the other behaviour's handler is still gated.
         Assert.Equal(["Mod.UiBehavior::OnTick"], set.Mods.Single().Handlers);
     }
@@ -114,7 +114,7 @@ public sealed class RecipeGenerationTests
         var gi = CoopSinks.FindGameInterface(ModderLords.Core.Launch.GamePaths.SteamLibraries());
         if (mods is null || gi is null || !mods.TryGetValue("TAOM", out var taom)) return;
         var report = AuthorityScan.Classify(ModAnalysis.Analyse(taom), CoopSinks.ScanDll(gi));
-        var set = RecipeSet.Build([("TAOM", AssemblyScan.Scan(taom), Array.Empty<string>())], "probe",
+        var set = RecipeSet.BuildDiagnostic([("TAOM", AssemblyScan.Scan(taom), Array.Empty<string>())], "probe",
             authority: new Dictionary<string, AuthorityReport> { ["TAOM"] = report });
         var r = set.Mods.Single();
         Assert.Empty(r.CampaignBehaviors);
@@ -130,7 +130,7 @@ public sealed class RecipeGenerationTests
         var gi = CoopSinks.FindGameInterface(ModderLords.Core.Launch.GamePaths.SteamLibraries());
         if (mods is null || gi is null || !mods.TryGetValue("ImprovedGarrisons", out var ig)) return;
         var report = AuthorityScan.Classify(ModAnalysis.Analyse(ig), CoopSinks.ScanDll(gi));
-        var set = RecipeSet.Build([("ImprovedGarrisons", AssemblyScan.Scan(ig), Array.Empty<string>())], "probe",
+        var set = RecipeSet.BuildDiagnostic([("ImprovedGarrisons", AssemblyScan.Scan(ig), Array.Empty<string>())], "probe",
             authority: new Dictionary<string, AuthorityReport> { ["ImprovedGarrisons"] = report });
         var r = set.Mods.Single();
         // OnGameOpen adds the keep's "Improved Garrison" option and the garrison dialog lines: it must run on clients.
@@ -143,13 +143,13 @@ public sealed class RecipeGenerationTests
     public void NotAnalysableOrMissingReport_FallsBackToWholeBehaviours()
     {
         var broken = new AuthorityReport { ModuleId = "Mod", NotAnalysable = true };
-        var set = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = broken });
+        var set = RecipeSet.BuildDiagnostic([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = broken });
         var r = set.Mods.Single();
         Assert.Equal(["Mod.TickBehavior", "Mod.UiBehavior"], r.CampaignBehaviors);
         Assert.Empty(r.Handlers);
         Assert.Contains("not analysable", r.Notes);
 
-        var noAnalysis = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test").Mods.Single();
+        var noAnalysis = RecipeSet.BuildDiagnostic([("Mod", Scan, Array.Empty<string>())], "test").Mods.Single();
         Assert.Equal(2, noAnalysis.CampaignBehaviors.Count);
         Assert.Null(noAnalysis.Notes);
     }
@@ -157,7 +157,7 @@ public sealed class RecipeGenerationTests
     [Fact]
     public void Json_IsSchemaV2_AndReadableByTheModule()
     {
-        var set = RecipeSet.Build([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
+        var set = RecipeSet.BuildDiagnostic([("Mod", Scan, Array.Empty<string>())], "test", authority: new Dictionary<string, AuthorityReport> { ["Mod"] = Report() });
         var json = set.ToJson();
         var back = RecipeSet.FromJson(json);
         Assert.Equal(RecipeSet.CurrentSchema, back.SchemaVersion);
