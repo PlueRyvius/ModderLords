@@ -21,7 +21,6 @@ public static class OperationPreparation
     }
     public static AnalysisRequest Resolve(Profile profile)
     {
-        profile = profile.ForServerLaunch();
         var paths = LaunchSession.ResolvePaths(profile);
         var catalog = LaunchSession.Scan(profile, paths, out var game);
         var selections = LaunchSession.Select(profile, catalog, new List<string>());

@@ -265,8 +265,6 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnModeChanged(AppMode value)
     {
-        OnPropertyChanged(nameof(ShowAdvancedCompatibility));
-        OnPropertyChanged(nameof(CompatibilityModeText));
         // Built once and kept: switching back to Host must not lose the console scrollback or, far worse, orphan a
         // running server. HostViewModel disposes nothing on the way out because nothing about it is per-session.
         if (value == AppMode.Host) Host ??= new HostViewModel(this);
@@ -1091,24 +1089,6 @@ public partial class MainViewModel : ObservableObject
     /// Whether this list is the load order or merely a request. Wraps the profile flag so toggling it re-runs the
     /// preview immediately — the whole point is to see the order change.
     /// </summary>
-    public bool AdvancedCompatibility
-    {
-        get => !Profile.SimpleCompatibility;
-        set
-        {
-            if (AdvancedCompatibility == value) return;
-            Profile.SimpleCompatibility = !value;
-            IsDirty = true;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(ShowAdvancedCompatibility));
-            OnPropertyChanged(nameof(CompatibilityModeText));
-            Host?.InvalidatePreview();
-            RefreshPreview();
-        }
-    }
-    public bool ShowAdvancedCompatibility => IsHost && AdvancedCompatibility;
-    public string CompatibilityModeText => AdvancedCompatibility ? "Compatibility: Advanced" : "Compatibility: Simple";
-
     public bool ManualLoadOrder
     {
         get => Profile.ManualLoadOrder;
@@ -1127,9 +1107,6 @@ public partial class MainViewModel : ObservableObject
     partial void OnProfileChanged(Profile value)
     {
         OnPropertyChanged(nameof(ManualLoadOrder));
-        OnPropertyChanged(nameof(AdvancedCompatibility));
-        OnPropertyChanged(nameof(ShowAdvancedCompatibility));
-        OnPropertyChanged(nameof(CompatibilityModeText));
     }
 
     [RelayCommand]

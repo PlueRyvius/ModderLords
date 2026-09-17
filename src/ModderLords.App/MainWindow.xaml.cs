@@ -84,7 +84,6 @@ public partial class MainWindow : Window
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.ShowAdvancedCompatibility)) ApplyModeToColumns(ViewModel.IsHost);
         if (e.PropertyName == nameof(MainViewModel.IsDirty)) Title = ViewModel.IsDirty ? "* " + _baseTitle : _baseTitle;
         if (e.PropertyName == nameof(MainViewModel.Host)) AttachHost();
         if (e.PropertyName != nameof(MainViewModel.Mode)) return;
@@ -119,7 +118,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void ApplyModeToColumns(bool host)
     {
-        var v = host && ViewModel.AdvancedCompatibility ? Visibility.Visible : Visibility.Collapsed;
+        var v = host ? Visibility.Visible : Visibility.Collapsed;
         foreach (var c in new System.Windows.Controls.DataGridColumn[]
                  { RoleColumn, ServerOnlyColumn, BehavioursColumn, CompatColumn, ServerVerdictColumn, BinsColumn, NotesColumn })
             c.Visibility = v;

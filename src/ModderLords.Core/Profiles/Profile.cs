@@ -64,27 +64,6 @@ public sealed class Profile
     public bool SettingsSync { get; set; } = false;
     /// <summary>Only shipped, fingerprint-matched and validated operation contracts may activate automatically.</summary>
     public bool AutomaticCompatibility { get; set; } = true;
-    /// <summary>Use shipped host defaults without applying saved manual compatibility overrides.</summary>
-    public bool SimpleCompatibility { get; set; } = true;
-
-    public Profile ForServerLaunch()
-    {
-        var copy = ProfileStore.Snapshot(this);
-        if (!copy.SimpleCompatibility) return copy;
-        var defaults = Compat.CompatDb.Load(Compat.CompatDb.BundledPath, null);
-        copy.CompatGuards = true;
-        copy.SettingsSync = false;
-        copy.AutomaticCompatibility = true;
-        copy.UseModDistanceCache = false;
-        foreach (var mod in copy.Mods)
-        {
-            mod.Role = defaults.DefaultRoleFor(mod.Id);
-            mod.ServerAuthoritative = false;
-            mod.ClientSideBehaviors.Clear();
-        }
-        return copy;
-    }
-
     /// <summary>
     /// Skip the confirmation when Launch client brings this PC's LauncherData.xml in line with the server. Set by
     /// ticking "don't ask again" in that dialog; warnings the sync cannot fix are still reported either way.

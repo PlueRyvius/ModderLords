@@ -85,7 +85,7 @@ public partial class HostViewModel : ObservableObject
     private LaunchSession.Prepared? _runningPrepared;
     private Profile? _runningProfile;
     internal LaunchSession.Prepared? ClientTarget => _runningPrepared ?? _prepared;
-    internal Profile ClientProfile => _runningProfile ?? Profile.ForServerLaunch();
+    internal Profile ClientProfile => _runningProfile ?? ProfileStore.Snapshot(Profile);
     internal void InvalidatePreview() => _prepared = null;
 
     internal void RecordRunningSession(LaunchSession.Prepared prepared, Profile profile)
@@ -385,7 +385,7 @@ public partial class HostViewModel : ObservableObject
         Main.CollectProfileFromRows();
         ProfileStore.Save(Profile);
         Main.IsDirty = false;
-        var launchProfile = Profile.ForServerLaunch();
+        var launchProfile = ProfileStore.Snapshot(Profile);
         Console.Clear();
         Status = "Checking…";
         var autoTaomCreate = false;

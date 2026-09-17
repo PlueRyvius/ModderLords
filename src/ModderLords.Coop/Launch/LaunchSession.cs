@@ -134,10 +134,8 @@ public sealed class LaunchSession
     public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowTaomWorldCreation = false,
         (ModuleCatalog Catalog, string? GameRoot)? scanned = null)
     {
-        profile = profile.ForServerLaunch();
-        var compatDb = profile.SimpleCompatibility ? CompatDb.Load(CompatDb.BundledPath, null) : CompatDb.Current;
+        var compatDb = CompatDb.Current;
         var messages = new List<string>();
-        if (profile.SimpleCompatibility) messages.Add("Simple compatibility: saved manual overrides are inactive for this launch.");
         var paths = ResolvePaths(profile);
         var problems = paths.Validate().ToList();
         if (problems.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, problems));
@@ -235,7 +233,7 @@ public sealed class LaunchSession
             if (applySideEffects)
             {
                 Live.LiveProtocol.Reset(liveDir);
-                var (overrides, compatDefaults) = Live.CompatSettingsDefaults.Merge(profile.SimpleCompatibility ? new Live.SettingsOverrides() : Live.SettingsOverridesStore.Load(profile.Name), ModDefaultSettings(selections, compatDb));
+                var (overrides, compatDefaults) = Live.CompatSettingsDefaults.Merge(Live.SettingsOverridesStore.Load(profile.Name), ModDefaultSettings(selections, compatDb));
                 foreach (var d in compatDefaults)
                     messages.Add($"{d.ModId}: compat database sets {d.SettingsId}.{d.PropId} = {d.Value} for co-op (override it in Mod settings to change)");
                 if (!overrides.IsEmpty)
@@ -430,8 +428,7 @@ public sealed class LaunchSession
     /// <summary>Re-creates the junctions/shadow folders for the profile without touching configs or saves (after a workshop update or Steam re-download).</summary>
     public static OverlayApplier.ApplyResult Resync(Profile profile)
     {
-        profile = profile.ForServerLaunch();
-        var compatDb = profile.SimpleCompatibility ? CompatDb.Load(CompatDb.BundledPath, null) : CompatDb.Current;
+        var compatDb = CompatDb.Current;
         var paths = ResolvePaths(profile);
         var catalog = Scan(profile, paths, out _);
         var selections = WithCompat(profile, Select(profile, catalog, new List<string>()), new List<string>());
@@ -459,7 +456,6 @@ public sealed class LaunchSession
     /// <summary>Layer 1: recipes.json inside the bundled sync module, built from the scan of every mod flagged server-authoritative.</summary>
     public static void WriteRecipes(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
     {
-        profile = profile.ForServerLaunch();
         var sync = LocateSyncModule();
         var flagged = profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         // Ground-truth tracing (docs/DEVELOPMENT.md, "Authority classifier, step 8"): both sides count every traced entry point.
