@@ -125,7 +125,7 @@ public sealed class LaunchSession
     /// false). A real launch ignores it and scans fresh, so it can never act on a folder that has since changed.
     /// </param>
     public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowTaomWorldCreation = false,
-        (ModuleCatalog Catalog, string? GameRoot)? scanned = null)
+        (ModuleCatalog Catalog, string? GameRoot)? scanned = null, bool experimentalCompat = false)
     {
         var messages = new List<string>();
         var paths = ResolvePaths(profile);
@@ -181,11 +181,13 @@ public sealed class LaunchSession
         // Refused, not warned: the old warning was one line in a long console, and on 2026-09-14 a TAOM host and join ran
         // with a generated recipe that no peer ever loaded. Ticking Server-only logic asks for gating; without Settings sync
         // it silently does nothing.
-        if (ServerOnlyLogicProblem(profile, selections.Select(s => s.Module.Id)) is { } serverOnlyProblem)
+        if (ServerOnlyLogicProblem(profile, selections.Select(s => s.Module.Id), experimentalCompat) is { } serverOnlyProblem)
         {
             if (applySideEffects) throw new InvalidOperationException(serverOnlyProblem);
             messages.Add("WARNING " + serverOnlyProblem);
         }
+        if (IgnoredServerOnlyTicks(profile, selections.Select(s => s.Module.Id), experimentalCompat) is { Count: > 0 } ignored)
+            messages.Add($"experimental compatibility is off: Server-only logic for {string.Join(", ", ignored)} is ignored (Server tab, Advanced)");
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
@@ -276,7 +278,7 @@ public sealed class LaunchSession
             messages.AddRange(cache.Messages);
 
             ServerConfig.Write(paths, profile.SaveName, profile.Server);
-            WriteRecipes(profile, selections, messages);
+            WriteRecipes(profile, selections, messages, experimentalCompat);
             if (!string.IsNullOrWhiteSpace(profile.SaveName) && !(allowTaomWorldCreation &&
                 TaomLaunchPolicy.HasCompleteRecipe(selections.Select(s => s.Module.Id)) && !SavePreparer.Exists(paths, profile.SaveName)))
             {
@@ -411,9 +413,9 @@ public sealed class LaunchSession
     /// is what carries the recipe to players and applies it, so without it nothing is gated and players keep running
     /// that code themselves. Null when there is nothing to stop.
     /// </summary>
-    public static string? ServerOnlyLogicProblem(Profile profile, IEnumerable<string> selectedModIds)
+    public static string? ServerOnlyLogicProblem(Profile profile, IEnumerable<string> selectedModIds, bool experimentalCompat = true)
     {
-        if (profile.SettingsSync) return null;
+        if (profile.SettingsSync || !experimentalCompat) return null;
         var selected = new HashSet<string>(selectedModIds, StringComparer.OrdinalIgnoreCase);
         var flagged = profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative && selected.Contains(m.Id)).Select(m => m.Id).ToList();
         if (flagged.Count == 0) return null;
@@ -423,13 +425,33 @@ public sealed class LaunchSession
              + "in their Modules), or untick Server-only logic for those mods.";
     }
 
+    /// <summary>
+    /// Ticked Server-only logic that this launch will not act on because experimental compatibility is off. The ticks
+    /// stay in the profile, so turning it back on restores them. Empty when it is on.
+    /// </summary>
+    public static IReadOnlyList<string> IgnoredServerOnlyTicks(Profile profile, IEnumerable<string> selectedModIds, bool experimentalCompat)
+    {
+        if (experimentalCompat) return [];
+        var selected = new HashSet<string>(selectedModIds, StringComparer.OrdinalIgnoreCase);
+        return profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative && selected.Contains(m.Id)).Select(m => m.Id).ToList();
+    }
+
+    /// <summary>
+    /// The mods whose code the recipe may gate, rewrite or relay. Experimental compatibility (per-mod gates, relays,
+    /// player-check rewrites, state sync, tracing) is off unless the user turned it on: then this is empty, and
+    /// recipes.json carries only the general parts (settings hints, battle scene exclusions).
+    /// </summary>
+    public static HashSet<string> ServerOnlyMods(Profile profile, bool experimentalCompat) => experimentalCompat
+        ? profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase)
+        : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Layer 1: recipes.json inside the bundled sync module, built from the scan of every mod flagged server-authoritative.</summary>
-    public static void WriteRecipes(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
+    public static void WriteRecipes(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages, bool experimentalCompat = false)
     {
         var sync = LocateSyncModule();
-        var flagged = profile.Mods.Where(m => m.Enabled && m.ServerAuthoritative).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var flagged = ServerOnlyMods(profile, experimentalCompat);
         // Ground-truth tracing (docs/DEVELOPMENT.md, "Authority classifier, step 8"): both sides count every traced entry point.
-        var traced = (Environment.GetEnvironmentVariable("MODDERLORDS_TRACE_MODS") ?? "")
+        var traced = (experimentalCompat ? Environment.GetEnvironmentVariable("MODDERLORDS_TRACE_MODS") ?? "" : "")
             .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(id => selections.Any(s => s.Module.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
             .Select(id => selections.First(s => s.Module.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).Module.Id)

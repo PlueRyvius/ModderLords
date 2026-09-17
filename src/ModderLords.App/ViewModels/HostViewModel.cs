@@ -156,7 +156,7 @@ public partial class HostViewModel : ObservableObject
     internal MainViewModel.PreviewResult PrepareServerPreview()
     {
         _prepared = null;
-        var p = LaunchSession.Prepare(Profile, applySideEffects: false, scanned: Main.ScannedCatalog);
+        var p = LaunchSession.Prepare(Profile, applySideEffects: false, scanned: Main.ScannedCatalog, experimentalCompat: Main.ExperimentalCompat);
         _prepared = p;
         return new MainViewModel.PreviewResult(p.Catalog, p.Order, p.Modules, p.Messages);
     }
@@ -361,7 +361,7 @@ public partial class HostViewModel : ObservableObject
             }
 
             Status = "Preparing…";
-            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowTaomWorldCreation: autoTaomCreate));
+            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowTaomWorldCreation: autoTaomCreate, experimentalCompat: Main.ExperimentalCompat));
             _prepared = prepared;
             // Preparing can take long enough for the user to save more edits. Merge observations into
             // the latest saved document instead of overwriting it with the launch snapshot.
@@ -432,7 +432,7 @@ public partial class HostViewModel : ObservableObject
                 if (creationCode != 11 || !SavePreparer.Exists(prepared.Paths, launchProfile.SaveName))
                     throw new InvalidOperationException($"TAOM world creation stopped with exit code {creationCode}; no usable save was written.");
                 AddLine(LogCategory.Milestone, $"[ModderLords] TAOM world '{launchProfile.SaveName}' saved; starting the server");
-                prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile));
+                prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, experimentalCompat: Main.ExperimentalCompat));
                 _prepared = prepared;
                 foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
                 // The serve phase is a second, independently prepared plan with its own environment. Describing

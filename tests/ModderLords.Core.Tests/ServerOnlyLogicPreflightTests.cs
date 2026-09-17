@@ -41,4 +41,19 @@ public sealed class ServerOnlyLogicPreflightTests
         Assert.Null(LaunchSession.ServerOnlyLogicProblem(Profile(settingsSync: false), ["LOTRLOME_Armory"]));
         Assert.Null(LaunchSession.ServerOnlyLogicProblem(new Profile { Mods = [new ProfileMod { Id = "TAOM" }] }, ["TAOM"]));
     }
+
+    [Fact]
+    public void Experimental_compatibility_off_ignores_ticks_instead_of_refusing()
+    {
+        Assert.Null(LaunchSession.ServerOnlyLogicProblem(Profile(settingsSync: false), ["TAOM"], experimentalCompat: false));
+        Assert.Equal(["TAOM"], LaunchSession.IgnoredServerOnlyTicks(Profile(settingsSync: true), ["TAOM", "LOTRLOME_Armory"], experimentalCompat: false));
+        Assert.Empty(LaunchSession.IgnoredServerOnlyTicks(Profile(settingsSync: true), ["TAOM"], experimentalCompat: true));
+    }
+
+    [Fact]
+    public void Experimental_compatibility_off_gates_no_mod()
+    {
+        Assert.Empty(LaunchSession.ServerOnlyMods(Profile(settingsSync: true), experimentalCompat: false));
+        Assert.Equal(["TAOM"], LaunchSession.ServerOnlyMods(Profile(settingsSync: true), experimentalCompat: true));   // disabled IG excluded
+    }
 }

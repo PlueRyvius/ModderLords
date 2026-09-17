@@ -461,6 +461,9 @@ Both bundled modules only ever load code from the launcher folder; nothing of Co
 
 ## Server-only logic (Layer 1, needs Settings sync on)
 
+**Experimental, off by default.** Turn it on under **Server tab → Advanced → Experimental compatibility**; until then the
+column is hidden and ticks are ignored at launch. It works for some behaviour-plus-settings mods only.
+
 On the Mods tab, tick **Server-only logic** for a mod whose gameplay should be decided by the host: garrison managers,
 economy tweaks, battle effects. The launcher scans the mod's DLL for its campaign behaviours and mission behaviours and
 writes a recipe into the shared `ModderLords.Compat` module. On the server everything runs as before. Joining players

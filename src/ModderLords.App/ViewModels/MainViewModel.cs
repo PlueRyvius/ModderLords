@@ -262,12 +262,24 @@ public partial class MainViewModel : ObservableObject
 
     public bool IsHost => Mode == AppMode.Host;
 
+    /// <summary>
+    /// App-wide, off by default: per-mod code gating, relays, player-check rewrites, state sync and tracing. It works
+    /// for some behaviour-plus-settings mods only, so it is hidden and, when off, not applied at launch either.
+    /// </summary>
+    [ObservableProperty] private bool _experimentalCompat;
+
+    /// <summary>The experimental columns and buttons are shown only in Host mode with experimental compatibility on.</summary>
+    public bool ShowExperimentalCompat => IsHost && ExperimentalCompat;
+
+    partial void OnExperimentalCompatChanged(bool value) => OnPropertyChanged(nameof(ShowExperimentalCompat));
+
     partial void OnModeChanged(AppMode value)
     {
         // Built once and kept: switching back to Host must not lose the console scrollback or, far worse, orphan a
         // running server. HostViewModel disposes nothing on the way out because nothing about it is per-session.
         if (value == AppMode.Host) Host ??= new HostViewModel(this);
         OnPropertyChanged(nameof(IsHost));
+        OnPropertyChanged(nameof(ShowExperimentalCompat));
         Rescan();
         if (IsHost) Host?.OnProfileSelected();
     }
@@ -305,6 +317,7 @@ public partial class MainViewModel : ObservableObject
         var changed = Mode != mode;
         Mode = mode;
         OnPropertyChanged(nameof(IsHost));
+        OnPropertyChanged(nameof(ShowExperimentalCompat));
         if (!changed)
         {
             Rescan();               // OnModeChanged did not fire, but the first scan still has to happen
