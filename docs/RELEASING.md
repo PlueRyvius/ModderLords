@@ -51,7 +51,9 @@ dotnet test
 
 - All green, both `ModderLords.Core.Tests` and `ModderLords.App.Tests`.
 - **Close every running ModderLords first.** A running dev build locks `src\ModderLords.App\bin\Debug\...\ModderLords.exe` and the App build fails.
-- The App test fixture also scans the real Steam Workshop, so never assert exact mod lists there.
+- The App test fixture overrides Steam library discovery (`GamePaths.SteamLibrariesOverride`), so it sees only the
+  modules the fixture creates. Asserting exact mod lists there is fine, and a failure means a real failure rather
+  than something about this PC. It used to scan the real Workshop; tests written before 1.0.3 may still hedge.
 
 ### 4. Package
 
