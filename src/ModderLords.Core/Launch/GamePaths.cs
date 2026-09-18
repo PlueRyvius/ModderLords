@@ -15,7 +15,16 @@ public static class GamePaths
 
     /// <summary>Every Steam library folder on this machine: the default install locations on each fixed drive,
     /// plus whatever libraryfolders.vdf lists.</summary>
-    public static IEnumerable<string> SteamLibraries()
+    /// <summary>
+    /// Replaces Steam library discovery for the duration of a test. Without it a test scans whatever the machine
+    /// running it happens to have installed, so the same test passes here and fails on a build agent — and a
+    /// fixture that means to describe three modules quietly describes thirty.
+    /// </summary>
+    internal static Func<IEnumerable<string>>? SteamLibrariesOverride;
+
+    public static IEnumerable<string> SteamLibraries() => SteamLibrariesOverride is { } o ? o() : DiscoverSteamLibraries();
+
+    private static IEnumerable<string> DiscoverSteamLibraries()
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var roots = new List<string>();

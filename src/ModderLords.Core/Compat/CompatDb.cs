@@ -31,6 +31,14 @@ public sealed class CompatRecord
     public List<string> SettingsTypes { get; set; } = new();
     /// <summary>Hints: never treat these classes as settings.</summary>
     public List<string> IgnoreSettingsTypes { get; set; } = new();
+    /// <summary>
+    /// The mod patches Coop and must load AFTER it on the player's machine, even though its manifest never says so.
+    /// CoopMarriage's Harmony patches target Coop's own types: load it first and TargetMethod() returns null,
+    /// PatchAll throws out of OnSubModuleLoad and Bannerlord dies at startup with 0xE0434352.
+    ///
+    /// The dedicated server pins Coop after the community block regardless, so this only ever moves a client order.
+    /// </summary>
+    public bool? ClientLoadsAfterCoop { get; set; }
     /// <summary>Lines the mod's own config files must contain under Coop, applied to its folder before launch. See <see cref="EnsureLinesApplier"/>.</summary>
     public List<EnsureLine> EnsureLines { get; set; } = new();
     /// <summary>
@@ -49,6 +57,7 @@ public sealed class CompatRecord
         Id = Id, Verdict = Verdict, TestedVersions = TestedVersions.ToList(), TestedCoopVersion = TestedCoopVersion,
         DefaultRole = DefaultRole, ServerAuthoritative = ServerAuthoritative, ClientSideBehaviors = ClientSideBehaviors.ToList(),
         KeepSubModules = KeepSubModules.ToList(), SettingsTypes = SettingsTypes.ToList(), IgnoreSettingsTypes = IgnoreSettingsTypes.ToList(),
+        ClientLoadsAfterCoop = ClientLoadsAfterCoop,
         EnsureLines = EnsureLines.Select(l => new EnsureLine { File = l.File, Section = l.Section, Value = l.Value }).ToList(),
         DefaultSettings = DefaultSettings.ToDictionary(o => o.Key, o => new Dictionary<string, string>(o.Value, StringComparer.Ordinal), StringComparer.Ordinal),
         Notes = Notes, Url = Url, UpdatedAt = UpdatedAt,
@@ -175,6 +184,14 @@ public sealed class CompatDb
     /// <summary>Role for a mod new to a profile: the record's DefaultRole, else the pre-DB table, else Run.</summary>
     public ServerRole DefaultRoleFor(string id) =>
         Find(id)?.DefaultRole ?? (FallbackRoles.TryGetValue(id, out var r) ? r : ServerRole.Run);
+
+    /// <summary>
+    /// Mods curated as having to load after Coop on a player's machine. Manifests do not carry this: CoopMarriage
+    /// and CoopModPatch declare nothing about Coop at all, so the sorter cannot derive it and only a curated fact
+    /// keeps them behind it. Fed to <c>LoadOrder.Compute</c> as <c>knownToFollowCoop</c>.
+    /// </summary>
+    public IReadOnlyCollection<string> ClientFollowsCoop() =>
+        Records.Where(r => r.ClientLoadsAfterCoop == true).Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Union of every record's KeepSubModules, plus the pre-DB MCM entries when no record covers MCM.</summary>
     public IReadOnlyCollection<string> KeepForDependencyOnly()

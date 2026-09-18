@@ -241,4 +241,49 @@ public sealed class CompatDbTests : IDisposable
         Assert.Contains("wrapper", record.Notes, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pre-serving", record.Notes, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void ClientLoadsAfterCoop_round_trips_through_the_local_override()
+    {
+        CompatDb.WriteFile(Local, [new CompatRecord { Id = "CoopMarriage", ClientLoadsAfterCoop = true }]);
+
+        var db = CompatDb.Load(null, Local);
+
+        Assert.True(db.Find("CoopMarriage")!.ClientLoadsAfterCoop);
+        Assert.Contains("CoopMarriage", db.ClientFollowsCoop());
+    }
+
+    [Fact]
+    public void Clone_carries_ClientLoadsAfterCoop()
+        => Assert.True(new CompatRecord { Id = "X", ClientLoadsAfterCoop = true }.Clone().ClientLoadsAfterCoop);
+
+    [Fact]
+    public void A_record_with_no_opinion_does_not_follow_Coop()
+    {
+        CompatDb.WriteFile(Local, [Rec("SomeMod", CompatVerdict.Works)]);
+
+        Assert.Empty(CompatDb.Load(null, Local).ClientFollowsCoop());
+    }
+
+    /// <summary>
+    /// No manifest places these: CoopMarriage depends only on Harmony, ButterLib, UIExtenderEx, MCM and the official
+    /// modules, so without a curated record it loads wherever it likes and takes the game down with it.
+    /// </summary>
+    [Fact]
+    public void The_bundled_database_marks_the_known_coop_aware_mods()
+    {
+        var follows = CompatDb.Reload().ClientFollowsCoop();
+
+        Assert.Contains("CoopMarriage", follows);
+        Assert.Contains("TAOM.CoopCompat", follows);
+    }
+
+    /// <summary>
+    /// CoopModPatch loads its adapters and then waits for Coop before arming them, so it runs correctly on either
+    /// side of Coop. Flagging it would shuffle the order for nothing and warn about a crash that cannot happen —
+    /// the flag is for mods that BIND to Coop's assemblies during OnSubModuleLoad, not for every coop-aware mod.
+    /// </summary>
+    [Fact]
+    public void A_mod_that_waits_for_Coop_instead_of_binding_to_it_is_not_marked()
+        => Assert.DoesNotContain("CoopModPatch", CompatDb.Reload().ClientFollowsCoop());
 }

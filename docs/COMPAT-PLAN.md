@@ -119,6 +119,15 @@ id. `Record…` on the Mods tab writes a local record; `Export…` / `Import…`
 the newer `UpdatedAt`). `ModderLords.Core.Compat.CompatDb` replaced the hardcoded role and keep-submodule tables. The
 recipe itself (guards, synced fields, settings classes from Layer 2) is not in the record yet; the behaviours list is.
 
+`ClientLoadsAfterCoop` records that a mod patches Coop and must load after it **on a player's machine**. It exists
+because no manifest carries the fact: CoopMarriage depends only on Harmony, ButterLib, UIExtenderEx, MCM and the
+official modules, so `ModuleSorter` cannot place it, and loading it before Coop makes its `TargetMethod()` return
+null, `PatchAll` throw out of `OnSubModuleLoad`, and Bannerlord die at startup with `0xE0434352`. `CompatDb.ClientFollowsCoop()`
+feeds the flagged ids to `LoadOrder.Compute` as `knownToFollowCoop`; the server pins Coop after the community block
+regardless, so the flag only ever moves a client order. Add one for any mod whose submodule binds to Coop's assemblies
+during `OnSubModuleLoad` — a mod that defers that binding to a later hook (ModularSmithing2 retries at
+`OnBeforeInitialModuleScreenSetAsRoot`) is order-independent and does not need it.
+
 ## Order of work
 
 1. Layer 0 guards + IL scan + badges (server-only, no client module yet). Verify with ImprovedGarrisons and HealOnKill

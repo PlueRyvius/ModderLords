@@ -1,3 +1,4 @@
+using ModderLords.Core.Compat;
 using ModderLords.Core.Modules;
 using System.Collections.Immutable;
 using ModderLords.Core.Profiles;
@@ -74,7 +75,8 @@ public static class ClientLaunchSession
         var mods = ModuleSelector.Select(profile, catalog, messages).Select(s => s.Module).ToList();
 
         var order = LoadOrder.Compute(officials, mods, profile.Mods.Select(m => m.Id).ToList(), LoadOrder.Profile.Client,
-            profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);
+            profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest,
+            CompatDb.Current.ClientFollowsCoop());
         messages.AddRange(order.Issues.Select(i => "order: " + i));
 
         var plan = new ClientLaunchPlan

@@ -130,4 +130,75 @@ public class ProfileWorkflowTests
             Directory.Delete(root, true);
         }
     }
+
+    // ---- naming ------------------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("", "Enter a name.")]
+    [InlineData("   ", "Enter a name.")]
+    [InlineData("///", "cannot contain")]
+    [InlineData("a:b", "cannot contain")]
+    public void A_name_that_cannot_be_a_file_is_refused(string name, string expected)
+        => Assert.Contains(expected, ProfileStore.NameProblem(name));
+
+    [Fact]
+    public void An_ordinary_name_is_accepted() => Assert.Null(ProfileStore.NameProblem("Nicks coop night"));
+
+    [Fact]
+    public void A_name_longer_than_the_limit_is_refused()
+        => Assert.Contains("too long", ProfileStore.NameProblem(new string('x', 65)));
+
+    /// <summary>The profile, its settings overrides, its settings cache and its overlay folder all move together.</summary>
+    [Fact]
+    public void Renaming_moves_the_profile_and_everything_named_after_it()
+    {
+        var from = "mbc-rename-" + Guid.NewGuid().ToString("N");
+        var to = "mbc-renamed-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            ProfileStore.Save(new Profile { Name = from, Mods = [new() { Id = "CoopNightly" }] });
+            Directory.CreateDirectory(Path.GetDirectoryName(ProfileStore.SettingsOverridesPath(from))!);
+            File.WriteAllText(ProfileStore.SettingsOverridesPath(from), "{}");
+            Directory.CreateDirectory(ProfileStore.OverlayDirFor(from));
+
+            Assert.Contains("already exists", ProfileStore.NameProblem(from));   // a name in use is refused
+            ProfileStore.Rename(from, to);
+
+            Assert.False(ProfileStore.Exists(from));
+            Assert.True(ProfileStore.Exists(to));
+            Assert.Equal(to, ProfileStore.Load(to)!.Name);
+            Assert.Equal(["CoopNightly"], ProfileStore.Load(to)!.Mods.Select(m => m.Id));
+            Assert.True(File.Exists(ProfileStore.SettingsOverridesPath(to)));
+            Assert.False(File.Exists(ProfileStore.SettingsOverridesPath(from)));
+            Assert.True(Directory.Exists(ProfileStore.OverlayDirFor(to)));
+            Assert.False(Directory.Exists(ProfileStore.OverlayDirFor(from)));
+        }
+        finally
+        {
+            foreach (var n in new[] { from, to })
+            {
+                ProfileStore.Delete(n);
+                if (Directory.Exists(ProfileStore.OverlayDirFor(n))) Directory.Delete(ProfileStore.OverlayDirFor(n), true);
+            }
+        }
+    }
+
+    /// <summary>Changing only the capitalisation is a rename, not a collision with itself.</summary>
+    [Fact]
+    public void Renaming_to_a_different_capitalisation_is_allowed()
+    {
+        var name = "mbc-Case-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            ProfileStore.Save(new Profile { Name = name });
+            Assert.Null(ProfileStore.NameProblem(name.ToUpperInvariant(), currentName: name));
+            ProfileStore.Rename(name, name.ToUpperInvariant());
+            Assert.Equal(name.ToUpperInvariant(), ProfileStore.Load(name)!.Name);
+        }
+        finally { ProfileStore.Delete(name); }
+    }
+
+    [Fact]
+    public void Renaming_something_that_is_not_there_says_so()
+        => Assert.Throws<InvalidOperationException>(() => ProfileStore.Rename("mbc-absent-" + Guid.NewGuid().ToString("N"), "mbc-x"));
 }

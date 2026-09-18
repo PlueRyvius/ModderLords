@@ -1,0 +1,18 @@
+<Window x:Class="ModderLords.App.NameProfileWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Name profile" SizeToContent="Height" Width="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource WindowForeground}">
+    <StackPanel Margin="16">
+        <TextBlock x:Name="PromptText" Text="Name this profile" Margin="0,0,0,8" />
+        <TextBox x:Name="NameBox" TextChanged="NameChanged" />
+        <!-- Says why OK is unavailable rather than leaving a dead button. -->
+        <TextBlock x:Name="ProblemText" Foreground="{DynamicResource WarningForeground}"
+                   TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="OkButton" Content="OK" IsDefault="True" Click="Ok" MinWidth="80" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Margin="8,0,0,0" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -51,8 +51,15 @@ public static class LoadOrder
     /// submodule binds to Coop's assemblies as it loads, so placing it ahead of Coop puts it in front of the thing
     /// it exists to patch. It still goes before DedicatedServer.Windows, which the host pins absolutely last.
     /// </summary>
-    public static bool LoadsAfterCoop(DiscoveredModule module, IReadOnlyCollection<string> coopIds) =>
-        module.Info.DependentModuleMetadatas.Any(d => d.LoadType == LoadType.LoadBeforeThis &&
+    /// <param name="knownToFollowCoop">
+    /// Mods curated as patching Coop even though their manifest is silent about it. CoopMarriage and CoopModPatch
+    /// declare nothing at all about Coop, so metadata alone cannot place them and loading them first crashes the
+    /// game at startup. Supplied by the compatibility database; see <c>CompatDb.ClientFollowsCoop</c>.
+    /// </param>
+    public static bool LoadsAfterCoop(DiscoveredModule module, IReadOnlyCollection<string> coopIds,
+                                      IReadOnlyCollection<string>? knownToFollowCoop = null) =>
+        knownToFollowCoop is not null && knownToFollowCoop.Contains(module.Id, StringComparer.OrdinalIgnoreCase)
+        || module.Info.DependentModuleMetadatas.Any(d => d.LoadType == LoadType.LoadBeforeThis &&
             coopIds.Contains(d.Id, StringComparer.OrdinalIgnoreCase));
 
     public static bool LoadsBeforeNative(DiscoveredModule module) =>
@@ -75,7 +82,7 @@ public static class LoadOrder
         Manual,
     }
 
-    public static Result Compute(IReadOnlyList<DiscoveredModule> stock, IReadOnlyList<DiscoveredModule> community, IReadOnlyList<string>? preferredOrder = null, Profile? profile = null, OrderPolicy policy = OrderPolicy.Suggest)
+    public static Result Compute(IReadOnlyList<DiscoveredModule> stock, IReadOnlyList<DiscoveredModule> community, IReadOnlyList<string>? preferredOrder = null, Profile? profile = null, OrderPolicy policy = OrderPolicy.Suggest, IReadOnlyCollection<string>? knownToFollowCoop = null)
     {
         profile ??= Profile.DedicatedServer;
         var issues = new List<string>();
@@ -163,13 +170,46 @@ public static class LoadOrder
         bool WantsToFollowCoop(string id)
         {
             var m = community.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
-            return m is not null && LoadsAfterCoop(m, coopIds);
+            return m is not null && LoadsAfterCoop(m, coopIds, knownToFollowCoop);
         }
-        var followCoop = communitySorted.Where(id => !WantsToPrecedeNative(id) && WantsToFollowCoop(id)).ToList();
+        // Following Coop only means something when Coop is actually in the order. On the dedicated server it always
+        // is, pinned in the tail. On a player's machine it is an ordinary community module -- possibly absent
+        // entirely, for someone using this purely as a mod loader, and then these mods have nothing to follow and
+        // are placed like any other.
+        var coopInCommunity = communitySorted.FirstOrDefault(id => coopIds.Contains(id));
+        var coopIsOrdered = tailIds.Count > 0 || coopInCommunity is not null;
+        var wantsToFollow = coopIsOrdered
+            ? communitySorted.Where(id => !WantsToPrecedeNative(id) && !coopIds.Contains(id) && WantsToFollowCoop(id)).ToList()
+            : [];
+
+        // On the server Coop trails the whole community block, so every follower moves and the move is structural,
+        // not a correction of anything the user chose -- it is not worth saying. On the player's machine the order
+        // is theirs, so a move is worth reporting, and under "My order wins" it is not made at all.
+        var coopName = coopInCommunity ?? (tailIds.Count > 0 ? tailIds[0] : "Coop");
+        var followCoop = policy == OrderPolicy.Manual && tailIds.Count == 0 ? [] : wantsToFollow;
         var followCoopSet = new HashSet<string>(followCoop, StringComparer.OrdinalIgnoreCase);
 
+        if (tailIds.Count == 0)
+            foreach (var id in wantsToFollow)
+            {
+                // Only the ones actually out of place: a mod the user already put after Coop needs no comment.
+                if (communitySorted.IndexOf(id) > communitySorted.IndexOf(coopName)) continue;
+                var fromDb = knownToFollowCoop is not null && knownToFollowCoop.Contains(id, StringComparer.OrdinalIgnoreCase);
+                var source = fromDb ? " (from the compatibility database; its own manifest does not say so)" : "";
+                issues.Add(policy == OrderPolicy.Manual
+                    ? $"{id}: kept your order — but it patches {coopName} and is set to load BEFORE it. Bannerlord will crash at startup. Move it below {coopName}, or untick My order wins.{source}"
+                    : $"{id}: moved after {coopName} — it patches Coop and crashes the game at startup if it loads first.{source}");
+            }
+
         ordered.AddRange(communitySorted.Where(id => !WantsToPrecedeNative(id) && !followCoopSet.Contains(id)));
-        if (tailIds.Count == 0) ordered.AddRange(followCoop);
+        if (tailIds.Count == 0)
+        {
+            // The player's own game. Coop sits wherever the user put it, so the mods that patch it go immediately
+            // after it rather than at the end of the list -- appending them only lands after Coop by accident, and
+            // not at all when Coop itself is last, which is exactly the order that crashes the game at startup.
+            if (coopInCommunity is not null && followCoop.Count > 0)
+                ordered.InsertRange(ordered.IndexOf(coopInCommunity) + 1, followCoop);
+        }
         else
         {
             ordered.AddRange(tailIds.Take(tailIds.Count - 1));   // Coop

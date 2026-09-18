@@ -438,4 +438,40 @@ public class LauncherDataSyncTests : IDisposable
         Assert.DoesNotContain(plan.Changes, c => c.Id == "BirthAndDeath");
         Assert.DoesNotContain(plan.Changes, c => c.Id == "FastMode");
     }
+
+    /// <summary>
+    /// A format 2 shared list says where Coop loads on a player, so the sync may place it. This is the payoff: it is
+    /// LauncherData.xml that decides what the player's game actually loads.
+    /// </summary>
+    [Fact]
+    public void A_client_order_moves_Coop_into_place()
+    {
+        var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("CoopMarriage", "v1.1.1", true), Mod("CoopNightly", "v0.1.5", true));
+
+        var plan = LauncherDataSync.ComputePlan([E("CoopMarriage", "v1.1.1")], Order("CoopNightly", "CoopMarriage"), path,
+            orderIncludesCoopPosition: true);
+        LauncherDataSync.Apply(plan, path, BackupRoot);
+
+        var ids = Read(path).Select(m => m.Id).ToList();
+        Assert.True(ids.IndexOf("CoopNightly") < ids.IndexOf("CoopMarriage"),
+            "Coop must end up ahead of the mod that patches it: " + string.Join(", ", ids));
+    }
+
+    /// <summary>
+    /// The host's own "launch client" path passes the SERVER order, where Coop is pinned after every mod. Writing
+    /// that into LauncherData.xml is the arrangement that crashed the client, so without the flag Coop never moves.
+    /// </summary>
+    [Fact]
+    public void A_server_order_never_moves_Coop()
+    {
+        var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("CoopNightly", "v0.1.5", true), Mod("CoopMarriage", "v1.1.1", true));
+
+        var plan = LauncherDataSync.ComputePlan([E("CoopMarriage", "v1.1.1")], Order("CoopMarriage", "CoopNightly"), path);
+        LauncherDataSync.Apply(plan, path, BackupRoot);
+
+        var ids = Read(path).Select(m => m.Id).ToList();
+        Assert.True(ids.IndexOf("CoopNightly") < ids.IndexOf("CoopMarriage"),
+            "Coop was already ahead and a server order must not drag it behind: " + string.Join(", ", ids));
+        Assert.DoesNotContain(plan.Changes, c => ClientManifest.CoopClientModuleIds.Contains(c.Id) && c.Action == LauncherDataSync.SyncAction.Move);
+    }
 }
