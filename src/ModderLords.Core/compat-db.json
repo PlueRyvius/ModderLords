@@ -49,9 +49,9 @@
       "TestedVersions": [ "v4.2.0.7" ],
       "TestedCoopVersion": "v0.1.4",
       "DefaultRole": "Run",
-      "ServerAuthoritative": true,
+      "ServerAuthoritative": false,
       "ClientSideBehaviors": [ "ImprovedGarrisons.SaveSystem.UiBehavior" ],
-      "Notes": "Reaches SERVING with the bundled guards. Garrison logic must be server-only (Settings sync + Server-only logic on) so only the host's copy manages garrisons; the save/UI behaviour stays client-side.",
+      "Notes": "Reaches SERVING with the bundled guards. Garrison logic is best run server-only (Settings sync + Server-only logic on) so only the host's copy manages garrisons; the save/UI behaviour stays client-side. Server-only logic is NOT pre-ticked: it is the experimental per-mod path, so it stays an explicit choice.",
       "UpdatedAt": "2026-09-02T00:00:00Z"
     },
     {

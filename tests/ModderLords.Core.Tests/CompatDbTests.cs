@@ -159,7 +159,10 @@ public sealed class CompatDbTests : IDisposable
         Assert.Empty(db.Problems);
         var ig = db.Find("ImprovedGarrisons")!;
         Assert.Equal(CompatVerdict.NeedsRecipe, ig.Verdict);
-        Assert.True(ig.ServerAuthoritative);
+        // Not pre-ticked: Server-only logic is the paused experimental per-mod path, so the database must never opt a
+        // profile into it. No shipped record may set it (docs/DEVELOPMENT.md, "Per-mod compatibility paused").
+        Assert.False(ig.ServerAuthoritative);
+        Assert.All(db.Records, r => Assert.NotEqual(true, r.ServerAuthoritative));
         Assert.Contains("ImprovedGarrisons.SaveSystem.UiBehavior", ig.ClientSideBehaviors);
         Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("Bannerlord.MBOptionScreen"));
         // MCM's settings core is kept by its own record now, so the fallback pair must still be in the union.
