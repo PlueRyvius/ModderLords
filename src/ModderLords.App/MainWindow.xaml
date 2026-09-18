@@ -67,6 +67,8 @@
                     </StackPanel>
                     <Button Content="New" Command="{Binding NewProfileCommand}" />
                     <Button Content="Save" Command="{Binding SaveProfileCommand}" />
+                    <Button Content="Rename" Command="{Binding RenameProfileCommand}"
+                            ToolTip="Rename this profile. Its settings, its saved mod-setting overrides and its overlay folder move with it." />
                     <Button Content="Delete" Command="{Binding DeleteProfileCommand}" />
                     <Button Content="Rescan mods" Command="{Binding RescanCommand}" />
                     <Button Content="Folders…" Command="{Binding EditFoldersCommand}"
@@ -173,6 +175,21 @@
                             <Button Content="Move up" Command="{Binding MoveUpCommand}" />
                             <Button Content="Move down" Command="{Binding MoveDownCommand}" />
                             <Button Content="Refresh order" Command="{Binding RefreshPreviewCommand}" />
+                            <!-- Only there when the profile actually holds the arrangement that crashes the game. -->
+                            <Button Content="Fix load order" Command="{Binding FixCoopOrderCommand}"
+                                    Background="{DynamicResource WarningBackground}"
+                                    ToolTip="{Binding CoopOrderWarning}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CoopOrderWarning}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                             <!-- Only there when it has something to do: a deleted mod otherwise stays on the list forever. -->
                             <Button Command="{Binding RemoveAllMissingCommand}" Background="{DynamicResource WarningBackground}"
                                     ToolTip="Take every mod that is no longer installed off this profile's list. You are asked first.">
@@ -240,6 +257,14 @@
                                 <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
                                     <!-- The band a row is in is why it can only be dragged so far, so say it on hover. -->
                                     <Setter Property="ToolTip" Value="{Binding BandName}" />
+                                    <Style.Triggers>
+                                        <!-- Coop in Host mode is a marker, not a mod you are choosing to run: it reads
+                                             differently because dragging it changes the PLAYERS' game, not this server. -->
+                                        <DataTrigger Binding="{Binding IsCoopClientMarker}" Value="True">
+                                            <Setter Property="FontStyle" Value="Italic" />
+                                            <Setter Property="ToolTip" Value="{Binding KindTip}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
                                 </Style>
                             </DataGrid.RowStyle>
                             <DataGrid.Columns>

@@ -30,7 +30,10 @@ public sealed record ScanResult(
     IReadOnlyList<string> CampaignBehaviors,
     IReadOnlyList<string> MissionBehaviors,
     IReadOnlyList<string> SettingsClasses,
-    bool UsesMcm)
+    bool UsesMcm,
+    /// <summary>Coop assemblies this mod's SUBMODULE dlls reference; non-empty means it binds to Coop as it loads.
+    /// Optional so the many places that build a ScanResult by hand do not all have to say "no".</summary>
+    IReadOnlyList<string>? CoopAssemblyReferences = null)
 {
     public string Summary => Verdict switch
     {
@@ -69,6 +72,14 @@ public static class AssemblyScan
         "TaleWorlds.Core.ViewModelCollection", "TaleWorlds.CampaignSystem.ViewModelCollection", "SandBox.ViewModelCollection", "TaleWorlds.MountAndBlade.ViewModelCollection",
     ];
     private static readonly string[] StoryModePrefixes = ["StoryMode", "CustomBattle"];
+
+    /// <summary>
+    /// Coop's own assemblies. A SUBMODULE assembly that references one of these is resolved as the engine loads the
+    /// module, so it has to come after Coop in the order or the resolve fails and the game dies at startup. An
+    /// adapter DLL that the mod loads itself, by reflection, once Coop is present does not count -- it is never a
+    /// submodule assembly, which is exactly how ModularSmithing2 stays order-independent.
+    /// </summary>
+    private static readonly string[] CoopAssemblyPrefixes = ["GameInterface", "Coop.Core", "Coop.Steam"];
     private static readonly (string type, string member)[] GuardedMembers =
     [
         ("InformationManager", "ShowInquiry"), ("InformationManager", "ShowTextInquiry"), ("InformationManager", "ShowTooltip"),
@@ -106,7 +117,7 @@ public static class AssemblyScan
     {
         var dlls = ModuleDlls(mod);
         if (dlls.Count == 0)
-            return new ScanResult(mod.Id, mod.HasCode ? ServerVerdict.Unknown : ServerVerdict.DataOnly, [], [], [], mod.HasCode ? ["submodule DLL not found"] : [], [], [], [], false);
+            return new ScanResult(mod.Id, mod.HasCode ? ServerVerdict.Unknown : ServerVerdict.DataOnly, [], [], [], mod.HasCode ? ["submodule DLL not found"] : [], [], [], [], false, []);
         return ScanDlls(mod.Id, dlls, mod.Info.DependentModules.Any(d => d.Id == "StoryMode" && d.IsOptional));
     }
 
@@ -121,6 +132,7 @@ public static class AssemblyScan
         var missionBehaviors = new SortedSet<string>(StringComparer.Ordinal);
         var settingsClasses = new SortedSet<string>(StringComparer.Ordinal);
         var usesMcm = false;
+        var coopRefs = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var notes = new List<string>();
 
         foreach (var dll in dlls)
@@ -137,6 +149,7 @@ public static class AssemblyScan
                     if (UiAssemblyPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) ui.Add(name);
                     if (StoryModePrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) story.Add(name);
                     if (name.StartsWith("MCM", StringComparison.OrdinalIgnoreCase)) usesMcm = true;
+                    if (CoopAssemblyPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) coopRefs.Add(name);
                 }
                 foreach (var h in md.TypeReferences)
                 {
@@ -219,7 +232,7 @@ public static class AssemblyScan
         if (hard.Count > 0) notes.Add("constructs UI objects: " + string.Join(", ", hard));
         if (story.Count > 0 && storyModeOptional)
             notes.Add("StoryMode dependency is declared optional; probably fine when the reference is only in StoryMode-specific code paths");
-        return new ScanResult(moduleId, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList(), settingsClasses.ToList(), usesMcm);
+        return new ScanResult(moduleId, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList(), settingsClasses.ToList(), usesMcm, coopRefs.ToList());
     }
 
     // ---- settings-shaped classes (metadata only) ----------------------------------------------------------------

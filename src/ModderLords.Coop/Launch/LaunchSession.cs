@@ -199,7 +199,8 @@ public sealed class LaunchSession
 
         var stock = catalog.Modules.Where(m => m.IsStock).ToList();
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
-            policy: profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);
+            policy: profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest,
+            knownToFollowCoop: compatDb.ClientFollowsCoop());
         messages.AddRange(order.Issues.Select(i => "order: " + i));
 
         var overlayRoot = ProfileStore.OverlayDirFor(profile.Name);

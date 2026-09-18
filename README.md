@@ -154,6 +154,18 @@ Map mods are also where a manifest's declared load order is most likely to be wr
 before TAOM, contradicting the order TAOM's own authors publish. If you need the order you typed to survive, tick
 **My order wins** on the Mods tab — conflicts are still reported, you just get the final say.
 
+### Where Coop loads
+
+Coop appears in the mod list in both modes, and its position is **where Coop loads on players' machines**. Mods that
+patch Coop — CoopMarriage, CoopModPatch — must sit below it, or their patches find nothing to patch and Bannerlord
+crashes at startup before the main menu. None of them say so in their manifest, so ModderLords keeps the rule in its
+compatibility database and moves them for you; if a profile already has one above Coop, the Mods tab says so and
+offers **Fix load order**.
+
+On the dedicated server the position is not a choice: the official host always loads Coop after every mod, with its
+own server module last. ModderLords does the same, whatever the list says — so the Coop row in Host mode is only ever
+about the players' game, which is the copy the host is handing out.
+
 ---
 
 
@@ -362,6 +374,10 @@ Available in both modes: handing somebody your modpack is what a mod loader is f
 Coop build you are running, the server-side roles, and — as the order of the list itself — the load order. Send that
 file to whoever needs it. Optional official modules and DLC selections are included too; older lists that do not
 specify them retain the default behavior. Sharing and export refresh the current selection automatically.
+
+The order written to the file is always the **player's** order, including where Coop sits, so exporting one profile
+from Host mode and from Player mode produces the same file. Lists written before ModderLords 1.0.3 did not record
+Coop's position; importing one leaves your Coop where it is and says so.
 
 Imported modules that are not installed remain visible as **Missing**, with their requested versions and download
 links retained. They are not passed to the engine. Download them and click **Rescan** to resolve them, or untick them

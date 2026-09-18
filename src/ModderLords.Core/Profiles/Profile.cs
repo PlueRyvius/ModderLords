@@ -180,6 +180,67 @@ public static class ProfileStore
             if (File.Exists(p)) File.Delete(p);
     }
 
+    /// <summary>Whether a profile of this name already exists on disk, compared the way the file system compares it.</summary>
+    public static bool Exists(string name) => File.Exists(PathFor(name));
+
+    /// <summary>
+    /// Why a name cannot be used, or null when it can. Names become file names, so the rules are the file system's:
+    /// something has to be left after the invalid characters are stripped, and it must not collide with a profile
+    /// that already exists. <paramref name="currentName"/> exempts a rename that only changes capitalisation.
+    /// </summary>
+    public static string? NameProblem(string? name, string? currentName = null)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "Enter a name.";
+        if (name.Trim().Length > 64) return "That name is too long (64 characters at most).";
+        // Refuse anything Safe() would rewrite rather than quietly renaming it. Accepting them would let the name on
+        // screen differ from the name on disk, and would let two different names ("a/b" and "a\b") collide on one
+        // file. Safe() stays as the guard for names that reach the store by other routes.
+        var trimmed = name.Trim();
+        var bad = trimmed.Where(c => Path.GetInvalidFileNameChars().Contains(c)).Distinct().ToArray();
+        if (bad.Length > 0) return "A profile name cannot contain " + string.Join(" ", bad.Select(c => char.IsControl(c) ? "control characters" : c.ToString()).Distinct()) + ".";
+        var safe = Safe(name);
+        if (currentName is not null && Safe(currentName).Equals(safe, StringComparison.OrdinalIgnoreCase)) return null;
+        return Exists(name) ? $"A profile called “{safe}” already exists." : null;
+    }
+
+    /// <summary>
+    /// Renames a profile and everything named after it: the settings overrides, the settings cache and the overlay
+    /// folder. Junctions inside the overlay survive the move, because moving a directory keeps its reparse points.
+    /// Never call this while the profile is hosting — the running server holds paths under the old overlay folder.
+    /// </summary>
+    public static void Rename(string oldName, string newName)
+    {
+        if (NameProblem(newName, oldName) is { } problem) throw new InvalidOperationException(problem);
+        var profile = Load(oldName) ?? throw new InvalidOperationException($"No profile called “{oldName}”.");
+
+        // Write the new profile first: if anything below fails, the profile still exists under one name or the other,
+        // never neither.
+        profile.Name = newName.Trim();
+        Save(profile);
+
+        foreach (var (from, to) in new[]
+                 {
+                     (SettingsOverridesPath(oldName), SettingsOverridesPath(newName)),
+                     (SettingsCachePath(oldName), SettingsCachePath(newName)),
+                 })
+        {
+            if (!File.Exists(from) || PathsMatch(from, to)) continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(to)!);
+            File.Move(from, to, overwrite: true);
+        }
+
+        var overlayFrom = OverlayDirFor(oldName);
+        var overlayTo = OverlayDirFor(newName);
+        if (Directory.Exists(overlayFrom) && !PathsMatch(overlayFrom, overlayTo) && !Directory.Exists(overlayTo))
+            Directory.Move(overlayFrom, overlayTo);
+
+        var old = PathFor(oldName);
+        if (!PathsMatch(old, PathFor(newName)) && File.Exists(old)) File.Delete(old);
+    }
+
+    private static bool PathsMatch(string a, string b) =>
+        string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
     public static string Safe(string name)
     {
         var chars = name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c).ToArray();

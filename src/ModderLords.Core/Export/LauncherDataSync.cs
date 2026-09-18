@@ -92,8 +92,15 @@ public static class LauncherDataSync
     /// every official alone except a DLC, which is switched off because Coop's validator rejects a client that
     /// has one enabled.
     /// </param>
+    /// <param name="orderIncludesCoopPosition">
+    /// Whether <paramref name="order"/> is a CLIENT order, in which Coop's position is where it should load on this
+    /// PC. Only a format 2 mod list carries one. It is off by default because the host's own "launch client" path
+    /// passes the SERVER order, where Coop is pinned after every mod — writing that into LauncherData.xml is exactly
+    /// the arrangement that crashes a client running mods that patch Coop.
+    /// </param>
     public static SyncPlan ComputePlan(IReadOnlyList<ClientManifest.Entry> serverMods, LoadOrder.Result order, string launcherDataPath,
-                                       IReadOnlySet<string>? installedClientSide = null, IReadOnlySet<string>? officialSelection = null)
+                                       IReadOnlySet<string>? installedClientSide = null, IReadOnlySet<string>? officialSelection = null,
+                                       bool orderIncludesCoopPosition = false)
     {
         var changes = new List<PlannedChange>();
         if (!File.Exists(launcherDataPath))
@@ -202,25 +209,27 @@ public static class LauncherDataSync
         }
 
         var added = changes.Where(x => x.Action == SyncAction.Add).Select(x => x.Id).ToList();
-        changes.AddRange(PlanOrder(client, added, order, enabling, out var targetOrder));
+        changes.AddRange(PlanOrder(client, added, order, enabling, orderIncludesCoopPosition, out var targetOrder));
         return new SyncPlan(changes, targetOrder);
     }
 
     /// <summary>
     /// Moves only the modules that end up enabled and that the server also orders, into the server's relative order,
-    /// in the positions they already occupy. Officials, the Coop entry and anything left unticked never move, so the
-    /// player's own arrangement of mods they are not using now survives.
+    /// in the positions they already occupy. Officials, anything left unticked, and anything server-only never move,
+    /// so the player's own arrangement of mods they are not using now survives.
+    ///
+    /// Coop moves only when the order actually knows where it belongs on a client -- see the ComputePlan parameter.
     /// </summary>
     private static List<PlannedChange> PlanOrder(IReadOnlyList<ClientEntry> client, IReadOnlyList<string> added, LoadOrder.Result order,
-                                                 IReadOnlySet<string> enabling, out IReadOnlyList<string> targetOrder)
+                                                 IReadOnlySet<string> enabling, bool orderIncludesCoopPosition, out IReadOnlyList<string> targetOrder)
     {
         var moves = new List<PlannedChange>();
         targetOrder = [];
         var target = order.ModuleIds
             .Where(id => !ClientManifest.OfficialModuleIds.Contains(id)
-                         && !ClientManifest.CoopClientModuleIds.Contains(id)
+                         && (orderIncludesCoopPosition || !ClientManifest.CoopClientModuleIds.Contains(id))
                          && !ClientManifest.IsServerOnly(id)
-                         && enabling.Contains(id))
+                         && (enabling.Contains(id) || orderIncludesCoopPosition && ClientManifest.CoopClientModuleIds.Contains(id)))
             .ToList();
 
         // Their current relative order in the file, ignoring everything we are not moving. Deduplicated, because a

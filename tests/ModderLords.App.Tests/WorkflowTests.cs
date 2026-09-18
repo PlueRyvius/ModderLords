@@ -96,6 +96,10 @@ public class WorkflowTests
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "ModderLords-ui-tests", Guid.NewGuid().ToString("N"));
         public Fixture()
         {
+            // Without this the scan walks this machine's real Steam Workshop, so a fixture that means to describe
+            // three modules describes however many the developer happens to have installed — and the same test
+            // passes here and fails on a build agent.
+            GamePaths.SteamLibrariesOverride = () => [Path.Combine(Root, "no-steam")];
             Directory.CreateDirectory(GamePaths.ClientBin(Root));
             File.WriteAllText(Path.Combine(GamePaths.ClientBin(Root), "Bannerlord.exe"), "fixture only");
             Module("Native"); Module("SandBoxCore"); Module("Sandbox");
@@ -111,7 +115,11 @@ public class WorkflowTests
             Profile = new Profile { Name = "ui-test-" + Guid.NewGuid().ToString("N"), GameRoot = Root,
                 DedicatedServerRoot = Path.Combine(Root, "no-server"), ClientOfficialModules = ["Native", "SandBoxCore", "Sandbox"] },
         };
-        public void Dispose() => Directory.Delete(Root, true); // This fixture never creates links.
+        public void Dispose()
+        {
+            GamePaths.SteamLibrariesOverride = null;
+            Directory.Delete(Root, true); // This fixture never creates links.
+        }
     }
 
     [Fact]
@@ -140,6 +148,158 @@ public class WorkflowTests
         vm.Mods.Single(m => m.Id == "CoopNightly" && m.Folder.StartsWith(fixture.Root, StringComparison.OrdinalIgnoreCase)).Enabled = true;
         Assert.Contains("CoopNightly", vm.LoadOrderPreview);
         Assert.Contains("CoopNightly", ClientLaunchSession.Prepare(vm.Profile).Plan.ModuleIds);
+    });
+
+    /// <summary>
+    /// The crash of 2026-09-18. Host mode has no row for Coop's server copy, and a save used to append every
+    /// row-less entry to the end of the profile — walking CoopNightly past the mods that patch it. The next client
+    /// launch then loaded CoopMarriage first, its Harmony patch found nothing to patch, and Bannerlord died at
+    /// startup before the main menu.
+    /// </summary>
+    [Fact]
+    public void HostModeSaveKeepsCoopsIndex() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Module("Bannerlord.Harmony"); fixture.Module("CoopNightly"); fixture.Module("CoopMarriage");
+        var vm = fixture.ViewModel();
+        vm.Profile.Mods =
+        [
+            new ProfileMod { Id = "CoopNightly", Enabled = true },
+            new ProfileMod { Id = "CoopMarriage", Enabled = true },
+        ];
+        vm.Rescan();
+        Assert.Equal(0, vm.Profile.Mods.FindIndex(m => m.Id == "CoopNightly"));
+        var before = 0;
+
+        // What Host mode does to the list: the server supplies Coop, so its row is not among the rows being saved.
+        foreach (var row in vm.Mods.Where(r => r.Id == "CoopNightly").ToList()) vm.Mods.Remove(row);
+        vm.CollectProfileFromRows();
+
+        Assert.Equal(before, vm.Profile.Mods.FindIndex(m => m.Id == "CoopNightly"));
+        Assert.True(vm.Profile.Mods.FindIndex(m => m.Id == "CoopNightly")
+                  < vm.Profile.Mods.FindIndex(m => m.Id == "CoopMarriage"),
+            "Coop must still load before the mod that patches it: " + string.Join(", ", vm.Profile.Mods.Select(m => m.Id)));
+    });
+
+    /// <summary>
+    /// Launching the client from the Server panel builds a client list from the server's selections. Coop used to be
+    /// appended to it, so a host handed their own game the server's arrangement — Coop after every mod — which is
+    /// the token the 2026-09-18 crash ran with.
+    /// </summary>
+    [Fact]
+    public void TheHostsClientLaunchPutsCoopWhereTheProfileWantsIt()
+    {
+        List<ProfileMod> Profile(params string[] ids) => ids.Select(id => new ProfileMod { Id = id }).ToList();
+
+        // Profile order: Harmony, Coop, CoopMarriage. The synthesized list has the two mods; Coop goes between them.
+        var mods = Profile("Bannerlord.Harmony", "CoopMarriage");
+        Assert.Equal(1, HostViewModel.CoopInsertIndex(mods, Profile("Bannerlord.Harmony", "CoopNightly", "CoopMarriage"), "CoopNightly"));
+
+        // Profile puts Coop first: nothing precedes it.
+        Assert.Equal(0, HostViewModel.CoopInsertIndex(mods, Profile("CoopNightly", "Bannerlord.Harmony", "CoopMarriage"), "CoopNightly"));
+
+        // Profile puts Coop last: so does the launch.
+        Assert.Equal(2, HostViewModel.CoopInsertIndex(mods, Profile("Bannerlord.Harmony", "CoopMarriage", "CoopNightly"), "CoopNightly"));
+
+        // A profile that never mentions Coop has said nothing, so the server's own convention stands.
+        Assert.Equal(2, HostViewModel.CoopInsertIndex(mods, Profile("Bannerlord.Harmony", "CoopMarriage"), "CoopNightly"));
+    }
+
+    /// <summary>
+    /// The mods list and the engine load order are computed separately, and this bug lived in the gap between them:
+    /// the list said one thing and the launch token said another, with nothing asserting they agree. Every enabled
+    /// row must appear in the preview, in the same relative order, or the list is lying about what will load.
+    /// </summary>
+    [Fact]
+    public void TheModsListAndTheEnginePreviewAgree() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Module("CoopNightly"); fixture.Module("CoopMarriage"); fixture.Module("ZebraMod");
+        var vm = fixture.ViewModel();
+        vm.Profile.Mods =
+        [
+            new ProfileMod { Id = "CoopNightly", Enabled = true },
+            new ProfileMod { Id = "CoopMarriage", Enabled = true },
+            new ProfileMod { Id = "ZebraMod", Enabled = true },
+        ];
+        vm.Rescan();
+
+        var preview = vm.LoadOrderPreview.ToList();
+        var listed = vm.Mods.Where(r => r.Enabled && !r.IsMissing && !r.IsGameModule).Select(r => r.Id).Distinct().ToList();
+
+        foreach (var id in listed)
+            Assert.True(preview.Contains(id), $"{id} is ticked but never loads. Preview: {string.Join(", ", preview)}");
+
+        // Same relative order, ignoring anything the preview places that the list does not show.
+        var listedInPreview = preview.Where(id => listed.Contains(id, StringComparer.OrdinalIgnoreCase)).ToList();
+        Assert.Equal(listed.Where(id => listedInPreview.Contains(id, StringComparer.OrdinalIgnoreCase)), listedInPreview);
+    });
+
+    [Fact]
+    public void AnEntryWithNoRowKeepsItsIndex()
+    {
+        var previous = new List<ProfileMod>
+        {
+            new() { Id = "A" }, new() { Id = "Hidden" }, new() { Id = "B" }, new() { Id = "C" },
+        };
+        var rows = new List<ProfileMod> { previous[0], previous[2], previous[3] };
+
+        var merged = MainViewModel.MergeKeepingPosition(rows, previous);
+
+        Assert.Equal(["A", "Hidden", "B", "C"], merged.Select(m => m.Id));
+    }
+
+    [Fact]
+    public void SeveralHiddenEntriesKeepTheirOrderAmongThemselves()
+    {
+        var previous = new List<ProfileMod>
+        {
+            new() { Id = "H1" }, new() { Id = "A" }, new() { Id = "H2" },
+        };
+
+        var merged = MainViewModel.MergeKeepingPosition([previous[1]], previous);
+
+        Assert.Equal(["H1", "A", "H2"], merged.Select(m => m.Id));
+    }
+
+    /// <summary>Coop's position on a player is a choice, so the launcher offers the fix rather than making it.</summary>
+    [Fact]
+    public void AModThatPatchesCoopPlacedFirstIsReportedAndFixable() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Module("CoopMarriage"); fixture.Module("CoopNightly");
+        var vm = fixture.ViewModel();
+        vm.Profile.Mods =
+        [
+            new ProfileMod { Id = "CoopMarriage", Enabled = true },
+            new ProfileMod { Id = "CoopNightly", Enabled = true },
+        ];
+        vm.Rescan();
+
+        Assert.NotNull(vm.CoopOrderWarning);
+        Assert.Contains("CoopMarriage", vm.CoopOrderWarning);
+
+        vm.FixCoopOrderCommand.Execute(null);
+
+        Assert.Null(vm.CoopOrderWarning);
+        Assert.True(vm.Mods.IndexOf(vm.Mods.First(r => r.Id == "CoopNightly"))
+                  < vm.Mods.IndexOf(vm.Mods.First(r => r.Id == "CoopMarriage")));
+    });
+
+    [Fact]
+    public void CoopInTheRightPlaceIsNotComplainedAbout() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Module("CoopMarriage"); fixture.Module("CoopNightly");
+        var vm = fixture.ViewModel();
+        vm.Profile.Mods =
+        [
+            new ProfileMod { Id = "CoopNightly", Enabled = true },
+            new ProfileMod { Id = "CoopMarriage", Enabled = true },
+        ];
+        vm.Rescan();
+
+        Assert.Null(vm.CoopOrderWarning);
     });
 
     [Fact]

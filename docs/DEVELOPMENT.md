@@ -139,7 +139,12 @@ How it works:
   That pair is the only breadcrumb left when the engine dies inside the UI stack without unwinding.
 - **Load order** (`LoadOrder`): official host sequence `Native, SandBoxCore, Sandbox, <community>, <Coop id>, DedicatedServer.Windows`,
   community block sorted by BUTR's `ModuleSorter`, Harmony first, StoryMode/CustomBattle/BirthAndDeath treated as
-  satisfied (they never exist on a server).
+  satisfied (they never exist on a server). The two profiles differ only in what is pinned: `Profile.DedicatedServer`
+  has that tail, `Profile.Client` has none — on a player's machine Coop is an ordinary community module and the mods
+  that patch it are placed immediately after wherever the user put it.
+- **Shared mod lists** (`ModListFile`, format 2): always carry the CLIENT order, computed by `ClientOrder.For`, with
+  Coop as an ordinary positioned entry. Format 1 files carried the exporting mode's engine order and no Coop entry,
+  so a host's export said "Coop last"; they still import, flagged by `CoopPositionUnknown`.
 
 Gotchas found on the way:
 

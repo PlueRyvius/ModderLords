@@ -97,14 +97,29 @@ public partial class ModRow : ObservableObject
 
     /// <summary>The game will not start without Native, SandBoxCore or SandBox, so their checkbox is read-only.</summary>
     public bool IsLocked => OfficialModules.IsRequired(Module.Id);
-    public bool CanToggle => !IsLocked;
+    public bool CanToggle => !IsLocked && !IsCoopClientMarker;
+
+    /// <summary>
+    /// The Coop row as Host mode shows it: the server supplies Coop itself, so this row is not a choice about the
+    /// server at all. It is there because its position IS a choice -- the one that decides where Coop loads on the
+    /// players' machines, which the host is the one handing out. In Player mode Coop is an ordinary mod and this is
+    /// false.
+    /// </summary>
+    public bool IsCoopClientMarker { get; init; }
+
+    /// <summary>True for Coop in either mode, so the list can say what it is rather than calling it "Mod".</summary>
+    public bool IsCoop => IsCoopClientMarker || ClientManifest.CoopClientModuleIds.Contains(Module.Id);
 
     /// <summary>Shown in its own column so a game module is never mistaken for a mod you installed.</summary>
     // Deliberately short: the column sits between Module and Version, and "required" is already obvious from the
     // checkbox being greyed out. The tooltip carries the explanation.
-    public string Kind => IsMissing ? "Missing" : IsGameModule ? (OfficialModules.IsDlc(Module.Id) ? "DLC" : "Game") : LoadsBeforeGame ? "Framework" : "Mod";
+    public string Kind => IsMissing ? "Missing" : IsCoop ? "Coop" : IsGameModule ? (OfficialModules.IsDlc(Module.Id) ? "DLC" : "Game") : LoadsBeforeGame ? "Framework" : "Mod";
 
-    public string KindTip => LoadsBeforeGame
+    public string KindTip => IsCoopClientMarker
+        ? "The Coop mod. This row shows where it loads on players' machines — drag it to change that. On the server it is always last; the dedicated server pins it there and this list cannot change it.\n\nMods that patch Coop (CoopMarriage, CoopModPatch) must sit BELOW this row on a player's machine, or their game crashes at startup.\n\nAlways on: the server supplies Coop and every player needs it."
+        : IsCoop
+        ? "The Coop mod. Mods that patch it — CoopMarriage, CoopModPatch — must load after it, or their Harmony patches find nothing to patch and the game crashes at startup."
+        : LoadsBeforeGame
         ? "A framework. Its own manifest says the game's modules load after it, so it sits above them - the TaleWorlds launcher does the same. Drag it among the other frameworks."
         : !IsGameModule ? "A mod. Enable it and drag it to place it in the load order."
         : IsLocked ? "Part of the base game. It cannot be turned off - the game will not start without it."
@@ -138,6 +153,10 @@ public partial class ModRow : ObservableObject
     public static ServerRole[] Roles { get; } = [ServerRole.Run, ServerRole.DependencyOnly, ServerRole.AsShipped];
 
     private ModderLords.Core.Compat.ScanResult? _scan;
+
+    /// <summary>The scan if the background pass has already produced one. Never computes: reading a mod's DLLs on
+    /// the UI thread is exactly what the background pass exists to avoid.</summary>
+    internal ModderLords.Core.Compat.ScanResult? ScanIfDone => _scan;
     /// <summary>IL-metadata verdict: server-safe / guarded / needs review. Computed lazily, never executes mod code.</summary>
     public string ServerVerdict => IsMissing ? "not installed" : _scan?.Summary ?? Scanning;
     public string ServerVerdictDetail => _scan is null ? "" : string.Join("\n", _scan.UiAssemblies.Concat(_scan.StoryModeAssemblies).Concat(_scan.GuardedCalls).Concat(_scan.Notes));
@@ -424,13 +443,47 @@ public partial class MainViewModel : ObservableObject
     {
         if (!ResolveUnsavedChanges()) return;
         var n = 1;
-        string name;
-        do { name = $"profile{n++}"; } while (ProfileNames.Contains(name));
+        string suggested;
+        do { suggested = $"profile{n++}"; } while (ProfileNames.Contains(suggested));
+
+        var ask = new NameProfileWindow("Name this profile", suggested) { Owner = Application.Current?.MainWindow };
+        if (ask.ShowDialog() != true) return;
+        var name = ask.ProfileName;
+
         Profile = new Profile { Name = name, SaveName = Profile.SaveName };
         ProfileStore.Save(Profile);
         LoadProfileList();
         SelectedProfileName = name;
         Rescan();
+    }
+
+    /// <summary>
+    /// Renames this profile and the files named after it. Blocked while the profile is hosting: the running server
+    /// holds paths under the overlay folder that the rename moves.
+    /// </summary>
+    [RelayCommand]
+    private void RenameProfile()
+    {
+        if (Host?.IsRunning == true)
+        {
+            Status = "Stop the server before renaming this profile.";
+            return;
+        }
+        var old = Profile.Name;
+        var ask = new NameProfileWindow("Rename this profile", old, currentName: old) { Owner = Application.Current?.MainWindow };
+        if (ask.ShowDialog() != true || ask.ProfileName == old) return;
+
+        // Save first: a rename must not quietly discard edits made since the last save.
+        CollectProfileFromRows();
+        ProfileStore.Save(Profile);
+        try { ProfileStore.Rename(old, ask.ProfileName); }
+        catch (Exception ex) { Status = "Rename failed: " + ex.Message; return; }
+
+        Profile.Name = ask.ProfileName;
+        LoadProfileList();
+        SelectedProfileName = Profile.Name;
+        IsDirty = false;
+        Status = $"Renamed “{old}” to “{Profile.Name}”";
     }
 
     [RelayCommand]
@@ -567,10 +620,26 @@ public partial class MainViewModel : ObservableObject
             if (!row.IsMissing) pm.SourcePath = row.Folder;
             ordered.Add(pm);
         }
-        // Host mode hides its stock Coop module. Missing or temporarily hidden entries are requirements,
-        // not a request to delete them from the profile.
-        ordered.AddRange(Profile.Mods.Where(pm => !ordered.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase))));
-        Profile.Mods = ordered;
+        // Entries with no row this session are requirements, not a request to delete them from the profile -- and
+        // not a request to MOVE them either. Appending them used to silently walk a hidden module to the end of the
+        // load order on every save, which is how CoopNightly ended up loading after the mods that patch it.
+        Profile.Mods = MergeKeepingPosition(ordered, Profile.Mods);
+    }
+
+    /// <summary>
+    /// Puts back the entries that had no row, each at the index it held before. A save made in a mode that cannot
+    /// show a row for something must not be the thing that reorders it.
+    /// </summary>
+    internal static List<ProfileMod> MergeKeepingPosition(List<ProfileMod> ordered, IReadOnlyList<ProfileMod> previous)
+    {
+        var present = new HashSet<string>(ordered.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+        // Ascending, so several missing entries keep their order relative to each other as well.
+        for (var i = 0; i < previous.Count; i++)
+        {
+            if (present.Contains(previous[i].Id)) continue;
+            ordered.Insert(Math.Min(i, ordered.Count), previous[i]);
+        }
+        return ordered;
     }
 
     // ---- catalog / mods ----------------------------------------------------------------------------
@@ -618,8 +687,12 @@ public partial class MainViewModel : ObservableObject
             // between them, and ModuleSelector would pick either.
             // The server supplies Coop in Host mode; in Player mode it is an ordinary selectable client mod.
             var stockIds = new HashSet<string>(catalog.Modules.Where(m => m.IsStock).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
-            var byId = catalog.Modules.Where(m => !m.IsStock && !OfficialModules.IsGameModule(m.Id) && !stockIds.Contains(m.Id)
-                                                  && (!IsHost || !ClientManifest.CoopClientModuleIds.Contains(m.Id)))
+            // Coop is the exception to "stock modules are not rows". In Host mode the server supplies it, so it is
+            // stock AND usually installed from the workshop as well - and where the workshop copy loads on the
+            // players' machines is a real choice, made here, by the host who hands the list out. Prefer the
+            // workshop copy: that is the one that actually loads on a player. Never a version sibling: one row.
+            var byId = catalog.Modules.Where(m => !m.IsStock && !OfficialModules.IsGameModule(m.Id)
+                                                  && (!stockIds.Contains(m.Id) || ClientManifest.CoopClientModuleIds.Contains(m.Id)))
                 .GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g
                     .GroupBy(m => m.Version ?? "", StringComparer.OrdinalIgnoreCase)
@@ -636,9 +709,24 @@ public partial class MainViewModel : ObservableObject
             var modRows = new List<ModRow>();
             foreach (var pm in Profile.Mods)
             {
+                // Host mode: one Coop row, marking where Coop loads on the players' machines. The server's own copy
+                // decides nothing here, so a version sibling would be a choice about nothing - show a single row.
+                if (IsHost && ClientManifest.CoopClientModuleIds.Contains(pm.Id))
+                {
+                    var coop = (byId.TryGetValue(pm.Id, out var coopCopies) ? coopCopies.FirstOrDefault() : null)
+                               ?? catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
+                    byId.Remove(pm.Id);
+                    if (coop is null) continue;      // no Coop anywhere: nothing to place
+                    modRows.Add(new ModRow
+                    {
+                        Module = coop, Enabled = true, Role = ServerRole.AsShipped,
+                        IsCoopClientMarker = true, HostMode = true,
+                    });
+                    continue;
+                }
                 if (!byId.TryGetValue(pm.Id, out var copies))
                 {
-                    if (IsHost && (stockIds.Contains(pm.Id) || ClientManifest.CoopClientModuleIds.Contains(pm.Id))) continue;
+                    if (IsHost && stockIds.Contains(pm.Id)) continue;
                     Messages.Add($"MISSING: {pm.Id} — download it, then Rescan, or right-click it → Remove from profile."
                                  + (string.IsNullOrWhiteSpace(pm.DownloadUrl) ? "" : " " + pm.DownloadUrl));
                     modRows.Add(new ModRow
@@ -667,6 +755,17 @@ public partial class MainViewModel : ObservableObject
             // Mods new to this profile take their defaults from the compat database; existing entries are never rewritten.
             foreach (var kv in byId.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
             {
+                // A host whose profile has never named Coop still needs the marker, so there is somewhere to say
+                // where Coop loads on a player. Last is the honest default: it is where the server loads it.
+                if (IsHost && ClientManifest.CoopClientModuleIds.Contains(kv.Key))
+                {
+                    modRows.Add(new ModRow
+                    {
+                        Module = kv.Value[0], Enabled = true, Role = ServerRole.AsShipped,
+                        IsCoopClientMarker = true, HostMode = true,
+                    });
+                    continue;
+                }
                 var rec = db.Find(kv.Key);
                 foreach (var c in OrderCopies(kv.Value, kv.Key, null))
                     modRows.Add(new ModRow
@@ -725,6 +824,7 @@ public partial class MainViewModel : ObservableObject
 
             foreach (var row in Mods) row.Compat = db.For(row.Id, row.Version);
             NotifyMissingChanged();
+            CheckCoopOrder();
             StartBackgroundScan();
 
             if (IsHost && Host is not null && paths is not null) Host.RefreshSaves(paths);
@@ -995,6 +1095,54 @@ public partial class MainViewModel : ObservableObject
     /// band. Clamping rather than refusing is deliberate: dragging past the end of a band parks the row at the end
     /// of the band, which is what the insertion line was showing, instead of silently doing nothing.
     /// </summary>
+    /// <summary>
+    /// The crashing arrangement, if this profile holds it: a mod that patches Coop placed before Coop. Bound to the
+    /// Fix load order button's visibility, and reported in Messages by Rescan.
+    /// </summary>
+    [ObservableProperty] private string? _coopOrderWarning;
+
+    private void CheckCoopOrder()
+    {
+        var finding = CoopOrderCheck.Inspect(Mods.Where(r => !r.IsGameModule)
+            .Select(r => new ProfileMod { Id = r.Id, Enabled = r.Enabled || r.IsCoopClientMarker }).ToList(),
+            CompatDb.Current.ClientFollowsCoop());
+        CoopOrderWarning = finding?.Message(Profile.ManualLoadOrder);
+        // Runs again once the background scan lands, so each line is said once rather than once per pass.
+        void Say(string m) { if (!Messages.Contains(m)) Messages.Add(m); }
+        if (CoopOrderWarning is not null) Say(CoopOrderWarning);
+
+        // Mods nothing has placed, whose own submodule binds to Coop. The scan is filled in by the background pass,
+        // so rows it has not reached yet simply do not report -- the next Rescan catches them.
+        var binders = CoopOrderCheck.UnplacedCoopBinders(
+            Mods.Where(r => !r.IsGameModule).Select(r => new ProfileMod { Id = r.Id, Enabled = r.Enabled || r.IsCoopClientMarker }).ToList(),
+            Mods.Where(r => !r.IsMissing && r.ScanIfDone is { CoopAssemblyReferences.Count: > 0 }).Select(r => r.Id).ToList(),
+            CompatDb.Current.ClientFollowsCoop(),
+            id => Mods.FirstOrDefault(r => r.Id == id) is { IsMissing: false } row
+                  && LoadOrder.LoadsAfterCoop(row.Module, ClientManifest.CoopClientModuleIds));
+        foreach (var id in binders)
+            Say($"{id} is listed before Coop and its own submodule references Coop's assemblies, which usually means it "
+                       + "must load after Coop. Nothing records that, so it has not been moved — if the game crashes at startup, "
+                       + "drag it below Coop and add a compatibility record.");
+    }
+
+    /// <summary>
+    /// Moves Coop above the mods that patch it. Deliberately a button and not something Rescan does on its own:
+    /// the user sees the move in the list and can drag it back before saving.
+    /// </summary>
+    [RelayCommand]
+    private void FixCoopOrder()
+    {
+        var coop = Mods.FirstOrDefault(r => r.IsCoop);
+        if (coop is null) return;
+        var follows = CompatDb.Current.ClientFollowsCoop();
+        var first = Mods.FirstOrDefault(r => follows.Contains(r.Id, StringComparer.OrdinalIgnoreCase));
+        if (first is null || Mods.IndexOf(first) > Mods.IndexOf(coop)) return;
+        if (!TryMoveTo(coop, Mods.IndexOf(first))) return;
+        IsDirty = true;
+        CheckCoopOrder();
+        Status = $"Moved {coop.Id} above the mods that patch it — save the profile to keep it";
+    }
+
     public bool TryMoveTo(ModRow row, int insertAt)
     {
         var from = Mods.IndexOf(row);
@@ -1202,6 +1350,8 @@ public partial class MainViewModel : ObservableObject
                 catch { continue; }     // a mod removed mid-scan; the next Rescan drops its row anyway
                 dispatcher.BeginInvoke(() => { if (generation == _scanGeneration) row.ApplyScan(scan); });
             }
+            // The coop-binding check reads these scans, so it only has an answer once they are in.
+            dispatcher.BeginInvoke(() => { if (generation == _scanGeneration) CheckCoopOrder(); });
         });
     }
 
@@ -1292,8 +1442,13 @@ public partial class MainViewModel : ObservableObject
             if (win.ApplyToLauncher)
             {
                 var path = ClientManifest.DefaultLauncherDataPath();
+                // A format 2 list knows where Coop loads on a player, so the sync may place it. Format 1 does not.
                 var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide(),
-                    file.ClientOfficialModules?.ToHashSet(StringComparer.OrdinalIgnoreCase));
+                    file.ClientOfficialModules?.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                    orderIncludesCoopPosition: file.FormatVersion >= 2);
+                if (file.CoopPositionUnknown)
+                    Log(LogCategory.Warning, "[ModderLords] shared list: written by an older ModderLords and does not record where Coop loads. "
+                                           + "Coop has been left where it is; if you use mods that patch Coop, drag it above them.");
                 foreach (var b in plan.Blockers) Log(LogCategory.Warning, $"[ModderLords] shared list: {b.Id} — {b.Detail}");
                 var confirm = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
                 if (confirm.ShowDialog() == true)
