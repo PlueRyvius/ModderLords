@@ -10,7 +10,8 @@ public sealed class OperationContractTests
 {
     private static readonly InputFingerprint Fingerprint = new("fixture", "fixture.dll", "ABC", ExecutionSide.Client);
     private static OperationContract Contract(bool verified = true, string provider = "ModderLords", bool suppressed = false) => new("fixture", "1", "fixture", "operation", provider,
-        AuthorityDomain.Campaign, "authenticated actor", ["campaign-mutation"], "fixture", "before campaign", [new("fixture", "fixture.dll", "ABC")], ["Fixture.Behavior::Tick"], suppressed, verified, verified, "fixture");
+        AuthorityDomain.Campaign, "authenticated actor", ["campaign-mutation"], "fixture", "before campaign", [new("fixture", "fixture.dll", "ABC")], ["Fixture.Behavior::Tick"], suppressed, verified, verified, "fixture",
+        [new("Fixture.Behavior::Tick", "HASH", 1)]);
     private static AnalysisRequest Request(bool auto = true, bool legacy = false) => new([new("fixture", "1", "unused", ["fixture.dll"], true, legacy ? ["Fixture.Behavior"] : [])], [], [], "v1.4.8", auto);
     [Fact] public void MatchingValidatedContractActivatesButUnknownOrUnvalidatedNeverDoes()
     {
@@ -46,6 +47,52 @@ public sealed class OperationContractTests
         Assert.True(copy.Mods[0].ServerAuthoritative); Assert.Equal("Ui", copy.Mods[0].ClientSideBehaviors[0]);
         p.AutomaticCompatibility = false; Assert.False(ProfileStore.Snapshot(p).AutomaticCompatibility);
     }
+    [Fact] public void AnAdapterContractWithoutASurfaceForEveryTargetCannotActivate()
+    {
+        Assert.Equal(ActivationDecision.Activate, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [Contract()]).Contracts[0].Decision);
+        // An adapter is compiled code patching a named method. With no surface captured for it there is nothing for
+        // the runtime to re-check, so the file hash would be the only guard — which is what this replaces.
+        var unpinned = Contract() with { TargetSurfaces = [] };
+        Assert.Equal(ActivationDecision.ValidationRequired, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [unpinned]).Contracts[0].Decision);
+        var partial = Contract() with { Targets = ["Fixture.Behavior::Tick", "Fixture.Behavior::Other"], TargetSurfaces = [new("Fixture.Behavior::Tick", "HASH", 1)] };
+        Assert.Equal(ActivationDecision.ValidationRequired, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [partial]).Contracts[0].Decision);
+        // A contract that installs nothing describes someone else's implementation, so it pins no surfaces.
+        Assert.Equal(ActivationDecision.RecognizedExternal, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [Contract(provider: "provider") with { AdapterId = null }]).Contracts[0].Decision);
+    }
+
+    [Fact] public void AProviderPinnedByItsSurfacesSurvivesAnUnrelatedUpdateButCoopDoesNot()
+    {
+        var contract = Contract() with
+        {
+            Requires = [new("fixture", "fixture.dll", "ABC", ExecutionSide.Client, Strict: false), new("coop", "Coop.Core.dll", "DEF", ExecutionSide.Client)],
+            TargetSurfaces = [new("Fixture.Behavior::Tick", "HASH", 1)],
+        };
+        var coop = new InputFingerprint("coop", "Coop.Core.dll", "DEF", ExecutionSide.Client);
+        Assert.Equal(ActivationDecision.Activate, CompatibilityPlanner.Build(Request(), [Fingerprint, coop], [], [contract]).Contracts[0].Decision);
+        // The provider shipped an unrelated change: still planned, because the methods it patches are what is pinned.
+        Assert.Equal(ActivationDecision.Activate, CompatibilityPlanner.Build(Request(), [Fingerprint with { Sha256 = "moved" }, coop], [], [contract]).Contracts[0].Decision);
+        // Coop moved: refused, because an adapter reaches across that assembly too widely for methods to stand in.
+        Assert.Equal(ActivationDecision.Diagnostic, CompatibilityPlanner.Build(Request(), [Fingerprint, coop with { Sha256 = "moved" }], [], [contract]).Contracts[0].Decision);
+        // Absent entirely is still a refusal, whether or not the file hash matters.
+        Assert.Equal(ActivationDecision.Diagnostic, CompatibilityPlanner.Build(Request(), [coop], [], [contract]).Contracts[0].Decision);
+    }
+
+    [Fact] public void EveryShippedContractThatInstallsAnAdapterPinsTheMethodsItPatches()
+    {
+        var shipped = CompatibilityPlanner.BundledContracts();
+        Assert.NotEmpty(shipped);
+        foreach (var contract in shipped.Where(c => c.AdapterId != null))
+        {
+            Assert.True(contract.SurfacesCoverTargets, contract.Id + " installs an adapter without a surface for every target");
+            Assert.All(contract.TargetSurfaces, s => Assert.Equal(64, s.BodyHash.Length));
+            // A recorded caller count is what makes a NEW caller appearing a refusal rather than a surprise.
+            Assert.All(contract.TargetSurfaces, s => Assert.True(s.Callers > 0, s.Method + " records no call sites"));
+            // The provider's own assembly is pinned by those surfaces; Coop's is still pinned by file.
+            Assert.All(contract.Requires.Where(r => r.Module == contract.Module), r => Assert.False(r.Strict));
+            Assert.All(contract.Requires.Where(r => r.Module != contract.Module), r => Assert.True(r.Strict));
+        }
+    }
+
     [Fact] public void StagingAnotherPlanCannotModifyExistingSessionFile()
     {
         var root = Path.Combine(Path.GetTempPath(), "operation-plan-tests", Guid.NewGuid().ToString("N"));
