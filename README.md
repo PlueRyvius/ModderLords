@@ -10,22 +10,99 @@ That half is kept out of the way unless you ask for it: see [Player mode and Hos
 
 Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop v0.1.5.
 
-### In a hurry?
+![The Mods tab: every mod found on this PC, with tick boxes, load order and per-mod compatibility, and the engine's resolved load order on the right](docs/images/mods-tab.png)
 
-1. Unzip anywhere and run `ModderLords.exe`.
-2. Choose **Play with mods**.
-3. On the **Mods** tab, tick your mods, drag them into order, and press **Play**.
+**Start here:** [Quick start](#quick-start) · [Hosting a coop server](#quick-start-hosting-a-coop-server) · [Troubleshooting](#troubleshooting)
 
-If the bottom bar says the game install was not found, click **Folders…** and point it at your Bannerlord folder.
-More detail: [playing with mods](#quick-start-playing-with-mods) and [hosting a coop server](#quick-start-hosting-a-coop-server).
+**Reference:** [What it does](#what-it-does) · [Requirements](#requirements) · [Install](#install) · [What is in the download](#what-is-in-the-download) · [Player mode and Host mode](#player-mode-and-host-mode) · [Playing on the machine that runs the server](#playing-on-the-machine-that-runs-the-server-host-mode) · [Performance](#performance) · [Sharing a mod list](#sharing-a-mod-list) · [The tabs](#the-tabs) · [Where things live](#where-things-live) · [Notes](#notes) · [Settings sync](#settings-sync-optional-players-install-one-extra-mod) · [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on) · [Mod settings](#mod-settings-host-side-live-or-offline) · [Compatibility database](#compatibility-database) · [Licence](#licence)
 
-> **Upgrading from Modular Bannerlords Coop?** This is the same project under a new name. Your profiles, local
-> compatibility records and settings caches are copied automatically on first run from `%LOCALAPPDATA%\ModularCoop`
-> to `%LOCALAPPDATA%\ModderLords`; the old folder is left untouched and can be deleted once you are happy. The
-> launcher's own in-game modules were renamed too, so delete the leftover `ModularCoop.Compat` and
-> `DedicatedServer.ModularCoopCompat` folders from your game's `Modules` directory — the Mods tab reminds you if
-> they are still there. From v0.9.0 the licence is [PolyForm Noncommercial](LICENSE): you may now share and modify
-> this, noncommercially.
+---
+
+## Quick start
+
+**What you need:** Windows 10/11 64-bit, and Mount & Blade II: Bannerlord v1.4.8 installed through Steam. Your mods
+installed the normal way — under the game's `Modules` folder, or subscribed on the Workshop. Nothing else: the
+download is self-contained and needs no separate .NET install. Hosting a coop server needs one more thing; see
+[Requirements](#requirements).
+
+### 1. Unzip anywhere and run `ModderLords.exe`
+
+![The unzipped release: ModderLords.exe beside the bin, compat, data and docs folders, LICENSE and README](docs/images/download-contents.png)
+
+Nothing needs installing — run the exe from wherever you unzipped it. Keep the files together: hosting needs
+`ModderLords.Hook.dll` and the `compat` folder next to the exe. If Windows SmartScreen warns about an unknown
+publisher, choose "More info" then "Run anyway"; [Install](#install) explains what the app does and does not touch.
+
+### 2. Choose what you are here to do
+
+It asks once and remembers. The toolbar button changes it later, one click and no restart — so picking the "wrong"
+one now costs you nothing.
+
+![The first-run dialog: What are you here to do? Play with mods, or Host a coop server](docs/images/first-run.png)
+
+### 3. Tick your mods, set the order, press Play
+
+On the **Mods** tab, tick the mods you want. Drag rows, or use **Move up** / **Move down**, to set the order; the
+panel on the right shows the order the engine will actually use. Click **Save** to keep the selection in the current
+profile, then click **Play** — Bannerlord starts with exactly those mods.
+
+That is the whole loop. Your TaleWorlds launcher mod list is not touched, so switching back to it later changes
+nothing about how ModderLords behaves.
+
+### If the bottom bar says the game install was not found
+
+Click **Folders…** on the top bar and point it at your Bannerlord folder — the one containing `bin` and `Modules`.
+The list rescans straight away.
+
+![The Folders dialog, showing the automatically detected game and coop server folders and a box for extra mod folders](docs/images/folders-dialog.png)
+
+Leave a box empty to keep finding it automatically in your Steam libraries. Mods kept somewhere other than the game's
+`Modules` folder or the Workshop go under **Extra mod folders** in the same dialog.
+
+**Something else wrong?** [Troubleshooting](#troubleshooting) covers the failures people actually hit.
+
+---
+
+## Quick start: hosting a coop server
+
+Hosting needs **Bannerlord Coop** subscribed on the Steam Workshop (item 3770450698); the dedicated server lives
+inside that workshop item and ModderLords finds it automatically.
+
+1. Switch to **Host mode** if you are not already in it.
+2. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see
+   [The tabs → Mods](#mods)). Click **Save**.
+3. **Saves tab**: pick the save to host, or type a name that does not exist to start a fresh world. The box below the
+   list shows how the selected save differs from your current mod set — the engine loads a mismatched save anyway,
+   and nothing is ever rewritten.
+
+   ![The Saves tab: every save with its character, level, day, and the community mods it was written with](docs/images/saves-tab.png)
+
+   *Starting a new TAOM campaign:* select the TAOM, TAOM_Map and LOTRLOME_Armory modules and leave the save name
+   empty (TAOM.Dependencies comes along on its own as a declared dependency — you do not have to tick it). The
+   launcher prepares the server-safe files in its private data folder, creates a unique campaign, and then starts the
+   server; creating the world takes about three minutes before hosting begins, and the Console tab shows its progress
+   as `worldcreate: phase=...` lines. If you already have a TAOM save, select it instead; **Import client save** is
+   available when the save only exists in Bannerlord's own save folder.
+4. **Server tab**: set a password if you want one, leave the join port at 4200 (forward UDP 4200 on your router for
+   direct connections; Steam joins need no forwarding).
+
+   ![The Server tab: join port, password, Steam discoverability and visibility, autosave, server guards, settings sync and log file](docs/images/server-tab.png)
+
+5. Click **Launch server**. The Console tab shows progress; the status line reads *SERVING, waiting for clients* when
+   the server is ready. First load takes about a minute.
+
+   ![The Console tab during startup, with the module-load lines classified and filterable by category](docs/images/console-tab.png)
+
+6. **Share tab**: click **Copy** and send the list to your players. They enable exactly those mods and join through
+   the Coop mod's server browser (Steam) or by direct IP.
+
+   ![The Share tab: the exact mod list to hand players, with versions and Workshop links, and buttons to check or match this PC's launcher](docs/images/share-tab.png)
+
+7. Hosting and playing on the same PC? Use **Launch client** rather than Steam's Play button — see
+   [Playing on the machine that runs the server](#playing-on-the-machine-that-runs-the-server-host-mode).
+8. When you are done, click **Stop**. The server shuts down cleanly and autosaves.
+
+**A player rejected, a mod crashing the server, a port already in use?** [Troubleshooting](#troubleshooting).
 
 ---
 
@@ -120,6 +197,14 @@ profile (that removes its junctions), or delete `%LOCALAPPDATA%\ModderLords` and
 `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\engine\Modules` (they are the entries that are links,
 not the five stock folders `Native`, `SandBoxCore`, `SandBox`, `Coop`, `DedicatedServer.Windows`).
 
+> **Upgrading from Modular Bannerlords Coop?** This is the same project under a new name. Your profiles, local
+> compatibility records and settings caches are copied automatically on first run from `%LOCALAPPDATA%\ModularCoop`
+> to `%LOCALAPPDATA%\ModderLords`; the old folder is left untouched and can be deleted once you are happy. The
+> launcher's own in-game modules were renamed too, so delete the leftover `ModularCoop.Compat` and
+> `DedicatedServer.ModularCoopCompat` folders from your game's `Modules` directory — the Mods tab reminds you if
+> they are still there. From v0.9.0 the licence is [PolyForm Noncommercial](LICENSE): you may now share and modify
+> this, noncommercially.
+
 ---
 
 ## What is in the download
@@ -136,17 +221,6 @@ docs\                        this guide as markdown, the roadmap, third-party no
 
 Nothing needs unpacking or installing: run the exe from wherever you unzipped it.
 
-## Quick start: playing with mods
-
-1. Pick **Play with mods** the first time you run it (you can change this any time — see below).
-2. **Mods tab**: tick the mods you want. Drag rows, or use **Move up** / **Move down**, to set the order; the panel on
-   the right shows the order the engine will actually use.
-3. Click **Save** to keep the selection in the current profile.
-4. Click **Play**. Bannerlord starts with exactly those mods.
-
-That is the whole loop. Your TaleWorlds launcher mod list is not touched, so switching back to it later changes
-nothing about how ModderLords behaves.
-
 ---
 
 ## Player mode and Host mode
@@ -160,28 +234,6 @@ ModderLords asks once, on first run, which one you want, and remembers it.
 
 Switch whenever you like with the mode button in the toolbar — one click, no restart. Stop the server first if one is
 running. Your window size, theme and selected tab are remembered between runs too.
-
----
-
-## Quick start: hosting a coop server
-
-1. Switch to **Host mode** if you are not already in it.
-2. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see below). Click **Save**.
-3. **Saves tab**: pick the save to host. For a vanilla profile you may type a new name to start a fresh world. For a
-   TAOM profile, select the TAOM, TAOM_Map and LOTRLOME_Armory modules and leave the save name empty when you want
-   the launcher to create a new TAOM campaign automatically (TAOM.Dependencies comes along on its own as a declared
-   dependency — you do not have to tick it). It prepares the server-safe files in its private data folder, creates a
-   unique campaign, and then starts the server; creating the world takes about three minutes before hosting begins,
-   and the Console tab shows its progress as `worldcreate: phase=...` lines. If you already have a TAOM save, select
-   it instead; **Import client save** is available when the save only exists in Bannerlord's own save folder.
-4. **Server tab**: set a password if you want one, leave the join port at 4200 (forward UDP 4200 on your router for
-   direct connections; Steam joins need no forwarding).
-5. Click **Launch server**. The Console tab shows progress; the status line reads *SERVING, waiting for clients* when
-   the server is ready. First load takes about a minute.
-6. **Share tab**: click **Copy** and send the list to your players. They enable exactly those mods and join through
-   the Coop mod's server browser (Steam) or by direct IP.
-7. Hosting and playing on the same PC? Use **Launch client** rather than Steam's Play button — see below.
-8. When you are done, click **Stop**. The server shuts down cleanly and autosaves.
 
 ---
 
@@ -232,6 +284,8 @@ you can check what Launch client would do without launching anything.
 
 The **Performance** tab shows how the server is running: tick rate, the worst single frame in each window, the
 engine process's CPU share and memory, plus whether campaign time is actually moving.
+
+![The Performance tab: tick rate, worst frame, engine CPU and memory, each judged against this session's own normal range rather than fixed thresholds](docs/images/performance-tab.png)
 
 There are no fixed good/bad numbers, because there aren't any — what is normal depends on your machine, your mod
 set and how many people are on. Instead it learns what YOUR server does: the first minute after launch is ignored
@@ -290,6 +344,8 @@ one is known.
 
 ### Mods
 
+
+![The Mods tab with its Kind, Version, Role, Settings, Bins, Compat, Server verdict, Notes and Folder columns](docs/images/mods-tab.png)
 Every module found on this PC, in three bands:
 
 1. **Frameworks** — mods whose manifest says the game's own modules load *after* them (Harmony, ButterLib,
@@ -366,6 +422,8 @@ Written to `server-config.json` at launch; the previous file is backed up under 
 The Coop mod's `mod-config.json`: campaign difficulty (VeryEasy / Easy / Realistic per category), births and deaths,
 fast forward, auto pause, client cheats, gold and food rules, wanderer limit, kingdom clan tier, smithing stamina,
 looter multipliers, executions, nameplates. Edit, then **Save to mod-config.json**. Applies on the next server start.
+
+![The Gameplay tab: the Coop mod's mod-config.json rendered as editable rows, each showing its current and previous value](docs/images/gameplay-tab.png)
 
 ### Console *(Host mode)*
 

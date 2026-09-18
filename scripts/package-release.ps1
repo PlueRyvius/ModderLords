@@ -78,8 +78,28 @@ foreach ($m in @($compatOut, $syncOut)) {
 Copy-Item (Join-Path $root 'README.md') (Join-Path $out 'README.txt') -Force
 $docsOut = Join-Path $out 'docs'
 New-Item -ItemType Directory -Path $docsOut -Force | Out-Null
-Copy-Item (Join-Path $root 'README.md') $docsOut -Force
 Copy-Item (Join-Path $root 'docs\ROADMAP.md') $docsOut -Force
+
+# The README shows the app rather than only describing it, so its images travel with it. Two copies ship at different
+# depths - README.txt at the root, docs\README.md one level down - so a single relative path cannot serve both; the
+# docs copy gets its image paths rewritten. A reference the zip cannot carry fails the build instead of shipping a
+# README full of broken images.
+$readme = Get-Content (Join-Path $root 'README.md') -Raw
+$refs = [regex]::Matches($readme, '!\[[^\]]*\]\((?<p>[^)]+)\)') | ForEach-Object { $_.Groups['p'].Value } | Sort-Object -Unique
+$missing = @($refs | Where-Object { -not (Test-Path (Join-Path $root $_)) })
+if ($missing.Count) { throw "README references images not in the repository: $($missing -join ', ')" }
+$imagesSrc = Join-Path $root 'docs\images'
+if (Test-Path $imagesSrc) {
+    $imagesOut = Join-Path $docsOut 'images'
+    New-Item -ItemType Directory -Path $imagesOut -Force | Out-Null
+    Copy-Item (Join-Path $imagesSrc '*') $imagesOut -Recurse -Force
+}
+($readme -replace 'docs/images/', 'images/') | Set-Content (Join-Path $docsOut 'README.md') -Encoding utf8 -NoNewline
+foreach ($r in $refs) {
+    if (-not (Test-Path (Join-Path $out $r))) { throw "README.txt would have a broken image: $r" }
+    $inDocs = $r -replace '^docs/images/', 'images/'
+    if (-not (Test-Path (Join-Path $docsOut $inDocs))) { throw "docs\README.md would have a broken image: $inDocs" }
+}
 # The world-generation records are maintainer evidence full of diagnostic commands a host must NOT run. They stay in
 # the repository; a zip handed to players and hosts carries only what they should follow.
 if (Test-Path (Join-Path $root 'LICENSE')) { Copy-Item (Join-Path $root 'LICENSE') $out -Force }
