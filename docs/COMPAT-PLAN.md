@@ -1,6 +1,6 @@
 # Root compatibility plan (draft, 2026-09-02)
 
-Goal (agreed with Andy): make single-player mods work under Coop by fixing the seams every mod hits, not by writing an
+Goal: make single-player mods work under Coop by fixing the seams every mod hits, not by writing an
 adapter per mod. First cut = "loads and runs on the server without crashing"; second cut = server-authoritative mod
 state through Coop's own sync framework. A single shared client module is acceptable. All classes of mods matter.
 

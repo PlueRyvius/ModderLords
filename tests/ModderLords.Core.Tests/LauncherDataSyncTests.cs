@@ -317,7 +317,7 @@ public class LauncherDataSyncTests : IDisposable
     public void A_duplicate_entry_does_not_silently_disable_reordering()
     {
         // The bug this pins: one mod listed twice made the counts disagree, so the whole reorder pass bailed out
-        // without a word. Andy reordered mods in the launcher and the app kept insisting nothing had changed.
+        // without a word. A user reordered mods in the launcher and the app kept insisting nothing had changed.
         var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("C", "v1", true), Mod("B", "v1", true),
                              Mod("A", "v1", true), Mod("C", "v1", false));
         var plan = LauncherDataSync.ComputePlan([E("A", "v1"), E("B", "v1"), E("C", "v1")], Order("A", "B", "C"), path);

@@ -104,7 +104,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// One click, no restart - Andy asked for exactly that. Switching to Host builds the host view model the first
+    /// One click, no restart - that was the requirement. Switching to Host builds the host view model the first
     /// time; switching back to Player only hides it, because a running server must survive the trip.
     /// </summary>
     private void Mode_Click(object sender, RoutedEventArgs e)

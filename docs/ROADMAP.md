@@ -39,7 +39,7 @@ Nothing is committed to. The most likely candidates, roughly in order of how oft
 - **Generalized mod compatibility** — the long-standing idea below, still the most interesting direction for the
   hosting half.
 
-## Future: generalized mod compatibility (idea from Andy, 2026-09-02)
+## Future: generalized mod compatibility
 
 CoopModPatch shows that a mod never written for co-op can be made to work with targeted server-side fixes
 (ImprovedGarrisons: a StoryMode-free load path, skipping main-menu/ribbon UI on the headless host, syncing its

@@ -666,7 +666,7 @@ public class PreferredOrderTests
     [Fact]
     public void Real_frameworks_are_repaired_but_the_rest_of_the_list_survives()
     {
-        // Andy's actual case: ButterLib before Harmony and MCM before UIExtenderEx, both backwards.
+        // A real-world case: ButterLib before Harmony and MCM before UIExtenderEx, both backwards.
         var community = new[]
         {
             Mod("Bannerlord.Harmony"), Mod("Bannerlord.ButterLib", "Bannerlord.Harmony"),

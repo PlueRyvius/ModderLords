@@ -2,7 +2,7 @@
 
 Every installed copy checks GitHub for a newer release on startup and offers it to the user. **Publishing a normal
 release is therefore outward-facing: the moment it is published, every friend's copy is offered it.** Follow these steps
-in order, and get the maintainer's (Andy's) explicit go-ahead before step 7.
+in order, and get the maintainer's explicit go-ahead before step 7.
 
 ## The contract the updater relies on
 
@@ -41,7 +41,7 @@ git merge --ff-only origin/main
 
 Set `<VersionPrefix>` in `Directory.Build.props` to `X.Y.Z`. That one line is the only place the version lives. The title bar, the updater's "running version" and the package script all read it.
 
-**Put the bump in the same PR as the change being released**, not in a separate version-bump PR afterwards. One PR, one merge. If a release gathers several already-merged PRs, bump in the last of them. Agents cannot merge on this repo (`gh pr merge` is blocked); Andy merges.
+**Put the bump in the same PR as the change being released**, not in a separate version-bump PR afterwards. One PR, one merge. If a release gathers several already-merged PRs, bump in the last of them. Agents cannot merge on this repo (`gh pr merge` is blocked); the maintainer merges.
 
 ### 3. Tests
 
@@ -115,7 +115,7 @@ The "new" copy is the same build, so it still reports X.Y.Z and the banner comes
 
 - **Clear the override afterwards:** `Remove-Item Env:MODDERLORDS_UPDATE_FEED`, or close that window.
 - **Debug builds never install in place;** they open the release page. Always test a packaged Release build.
-- **Don't drive the desktop while Andy is using the machine.** Take a screenshot first; a UI automation pass once ran while he was in a game.
+- **Don't drive the desktop while the maintainer is using the machine.** Take a screenshot first; a UI automation pass once ran during a game session.
 
 ### 7. Publish (ask first)
 
@@ -126,7 +126,7 @@ Notes style, following past releases: a `## ModderLords X.Y.Z` heading, then sho
 - anything users do NOT need to do;
 - how it was validated (test count, what was checked in the app).
 
-Then, **with Andy's go-ahead**:
+Then, **with the maintainer's go-ahead**:
 
 ```powershell
 gh release create vX.Y.Z artifacts\ModderLords-X.Y.Z.zip --target main --title "ModderLords X.Y.Z" --notes-file <notes.md>

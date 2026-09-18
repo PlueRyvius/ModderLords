@@ -51,7 +51,7 @@ public class ModuleVersionTests
     public void A_normal_version_is_not_flagged()
         => InTempDir(dir => Assert.False(Parse(dir, "Good", "v0.9.30").HasUnparsableVersion));
 
-    /// <summary>The case Andy hit: a trailing letter the game cannot read.</summary>
+    /// <summary>A real-world case: a trailing letter the game cannot read.</summary>
     [Fact]
     public void A_trailing_letter_shows_what_the_manifest_says_not_a0_0_0()
         => InTempDir(dir => Assert.Equal("v0.9.30a", Parse(dir, "Trailing", "v0.9.30a").Version));
