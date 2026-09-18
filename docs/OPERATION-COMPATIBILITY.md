@@ -33,6 +33,37 @@ The ClansResourceAdder adapter changes only the award callback gate and AI-clan 
 
 The inspected AutoSync path is: Hero.Gold property prefix / Clan._influence field interception → local set message → generated subscription → network broadcast or coalescer → client object lookup and value application under AllowedThread. AutoSyncPatchCollector catches installation failures, so registrations and generated templates alone cannot prove those patches are active. Real mutation/state comparison and actual patch ownership checks remain acceptance prerequisites.
 
+## What a contract pins: the methods, not the file
+
+A contract used to be pinned to whole files: every required DLL by SHA-256, refused on any mismatch. That is the
+right guard for Coop's own assemblies, which an adapter reaches into by reflection across a wide surface — there is
+no small set of methods that stands for the dependency. It was the wrong guard for the provider mod itself. An
+adapter depends on the handful of methods it patches, so pinning the file meant a texture fix, an unrelated bug fix
+or a plain rebuild silently disabled the contract, and a per-update maintenance cost bought nothing.
+
+Contracts now carry a `TargetSurfaces` entry per target: the method's signature and body, hashed, plus how many call
+sites it has in the provider's own assembly. `Requires` gains `Strict`. Coop's assemblies stay strict and still
+refuse on any file change; the provider's own assembly is no longer strict, because its surfaces are the dependency.
+Every required file must still be present and loaded.
+
+**Raw IL cannot be hashed directly.** Operand tokens are metadata row indices that renumber whenever anything else
+in the assembly changes, so a raw IL hash would move on every rebuild — the same false alarm as the file hash. Both
+readers resolve every token to a name first and hash that canonical text (`MethodSurface`, `CecilSurface`).
+
+**Two readers, one format.** The maintainer captures offline with Cecil, because a provider assembly references
+TaleWorlds types and cannot be loaded for reflection outside the game. The game re-checks at activation with
+reflection, over the assembly it actually loaded. `MethodSurfaceParityTests` compares the two over every method of a
+real assembly, so the pair cannot drift apart unnoticed. Known deliberate limits of the canonical form: generic
+arguments are reduced to the open type, and a `calli` signature is recorded as a marker only.
+
+**The caller count is the other half.** An IL hash catches the patched method changing. It cannot catch a NEW caller
+of it appearing elsewhere in the provider — which is exactly what would widen an adapter's blast radius without
+touching a byte of the method it patches. The count is captured offline and reviewed on every recapture.
+
+Capture with `dotnet run --project tools/CaptureProviderContracts`. It rewrites `provider-contracts.json` in place,
+updating only the modules installed on the machine and leaving the rest untouched, and it never sets a validation
+flag: a recaptured contract still has to pass offline and integration validation before it can activate.
+
 ## Verification and outstanding acceptance
 
 The solution and optional integration fixture build. Offline tests cover cross-assembly calls, callbacks, mixed presentation/simulation, player-context propagation, inherited dispatch, constant DI, direct authority branches, unresolved reflection, shared models, malformed inputs, dynamic payload selection, contract matching/conflicts, profile round trips, commands and snapshots. Installed corpus analysis recognized all five external coverage entries, including camp suppression, and activated no new contract.

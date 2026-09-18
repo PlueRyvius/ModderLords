@@ -92,9 +92,15 @@ public static class OperationRuntime
                     if (side != null && side != (Common.ModInformation.IsServer ? "Server" : "Client")) continue;
                     var name = Path.GetFileNameWithoutExtension((string)required["Name"]!);
                     var assembly = AppDomain.CurrentDomain.GetAssemblies().SingleOrDefault(a => !a.IsDynamic && a.GetName().Name == name);
-                    if (assembly == null || HashFile(assembly.Location) != (string?)required["Sha256"]) throw new InvalidOperationException("Required assembly fingerprint mismatch: " + name);
+                    if (assembly == null) throw new InvalidOperationException("Required assembly is not loaded: " + name);
+                    // A strict requirement is pinned to the file, because the adapter reaches across it by reflection
+                    // and any change can move something it depends on. A provider mod pinned by target surfaces is
+                    // not: refusing there on an unrelated update would only teach people to ignore the refusal.
+                    if ((bool?)required["Strict"] != false && HashFile(assembly.Location) != (string?)required["Sha256"])
+                        throw new InvalidOperationException("Required assembly fingerprint mismatch: " + name);
                 }
                 var adapterId = (string?)contract["AdapterId"];
+                if (adapterId != null && TargetSurfaceCheck.Problem(contract) is { } surfaceProblem) throw new InvalidOperationException(surfaceProblem);
                 ICompatibilityAdapter adapter = adapterId == "clans-resource-adder.v1" ? new ClansResourceAdderAdapter() : throw new InvalidOperationException("Unknown compiled adapter");
                 if (!adapter.ValidateTargets(out reason)) throw new InvalidOperationException(reason);
                 pending.Add(adapter);

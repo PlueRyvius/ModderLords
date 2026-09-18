@@ -14,6 +14,9 @@
     <!-- Real Harmony for RecipeGatesTests (the module's own copy is compile-time only). -->
     <PackageReference Include="Lib.Harmony" Version="2.4.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!-- MethodSurfaceParityTests reads real IL with Cecil and compiles scrap assemblies to compare the two readers. -->
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
   </ItemGroup>
 
   <ItemGroup>

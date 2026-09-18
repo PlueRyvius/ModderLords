@@ -17,25 +17,29 @@
         "Module": "TAOM",
         "Name": "TAOM.dll",
         "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "TAOM",
         "Name": "TAOM.dll",
         "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       },
       {
         "Module": "TAOM.CoopCompat",
         "Name": "TAOM.CoopCompat.dll",
         "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "TAOM.CoopCompat",
         "Name": "TAOM.CoopCompat.dll",
         "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       }
     ],
     "Targets": [
@@ -45,7 +49,20 @@
     "Suppressed": false,
     "OfflineValidated": false,
     "RuntimeValidated": false,
-    "AdapterId": null
+    "AdapterId": null,
+    "TargetSurfaces": [
+      {
+        "Method": "TAOM.Features.CareerSystem.CareerDataService::TryAddChoice",
+        "BodyHash": "F3E048B1C560E139F96625C4BC214DAABD3464D56C1B8CD747CAE4E3CF44DE5D",
+        "Callers": 0
+      },
+      {
+        "Method": "TAOM.Features.CareerSystem.CareerSwitchService::SwitchCareer",
+        "BodyHash": "377C29EC55CD54135D1FE27B9D4999BA69AB22DB951DEA3B020C965F395829AF",
+        "Callers": 0
+      }
+    ],
+    "SurfacesCoverTargets": true
   },
   {
     "Id": "taom.emissary",
@@ -65,25 +82,29 @@
         "Module": "TAOM",
         "Name": "TAOM.dll",
         "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "TAOM",
         "Name": "TAOM.dll",
         "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       },
       {
         "Module": "TAOM.CoopCompat",
         "Name": "TAOM.CoopCompat.dll",
         "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "TAOM.CoopCompat",
         "Name": "TAOM.CoopCompat.dll",
         "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       }
     ],
     "Targets": [
@@ -92,7 +113,9 @@
     "Suppressed": false,
     "OfflineValidated": false,
     "RuntimeValidated": false,
-    "AdapterId": null
+    "AdapterId": null,
+    "TargetSurfaces": [],
+    "SurfacesCoverTargets": true
   },
   {
     "Id": "taom.camp-suppressed",
@@ -112,25 +135,29 @@
         "Module": "TAOM",
         "Name": "TAOM.dll",
         "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "TAOM",
         "Name": "TAOM.dll",
         "Sha256": "EDC511107E840484F6B0E26FFD3029A71161A4E46F14766201B999B3A97A2517",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       },
       {
         "Module": "TAOM.CoopCompat",
         "Name": "TAOM.CoopCompat.dll",
         "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "TAOM.CoopCompat",
         "Name": "TAOM.CoopCompat.dll",
         "Sha256": "AC5F854022C38E144C778BFF83AD7C5DFC80C48BFA9986F33D28C76745F71437",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       }
     ],
     "Targets": [
@@ -139,7 +166,15 @@
     "Suppressed": true,
     "OfflineValidated": false,
     "RuntimeValidated": false,
-    "AdapterId": null
+    "AdapterId": null,
+    "TargetSurfaces": [
+      {
+        "Method": "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM::ExecuteOpenCampMenu",
+        "BodyHash": "437CCA0338313932A2CBE51AD9D5B60D268D450438B36F727153A8E0149D5E58",
+        "Callers": 0
+      }
+    ],
+    "SurfacesCoverTargets": true
   },
   {
     "Id": "ig.management",
@@ -159,37 +194,43 @@
         "Module": "ImprovedGarrisons",
         "Name": "ImprovedGarrisons.dll",
         "Sha256": "C1845966BE591FCF2C35D07BF93348ABB6F50F8D5FF1B512E7FDC0FF8757B122",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "ImprovedGarrisons",
         "Name": "ImprovedGarrisons.dll",
         "Sha256": "C1845966BE591FCF2C35D07BF93348ABB6F50F8D5FF1B512E7FDC0FF8757B122",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       },
       {
         "Module": "CoopModPatch",
         "Name": "CoopModPatch.dll",
         "Sha256": "53D9C25A2000A2F48A122456B92BED340BC53BDAFCF8B0D6540580F5344F1181",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "CoopModPatch",
         "Name": "CoopModPatch.dll",
         "Sha256": "53D9C25A2000A2F48A122456B92BED340BC53BDAFCF8B0D6540580F5344F1181",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       },
       {
         "Module": "CoopModPatch",
         "Name": "Adapter.ImprovedGarrisons.dll",
         "Sha256": "E707F4D301788603091DB1235C36C30718DB1D5B12918D3AC5027DE4B603D141",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": true
       },
       {
         "Module": "CoopModPatch",
         "Name": "Adapter.ImprovedGarrisons.dll",
         "Sha256": "E707F4D301788603091DB1235C36C30718DB1D5B12918D3AC5027DE4B603D141",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": true
       }
     ],
     "Targets": [
@@ -199,7 +240,20 @@
     "Suppressed": false,
     "OfflineValidated": false,
     "RuntimeValidated": false,
-    "AdapterId": null
+    "AdapterId": null,
+    "TargetSurfaces": [
+      {
+        "Method": "ImprovedGarrisons.SaveSystem.GarrisonBehavior::HourlyEvent",
+        "BodyHash": "95AFFADDF8855B1FF2EC9A180EE4996330FCF14D7A2E3C0767EFE6C1FA790420",
+        "Callers": 1
+      },
+      {
+        "Method": "ImprovedGarrisons.SaveSystem.GarrisonBehavior::DailyEvent",
+        "BodyHash": "EECDE7F9054F73E786E267D3499C040D7D991306940E8FE70A55E1277CEC6CC7",
+        "Callers": 1
+      }
+    ],
+    "SurfacesCoverTargets": true
   },
   {
     "Id": "mlw.editing",
@@ -219,37 +273,43 @@
         "Module": "MyLittleWarband",
         "Name": "MyLittleWarband.dll",
         "Sha256": "5B0F99156A40B0A8F7112B8406BB41CFD7F8653CB2506833BE1696A60AF69521",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "MyLittleWarband",
         "Name": "MyLittleWarband.dll",
         "Sha256": "5B0F99156A40B0A8F7112B8406BB41CFD7F8653CB2506833BE1696A60AF69521",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       },
       {
         "Module": "CoopModPatch",
         "Name": "CoopModPatch.dll",
         "Sha256": "53D9C25A2000A2F48A122456B92BED340BC53BDAFCF8B0D6540580F5344F1181",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "CoopModPatch",
         "Name": "CoopModPatch.dll",
         "Sha256": "53D9C25A2000A2F48A122456B92BED340BC53BDAFCF8B0D6540580F5344F1181",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       },
       {
         "Module": "CoopModPatch",
         "Name": "Adapter.MyLittleWarband.dll",
         "Sha256": "B3BE139E51D535BE19B533F90FCEBED9C3BF4B0648FF50DD038EA6DA4D670107",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": true
       },
       {
         "Module": "CoopModPatch",
         "Name": "Adapter.MyLittleWarband.dll",
         "Sha256": "B3BE139E51D535BE19B533F90FCEBED9C3BF4B0648FF50DD038EA6DA4D670107",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": true
       }
     ],
     "Targets": [
@@ -258,7 +318,15 @@
     "Suppressed": false,
     "OfflineValidated": false,
     "RuntimeValidated": false,
-    "AdapterId": null
+    "AdapterId": null,
+    "TargetSurfaces": [
+      {
+        "Method": "MyLittleWarband.CustomUnitsBehavior::UpdateSelectedUnitEquipment",
+        "BodyHash": "834CB8BD1BCD9E5CA8E9F91BBA4CC154C247CF09ADC08CF5C882120F5173D7D9",
+        "Callers": 2
+      }
+    ],
+    "SurfacesCoverTargets": true
   },
   {
     "Id": "clans-resource-adder.daily",
@@ -278,49 +346,57 @@
         "Module": "Europe1100",
         "Name": "ClansResourceAdder.dll",
         "Sha256": "339D5C2FF7D1E01823B063135E41F31B79B8EDC0B9ECFD75AB1CD648AB78F93A",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": false
       },
       {
         "Module": "Europe1100",
         "Name": "ClansResourceAdder.dll",
         "Sha256": "339D5C2FF7D1E01823B063135E41F31B79B8EDC0B9ECFD75AB1CD648AB78F93A",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": false
       },
       {
         "Module": "CoopNightly",
         "Name": "GameInterface.dll",
         "Sha256": "216233E7739380DD4954C9766F875A32078EC8F6927785CF85B6FB76017ED27A",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": true
       },
       {
         "Module": "CoopNightly",
         "Name": "GameInterface.dll",
         "Sha256": "216233E7739380DD4954C9766F875A32078EC8F6927785CF85B6FB76017ED27A",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": true
       },
       {
         "Module": "CoopNightly",
         "Name": "Common.dll",
         "Sha256": "4D69296C41B16E5ED87F6BA453A1B420FA42BF8D43A8EF49680C06A06665233D",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": true
       },
       {
         "Module": "CoopNightly",
         "Name": "Common.dll",
         "Sha256": "4D69296C41B16E5ED87F6BA453A1B420FA42BF8D43A8EF49680C06A06665233D",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": true
       },
       {
         "Module": "CoopNightly",
         "Name": "Coop.Core.dll",
         "Sha256": "90121C59FF8B6D379933CE01D9A4C4BB842FCFE730CD5131C1072D4332A47CF1",
-        "Side": "Client"
+        "Side": "Client",
+        "Strict": true
       },
       {
         "Module": "CoopNightly",
         "Name": "Coop.Core.dll",
         "Sha256": "90121C59FF8B6D379933CE01D9A4C4BB842FCFE730CD5131C1072D4332A47CF1",
-        "Side": "Server"
+        "Side": "Server",
+        "Strict": true
       }
     ],
     "Targets": [
@@ -330,6 +406,19 @@
     "Suppressed": false,
     "OfflineValidated": false,
     "RuntimeValidated": false,
-    "AdapterId": "clans-resource-adder.v1"
+    "AdapterId": "clans-resource-adder.v1",
+    "TargetSurfaces": [
+      {
+        "Method": "ClansResourceAdder.ResourcesAdderEvents::AddResources",
+        "BodyHash": "339872D6150133172B6FEB903D7EE2AB13FBF761330E59871FE23D2765F07410",
+        "Callers": 1
+      },
+      {
+        "Method": "ClansResourceAdder.ResourcesAdderEvents::is_ai_clan",
+        "BodyHash": "28B7D84EB8DDD458C0D0B0A90507F792574D4732EF8D916C53D09F9024F452F5",
+        "Callers": 1
+      }
+    ],
+    "SurfacesCoverTargets": true
   }
 ]

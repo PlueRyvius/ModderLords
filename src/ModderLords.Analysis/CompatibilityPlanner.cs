@@ -19,10 +19,13 @@ public static class CompatibilityPlanner
             var mod = request.Modules.FirstOrDefault(m => m.Id == contract.Module);
             if (mod == null) continue;
             var required = contract.Requires;
+            // Every required file must be PRESENT; only a strict one must also be unchanged. A provider mod that
+            // carries target surfaces is pinned by the methods the adapter patches, so an unrelated update to it no
+            // longer disables the contract — the surface check at activation is what refuses a real change.
             var matches = required.Length > 0 && required.All(r =>
             {
                 var observed = fingerprints.Where(f => f.Module == r.Module && f.Name == r.Name && (r.Side == null || f.Side == r.Side)).ToArray();
-                return observed.Length > 0 && observed.All(f => f.Sha256.Equals(r.Sha256, StringComparison.OrdinalIgnoreCase));
+                return observed.Length > 0 && (!r.Strict || observed.All(f => f.Sha256.Equals(r.Sha256, StringComparison.OrdinalIgnoreCase)));
             });
             var legacy = !mod.LegacyGatedTypes.IsDefaultOrEmpty && contract.Targets.Any(t => mod.LegacyGatedTypes.Any(l => t.StartsWith(l + "::", StringComparison.Ordinal)));
             if (legacy) decisions.Add(new(contract, ActivationDecision.Conflict, "Explicit legacy behavior gate overlaps this operation; legacy configuration retained."));
@@ -31,6 +34,7 @@ public static class CompatibilityPlanner
                 contract.Suppressed ? "The matching external provider suppresses this feature." : "External implementation recognized; runtime installation is not verified."));
             else if (!request.AutomaticCompatibility) decisions.Add(new(contract, ActivationDecision.Disabled, "Automatic compatibility is disabled for this profile."));
             else if (!contract.OfflineValidated || !contract.RuntimeValidated) decisions.Add(new(contract, ActivationDecision.ValidationRequired, "Contract is implemented but has not completed its required offline and integration validation."));
+            else if (!contract.SurfacesCoverTargets) decisions.Add(new(contract, ActivationDecision.ValidationRequired, "Contract installs an adapter without a captured surface for every target it patches."));
             else if (gaps.Length > 0) decisions.Add(new(contract, ActivationDecision.Diagnostic, "The selected execution environment has unresolved coverage gaps."));
             else decisions.Add(new(contract, ActivationDecision.Activate, "Compiled adapter and exact inputs have a validated contract."));
         }
