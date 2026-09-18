@@ -12,9 +12,9 @@ Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop
 
 ![The Mods tab: every mod found on this PC, with tick boxes, load order and per-mod compatibility, and the engine's resolved load order on the right](docs/images/mods-tab.png)
 
-**Start here:** [Quick start](#quick-start) · [Hosting a coop server](#quick-start-hosting-a-coop-server) · [Troubleshooting](#troubleshooting)
+**Start here:** [Quick start](#quick-start) · [Hosting a coop server](#quick-start-hosting-a-coop-server) · [Hosting a map-replacing mod](#hosting-a-map-replacing-mod) · [Troubleshooting](#troubleshooting)
 
-**Reference:** [What it does](#what-it-does) · [Requirements](#requirements) · [Install](#install) · [What is in the download](#what-is-in-the-download) · [Player mode and Host mode](#player-mode-and-host-mode) · [Playing on the machine that runs the server](#playing-on-the-machine-that-runs-the-server-host-mode) · [Performance](#performance) · [Sharing a mod list](#sharing-a-mod-list) · [The tabs](#the-tabs) · [Where things live](#where-things-live) · [Notes](#notes) · [Settings sync](#settings-sync-optional-players-install-one-extra-mod) · [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on) · [Mod settings](#mod-settings-host-side-live-or-offline) · [Compatibility database](#compatibility-database) · [Licence](#licence)
+**Reference:** [What it does](#what-it-does) · [Requirements](#requirements) · [Install](#install) · [What is in the download](#what-is-in-the-download) · [Player mode and Host mode](#player-mode-and-host-mode) · [Playing on the machine that runs the server](#playing-on-the-machine-that-runs-the-server-host-mode) · [Performance](#performance) · [Sharing a mod list](#sharing-a-mod-list) · [The tabs](#the-tabs) · [App settings](#app-settings) · [Where things live](#where-things-live) · [Notes](#notes) · [Settings sync](#settings-sync-optional-players-install-one-extra-mod) · [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on) · [Mod settings](#mod-settings-host-side-live-or-offline) · [Compatibility database](#compatibility-database) · [Licence](#licence)
 
 ---
 
@@ -71,6 +71,9 @@ inside that workshop item and ModderLords finds it automatically.
 1. Switch to **Host mode** if you are not already in it.
 2. **Mods tab**: tick the mods you want on the server. Leave the roles at their defaults (see
    [The tabs → Mods](#mods)). Click **Save**.
+
+   **Replacing the campaign map?** A total conversion such as TAOM_Map or Europe1100 needs one setting changed before
+   the server can load the world at all — see [Hosting a map-replacing mod](#hosting-a-map-replacing-mod).
 3. **Saves tab**: pick the save to host, or type a name that does not exist to start a fresh world. The box below the
    list shows how the selected save differs from your current mod set — the engine loads a mismatched save anyway,
    and nothing is ever rewritten.
@@ -105,6 +108,54 @@ inside that workshop item and ModderLords finds it automatically.
 **A player rejected, a mod crashing the server, a port already in use?** [Troubleshooting](#troubleshooting).
 
 ---
+## Hosting a map-replacing mod
+
+A mod that replaces the campaign map — TAOM_Map, Europe1100, any total conversion — needs one setting changed, and
+without it the server cannot load the world at all.
+
+**Tick "Use a map mod's distance cache" on the Server tab** (CLI: `--mod-distance-cache`).
+
+### Why
+
+The engine's path to the settlement distance cache is hardcoded to SandBox's copy, which was built for the vanilla
+map. A map mod ships its own rebuilt cache — TAOM_Map's is 10 MB, 988 settlements — and the server never reads it.
+Deserialising vanilla settlement pairs against the mod's settlements produces entries whose settlement is null, and
+hashing one throws inside `NavigationCache.Deserialize`. The campaign then re-enters and tries again, forever: a
+measured run sat for 2h15m without passing 81 seconds of progress, reloading the map 159,872 times. There is no error
+screen and the server looks busy the whole time.
+
+Ticking the box replaces that one file with the cache your map mod ships.
+
+### What it does to your install
+
+This is **the only file the launcher ever writes inside the DedicatedServer package**, which is why it is off by
+default rather than automatic. Before touching anything it takes a keep-forever backup of the original beside it
+(`settlements_distance_cache_Default.bin.modderlords-original`), and unticking the box puts the original back. Nothing
+else in the server folder is modified.
+
+### You will be stopped if you forget
+
+The launcher checks before starting. If a selected mod ships its own distance cache and the box is off, the launch is
+refused up front with the reason and the fix, rather than hanging for hours:
+
+> *…ships its own settlement distance cache, so it replaces the campaign map, but this profile has "Use a map mod's
+> distance cache" off. The server would read SandBox's vanilla cache against that map and crash while loading it.*
+
+### Field battles
+
+Field battles on a modded map work, with one known gap. The server's scene choice is what every client loads, so the
+launcher excludes battle scenes that ship without a terrain shader cache — a client entering one dies in
+`rglGPU_device::create_texture_array`. Of TAOM's 81 selectable battle scenes, 2 ship without that cache and are
+skipped automatically; the other 79 load. You do not have to configure this.
+
+### Load order
+
+Map mods are also where a manifest's declared load order is most likely to be wrong: TAOM_Map's manifest asks to load
+before TAOM, contradicting the order TAOM's own authors publish. If you need the order you typed to survive, tick
+**My order wins** on the Mods tab — conflicts are still reported, you just get the final say.
+
+---
+
 
 ## What it does
 
@@ -389,6 +440,14 @@ resolved. **Use engine order** sorts the list to match it. Messages about missin
 unreadable version numbers appear under it.
 
 **Rescan mods** re-reads the disk. **Re-sync junctions** (Host mode) recreates the links inside the server after a
+
+**Toggles above the list**
+
+| Toggle | Default | What it does, and when to change it |
+|---|---|---|
+| My order wins | off | Use the list exactly as you wrote it, even where a mod's manifest declares a different order. Conflicts are still listed under the order preview, so you can see what you are overriding. Leave it off unless a mod's declared order is wrong — which does happen; see [Hosting a map-replacing mod](#hosting-a-map-replacing-mod). |
+| Automatic validated contracts | on (Host mode) | Let a shipped compatibility contract activate itself when it fingerprint-matches the exact binaries you have installed **and** has passed offline and integration validation. Nothing activates on a guess. Turn it off to run with no automatic adapters at all. |
+| Server-only logic | off per mod | Only visible with **Experimental compatibility** on (Server tab → Advanced). See [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on). |
 Workshop update or after Steam re-downloaded the server.
 
 ### Saves *(Host mode)*
@@ -404,18 +463,32 @@ or any other game files.
 
 ### Server *(Host mode)*
 
-| Setting | Effect |
-|---|---|
-| Join port | UDP port players connect to (default 4200). Forward it for direct joins. |
-| Password | Players are prompted; empty means open. |
-| Steam discoverability | Advertise on Steam when a logged-in Steam client runs on this machine; Steam joins need no port forwarding. |
-| Steam visibility | Public, friends only, or none. |
-| Autosave minutes | 0 disables. |
-| Server log file | Also write the server's own `logs\coop-server-*.log`. |
-| Engine port / region | Internal engine values; leave at 7210 / EU unless you know why. |
-| Trace | Diagnostics for bug reports only. |
+![The Server tab: join port, password, Steam discoverability and visibility, autosave, server guards, settings sync, the map-mod distance cache, the stall warning, log file, engine port and the trace switches](docs/images/server-tab.png)
 
-Written to `server-config.json` at launch; the previous file is backed up under `config-backups`.
+Everything here is saved in the profile. The connection settings are written into `server-config.json` at launch, with
+a backup of the previous file under `config-backups`; the rest change how the launcher prepares and watches the server.
+
+| Setting | Default | What it does, and when to change it |
+|---|---|---|
+| Join port | 4200 | The UDP port players connect to. Forward it on your router for direct joins; Steam joins need no forwarding. Change it only if something else on the machine already has 4200. |
+| Password | empty | Players are prompted for it. Empty means anyone who can reach the server may join. |
+| Steam discoverability | on | Advertise the server on Steam, so players can find it in the Coop mod's browser without port forwarding. Needs a logged-in Steam client running on this machine. Turn it off for a private, direct-IP-only server. |
+| Steam visibility | Public | Who sees the advertised server: public, friends only, or none. Only meaningful with discoverability on. |
+| Autosave minutes | 5 | How often the server autosaves. `0` disables it — don't, unless you are testing. |
+| **Server guards** (Compat module) | **on** | Loads the launcher's `DedicatedServer.ModderLordsCompat` module, which answers inquiries and swallows screen pushes so single-player mods do not crash the headless host. Server-side only; players need nothing. Leave it on — turn it off only to prove a crash is not caused by the guards. |
+| **Settings sync** (ModderLords.Compat) | **off** | Pushes the server's MCM settings to joining players, and enables the [Mod settings](#mod-settings-host-side-live-or-offline) tab. It adds the shared `ModderLords.Compat` module to the server **and to the player mod list**, so every player must install and enable it — see [Settings sync](#settings-sync-optional-players-install-one-extra-mod). Turn it on when you want mod settings decided by the host rather than by each player's local file. |
+| **Use a map mod's distance cache** | **off** | Required for any mod that replaces the campaign map. See [Hosting a map-replacing mod](#hosting-a-map-replacing-mod) — leave it off otherwise. |
+| **Warn if loading stalls** (seconds) | empty (5 minutes) | How long the launch console waits with no loading progress before saying so. `0` turns the warning off. Heavy mods can legitimately load for a very long time — TAOM's authors quote up to two hours — so raise it or set `0` for those rather than being nagged. |
+| Server log file | on | Also write the server's own `logs\coop-server-*.log`, separate from the launcher's per-launch log. |
+| Engine port / region | 7210 / EU | Internal engine values; leave them alone unless you know why you are changing them. |
+| Trace tick / publish / bandits | off | **Diagnostics only.** These make the engine print hundreds of thousands of lines a second: the launch log grows by gigabytes a minute and the whole machine slows down. Use them to chase a specific bug, then turn them back off. |
+
+Under **Advanced** there is one more:
+
+| Setting | Default | What it does, and when to change it |
+|---|---|---|
+| Experimental compatibility | off | Enables the **Server-only logic** column on the Mods tab and opt-in tracing. While it is off, Server-only logic ticks are kept in the profile but ignored at launch, and the launch console says so. It changes how a mod's own code runs and works for some mods only — see [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on). Applies to the next launch. |
+
 
 ### Gameplay *(Host mode)*
 
@@ -440,6 +513,30 @@ and **Import…**.
 Right, in Host mode only: **Check my client** reads this PC's Bannerlord launcher selection and reports what the Coop
 validator would say (missing, not enabled, version differs, extra mod enabled, DLC enabled), and **Match server…**
 shows what would change and offers to apply it.
+
+---
+
+## App settings
+
+These are the launcher's own, not a profile's. Most have a control in the app; the file is
+`%LOCALAPPDATA%\ModderLords\ui-state.json`, read at startup and written on exit — **close ModderLords before editing
+it by hand**, or your edit will be overwritten.
+
+| Setting | Where | What it does |
+|---|---|---|
+| Mode | toolbar button, one click, no restart | Player mode or Host mode; see [Player mode and Host mode](#player-mode-and-host-mode). Delete this value from `ui-state.json` to be asked again on the next start. |
+| Theme | **Light** / **Dark** button on the top bar | Remembered between runs. |
+| `CheckForUpdates` | `ui-state.json` only | `false` stops the check on startup. **Updates** on the top bar still checks on demand. See [Updates](#updates). |
+| `SkippedVersion` | set by **Skip this version** on the update banner | That one version is never mentioned again; a later one still is. Clear it to be offered the skipped version again. |
+| Window size, position, selected tab | remembered automatically | — |
+
+Per-profile things without a tab of their own:
+
+| Setting | Where | What it does |
+|---|---|---|
+| Don't ask again for this profile | the **Launch client** confirmation dialog | Applies the launcher-list changes silently from then on. Warnings the sync cannot fix are still reported either way. |
+| Extra mod folders | **Folders…** on the top bar | Folders holding mods outside the game's `Modules` folder and the Workshop. Pick the folder that *contains* the mods. |
+| Game and coop server folders | **Folders…** | Leave empty to keep finding them automatically in your Steam libraries. Set them for a GOG, Xbox or copied install. |
 
 ---
 
