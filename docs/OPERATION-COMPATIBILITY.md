@@ -76,10 +76,21 @@ Pending acceptance: real server/client resource awards and configured amount com
 
 Analysis remains conservative and incomplete for dynamic reflection, uncertain aliases, unrecognized loaders and dispatch. Engine effects are an explicit initial rule set, not complete engine semantic coverage. Direct guard evidence applies to the witnessed mutation, not every transitive mutation. Runtime plan agreement currently validates the shipped active contract and its required assembly hashes; full configuration fingerprint attestation still needs integration validation. No release was published.
 
-## Experimental compatibility switch
+## Per-mod compatibility: what gates it
 
-Server tab → Advanced → Experimental compatibility is off by default (PR #78). Turning it off ignores saved Server-only logic selections and tracing requests while keeping their values for later. Normal server guards, settings synchronization, roles, compatibility records, and battle-scene exclusions retain their configured behavior. Read-only operation analysis remains available independently.
+There is no app-wide experimental switch. One was built (PR #78) and dropped: the per-mod **Server-only logic** tick
+already gates that code and is off unless a user sets it, so a second off-by-default gate over the same code bought
+only column hiding. See `docs/DEVELOPMENT.md`, "Per-mod compatibility paused".
 
-Turning it on enables explicit legacy schema-v1 behavior gates and opt-in entry-point tracing. Generated handler gates, player comparison rewrites, relay proposals, and static-state transformations remain diagnostic even when experimental compatibility is enabled. Only separately shipped, fingerprint-matched and validated compiled operation contracts may authorize new transformations.
+A mod that is not ticked has nothing written into `recipes.json` — no handler gates, postfix removals, player-check
+rewrites, relays, state sync or tracing. `compat-db.json` ships no record that pre-ticks it, so no profile picks the
+experimental path up from the database alone. Normal server guards, settings synchronization, roles, compatibility
+records and battle-scene exclusions are unaffected, and read-only operation analysis is always available.
 
-This replaces the earlier broad Simple-mode projection. Existing profile values are preserved; no mode resets user roles or settings-sync choices. Running sessions retain their captured profile and operation plan.
+Ticking it enables explicit legacy schema-v1 behavior gates and opt-in entry-point tracing. Generated handler gates,
+player comparison rewrites, relay proposals and static-state transformations remain diagnostic even then. Only
+separately shipped, validated compiled operation contracts whose target surfaces still match may authorize new
+transformations.
+
+Existing profile values are preserved; nothing here resets user roles or settings-sync choices. Running sessions
+retain their captured profile and operation plan.

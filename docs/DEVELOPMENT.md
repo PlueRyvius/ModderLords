@@ -328,6 +328,24 @@ the `Campaign.PlayerDefaultFaction` setter) and transpiles mod methods under Coo
 compat silently (the probe pattern degrades to "disabled" in the log); check the compat logs after every Coop update.
 Raising this with the Coop maintainers was deferred by the maintainer on 2026-09-15.
 
+## Per-mod compatibility paused (2026-09-16)
+
+The maintainer paused the per-mod work on 2026-09-16: steps 4-9 fit one installed mod shape (ImprovedGarrisons), which
+is chasing a specific solution rather than a general one. Nothing was reverted -- the per-mod path is opt-in and stays
+where it is, gated by the **Server-only logic** tick on the Mods tab, which is off unless a user sets it.
+
+- **What per-mod covers:** handler gates, postfix removal, player-check rewrites, generic relays, state sync and
+  `MODDERLORDS_TRACE_MODS` tracing. None of it is written into `recipes.json` for a mod that is not ticked.
+- **General, unaffected:** server guards, MCM settings sync, battle-scene exclusion, the Compat column and records.
+- **Not pre-ticked:** `compat-db.json` no longer ships `ServerAuthoritative: true` for any mod, so no profile picks up
+  the experimental path from the database alone. The ImprovedGarrisons record keeps the recommendation in its Notes.
+- Parked until the maintainer resumes it: Phase B (instance-field state through Coop's AutoSync) and the two-player
+  gate. A first IG trace run on 2026-09-15 (Server-only logic on) showed gates holding (5,549 client skips, 0 runs),
+  8/8 relays confirmed and trace install in 233 ms; totals not written up.
+
+An app-wide "Experimental compatibility" switch was built for this (PR #78) and dropped: the per-mod tick already
+gates the behaviour and defaults off, so the switch only added a second off-by-default gate over the same code.
+
 ## Experimental compatibility behind a switch (2026-09-16)
 
 The maintainer paused the per-mod work on 2026-09-16: steps 4–9 fit one installed mod shape (ImprovedGarrisons), which
