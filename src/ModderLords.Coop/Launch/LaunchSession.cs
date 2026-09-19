@@ -88,16 +88,24 @@ public sealed class LaunchSession
     }
 
     /// <summary>Adds the bundled compat modules to the selections when the profile asks for them and they are installed.</summary>
-    public static IReadOnlyList<ModSelection> WithCompat(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages)
-        => WithCompat(profile, selections, messages, LocateBundled);
+    public static IReadOnlyList<ModSelection> WithCompat(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages,
+        bool requireCompat = false)
+        => WithCompat(profile, selections, messages, LocateBundled, requireCompat);
 
     /// <summary>
     /// As above, with the bundled-module lookup supplied (tests). The launcher's own modules always come from compat\ next
     /// to the exe: recipes.json is written there, so a copy a profile ticked — usually the one Launch client installed
     /// into the game's Modules on a machine that also hosts — would load on the server without the recipe.
     /// </summary>
+    /// <param name="requireCompat">
+    /// That this launch cannot work without the compat module, whatever the profile's Server-guards tick says.
+    /// World creation is the case: <c>WorldCreator</c> lives in that module and is the only thing that reads
+    /// MODDERLORDS_CREATE_WORLD, so without it the variables are set and nobody acts on them. Measured 2026-09-19:
+    /// a profile with guards off asked for a generated world, got no creation pass at all, and the process silently
+    /// carried on as an ordinary server hosting a template world instead.
+    /// </param>
     public static IReadOnlyList<ModSelection> WithCompat(Profile profile, IReadOnlyList<ModSelection> selections, List<string> messages,
-        Func<string, DiscoveredModule?> locateBundled)
+        Func<string, DiscoveredModule?> locateBundled, bool requireCompat = false)
     {
         var list = new List<ModSelection>();
         foreach (var s in selections)
@@ -108,11 +116,20 @@ public sealed class LaunchSession
                 messages.Add($"{s.Module.Id}: the server uses the launcher's own copy, not the one ticked in the profile ({s.Module.FolderPath})");
             list.Add(new ModSelection(own, ServerRole.AsShipped));
         }
-        if (profile.CompatGuards && !list.Any(s => s.Module.Id.Equals(CompatModuleId, StringComparison.OrdinalIgnoreCase)))
+        if ((profile.CompatGuards || requireCompat) && !list.Any(s => s.Module.Id.Equals(CompatModuleId, StringComparison.OrdinalIgnoreCase)))
         {
             var compat = locateBundled(CompatModuleId);
-            if (compat is null) messages.Add("server guards requested but the compat module is missing next to the launcher; continuing without it");
-            else list.Add(new ModSelection(compat, ServerRole.AsShipped));
+            if (compat is null)
+                messages.Add(requireCompat && !profile.CompatGuards
+                    ? "WARNING generating a world needs the compat module, but it is missing next to the launcher; the world cannot be generated"
+                    : "server guards requested but the compat module is missing next to the launcher; continuing without it");
+            else
+            {
+                list.Add(new ModSelection(compat, ServerRole.AsShipped));
+                // Said out loud: the profile has guards off, and the launch is overriding that for this run.
+                if (!profile.CompatGuards)
+                    messages.Add($"generating a world needs {CompatModuleId}, so it is loaded for this launch even though Server guards is off");
+            }
         }
         if (profile.SettingsSync && !list.Any(s => s.Module.Id.Equals(SyncModuleId, StringComparison.OrdinalIgnoreCase)))
         {
@@ -150,7 +167,13 @@ public sealed class LaunchSession
         if (!applySideEffects && scanned is { } previous) (catalog, gameRoot) = previous;
         else catalog = Scan(profile, paths, out gameRoot);
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));
-        var selections = WithCompat(profile, Select(profile, catalog, messages), messages);
+        // Decided from the profile's own enabled ids, before selections resolve, because the answer changes which
+        // modules are selected: a generated world needs the compat module in the list.
+        var requestedIds = profile.EnabledMods.Select(m => m.Id).ToList();
+        var requestedCreation = allowWorldCreation && WorldCreationPolicy
+            .Decide(requestedIds, profile.SaveName, name => SavePreparer.Exists(paths, name), profile.GenerateWorldWithActiveMods)
+            .ShouldCreate && !string.IsNullOrWhiteSpace(profile.SaveName);
+        var selections = WithCompat(profile, Select(profile, catalog, messages), messages, requireCompat: requestedCreation);
         if (applySideEffects)
         {
             var missing = profile.EnabledMods.Where(pm => !ClientManifest.CoopClientModuleIds.Contains(pm.Id) &&
@@ -181,7 +204,10 @@ public sealed class LaunchSession
         // The one decision both halves of world creation read: this block's messages, and the EnsureExists guard
         // further down. Computing it once is what keeps them from disagreeing about whether a world is being made.
         var moduleIds = selections.Select(s => s.Module.Id).ToList();
-        var creation = WorldCreationPolicy.Decide(moduleIds, profile.SaveName,
+        // Counted from the profile's enabled mods, not the resolved selections: the selections include modules the
+        // launcher adds itself (compat, sync) and exclude any that failed to resolve, so the two disagreed - one
+        // launch said "8 active mod(s)" and "9 active mod(s)" two lines apart. The user's tick list is the honest number.
+        var creation = WorldCreationPolicy.Decide(requestedIds, profile.SaveName,
             name => SavePreparer.Exists(paths, name), profile.GenerateWorldWithActiveMods);
         var willCreateWorld = allowWorldCreation && creation.ShouldCreate && !string.IsNullOrWhiteSpace(profile.SaveName);
 
