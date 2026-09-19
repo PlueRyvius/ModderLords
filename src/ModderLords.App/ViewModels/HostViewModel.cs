@@ -915,6 +915,9 @@ public partial class HostViewModel : ObservableObject
         // No DeferRefresh here: a ListCollectionView throws if its source changes while a refresh is deferred.
         var n = 0;
         while (n < 1500 && _pending.TryDequeue(out var l)) { Console.Add(l); n++; }
+        // The counter has to move as lines arrive, not only when a filter is touched: "showing 12 of 48,003" is how
+        // a filtered console is told apart from a stopped one, and that distinction is needed while output is flowing.
+        if (n > 0) RefreshConsoleCounts();
 
         // Tell the user when output is being discarded; a console that silently skips lines is worse
         // than one that admits it. Reported once per tick, only when something was actually dropped.
@@ -985,17 +988,36 @@ public partial class HostViewModel : ObservableObject
     private bool MatchesFilter(ConsoleLine l) =>
         string.IsNullOrEmpty(ConsoleFilter) || l.Text.Contains(ConsoleFilter, StringComparison.OrdinalIgnoreCase);
 
-    partial void OnShowEngineChanged(bool value) => ConsoleView.Refresh();
-    partial void OnShowModuleLoadChanged(bool value) => ConsoleView.Refresh();
-    partial void OnShowServerChanged(bool value) => ConsoleView.Refresh();
-    partial void OnShowCoopChanged(bool value) => ConsoleView.Refresh();
-    partial void OnShowWarningsChanged(bool value) => ConsoleView.Refresh();
-    partial void OnShowProbesChanged(bool value) => ConsoleView.Refresh();
-    partial void OnShowConsoleIoChanged(bool value) => ConsoleView.Refresh();
-    partial void OnShowPerfChanged(bool value) => ConsoleView.Refresh();
-    partial void OnErrorsOnlyChanged(bool value) => ConsoleView.Refresh();
-    partial void OnOurMessagesOnlyChanged(bool value) => ConsoleView.Refresh();
-    partial void OnConsoleFilterChanged(string value) => ConsoleView.Refresh();
+    partial void OnShowEngineChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnShowModuleLoadChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnShowServerChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnShowCoopChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnShowWarningsChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnShowProbesChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnShowConsoleIoChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnShowPerfChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnErrorsOnlyChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+    partial void OnOurMessagesOnlyChanged(bool value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
+
+    /// <summary>
+    /// "showing 12 of 48,003", or a plain count when nothing is filtered. A console that is hiding everything
+    /// arriving looks exactly like a console that has stopped, and twice in one session a healthy server was read
+    /// as hung because of it - once with ErrorsOnly and a Find term stacked, while the engine was printing a hundred
+    /// Server lines a minute behind them. The counter is the only thing that tells those two states apart.
+    /// </summary>
+    public string ConsoleCounts
+    {
+        get
+        {
+            var total = Console.Count;
+            var shown = ConsoleView.Cast<ConsoleLine>().Count();
+            return shown == total ? $"{total:N0} line(s)" : $"showing {shown:N0} of {total:N0} — filters are hiding {total - shown:N0}";
+        }
+    }
+
+    /// <summary>Recomputed from the same places that refresh the view, plus each drain, so it cannot go stale.</summary>
+    private void RefreshConsoleCounts() => OnPropertyChanged(nameof(ConsoleCounts));
+    partial void OnConsoleFilterChanged(string value) { ConsoleView.Refresh(); RefreshConsoleCounts(); }
 
     /// <summary>
     /// Everything the console is currently showing, as text, on the clipboard. The filters decide what that is, so

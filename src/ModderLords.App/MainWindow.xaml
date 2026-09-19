@@ -673,7 +673,12 @@
                             <TextBox Text="{Binding CommandText, UpdateSourceTrigger=PropertyChanged}" KeyDown="Command_KeyDown"
                                      IsEnabled="{Binding IsRunning}" FontFamily="Consolas" />
                         </DockPanel>
-                        <TextBlock Text="{Binding CommandStatus}" Foreground="{DynamicResource MutedForeground}" Margin="2,3,0,0" TextWrapping="Wrap" />
+                        <DockPanel Margin="2,3,0,0">
+                            <!-- Says when the filters are hiding what is arriving. A console filtered down to nothing
+                                 looks exactly like a console that has stopped; this is what tells them apart. -->
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding ConsoleCounts}" Foreground="{DynamicResource MutedForeground}" Margin="12,0,0,0" />
+                            <TextBlock Text="{Binding CommandStatus}" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" />
+                        </DockPanel>
                     </StackPanel>
                     <!-- Extended selection + Ctrl+C: the console was read-only, so the only way to report a line was a
                          screenshot of it. Virtualization stays on; SelectedItems is unaffected by recycling. -->
