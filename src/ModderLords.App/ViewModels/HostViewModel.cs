@@ -682,6 +682,8 @@ public partial class HostViewModel : ObservableObject
     {
         Main.RefreshPreview();
         if (ClientTarget is not { } target) { Status = "Nothing to compare yet: rescan the mods first."; return; }
+        EnsureClientModule(ServerCarriesSyncModule(target));
+        Main.RefreshPreview();
         var path = ClientManifest.DefaultLauncherDataPath();
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase));
         var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot(), launching: false) { Owner = Application.Current.MainWindow };
@@ -702,11 +704,13 @@ public partial class HostViewModel : ObservableObject
     /// copy it out of the release zip and it cannot fall behind the launcher's build. Only when the profile actually
     /// uses it, or when an older copy is already there and would otherwise drift.
     /// </summary>
-    private void EnsureClientModule()
+    private void EnsureClientModule(bool serverRequiresIt = false)
     {
         var gameRoot = ClientLauncher.ResolveGameRoot(ClientProfile);
         var alreadyThere = gameRoot is not null && Directory.Exists(ClientModuleInstaller.TargetDir(gameRoot));
-        if (!ClientProfile.SettingsSync && !alreadyThere) return;
+        // The decisive vote is the server's: a joining player has no reason to have ticked Settings sync on their own
+        // profile, and without the module their mod list can never match a server that carries it.
+        if (!serverRequiresIt && !ClientProfile.SettingsSync && !alreadyThere) return;
 
         var r = ClientModuleInstaller.Ensure(gameRoot);
         switch (r.Outcome)
@@ -718,22 +722,29 @@ public partial class HostViewModel : ObservableObject
             case ClientModuleInstaller.InstallOutcome.Failed:
                 AddLine(LogCategory.Error, "[ModderLords] " + r.Message);
                 break;
-            case ClientModuleInstaller.InstallOutcome.Unavailable when ClientProfile.SettingsSync:
+            case ClientModuleInstaller.InstallOutcome.Unavailable when serverRequiresIt || ClientProfile.SettingsSync:
                 AddLine(LogCategory.Warning, "[ModderLords] " + r.Message);
                 break;
         }
     }
 
+    /// <summary>Whether the server's own mod list carries the shared sync module, which every client then needs too.</summary>
+    private static bool ServerCarriesSyncModule(LaunchSession.Prepared target) =>
+        target.Selections.Any(s => s.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase));
+
     internal bool SyncLauncherData()
     {
         Main.RefreshPreview();
         var path = ClientManifest.DefaultLauncherDataPath();
-        EnsureClientModule();
         if (ClientTarget is not { } target)
         {
             AddLine(LogCategory.Warning, "[ModderLords] Launch client: no valid server plan. Rescan before launching.");
             return false;
         }
+
+        // Install before the plan is computed, so a freshly installed module is seen as present rather than missing.
+        EnsureClientModule(ServerCarriesSyncModule(target));
+        Main.RefreshPreview();
 
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase));
         foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModderLords] mod list: {b.Id} — {b.Detail}");

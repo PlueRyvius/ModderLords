@@ -1,4 +1,4 @@
-﻿
+
 using ModderLords.Core.Compat;
 using ModderLords.Core.Config;
 using ModderLords.Core.Export;
@@ -49,6 +49,16 @@ public static class ClientModuleInstaller
     public static string TargetDir(string gameRoot) => Path.Combine(gameRoot, "Modules", LaunchSession.SyncModuleId);
 
     /// <summary>
+    /// Files that belong to the host's copy and must never be installed on a client. recipes.json is the only one:
+    /// the launcher writes it into its own bundled copy on every host launch, so on a machine that also hosts it
+    /// holds the recipe of the last server THIS machine ran. A client applies whatever recipe sits next to the
+    /// module as soon as the session arms (before the server's own recipe arrives, and the gates it adds are not
+    /// taken back when it does), so copying it in would gate behaviours the server being joined never asked for.
+    /// The client gets the authoritative recipe over the wire; it never needs one on disk.
+    /// </summary>
+    private static readonly HashSet<string> HostOnlyFiles = new(StringComparer.OrdinalIgnoreCase) { RecipeSet.FileName };
+
+    /// <summary>
     /// Installs or updates the client copy of the sync module. Safe to call on every launch: it does nothing at all
     /// when the installed version is already current.
     /// </summary>
@@ -73,8 +83,14 @@ public static class ClientModuleInstaller
             : null;
 
         if (installed is not null && SaveHeaderReader.CompareVersions(bundled.Version, installed) <= 0)
+        {
+            // A copy the player extracted by hand is usually still marked-of-the-web, which reads as a blocked DLL.
+            // We are not replacing it, but clearing that costs nothing and is the difference between loading and not.
+            BlockedFiles.UnblockFolder(target);
+            RemoveHostOnlyFiles(target);
             return new InstallResult(InstallOutcome.UpToDate, installed, bundled.Version,
                 $"{LaunchSession.SyncModuleId} {installed} is already installed for the client");
+        }
 
         try
         {
@@ -111,6 +127,28 @@ public static class ClientModuleInstaller
         foreach (var dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
             Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, dir)));
         foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-            File.Copy(file, Path.Combine(destination, Path.GetRelativePath(source, file)), overwrite: true);
+        {
+            if (HostOnlyFiles.Contains(Path.GetFileName(file))) continue;
+            var copied = Path.Combine(destination, Path.GetRelativePath(source, file));
+            File.Copy(file, copied, overwrite: true);
+            BlockedFiles.Unblock(copied);
+        }
+    }
+
+    /// <summary>
+    /// Deletes any <see cref="HostOnlyFiles"/> left in a client copy — by an older launcher that copied them in, or
+    /// by a player who installed the folder by hand out of a host's launcher directory.
+    /// </summary>
+    private static void RemoveHostOnlyFiles(string dir)
+    {
+        try
+        {
+            foreach (var name in HostOnlyFiles)
+            {
+                var path = Path.Combine(dir, name);
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+        catch { /* a read-only or locked file; the client would still prefer the server's recipe on the next message. */ }
     }
 }

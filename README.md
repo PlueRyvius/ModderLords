@@ -1,4 +1,4 @@
-﻿# ModderLords
+# ModderLords
 
 **A mod loader for Mount & Blade II: Bannerlord.** Pick a set of mods, put them in the order you want, and launch
 the game — without the TaleWorlds launcher. Mods load from wherever they already live, whether that is your game's
@@ -578,6 +578,17 @@ Per-profile things without a tab of their own:
 bare name first, logs a miss, then the helper resolves it. They are hidden unless **DLL probes** is ticked. A real
 failure shows in red right after.
 
+**A mod is installed and enabled but does nothing — no menus, no settings page, and the server says the player does
+not have it.** Windows blocked it. Files extracted from a downloaded zip are tagged as coming from the internet, and
+the .NET loader then refuses the mod's DLLs — silently: the folder loads, the code never runs. The launcher checks for
+this on every scan and shows a banner naming the affected mods, with **Unblock them** to clear it; restart Bannerlord
+afterwards. To avoid it in the first place, right-click the **zip** before extracting → Properties → **Unblock**. If a
+file refuses to clear, close Bannerlord and its launcher and press the button again. By hand:
+
+```powershell
+Get-ChildItem -Recurse '...\Mount & Blade II Bannerlord\Modules' | Unblock-File
+```
+
 **A player is rejected with "module X is required" or "wrong version".** Community mods must match exactly, both ways.
 Send the Share tab list again and have them run **Check my client** on their PC with this tool, or compare versions by hand.
 
@@ -617,10 +628,28 @@ the game's `Modules` folder or the Workshop can be added there too, under **Extr
 ## Settings sync (optional, players install one extra mod)
 
 With **Settings sync** ticked on the Server tab, the launcher also loads the shared `ModderLords.Compat` module on the
-server. It is a normal community mod, so it appears in the Share tab list and **every player must install and
-enable it**: copy the folder `compat\ModderLords.Compat` from the launcher folder into the game's `Modules` folder
-(`...\Mount & Blade II Bannerlord\Modules\ModderLords.Compat`) and enable it in the Bannerlord launcher, anywhere after
-the frameworks.
+server. It is a normal community mod, so it appears in the Share tab list and **every player needs it enabled** on
+their side too.
+
+The launcher installs it on start, so it is simply there before any server asks for it, and again when the player
+joins with **Launch client** (or presses **Match server**): it copies
+its own bundled build into `...\Mount & Blade II Bannerlord\Modules\ModderLords.Compat` and keeps it up to date. The
+folder on its own changes nothing — the module still has to be enabled in the Bannerlord launcher, which the mod-list
+sync does whenever the *server's* list carries it, so the joining player never has to tick Settings sync on their own
+profile. The host's `recipes.json` is deliberately never copied to a client: clients are sent the authoritative
+recipe by the server they actually join. If the game lives somewhere non-elevated
+writes are refused (usually Program Files), the launcher says so — run it as administrator once.
+
+Installing by hand still works: copy the folder `compat\ModderLords.Compat` from the launcher folder into the game's
+`Modules` folder and enable it in the Bannerlord launcher, anywhere after the frameworks. If you extracted the release
+zip with Explorer, Windows marks every file in it as coming from the internet and the game refuses to load the DLLs
+("blocked"). Right-click the **zip** before extracting → Properties → **Unblock**, or clear it afterwards with:
+
+```powershell
+Get-ChildItem -Recurse '...\Mount & Blade II Bannerlord\Modules\ModderLords.Compat' | Unblock-File
+```
+
+The launcher-installed copy is unblocked for you, including a hand-installed copy it finds already in place.
 
 What it does: when a player joins, the server sends the values of every MCM settings page it has (toggles, numbers,
 text, enum choices) and the client applies them in memory for the session, so mod settings match the host instead of
