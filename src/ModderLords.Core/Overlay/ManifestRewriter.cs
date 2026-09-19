@@ -1,4 +1,4 @@
-using System.Xml;
+﻿using System.Xml;
 
 namespace ModderLords.Core.Overlay;
 
@@ -42,6 +42,28 @@ public static class ManifestRewriter
     /// <summary>A submodule the author explicitly excluded from a dedicated server.</summary>
     private static bool IsClientOnlySubModule(XmlElement sub) =>
         string.Equals(TagValue(sub, DedicatedServerTypeTag), "none", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether this manifest excludes every one of its submodules from a dedicated server. With
+    /// <see cref="ServerRole.AsShipped"/> the manifest is passed through untouched, so the engine honours that tag
+    /// and loads none of the mod's code - silently, because the launcher stripped nothing and had nothing to report.
+    ///
+    /// Measured 2026-09-19: RBM ships <c>DedicatedServerType value="none"</c>. Six launches went by with it set
+    /// As-shipped and its code never ran, while the generated world's save header listed the module the whole time.
+    /// <see cref="ServerRole.Run"/> is the setting that strips the tag.
+    /// </summary>
+    public static bool IsExcludedFromDedicatedServer(string originalXml)
+    {
+        try
+        {
+            var doc = new XmlDocument { PreserveWhitespace = true };
+            doc.LoadXml(originalXml);
+            var subs = doc.SelectSingleNode("Module")?.SelectNodes("SubModules/SubModule")?.Cast<XmlElement>().ToList();
+            return subs is { Count: > 0 } && subs.All(IsClientOnlySubModule);
+        }
+        // A manifest we cannot parse is the module scanner's problem to report, not this check's to guess at.
+        catch (XmlException) { return false; }
+    }
 
     public static Result Rewrite(string originalXml, ServerRole role, IReadOnlyCollection<string>? keepSubModuleClassTypes = null)
     {

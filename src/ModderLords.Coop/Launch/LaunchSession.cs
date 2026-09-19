@@ -229,6 +229,22 @@ public sealed class LaunchSession
             if (willCreateWorld || !creation.ShouldCreate) messages.Add(creationMessage);
         }
 
+        // The silent one. AsShipped over a manifest that excludes itself from dedicated servers means the engine
+        // skips the mod's code and the launcher strips nothing, so nothing anywhere says the mod is inert - while
+        // the save header goes on listing it. This is what cost six launches on 2026-09-19 chasing RBM Campaign.
+        foreach (var selection in selections.Where(s => s.Role == ServerRole.AsShipped))
+        {
+            var manifest = Path.Combine(selection.Module.FolderPath, "SubModule.xml");
+            if (!File.Exists(manifest)) continue;
+            string xml;
+            try { xml = File.ReadAllText(manifest); } catch (IOException) { continue; }
+            if (!ManifestRewriter.IsExcludedFromDedicatedServer(xml)) continue;
+            messages.Add($"WARNING {selection.Module.Id} is As-shipped, and its manifest excludes it from dedicated " +
+                         "servers (DedicatedServerType=none), so the engine will load none of its code. The module " +
+                         "still appears in the load order and in any save header written here. Set it to Run to load " +
+                         "it anyway" + (willCreateWorld ? " - without it, whatever it would set up at campaign creation will be missing from this world." : "."));
+        }
+
         // What DependencyOnly costs, said at the one moment it matters. A mod whose code is not loaded cannot run
         // its creation-time setup, so the generated world is missing whatever that setup would have built - and
         // nothing said so: RBM Campaign's economy pass was found missing only by playing the world and reading the

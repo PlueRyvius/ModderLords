@@ -657,10 +657,14 @@
                         <CheckBox Content="Console input + replies" IsChecked="{Binding ShowConsoleIo}"
                                   ToolTip="Show the commands you type and whatever the server prints just after them. Stays visible even with &quot;Errors + milestones only&quot; ticked." />
                         <CheckBox Content="Errors + milestones only" IsChecked="{Binding ErrorsOnly}" />
+                        <CheckBox Content="ModderLords only" IsChecked="{Binding OurMessagesOnly}"
+                                  ToolTip="Show only the launcher's own lines and hide the engine's. A launch prints tens of thousands of engine lines, and the few that tell you what to do — which mod to change, why a world will be missing something — are all ours. Combine with Copy shown to get the whole story on the clipboard." />
                         <CheckBox Content="Auto-scroll" IsChecked="{Binding AutoScroll}"
                                   ToolTip="Follow the newest output. Ticking it jumps to the bottom now; untick it to stop and read." />
                         <TextBlock Text="Find:" VerticalAlignment="Center" Margin="12,0,4,0" />
                         <TextBox Width="220" Text="{Binding ConsoleFilter, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Content="Copy shown" Command="{Binding CopyShownCommand}" Margin="8,0,4,0"
+                                ToolTip="Copy every line the console is currently showing. Select rows and press Ctrl+C (or right-click) to copy just those instead." />
                         <Button Content="Logs folder" Command="{Binding OpenLogsFolderCommand}" />
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
@@ -671,9 +675,20 @@
                         </DockPanel>
                         <TextBlock Text="{Binding CommandStatus}" Foreground="{DynamicResource MutedForeground}" Margin="2,3,0,0" TextWrapping="Wrap" />
                     </StackPanel>
+                    <!-- Extended selection + Ctrl+C: the console was read-only, so the only way to report a line was a
+                         screenshot of it. Virtualization stays on; SelectedItems is unaffected by recycling. -->
                     <ListBox x:Name="ConsoleList" ItemsSource="{Binding ConsoleView}" FontFamily="Consolas" FontSize="12"
+                             SelectionMode="Extended" KeyDown="ConsoleList_KeyDown"
                              VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                              ScrollViewer.HorizontalScrollBarVisibility="Visible" ScrollViewer.VerticalScrollBarVisibility="Visible">
+                        <ListBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy selected lines" Click="ConsoleCopySelected_Click" InputGestureText="Ctrl+C" />
+                                <MenuItem Header="Copy all shown lines" Command="{Binding CopyShownCommand}" />
+                                <Separator />
+                                <MenuItem Header="Select all" Click="ConsoleSelectAll_Click" InputGestureText="Ctrl+A" />
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">

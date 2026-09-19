@@ -131,6 +131,12 @@ public partial class HostViewModel : ObservableObject
     [ObservableProperty] private bool _showCoop = true;
     [ObservableProperty] private bool _showWarnings = true;
     [ObservableProperty] private bool _errorsOnly;
+    /// <summary>
+    /// Show only what the launcher itself said. A launch prints tens of thousands of engine lines - one measured
+    /// today ran to 1,345 repeats of a single line in 21 seconds - and the handful of messages that actually tell
+    /// you what to DO are ours. They were findable only by knowing to type "[ModderLords" into Find.
+    /// </summary>
+    [ObservableProperty] private bool _ourMessagesOnly;
     [ObservableProperty] private bool _autoScroll = true;
     [ObservableProperty] private bool _showProbes;
     /// <summary>Console tab: show the commands the host typed and whatever the server said back.</summary>
@@ -949,6 +955,9 @@ public partial class HostViewModel : ObservableObject
         // your own commands and their replies visible even while filtered down to errors.
         if (l.Category is LogCategory.Command or LogCategory.CommandReply) return ShowConsoleIo && MatchesFilter(l);
         if (l.Category is LogCategory.Perf) return ShowPerf && MatchesFilter(l);
+        // Checked before ErrorsOnly so the two compose: our own warnings and advice are not all Errors or Milestones,
+        // and the whole point of this one is to surface the Tool lines that neither of those catches.
+        if (OurMessagesOnly && !IsOurs(l)) return false;
         if (ErrorsOnly && l.Category is not (LogCategory.Error or LogCategory.Milestone)) return false;
         var visible = l.Category switch
         {
@@ -964,6 +973,14 @@ public partial class HostViewModel : ObservableObject
         return MatchesFilter(l);
     }
 
+    /// <summary>
+    /// A line the launcher wrote rather than the engine. Every one of ours carries a bracketed prefix - the
+    /// launcher's own "[ModderLords]" and the two game modules' "[ModderLords.Compat]" / "[ModderLords.Hook]" - so
+    /// one prefix test covers all of them, and an engine line that merely mentions us in passing does not qualify.
+    /// </summary>
+    private static bool IsOurs(ConsoleLine l) =>
+        l.Text.TrimStart().StartsWith("[ModderLords", StringComparison.Ordinal);
+
     /// <summary>The Find box, applied on its own so every category path uses the same rule.</summary>
     private bool MatchesFilter(ConsoleLine l) =>
         string.IsNullOrEmpty(ConsoleFilter) || l.Text.Contains(ConsoleFilter, StringComparison.OrdinalIgnoreCase);
@@ -977,7 +994,39 @@ public partial class HostViewModel : ObservableObject
     partial void OnShowConsoleIoChanged(bool value) => ConsoleView.Refresh();
     partial void OnShowPerfChanged(bool value) => ConsoleView.Refresh();
     partial void OnErrorsOnlyChanged(bool value) => ConsoleView.Refresh();
+    partial void OnOurMessagesOnlyChanged(bool value) => ConsoleView.Refresh();
     partial void OnConsoleFilterChanged(string value) => ConsoleView.Refresh();
+
+    /// <summary>
+    /// Everything the console is currently showing, as text, on the clipboard. The filters decide what that is, so
+    /// "ModderLords only" plus this is the whole report in two clicks. Copying the SELECTION is on the list itself
+    /// (Ctrl+C and the right-click menu); this is the no-selection path, which is the common one.
+    /// </summary>
+    [RelayCommand]
+    private void CopyShown()
+    {
+        var text = string.Join(Environment.NewLine, ConsoleView.Cast<ConsoleLine>().Select(Format));
+        if (text.Length == 0) { CommandStatus = "Nothing to copy: the console is empty or fully filtered out."; return; }
+        if (TrySetClipboard(text))
+            CommandStatus = $"Copied {ConsoleView.Cast<ConsoleLine>().Count()} shown line(s) to the clipboard.";
+    }
+
+    /// <summary>The same shape the launch log uses on disk, so a pasted excerpt and the file read alike.</summary>
+    public static string Format(ConsoleLine l) => $"{l.Time} {l.Category,-10} {l.Text}";
+
+    /// <summary>
+    /// The clipboard belongs to the whole desktop and any app can be holding it open, in which case WPF throws a
+    /// COMException. That is a "try again" for the user, never a reason to take the launcher down mid-session.
+    /// </summary>
+    public bool TrySetClipboard(string text)
+    {
+        try { System.Windows.Clipboard.SetText(text); return true; }
+        catch (Exception ex)
+        {
+            CommandStatus = "Could not write to the clipboard (another app may be holding it): " + ex.Message;
+            return false;
+        }
+    }
 
     [RelayCommand]
     private void OpenLogsFolder()
