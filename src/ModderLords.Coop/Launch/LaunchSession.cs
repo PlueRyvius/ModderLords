@@ -298,7 +298,12 @@ public sealed class LaunchSession
 
         // Pre-flight: does the world we are about to load actually match the modules we are about to run? Warn only —
         // outside applySideEffects too, so --dry-run reports it without the save having to be created first.
-        messages.AddRange(SaveModuleCheck.MessagesForLaunch(paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections)));
+        // The template is passed so the check still fires when the save has not been created yet — which is every
+        // --dry-run, and every first launch of a new profile. Without it the most common mismatch of all (a brand
+        // new world stamped from the vanilla template under a heavily modded load order) was reported only after
+        // the file had already been written, and not at all in dry-run.
+        messages.AddRange(SaveModuleCheck.MessagesForLaunch(
+            paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections), SavePreparer.FindTemplate(paths)));
 
         ModderLords.Analysis.CompatibilityPlan? operationPlan = null;
         // Full operation analysis is explicit in the UI. Launch performs it when an approved managed adapter
