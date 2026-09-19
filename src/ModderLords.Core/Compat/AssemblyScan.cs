@@ -122,6 +122,42 @@ public static class AssemblyScan
     }
 
     /// <summary>Scans concrete DLL paths (the module form above resolves them from the manifest; tests pass their own).</summary>
+    /// <summary>
+    /// Every type name defined in these DLLs. IL metadata only; nothing is loaded or executed.
+    ///
+    /// Deliberately dumber than <see cref="ScanDlls"/>, which also walks TypeDefinitions but discards the list and
+    /// has to be fussy about its own failures because its verdict feeds user-facing advice. This is a yes/no
+    /// existence index for one question - "is the class the manifest names actually in here" - so an unreadable DLL
+    /// simply contributes nothing. Kept separate on purpose: sharing the loop would couple two callers with opposite
+    /// failure tolerance, and ScanDlls' loop feeds the settings-detection logic that is intricate enough already.
+    /// </summary>
+    public static HashSet<string> TypeNames(IReadOnlyList<string> dlls)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var dll in dlls)
+        {
+            try
+            {
+                using var fs = File.OpenRead(dll);
+                using var pe = new PEReader(fs);
+                if (!pe.HasMetadata) continue;
+                var md = pe.GetMetadataReader();
+                foreach (var h in md.TypeDefinitions)
+                {
+                    var td = md.GetTypeDefinition(h);
+                    var ns = md.GetString(td.Namespace);
+                    var name = md.GetString(td.Name);
+                    names.Add(string.IsNullOrEmpty(ns) ? name : ns + "." + name);
+                }
+            }
+            catch { /* a file we cannot read simply defines nothing we can prove */ }
+        }
+        return names;
+    }
+
+    /// <summary>Type names defined in a module's own submodule DLLs.</summary>
+    public static HashSet<string> ModuleTypeNames(DiscoveredModule mod) => TypeNames(ModuleDlls(mod));
+
     public static ScanResult ScanDlls(string moduleId, IReadOnlyList<string> dlls, bool storyModeOptional = false)
     {
         var ui = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
