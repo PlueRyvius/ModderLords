@@ -132,6 +132,81 @@ public class ServerSubmoduleClassTests
         }
     }
 
+    // ---- desktop frameworks ----------------------------------------------------------------------------------
+
+    private static ScanResult ScanWithDesktop(string id, params string[] desktop) =>
+        new(id, desktop.Length > 0 ? ServerVerdict.NeedsReview : ServerVerdict.ServerSafe,
+            [], [], [], [], [], [], [], false, null, desktop);
+
+    private static OverlayPlan PlanWithScan(DiscoveredModule mod, ScanResult result, Func<string, CompatRecord?>? record = null) =>
+        OverlayPlanner.Plan(@"X\overlay", @"X\engine", [new ModSelection(mod, ServerRole.Run)],
+            scan: _ => result, record: record ?? (_ => null), typeNames: _ => [ClientClass, ServerClass, "Plain.SubModule"]);
+
+    [Fact]
+    public void A_desktop_framework_reference_falls_back_to_DependencyOnly()
+    {
+        // Warning alone was tried and did not work: on 2026-09-19 DismembermentPlus was warned about on line 3 of a
+        // 2,687-line log and killed the server anyway, 2,684 lines later. The assembly is absent, so this is a
+        // certainty rather than a risk - the same answer the missing-class check gives.
+        var mod = SingleSubmoduleMod();
+        var entry = Assert.Single(PlanWithScan(mod, ScanWithDesktop(mod.Id, "System.Windows.Forms")).Entries);
+
+        Assert.Equal(ServerRole.DependencyOnly, entry.Selection.Role);
+        Assert.Contains(entry.Notes, n => n.Contains("System.Windows.Forms") && n.Contains("does not ship"));
+        Assert.Contains(entry.Notes, n => n.Contains("DependencyOnly"));
+    }
+
+    [Fact]
+    public void A_desktop_reference_is_caught_even_when_the_mod_never_tagged_itself()
+    {
+        // The whole reason this check is not gated on HasHeadlessExclusions. A mod that forgot the tag dies exactly
+        // the same way, and is the case nobody is watching for.
+        var untagged = new DiscoveredModule("Untagged", "v1.0.0", @"X\Untagged", ModuleSourceKind.Workshop,
+            new ModuleInfoExtended
+            {
+                Id = "Untagged", Name = "Untagged",
+                SubModules = [Sub("Untagged", "Untagged.SubModule", dedicatedServerType: null)],
+            });
+        Assert.False(untagged.HasHeadlessExclusions, "fixture must be untagged for this test to mean anything");
+
+        var entry = Assert.Single(PlanWithScan(untagged, ScanWithDesktop("Untagged", "PresentationFramework")).Entries);
+
+        Assert.Equal(ServerRole.DependencyOnly, entry.Selection.Role);
+    }
+
+    [Fact]
+    public void A_curated_record_that_says_Run_outranks_the_desktop_scan()
+    {
+        // A tested result beats a static guess, and the scan is skipped entirely in that case.
+        var mod = SingleSubmoduleMod();
+        var vouched = new CompatRecord { Id = mod.Id, DefaultRole = ServerRole.Run, Verdict = CompatVerdict.Works };
+
+        var entry = Assert.Single(PlanWithScan(mod, ScanWithDesktop(mod.Id, "System.Windows.Forms"), _ => vouched).Entries);
+
+        Assert.Equal(ServerRole.Run, entry.Selection.Role);
+    }
+
+    [Fact]
+    public void No_desktop_reference_leaves_Run_alone()
+    {
+        var mod = SingleSubmoduleMod();
+        var entry = Assert.Single(PlanWithScan(mod, ScanWithDesktop(mod.Id)).Entries);
+
+        Assert.Equal(ServerRole.Run, entry.Selection.Role);
+        Assert.DoesNotContain(entry.Notes, n => n.Contains("does not ship"));
+    }
+
+    [Fact]
+    public void The_dotnet_crash_code_does_not_promise_exception_text_that_is_not_there()
+    {
+        // It used to say "The exception text is in the log above". For this crash class there is none - the handler
+        // that would have logged it is part of what failed - so that sent people hunting for nothing.
+        var text = ModderLords.Coop.Launch.ExitCodeExplainer.Explain(unchecked((int)0xE0434352));
+
+        Assert.DoesNotContain("is in the log above", text);
+        Assert.Contains("WARNING", text);
+    }
+
     // ---- AssemblyScan.TypeNames ------------------------------------------------------------------------------
 
     [Fact]
