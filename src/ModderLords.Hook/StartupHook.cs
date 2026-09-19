@@ -17,6 +17,7 @@ internal static class StartupHook
     private const string SearchDirsVariable = "MODDERLORDS_SEARCH_DIRS";
     private const string VerboseVariable = "MODDERLORDS_HOOK_VERBOSE";
     private const string SidecarVariable = "MODDERLORDS_HOOK_LOG";
+    private const string DesktopDirVariable = "MODDERLORDS_DESKTOP_DIR";
     private const string Prefix = "[ModderLords.Hook] ";
 
     private static readonly object Gate = new object();
@@ -37,6 +38,22 @@ internal static class StartupHook
     /// </summary>
     private static readonly string[] ServerOwnedPrefixes = { "0Harmony", "MonoMod", "Serilog", "Newtonsoft.Json" };
 
+    /// <summary>
+    /// The only assemblies we will take from the game's Microsoft.WindowsDesktop.App. That folder also holds WinForms
+    /// and WPF, and we will NOT supply those: their references are almost always a dialog, and MessageBox.Show blocks
+    /// its calling thread until a human clicks OK. On a headless server that converts a loud crash into a silent hang,
+    /// which is strictly worse to diagnose. An allow-list, not a search dir, is what keeps that distinction.
+    ///
+    /// System.Drawing.Common is the opposite case: GDI+ works fine with no window station (in-memory bitmaps need no
+    /// desktop), plenty of mods use Bitmap/Graphics/Color for pure computation, and it is the one piece the server's
+    /// Microsoft.NETCore.App genuinely lacks - System.Drawing and System.Drawing.Primitives are already there, so
+    /// Color/Point/Rectangle arithmetic has always worked. Microsoft.Win32.SystemEvents comes along because
+    /// System.Drawing.Common references it.
+    /// </summary>
+    private static readonly string[] SuppliedDesktopAssemblies = { "System.Drawing.Common", "Microsoft.Win32.SystemEvents" };
+
+    private static string? _desktopDir;
+
     private static string _lastRequested = "(none)";
     private static string _lastRequester = "(none)";
     private static string _lastResolved = "(none)";
@@ -44,6 +61,8 @@ internal static class StartupHook
     public static void Initialize()
     {
         _dirs = ReadDirs();
+        _desktopDir = Environment.GetEnvironmentVariable(DesktopDirVariable);
+        if (!string.IsNullOrEmpty(_desktopDir) && !Directory.Exists(_desktopDir)) _desktopDir = null;
         _verbose = Environment.GetEnvironmentVariable(VerboseVariable) == "1";
         _sidecar = OpenSidecar();
         // AssemblyResolve only: the load context's Resolving event fires before every AppDomain handler, which would
@@ -128,7 +147,37 @@ internal static class StartupHook
                 if (loaded != null) return loaded;
             }
         }
-        return null;
+        return ResolveFromDesktopFramework(requested, requestingAssembly);
+    }
+
+    /// <summary>
+    /// Last resort, and only for <see cref="SuppliedDesktopAssemblies"/>: the game's desktop-framework folder. Kept
+    /// out of the ordinary search list on purpose so that WinForms and WPF, which live in the same folder, stay
+    /// unresolvable - see the comment on that field.
+    /// </summary>
+    private static Assembly? ResolveFromDesktopFramework(AssemblyName requested, Assembly? requestingAssembly)
+    {
+        if (_desktopDir == null) return null;
+        var allowed = false;
+        foreach (var name in SuppliedDesktopAssemblies)
+            if (string.Equals(requested.Name, name, StringComparison.OrdinalIgnoreCase)) { allowed = true; break; }
+        if (!allowed) return null;
+
+        var path = Path.Combine(_desktopDir, requested.Name + ".dll");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            // NameMatches still applies: the client's desktop framework and the server's runtime are both .NET 6
+            // today, but a Steam update could move one of them, and loading a mismatched framework assembly is a
+            // worse failure than the missing-assembly one we are fixing.
+            if (!NameMatches(requested, AssemblyName.GetAssemblyName(path))) return null;
+            var asm = AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+            _lastResolved = requested.Name!;
+            Announce(requested.Name!, path, requestingAssembly);
+            return asm;
+        }
+        catch (BadImageFormatException) { return null; }
+        catch (FileLoadException) { return null; }
     }
 
     private static bool NameMatches(AssemblyName requested, AssemblyName candidate)

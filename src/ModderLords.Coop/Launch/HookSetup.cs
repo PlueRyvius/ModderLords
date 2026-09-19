@@ -28,6 +28,24 @@ public static class HookSetup
     public const string HookFileName = "ModderLords.Hook.dll";
     public const string SearchDirsVariable = "MODDERLORDS_SEARCH_DIRS";
 
+    /// <summary>
+    /// The real game's Microsoft.WindowsDesktop.App folder, from which the hook may supply a SHORT ALLOW-LIST of
+    /// assemblies the server's own runtime lacks. Deliberately not just another search dir: that folder also holds
+    /// System.Windows.Forms and the whole of WPF, and supplying those would be actively worse than the crash they
+    /// prevent - MessageBox.Show blocks its thread until someone clicks a dialog, so a mod whose error handler pops
+    /// one would turn a loud crash into a silent hang on a server nobody is looking at. The hook decides what it is
+    /// willing to take from here; this only says where "here" is.
+    /// </summary>
+    public const string DesktopDirVariable = "MODDERLORDS_DESKTOP_DIR";
+
+    /// <summary>The game's desktop-framework folder, or null. Version-checked by the hook, not here.</summary>
+    public static string? DesktopFrameworkDir(string? gameRoot)
+    {
+        if (gameRoot is null) return null;
+        var dir = Path.Combine(gameRoot, "bin", "Win64_Shipping_Client", "Microsoft.WindowsDesktop.App");
+        return Directory.Exists(dir) ? dir : null;
+    }
+
     /// <summary>Where the hook mirrors its own output. Survives a crash that takes the redirected stdout pipe with it.</summary>
     public const string SidecarVariable = "MODDERLORDS_HOOK_LOG";
 
@@ -80,13 +98,14 @@ public static class HookSetup
         return dirs.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    public static IReadOnlyDictionary<string, string> Environment(string hookDllPath, IEnumerable<string> searchDirs, bool verbose = false, string? sidecarPath = null)
+    public static IReadOnlyDictionary<string, string> Environment(string hookDllPath, IEnumerable<string> searchDirs, bool verbose = false, string? sidecarPath = null, string? desktopDir = null)
     {
         var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["DOTNET_STARTUP_HOOKS"] = Path.GetFullPath(hookDllPath),
             [SearchDirsVariable] = string.Join(";", searchDirs),
         };
+        if (!string.IsNullOrWhiteSpace(desktopDir)) env[DesktopDirVariable] = desktopDir!;
         if (verbose) env["MODDERLORDS_HOOK_VERBOSE"] = "1";
         if (!string.IsNullOrWhiteSpace(sidecarPath)) env[SidecarVariable] = sidecarPath!;
         return env;

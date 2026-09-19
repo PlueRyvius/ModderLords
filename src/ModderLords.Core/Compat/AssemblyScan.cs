@@ -12,7 +12,7 @@ public enum ServerVerdict
     ServerSafe,
     /// <summary>References UI entry points or inquiries that the Compat guards handle.</summary>
     Guarded,
-    /// <summary>References client-only assemblies (StoryMode, views, Gauntlet layers) in ways guards cannot cover.</summary>
+    /// <summary>References client-only assemblies (StoryMode, views, Gauntlet layers, desktop UI frameworks) in ways guards cannot cover.</summary>
     NeedsReview,
     /// <summary>No managed code (data-only module).</summary>
     DataOnly,
@@ -33,16 +33,25 @@ public sealed record ScanResult(
     bool UsesMcm,
     /// <summary>Coop assemblies this mod's SUBMODULE dlls reference; non-empty means it binds to Coop as it loads.
     /// Optional so the many places that build a ScanResult by hand do not all have to say "no".</summary>
-    IReadOnlyList<string>? CoopAssemblyReferences = null)
+    IReadOnlyList<string>? CoopAssemblyReferences = null,
+    /// <summary>Desktop-framework assemblies (WinForms, WPF, GDI+) the server's runtime does not ship. Optional so
+    /// the many places that build a ScanResult by hand do not all have to say "none".</summary>
+    IReadOnlyList<string>? DesktopAssemblies = null)
 {
     public string Summary => Verdict switch
     {
         ServerVerdict.ServerSafe => "server-safe",
         ServerVerdict.Guarded => "guarded: " + string.Join(", ", GuardedCalls.Take(3)) + (GuardedCalls.Count > 3 ? ", …" : ""),
-        ServerVerdict.NeedsReview => "needs review: " + string.Join(", ", UiAssemblies.Concat(StoryModeAssemblies).Take(3)),
+        ServerVerdict.NeedsReview => "needs review: " + string.Join(", ", Blockers.Take(3)),
         ServerVerdict.DataOnly => "data only",
         _ => "not scanned",
     };
+
+    /// <summary>Everything that makes this mod unsafe to Run headless, most fatal first. Desktop-framework
+    /// references lead because they are unconditional: the assembly is simply absent from the server's runtime,
+    /// so the method carrying the reference cannot be compiled at all, whatever the code path would have done.</summary>
+    public IEnumerable<string> Blockers =>
+        (DesktopAssemblies ?? Array.Empty<string>()).Concat(UiAssemblies).Concat(StoryModeAssemblies);
 
     /// <summary>What the Mod settings tab can expect from this mod: "MCM", "own settings (N values)", "MCM + own …", or "none found".</summary>
     public string SettingsSummary
@@ -72,6 +81,44 @@ public static class AssemblyScan
         "TaleWorlds.Core.ViewModelCollection", "TaleWorlds.CampaignSystem.ViewModelCollection", "SandBox.ViewModelCollection", "TaleWorlds.MountAndBlade.ViewModelCollection",
     ];
     private static readonly string[] StoryModePrefixes = ["StoryMode", "CustomBattle"];
+
+    /// <summary>
+    /// Desktop UI frameworks. The dedicated server runs on the runtime bundled at engine\dotnet, which ships only
+    /// Microsoft.NETCore.App - there is no Microsoft.WindowsDesktop.App, so none of these assemblies exist in the
+    /// process. The real game does ship them (bin\Win64_Shipping_Client\Microsoft.WindowsDesktop.App), which is why
+    /// a mod that reaches for one runs perfectly as a client and kills the server.
+    ///
+    /// This is harsher than a view-assembly reference: those resolve and only misbehave if a headless code path
+    /// actually reaches them, so a guard can cover them. These do not resolve at all. A method with a WinForms call
+    /// site cannot be JIT-compiled on the server even when the call is in a catch block that never runs - which is
+    /// exactly how DismembermentPlus killed the server on 2026-09-19, and why it died without logging an exception:
+    /// the handler that would have reported the failure is the thing that is missing.
+    /// </summary>
+    private static readonly string[] DesktopFrameworkPrefixes =
+    [
+        "System.Windows.Forms", "Microsoft.VisualBasic.Forms", "WindowsFormsIntegration",
+        "PresentationFramework", "PresentationCore", "PresentationUI", "WindowsBase", "System.Windows.Presentation",
+        "System.Drawing.Common", "System.Drawing.Design", "Microsoft.Win32.SystemEvents",
+    ];
+
+    /// <summary>
+    /// Desktop-framework assemblies the launcher supplies to the server itself (see HookSetup), so a reference to
+    /// one is reported but is not a blocker. Kept as a separate list rather than dropped from
+    /// <see cref="DesktopFrameworkPrefixes"/> so that turning the passthrough off restores the warning by deleting
+    /// one entry.
+    ///
+    /// Note what is NOT here: System.Drawing and System.Drawing.Primitives are already in the server's
+    /// Microsoft.NETCore.App, so Color/Point/Rectangle arithmetic has always worked headless and never belonged on
+    /// either list. Only the GDI+ half (Bitmap, Graphics, Image) is actually missing.
+    /// </summary>
+    private static readonly string[] SuppliedDesktopPrefixes =
+    [
+        "System.Drawing.Common", "Microsoft.Win32.SystemEvents",
+    ];
+
+    /// <summary>True when the launcher makes this desktop assembly available to the headless server.</summary>
+    public static bool IsSuppliedOnServer(string assemblyName) =>
+        SuppliedDesktopPrefixes.Any(p => assemblyName.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Coop's own assemblies. A SUBMODULE assembly that references one of these is resolved as the engine loads the
@@ -164,6 +211,8 @@ public static class AssemblyScan
         var story = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var guarded = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var hard = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var desktop = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var desktopSupplied = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var campaignBehaviors = new SortedSet<string>(StringComparer.Ordinal);
         var missionBehaviors = new SortedSet<string>(StringComparer.Ordinal);
         var settingsClasses = new SortedSet<string>(StringComparer.Ordinal);
@@ -184,6 +233,8 @@ public static class AssemblyScan
                     var name = md.GetString(md.GetAssemblyReference(h).Name);
                     if (UiAssemblyPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) ui.Add(name);
                     if (StoryModePrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) story.Add(name);
+                    if (DesktopFrameworkPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                        (IsSuppliedOnServer(name) ? desktopSupplied : desktop).Add(name);
                     if (name.StartsWith("MCM", StringComparison.OrdinalIgnoreCase)) usesMcm = true;
                     if (CoopAssemblyPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) coopRefs.Add(name);
                 }
@@ -262,13 +313,18 @@ public static class AssemblyScan
             catch (Exception ex) { notes.Add(Path.GetFileName(dll) + ": " + ex.Message); }
         }
 
-        var verdict = hard.Count > 0 || story.Count > 0 ? ServerVerdict.NeedsReview
+        var verdict = desktop.Count > 0 || hard.Count > 0 || story.Count > 0 ? ServerVerdict.NeedsReview
             : ui.Count > 0 || guarded.Count > 0 ? ServerVerdict.Guarded
             : ServerVerdict.ServerSafe;
+        if (desktop.Count > 0)
+            notes.Add("references desktop frameworks the server's runtime does not ship (" + string.Join(", ", desktop)
+                      + "); any method holding one of these call sites fails to compile headless, even in a catch block");
+        if (desktopSupplied.Count > 0)
+            notes.Add("references " + string.Join(", ", desktopSupplied) + ", which the launcher supplies to the server");
         if (hard.Count > 0) notes.Add("constructs UI objects: " + string.Join(", ", hard));
         if (story.Count > 0 && storyModeOptional)
             notes.Add("StoryMode dependency is declared optional; probably fine when the reference is only in StoryMode-specific code paths");
-        return new ScanResult(moduleId, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList(), settingsClasses.ToList(), usesMcm, coopRefs.ToList());
+        return new ScanResult(moduleId, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList(), settingsClasses.ToList(), usesMcm, coopRefs.ToList(), desktop.ToList());
     }
 
     // ---- settings-shaped classes (metadata only) ----------------------------------------------------------------

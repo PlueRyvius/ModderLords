@@ -1,4 +1,4 @@
-﻿using ModderLords.Core.Compat.Authority;
+using ModderLords.Core.Compat.Authority;
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
 using ModderLords.Coop.Launch;
@@ -407,7 +407,7 @@ switch (cmd)
             else
             {
                 var dirs = HookSetup.SearchDirs(paths, (overlayPlan ?? OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections)).Entries, gameRoot);
-                foreach (var kv in HookSetup.Environment(hook, dirs, verbose: opts.ContainsKey("hook-verbose"), sidecarPath: diagnosticData is null ? HookSetup.SidecarPathFor(DateTime.Now) : Path.Combine(paths.LogsDir, $"hook-{Guid.NewGuid():N}.log"))) extraEnv[kv.Key] = kv.Value;
+                foreach (var kv in HookSetup.Environment(hook, dirs, verbose: opts.ContainsKey("hook-verbose"), sidecarPath: diagnosticData is null ? HookSetup.SidecarPathFor(DateTime.Now) : Path.Combine(paths.LogsDir, $"hook-{Guid.NewGuid():N}.log"), desktopDir: HookSetup.DesktopFrameworkDir(gameRoot))) extraEnv[kv.Key] = kv.Value;
             }
         }
 
