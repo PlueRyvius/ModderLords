@@ -89,43 +89,64 @@ public static class OverlayPlanner
         Func<string, CompatRecord?> record, Func<DiscoveredModule, HashSet<string>> typeNames, List<string> notes)
     {
         var mod = sel.Module;
-        if (sel.Role != ServerRole.Run || !mod.HasHeadlessExclusions) return sel;
+        if (sel.Role != ServerRole.Run) return sel;
 
-        // The hard failure first. The submodule that survives a Run rewrite names a class, and when that class is not
-        // in the mod's DLLs the engine dies on a missing SubModuleClassType - a native access violation with no
-        // managed exception to read (FamilyAppearanceEditor, 2026-09-19).
-        //
-        // The fallback is DependencyOnly and NOT AsShipped. AsShipped leaves DedicatedServerType=custom in place, so
-        // the engine loads that same missing class and dies exactly as before; it only looks safer. DependencyOnly
-        // drops the submodules while keeping id and version for Coop's handshake, which is what was observed to
-        // actually reach SERVING. Do not "simplify" this to AsShipped.
-        var missing = MissingServerSubmoduleClasses(mod, typeNames);
-        if (missing.Count > 0)
+        // A curated record that says Run is a tested result and outranks every static guess below, so when we have
+        // one there is nothing to scan for. Scanned once and shared: the desktop check and the view-assembly check
+        // both want the same result.
+        var vouched = VouchedForRunning(record, mod.Id);
+        var scanned = vouched ? null : SafeScan(scan, mod);
+
+        if (mod.HasHeadlessExclusions)
         {
-            notes.Add("WARNING: its manifest names server submodule class(es) " + string.Join(", ", missing)
-                      + " which are not in this mod's DLLs; Run would crash the server on load. "
-                      + "Falling back to DependencyOnly: data and load-order entry kept, code not loaded.");
-            return sel with { Role = ServerRole.DependencyOnly };
+            // The hard failure first. The submodule that survives a Run rewrite names a class, and when that class is
+            // not in the mod's DLLs the engine dies on a missing SubModuleClassType - a native access violation with
+            // no managed exception to read (FamilyAppearanceEditor, 2026-09-19).
+            //
+            // The fallback is DependencyOnly and NOT AsShipped. AsShipped leaves DedicatedServerType=custom in place,
+            // so the engine loads that same missing class and dies exactly as before; it only looks safer.
+            // DependencyOnly drops the submodules while keeping id and version for Coop's handshake, which is what
+            // was observed to actually reach SERVING. Do not "simplify" this to AsShipped.
+            var missing = MissingServerSubmoduleClasses(mod, typeNames);
+            if (missing.Count > 0)
+            {
+                notes.Add("WARNING: its manifest names server submodule class(es) " + string.Join(", ", missing)
+                          + " which are not in this mod's DLLs; Run would crash the server on load. "
+                          + "Falling back to DependencyOnly: data and load-order entry kept, code not loaded.");
+                return sel with { Role = ServerRole.DependencyOnly };
+            }
         }
+
+        // Desktop frameworks, deliberately NOT gated on HasHeadlessExclusions. A WinForms or WPF reference kills the
+        // server whether or not the mod bothered to tag itself client-only, because the assembly is absent from the
+        // server's runtime rather than merely unsafe to touch - so the method holding the call site cannot even be
+        // compiled headless. Gating this on the manifest would miss every mod that forgot the tag.
+        var desktop = scanned?.DesktopAssemblies ?? [];
+        if (desktop.Count > 0)
+            notes.Add("WARNING: its code references " + string.Join(", ", desktop)
+                      + ", which the dedicated server's runtime does not ship - Run will crash the server on load, "
+                      + "not only if the feature is used. Use AsShipped to let the engine skip it, or DependencyOnly "
+                      + "to keep its data and load-order entry without loading its code.");
+
+        if (!mod.HasHeadlessExclusions) return sel;
 
         notes.Add("manifest tags mark it client-only; stripping them so the server loads it");
         // The mod said "not on a dedicated server" and Run overrides that. When its own code reaches for the
         // render stack there is nothing to override safely: the engine loads the DLL, the view assemblies get
         // pulled into a headless process and it dies without an exception. Say so before the launch, not after.
         //
-        // Unless we have actually run it. Plenty of mods reference the view assemblies from code paths a
-        // headless server never enters, and the bundled guards cover the common entry points - ImprovedGarrisons
-        // is the worked example. A curated record that says "Run" is a tested result and outranks the scan.
-        if (!VouchedForRunning(record, mod.Id))
+        // Plenty of mods reference the view assemblies from code paths a headless server never enters, and the
+        // bundled guards cover the common entry points - ImprovedGarrisons is the worked example.
+        if (scanned is { Verdict: ServerVerdict.NeedsReview })
         {
-            var s = SafeScan(scan, mod);
-            if (s is { Verdict: ServerVerdict.NeedsReview })
+            // Can be empty when the only finding was a desktop framework, which already has its own line above.
+            var blockers = scanned.UiAssemblies.Concat(scanned.StoryModeAssemblies).Take(4).ToList();
+            if (blockers.Count > 0)
             {
-                var blockers = s.UiAssemblies.Concat(s.StoryModeAssemblies).Take(4).ToList();
                 notes.Add("WARNING: it declares itself client-only and its code references "
-                          + string.Join(", ", blockers) + (s.UiAssemblies.Count + s.StoryModeAssemblies.Count > blockers.Count ? ", ..." : "")
+                          + string.Join(", ", blockers) + (scanned.UiAssemblies.Count + scanned.StoryModeAssemblies.Count > blockers.Count ? ", ..." : "")
                           + " - Run may crash the server. Consider DependencyOnly, which keeps its data and load-order entry without loading its code.");
-                foreach (var n in s.Notes) notes.Add("  " + n);
+                foreach (var n in scanned.Notes) notes.Add("  " + n);
             }
         }
         return sel;

@@ -225,7 +225,7 @@ public sealed class LaunchSession
         {
             var hook = HookSetup.LocateHook();
             if (hook is null) messages.Add("ModderLords.Hook.dll is missing next to the launcher; mods with helper DLLs will fail to load");
-            else foreach (var kv in HookSetup.Environment(hook, HookSetup.SearchDirs(paths, overlayPlan.Entries, gameRoot), sidecarPath: HookSetup.SidecarPathFor(DateTime.Now))) extraEnv[kv.Key] = kv.Value;
+            else foreach (var kv in HookSetup.Environment(hook, HookSetup.SearchDirs(paths, overlayPlan.Entries, gameRoot), sidecarPath: HookSetup.SidecarPathFor(DateTime.Now), desktopDir: HookSetup.DesktopFrameworkDir(gameRoot))) extraEnv[kv.Key] = kv.Value;
         }
         // Host-side live MCM edits: the sync module polls this directory (see Live/LiveSettingsClient). Only meaningful
         // when the module is loaded, so it is tied to SettingsSync; a fresh dir per launch so nothing stale is shown.
