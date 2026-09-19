@@ -27,6 +27,22 @@ public static class ManifestRewriter
 
     public sealed record Result(string Xml, IReadOnlyList<string> Changes);
 
+    /// <summary>The value the engine reads for "this submodule is for a dedicated server".</summary>
+    private const string DedicatedServerTypeTag = "DedicatedServerType";
+
+    private static string? TagValue(XmlElement sub, string key) =>
+        sub.SelectNodes("Tags/Tag")?.Cast<XmlElement>()
+            .FirstOrDefault(t => string.Equals(t.GetAttribute("key"), key, StringComparison.OrdinalIgnoreCase))
+            ?.GetAttribute("value");
+
+    /// <summary>A submodule the author built for a dedicated server ("custom", or any value that is not "none").</summary>
+    private static bool HasServerSubModuleTag(XmlElement sub) =>
+        TagValue(sub, DedicatedServerTypeTag) is { } v && !string.Equals(v, "none", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A submodule the author explicitly excluded from a dedicated server.</summary>
+    private static bool IsClientOnlySubModule(XmlElement sub) =>
+        string.Equals(TagValue(sub, DedicatedServerTypeTag), "none", StringComparison.OrdinalIgnoreCase);
+
     public static Result Rewrite(string originalXml, ServerRole role, IReadOnlyCollection<string>? keepSubModuleClassTypes = null)
     {
         var doc = new XmlDocument { PreserveWhitespace = true };
@@ -37,6 +53,12 @@ public static class ManifestRewriter
         if (role == ServerRole.AsShipped) return new Result(originalXml, changes);
 
         var subModules = module.SelectNodes("SubModules/SubModule")?.Cast<XmlElement>().ToList() ?? [];
+
+        // Does the author already ship a server variant? A DedicatedServerType of anything but "none" means this
+        // submodule is meant to run headless, which in turn means the "none" ones are its deliberate client-side
+        // counterparts, not a mislabel.
+        var hasServerVariant = role == ServerRole.Run && subModules.Any(HasServerSubModuleTag);
+
         foreach (var sub in subModules)
         {
             var name = sub.SelectSingleNode("Name")?.Attributes?["value"]?.Value ?? "?";
@@ -46,6 +68,18 @@ public static class ManifestRewriter
             {
                 sub.ParentNode!.RemoveChild(sub);
                 changes.Add($"removed submodule '{name}' ({classType})");
+                continue;
+            }
+
+            // Run, on a module that split itself into client and server halves: honour the split instead of
+            // flattening it. Stripping every exclusion tag made the server load the CLIENT submodule alongside the
+            // server one - which is how FamilyAppearanceEditor took the server down with a native access violation
+            // on 2026-09-19, patching barber screens in a headless process. Run exists to override a mod that
+            // wrongly says "not on a server"; it was never meant to override a mod that said "use THIS half".
+            if (hasServerVariant && IsClientOnlySubModule(sub))
+            {
+                sub.ParentNode!.RemoveChild(sub);
+                changes.Add($"removed client-only submodule '{name}' ({classType}); the module ships a dedicated-server submodule");
                 continue;
             }
 
