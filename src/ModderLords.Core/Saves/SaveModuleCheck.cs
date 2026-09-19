@@ -51,14 +51,63 @@ public static class SaveModuleCheck
     /// </summary>
     public const string CoopAutoSaveName = "saveauto1";
 
-    /// <summary>The messages for a launch, resolving the save Coop will actually load when none was named.</summary>
-    public static IReadOnlyList<string> MessagesForLaunch(string savesDir, string? saveName, IReadOnlyDictionary<string, string> plannedCommunityVersions)
+    /// <summary>
+    /// The messages for a launch, resolving the save Coop will actually load when none was named.
+    ///
+    /// <paramref name="templatePath"/> is the default_new_game.sav a missing save would be bootstrapped from. It is
+    /// what makes this check useful before the save exists: a world that is about to be stamped out of the vanilla
+    /// template is <b>already</b> mismatched against any modded launch, and saying so only after the file has been
+    /// written means --dry-run — the one mode whose whole job is to report what a launch would do — stays silent
+    /// about the launch's most likely failure. Pass null to skip the fresh-world check.
+    /// </summary>
+    public static IReadOnlyList<string> MessagesForLaunch(
+        string savesDir,
+        string? saveName,
+        IReadOnlyDictionary<string, string> plannedCommunityVersions,
+        string? templatePath = null)
     {
         var implicitly_ = string.IsNullOrWhiteSpace(saveName);
         var name = implicitly_ ? CoopAutoSaveName : saveName!;
-        var messages = Messages(Path.Combine(savesDir, name + ".sav"), plannedCommunityVersions);
+        var savePath = Path.Combine(savesDir, name + ".sav");
+        var messages = File.Exists(savePath)
+            ? Messages(savePath, plannedCommunityVersions)
+            : FreshWorldMessages(name, templatePath, plannedCommunityVersions);
         if (messages.Count == 0 || !implicitly_) return messages;
         return messages.Select(m => m + $" (no save was named, so Coop will load its autosave '{name}')").ToList();
+    }
+
+    /// <summary>
+    /// What a not-yet-created world will disagree about. The template lists Native;SandBoxCore;Sandbox;Coop and
+    /// nothing else, so for any modded profile this fires every time — which is correct, and is the point. The
+    /// existing post-creation warning tells you the world is wrong; this one tells you before anything is written,
+    /// and names the two commands that actually produce a world built with the right modules, because "a world has
+    /// to be created with the modules it will run under" is not an instruction anyone can act on by itself.
+    /// </summary>
+    public static IReadOnlyList<string> FreshWorldMessages(
+        string saveName,
+        string? templatePath,
+        IReadOnlyDictionary<string, string> plannedCommunityVersions)
+    {
+        if (string.IsNullOrWhiteSpace(templatePath) || !File.Exists(templatePath)) return Array.Empty<string>();
+
+        var header = SaveHeaderReader.TryRead(templatePath, out _);
+        if (header is null) return Array.Empty<string>();
+
+        var r = Compare(header, plannedCommunityVersions);
+        if (!r.IsSevere) return Array.Empty<string>();
+
+        // Only Added matters here. Removed would mean the vanilla template carries a community module this launch
+        // drops, which cannot happen, and reporting it would be noise if the template is ever swapped.
+        if (r.Added.Count == 0) return Array.Empty<string>();
+
+        return new[]
+        {
+            $"WARNING save '{saveName}' does not exist and will be created from {Path.GetFileName(templatePath)}, " +
+            $"which was built without {r.Added.Count} module(s) in this launch ({string.Join(", ", r.Added)}). " +
+            "The engine will force the load and the campaign may stall during world init. " +
+            "To get a world built with these modules: start a campaign in the real game with the same load order and " +
+            "run 'import-save', or run 'create-world' to have the server build one."
+        };
     }
 
     /// <summary>
