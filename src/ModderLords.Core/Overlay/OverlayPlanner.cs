@@ -36,15 +36,23 @@ public static class OverlayPlanner
     public static OverlayPlan Plan(string overlayRoot, string engineModulesRoot, IEnumerable<ModSelection> selections,
         Func<DiscoveredModule, ScanResult>? scan = null, Func<string, CompatRecord?>? record = null,
         IReadOnlyDictionary<string, string>? headlessAssetPaths = null,
-        IReadOnlyDictionary<string, string>? headlessMapPaths = null)
+        IReadOnlyDictionary<string, string>? headlessMapPaths = null,
+        Func<DiscoveredModule, HashSet<string>>? typeNames = null)
     {
         scan ??= AssemblyScan.Scan;
         record ??= CompatDb.Current.Find;
+        typeNames ??= AssemblyScan.ModuleTypeNames;
         var entries = new List<OverlayEntry>();
-        foreach (var sel in selections)
+        foreach (var original in selections)
         {
-            var mod = sel.Module;
+            var mod = original.Module;
             var notes = new List<string>();
+
+            // The role is settled HERE, before anything reads it. A downgrade decided further down would be silently
+            // wrong: manifestNeedsRewrite and kind below are both derived from the role, so a role that changed after
+            // them would build an overlay for the role we had just rejected.
+            var sel = ResolveRole(original, scan, record, typeNames, notes);
+
             var enginePath = Path.Combine(engineModulesRoot, mod.Id);
 
             var binTarget = mod.HasServerBin ? mod.ServerBin : mod.ClientBin;
@@ -57,29 +65,6 @@ public static class OverlayPlanner
                 ServerRole.DependencyOnly => mod.HasCode,
                 _ => false,
             };
-            if (sel.Role == ServerRole.Run && mod.HasHeadlessExclusions)
-            {
-                notes.Add("manifest tags mark it client-only; stripping them so the server loads it");
-                // The mod said "not on a dedicated server" and Run overrides that. When its own code reaches for the
-                // render stack there is nothing to override safely: the engine loads the DLL, the view assemblies get
-                // pulled into a headless process and it dies without an exception. Say so before the launch, not after.
-                //
-                // Unless we have actually run it. Plenty of mods reference the view assemblies from code paths a
-                // headless server never enters, and the bundled guards cover the common entry points - ImprovedGarrisons
-                // is the worked example. A curated record that says "Run" is a tested result and outranks the scan.
-                if (!VouchedForRunning(record, mod.Id))
-                {
-                    var s = SafeScan(scan, mod);
-                    if (s is { Verdict: ServerVerdict.NeedsReview })
-                    {
-                        var blockers = s.UiAssemblies.Concat(s.StoryModeAssemblies).Take(4).ToList();
-                        notes.Add("WARNING: it declares itself client-only and its code references "
-                                  + string.Join(", ", blockers) + (s.UiAssemblies.Count + s.StoryModeAssemblies.Count > blockers.Count ? ", ..." : "")
-                                  + " - Run may crash the server. Consider DependencyOnly, which keeps its data and load-order entry without loading its code.");
-                        foreach (var n in s.Notes) notes.Add("  " + n);
-                    }
-                }
-            }
             if (sel.Role == ServerRole.DependencyOnly) notes.Add("dependency-only: kept in the module list for the handshake, no code loaded");
 
             string? headlessAssetPath = null;
@@ -94,6 +79,94 @@ public static class OverlayPlanner
             entries.Add(new OverlayEntry(sel, kind, enginePath, shadow, binTarget, notes, headlessAssetPath, headlessMapPath));
         }
         return new OverlayPlan(overlayRoot, engineModulesRoot, entries);
+    }
+
+    /// <summary>
+    /// The role this mod will actually launch under, plus any notes explaining a change. Extracted so the decision is
+    /// made once, up front, and every later use reads a single value.
+    /// </summary>
+    private static ModSelection ResolveRole(ModSelection sel, Func<DiscoveredModule, ScanResult> scan,
+        Func<string, CompatRecord?> record, Func<DiscoveredModule, HashSet<string>> typeNames, List<string> notes)
+    {
+        var mod = sel.Module;
+        if (sel.Role != ServerRole.Run || !mod.HasHeadlessExclusions) return sel;
+
+        // The hard failure first. The submodule that survives a Run rewrite names a class, and when that class is not
+        // in the mod's DLLs the engine dies on a missing SubModuleClassType - a native access violation with no
+        // managed exception to read (FamilyAppearanceEditor, 2026-09-19).
+        //
+        // The fallback is DependencyOnly and NOT AsShipped. AsShipped leaves DedicatedServerType=custom in place, so
+        // the engine loads that same missing class and dies exactly as before; it only looks safer. DependencyOnly
+        // drops the submodules while keeping id and version for Coop's handshake, which is what was observed to
+        // actually reach SERVING. Do not "simplify" this to AsShipped.
+        var missing = MissingServerSubmoduleClasses(mod, typeNames);
+        if (missing.Count > 0)
+        {
+            notes.Add("WARNING: its manifest names server submodule class(es) " + string.Join(", ", missing)
+                      + " which are not in this mod's DLLs; Run would crash the server on load. "
+                      + "Falling back to DependencyOnly: data and load-order entry kept, code not loaded.");
+            return sel with { Role = ServerRole.DependencyOnly };
+        }
+
+        notes.Add("manifest tags mark it client-only; stripping them so the server loads it");
+        // The mod said "not on a dedicated server" and Run overrides that. When its own code reaches for the
+        // render stack there is nothing to override safely: the engine loads the DLL, the view assemblies get
+        // pulled into a headless process and it dies without an exception. Say so before the launch, not after.
+        //
+        // Unless we have actually run it. Plenty of mods reference the view assemblies from code paths a
+        // headless server never enters, and the bundled guards cover the common entry points - ImprovedGarrisons
+        // is the worked example. A curated record that says "Run" is a tested result and outranks the scan.
+        if (!VouchedForRunning(record, mod.Id))
+        {
+            var s = SafeScan(scan, mod);
+            if (s is { Verdict: ServerVerdict.NeedsReview })
+            {
+                var blockers = s.UiAssemblies.Concat(s.StoryModeAssemblies).Take(4).ToList();
+                notes.Add("WARNING: it declares itself client-only and its code references "
+                          + string.Join(", ", blockers) + (s.UiAssemblies.Count + s.StoryModeAssemblies.Count > blockers.Count ? ", ..." : "")
+                          + " - Run may crash the server. Consider DependencyOnly, which keeps its data and load-order entry without loading its code.");
+                foreach (var n in s.Notes) notes.Add("  " + n);
+            }
+        }
+        return sel;
+    }
+
+    /// <summary>
+    /// Server submodule classes the manifest promises but the DLLs do not define.
+    ///
+    /// Mirrors the "which submodule survives Run" rule in <see cref="ManifestRewriter"/> - deliberately, because the
+    /// two read different representations (raw XML there, BUTR's parsed model here) and making one depend on the
+    /// other would drag DiscoveredModule into what is otherwise a pure XML transform. Change the rule in one, change
+    /// it in the other.
+    /// </summary>
+    private static IReadOnlyList<string> MissingServerSubmoduleClasses(DiscoveredModule mod, Func<DiscoveredModule, HashSet<string>> typeNames)
+    {
+        var subs = mod.Info.SubModules;
+        var hasServerVariant = subs.Any(s => DedicatedServerType(s) is { } v && !IsNone(v));
+
+        // Only a mod that actually split itself is at risk. With no server variant, Run strips tags and keeps the one
+        // submodule the mod has always used on clients - nothing new to verify, and nothing to gain by opening DLLs.
+        if (!hasServerVariant) return [];
+
+        var surviving = subs
+            .Where(s => DedicatedServerType(s) is not { } v || !IsNone(v))
+            .Select(s => s.SubModuleClassType)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (surviving.Count == 0) return [];
+
+        HashSet<string> defined;
+        try { defined = typeNames(mod); }
+        catch { return []; }               // unreadable DLLs: this is a guard, not a gate - never block a launch on it
+        if (defined.Count == 0) return [];  // nothing readable to prove absence against, so prove nothing
+
+        return surviving.Where(t => !defined.Contains(t)).ToList();
+
+        static string? DedicatedServerType(Bannerlord.ModuleManager.SubModuleInfoExtended s) =>
+            s.Tags.TryGetValue("DedicatedServerType", out var v) ? v.FirstOrDefault() : null;
+
+        static bool IsNone(string v) => v.Equals("none", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>True when the compat database has seen this mod run on the server, which beats any static guess.</summary>
