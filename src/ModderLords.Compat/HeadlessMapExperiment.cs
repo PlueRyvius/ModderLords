@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -16,6 +16,13 @@ internal static class HeadlessMapExperiment
     private static Vec2 _min, _max, _size;
     private static float _height;
     private static bool _installed;
+    /// <summary>
+    /// Latches the "nothing to install" path. Without it that path logged and returned without recording that it had
+    /// run, so it announced itself on every call - and OnBeforeInitialModuleScreenSetAsRoot fires repeatedly on a
+    /// headless host, not once. Measured 2026-09-19: 1,345 identical lines in 21 seconds, about 64 a second, for the
+    /// whole life of the server.
+    /// </summary>
+    private static bool _declined;
     private static Type? _headlessType;
     private static string _mapModuleId = "TAOM_Map";
 
@@ -30,8 +37,11 @@ internal static class HeadlessMapExperiment
         // process installed this and the serving process did not, and neither the log nor the console said which.
         if (string.IsNullOrEmpty(path))
         {
-            if (ServerDetect.IsDedicatedServer)
+            if (ServerDetect.IsDedicatedServer && !_declined)
+            {
+                _declined = true;
                 Log.Info("headless-map: MODDERLORDS_HEADLESS_MAP is not set; the stock map will be used");
+            }
             return;
         }
         if (!ServerDetect.IsDedicatedServer) throw new InvalidOperationException("Headless map requires a dedicated server");
