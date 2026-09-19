@@ -45,6 +45,7 @@ public partial class MainWindow : Window
         // After the first frame: the check is a network call, and the window must never wait on the network to appear.
         ContentRendered += async (_, _) =>
         {
+            await ViewModel.EnsureClientModuleAtStartupAsync();
             try { if (ViewModel.Update is { } update) await update.CheckOnStartupAsync(); }
             catch (Exception) { }
         };

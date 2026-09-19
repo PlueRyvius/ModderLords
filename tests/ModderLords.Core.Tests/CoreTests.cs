@@ -420,6 +420,60 @@ public class ClientModuleInstallerTests : IDisposable
     private void Install(string gameRoot, string version, string payload) =>
         Directory.Move(MakeModule("staged", version, payload), ClientModuleInstaller.TargetDir(gameRoot));
 
+    private static void Block(string file) => File.WriteAllText(file + ":Zone.Identifier", "[ZoneTransfer]" + Environment.NewLine + "ZoneId=3" + Environment.NewLine);
+    private static bool IsBlocked(string file) => File.Exists(file + ":Zone.Identifier");
+
+    [Fact]
+    public void Never_copies_the_hosts_recipe_into_a_client()
+    {
+        var game = GameRoot();
+        var bundled = Bundled("v0.2.0");
+        File.WriteAllText(Path.Combine(bundled.FolderPath, RecipeSet.FileName), "{\"Mods\":[]}");
+
+        ClientModuleInstaller.Ensure(bundled, game, Path.Combine(_dir, "backups"));
+        Assert.False(File.Exists(Path.Combine(ClientModuleInstaller.TargetDir(game), RecipeSet.FileName)));
+    }
+
+    [Fact]
+    public void Removes_a_hosts_recipe_from_a_copy_it_leaves_in_place()
+    {
+        var game = GameRoot();
+        Install(game, "v0.2.0", "theirs");
+        var stale = Path.Combine(ClientModuleInstaller.TargetDir(game), RecipeSet.FileName);
+        File.WriteAllText(stale, "{\"Mods\":[]}");
+
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.UpToDate, r.Outcome);
+        Assert.False(File.Exists(stale));
+    }
+
+    [Fact]
+    public void Clears_the_mark_of_the_web_it_would_otherwise_copy_in()
+    {
+        var game = GameRoot();
+        var bundled = Bundled("v0.2.0");
+        var marker = Path.Combine(bundled.FolderPath, "bin", "Win64_Shipping_Client", "marker.txt");
+        Block(marker);
+        if (!IsBlocked(marker)) return; // no alternate data streams here (not NTFS): nothing to assert.
+
+        ClientModuleInstaller.Ensure(bundled, game, Path.Combine(_dir, "backups"));
+        Assert.False(IsBlocked(Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "marker.txt")));
+    }
+
+    [Fact]
+    public void Clears_the_mark_of_the_web_on_a_copy_the_player_installed_by_hand()
+    {
+        var game = GameRoot();
+        Install(game, "v0.2.0", "theirs");
+        var marker = Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "marker.txt");
+        Block(marker);
+        if (!IsBlocked(marker)) return;
+
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.UpToDate, r.Outcome);
+        Assert.False(IsBlocked(marker));
+    }
+
     [Fact]
     public void Installs_when_the_client_has_no_copy()
     {

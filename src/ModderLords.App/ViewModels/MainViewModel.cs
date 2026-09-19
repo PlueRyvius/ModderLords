@@ -319,6 +319,30 @@ public partial class MainViewModel : ObservableObject
         else if (category is LogCategory.Warning or LogCategory.Error or LogCategory.Tool) Messages.Add(text);
     }
 
+    /// <summary>
+    /// Puts the shared ModderLords.Compat module in the game's Modules folder once per app start, so it is already
+    /// there whenever a server turns out to need it. This lives here rather than on HostViewModel because the player
+    /// it exists for is in Player mode, where there is no HostViewModel at all.
+    ///
+    /// The folder alone changes nothing: the module only does anything when the Bannerlord launcher has it enabled,
+    /// which is still the mod-list sync's job, and only when the server runs it too. What it buys is that "the server
+    /// has a mod you do not have" stops being reachable for this one module. Failures are not worth a line at
+    /// startup — the launch path reports them properly.
+    /// </summary>
+    public async Task EnsureClientModuleAtStartupAsync()
+    {
+        try
+        {
+            // Off the UI thread: resolving the game root can walk the Steam libraries and the install copies a folder,
+            // and this runs on the first frame. The await returns here on the UI thread, where the log surfaces live.
+            var profile = Profile;
+            var r = await Task.Run(() => ClientModuleInstaller.Ensure(ClientLauncher.ResolveGameRoot(profile)));
+            if (r.Outcome is ClientModuleInstaller.InstallOutcome.Installed or ClientModuleInstaller.InstallOutcome.Updated)
+                Log(LogCategory.Tool, "[ModderLords] " + r.Message);
+        }
+        catch (Exception ex) { Log(LogCategory.Tool, "[ModderLords] client module check skipped: " + ex.Message); }
+    }
+
     public MainViewModel() : this(true) { }
 
     internal MainViewModel(bool initialize)
@@ -675,6 +699,8 @@ public partial class MainViewModel : ObservableObject
             GameRoot = gameRoot ?? "(game install not found)";
             ScannedCatalog = (catalog, gameRoot);
             Messages.Clear();
+            _blockedFiles.Clear();
+            BlockedFileCount = 0;       // the background scan fills this in again
             foreach (var p in catalog.Problems) Messages.Add("catalog: " + p);
             var db = CompatDb.Reload();
             foreach (var p in db.Problems) Messages.Add("compat db: " + p);
@@ -1350,9 +1376,60 @@ public partial class MainViewModel : ObservableObject
                 catch { continue; }     // a mod removed mid-scan; the next Rescan drops its row anyway
                 dispatcher.BeginInvoke(() => { if (generation == _scanGeneration) row.ApplyScan(scan); });
             }
-            // The coop-binding check reads these scans, so it only has an answer once they are in.
-            dispatcher.BeginInvoke(() => { if (generation == _scanGeneration) CheckCoopOrder(); });
+            // Only the enabled rows: a blocked assembly in a mod nobody has ticked is not a problem anyone has.
+            var blocked = rows.Where(r => r.Enabled)
+                .Select(r => (Row: r, Files: BlockedFiles.Find(r.Module.FolderPath)))
+                .Where(x => x.Files.Count > 0)
+                .ToList();
+            if (generation != _scanGeneration) return;
+            dispatcher.BeginInvoke(() =>
+            {
+                if (generation != _scanGeneration) return;
+                ReportBlocked(blocked);
+                CheckCoopOrder();   // the coop-binding check reads the scans, so it only has an answer once they are in
+            });
         });
+    }
+
+    /// <summary>
+    /// Says, in the Messages list, which enabled mods Windows has blocked, and arms the button that clears them.
+    /// This is worth its own notice rather than a line per mod: a player whose zip was blocked usually has EVERY
+    /// mod from it blocked at once, and the symptom they came here with is that none of them do anything.
+    /// </summary>
+    private void ReportBlocked(IReadOnlyList<(ModRow Row, IReadOnlyList<string> Files)> blocked)
+    {
+        _blockedFiles = blocked.SelectMany(b => b.Files).ToList();
+        BlockedFileCount = _blockedFiles.Count;
+        if (blocked.Count == 0) return;
+        Messages.Add($"BLOCKED: Windows is blocking {_blockedFiles.Count} file(s) in {blocked.Count} enabled mod(s), so the "
+                   + "game loads the mod's folder but none of its code — the usual cause is extracting a download without "
+                   + "unblocking the zip first. Use “Unblock them” to clear it, then restart the game.");
+        foreach (var b in blocked.OrderBy(b => b.Row.Id, StringComparer.OrdinalIgnoreCase))
+            Messages.Add($"  blocked: {b.Row.Id} — {b.Files.Count} file(s)");
+    }
+
+    /// <summary>Files the last scan found blocked, kept so the command does not have to walk the disk again.</summary>
+    private List<string> _blockedFiles = new();
+
+    [ObservableProperty] private int _blockedFileCount;
+
+    public bool HasBlockedFiles => BlockedFileCount > 0;
+
+    partial void OnBlockedFileCountChanged(int value) => OnPropertyChanged(nameof(HasBlockedFiles));
+
+    /// <summary>Clears the mark-of-the-web the scan found. Nothing is undone by it and nothing needs elevating.</summary>
+    [RelayCommand]
+    private void UnblockMods()
+    {
+        var files = _blockedFiles.ToList();
+        if (files.Count == 0) return;
+        var cleared = BlockedFiles.UnblockAll(files);
+        var failed = files.Count - cleared;
+        Log(LogCategory.Tool, $"[ModderLords] unblocked {cleared} file(s)"
+            + (failed > 0 ? $"; {failed} refused — close the game and the Bannerlord launcher, then try again" : ""));
+        if (failed == 0) Messages.Add("Unblocked. Restart Bannerlord for the mods to load.");
+        _blockedFiles = files.Where(BlockedFiles.IsBlocked).ToList();
+        BlockedFileCount = _blockedFiles.Count;
     }
 
     internal void UpdateShareText()
