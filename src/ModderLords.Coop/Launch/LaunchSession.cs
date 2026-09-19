@@ -1,4 +1,4 @@
-
+﻿
 using ModderLords.Core.Compat;
 using ModderLords.Core.Config;
 using ModderLords.Core.Export;
@@ -131,7 +131,12 @@ public sealed class LaunchSession
     /// A catalogue already scanned for this profile, reused only for a preview (<paramref name="applySideEffects"/>
     /// false). A real launch ignores it and scans fresh, so it can never act on a folder that has since changed.
     /// </param>
-    public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowTaomWorldCreation = false,
+    /// <param name="allowWorldCreation">
+    /// That the caller is willing and able to run a creation pass before hosting. Only <c>HostViewModel.Launch</c>
+    /// is: it starts the generated plan, waits for it, and then prepares again. Everything else (previews, the CLI's
+    /// dry run) passes false, and a save that has to exist is then bootstrapped from the template as before.
+    /// </param>
+    public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowWorldCreation = false,
         (ModuleCatalog Catalog, string? GameRoot)? scanned = null, bool experimentalCompat = false)
     {
         var compatDb = CompatDb.Current;
@@ -173,17 +178,29 @@ public sealed class LaunchSession
             messages.Add("WARNING " + cacheProblem);
         }
 
-        var taomSaveMessage = TaomLaunchPolicy.MessageFor(selections.Select(s => s.Module.Id), profile.SaveName,
+        // The one decision both halves of world creation read: this block's messages, and the EnsureExists guard
+        // further down. Computing it once is what keeps them from disagreeing about whether a world is being made.
+        var moduleIds = selections.Select(s => s.Module.Id).ToList();
+        var creation = WorldCreationPolicy.Decide(moduleIds, profile.SaveName,
+            name => SavePreparer.Exists(paths, name), profile.GenerateWorldWithActiveMods);
+        var willCreateWorld = allowWorldCreation && creation.ShouldCreate && !string.IsNullOrWhiteSpace(profile.SaveName);
+
+        var taomSaveMessage = TaomLaunchPolicy.MessageFor(moduleIds, profile.SaveName,
             name => SavePreparer.Exists(paths, name));
         if (taomSaveMessage is not null)
         {
-            var canCreate = allowTaomWorldCreation && TaomLaunchPolicy.HasCompleteRecipe(selections.Select(s => s.Module.Id)) &&
-                !string.IsNullOrWhiteSpace(profile.SaveName) && !SavePreparer.Exists(paths, profile.SaveName);
+            var canCreate = willCreateWorld && TaomLaunchPolicy.HasCompleteRecipe(moduleIds);
             if (applySideEffects && !canCreate) throw new InvalidOperationException(taomSaveMessage);
             // One or the other, never both. Printing the "create it in Bannerlord and import it" advice directly
             // under "this will be created automatically" told the user to do work the launcher was about to do.
             if (canCreate) messages.Add("TAOM: this campaign will be created automatically before the server starts");
             else messages.Add("TAOM: " + taomSaveMessage);
+        }
+        else if (creation.Message is { } creationMessage)
+        {
+            // Suppressed when the caller cannot act on it: a preview saying "will be generated" about a run it is not
+            // going to make would be a lie. The vanilla-template warning is printed either way — it is true either way.
+            if (willCreateWorld || !creation.ShouldCreate) messages.Add(creationMessage);
         }
 
         // Refused, not warned: the old warning was one line in a long console, and on 2026-09-14 a TAOM host and join ran
@@ -288,8 +305,9 @@ public sealed class LaunchSession
 
             ServerConfig.Write(paths, profile.SaveName, profile.Server);
             WriteRecipes(profile, selections, messages, experimentalCompat);
-            if (!string.IsNullOrWhiteSpace(profile.SaveName) && !(allowTaomWorldCreation &&
-                TaomLaunchPolicy.HasCompleteRecipe(selections.Select(s => s.Module.Id)) && !SavePreparer.Exists(paths, profile.SaveName)))
+            // Skipped only when a creation pass is about to write this save itself. Bootstrapping it from the
+            // template first would make the creation pass refuse: it will not overwrite a save that exists.
+            if (!string.IsNullOrWhiteSpace(profile.SaveName) && !willCreateWorld)
             {
                 var prep = SavePreparer.EnsureExists(paths, profile.SaveName);
                 if (prep.CreatedFromTemplate) messages.Add($"save '{profile.SaveName}' did not exist; created a fresh world from {prep.TemplateUsed}");

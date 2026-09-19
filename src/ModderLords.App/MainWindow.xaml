@@ -1,4 +1,4 @@
-<Window x:Class="ModderLords.App.MainWindow"
+﻿<Window x:Class="ModderLords.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:ModderLords.App.ViewModels"
@@ -456,7 +456,7 @@
             <TabItem Header="Server" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
                     <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,10" />
-                    <UniformGrid Columns="2" Rows="16">
+                    <UniformGrid Columns="2" Rows="17">
                         <TextBlock Text="Join port (UDP, forward this)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.JoinPort}" />
                         <TextBlock Text="Password (empty = open)" VerticalAlignment="Center" />
@@ -475,6 +475,10 @@
                              says so. Turning it off restores SandBox's file on the next launch. -->
                         <TextBlock Text="Use a map mod's distance cache" VerticalAlignment="Center" ToolTip="A map mod replaces the campaign map but the server always reads SandBox's settlement distance cache, which was built for the vanilla map — the mismatch crashes world loading in a loop that never ends. This replaces that file with the one your map mod ships (TAOM_Map ships a rebuilt 10 MB cache). It is the only file the launcher writes inside the DedicatedServer folder; the original is backed up and put back when you untick this. Leave off unless you are running a map-replacing mod." />
                         <CheckBox IsChecked="{Binding Profile.UseModDistanceCache}" HorizontalAlignment="Left" />
+                        <!-- Creation only. An existing save is loaded untouched however this is set; see
+                             Profile.GenerateWorldWithActiveMods and WorldCreationPolicy. -->
+                        <TextBlock Text="Generate a new world with the active mods" VerticalAlignment="Center" ToolTip="When a NEW save has to be made, run the engine once with your mods loaded and generate the campaign from them, instead of copying the vanilla default_new_game.sav — which lists only Native, SandBoxCore, Sandbox and Coop, so a world bootstrapped from it never contains your mods. This never touches a save that already exists: if the save name points at a campaign on disk, that campaign is loaded and nothing is generated. Costs one extra engine run before the server starts (up to 15 minutes with heavy mods)." />
+                        <CheckBox IsChecked="{Binding Profile.GenerateWorldWithActiveMods}" HorizontalAlignment="Left" />
                         <TextBlock Text="Warn if loading stalls (seconds)" VerticalAlignment="Center" ToolTip="How long the launch console waits with no loading progress before saying so. Empty uses the default (5 minutes); 0 turns the warning off. Heavy mods can legitimately load for a very long time — TAOM's authors quote up to two hours — so raise it or set 0 for those rather than being nagged." />
                         <TextBox Text="{Binding Profile.StallWarningSeconds, TargetNullValue=''}" />
                         <TextBlock Text="Server log file" VerticalAlignment="Center" />

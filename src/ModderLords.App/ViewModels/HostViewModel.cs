@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.ComponentModel;
@@ -389,21 +389,33 @@ public partial class HostViewModel : ObservableObject
         var experimentalCompat = Main.ExperimentalCompat;
         Console.Clear();
         Status = "Checking…";
-        var autoTaomCreate = false;
+        var autoCreateWorld = false;
         try
         {
             var profileModuleIds = launchProfile.EnabledMods.Select(m => m.Id).ToList();
-            if (TaomLaunchPolicy.IsTaom(profileModuleIds))
+            var isTaom = TaomLaunchPolicy.IsTaom(profileModuleIds);
+            // Asked for either by the tick box or by TAOM, which cannot be served from the vanilla template at all.
+            if (isTaom || launchProfile.GenerateWorldWithActiveMods)
             {
-                if (string.IsNullOrWhiteSpace(launchProfile.SaveName))
+                var worldPaths = LaunchSession.ResolvePaths(launchProfile);
+                // A named save that exists is a campaign to LOAD. Nothing below may touch it: generation only ever
+                // fills a save that is being created, so an existing one ends the question here.
+                if (!string.IsNullOrWhiteSpace(launchProfile.SaveName) && SavePreparer.Exists(worldPaths, launchProfile.SaveName))
                 {
-                    launchProfile.SaveName = "taom_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                    Profile.SaveName = launchProfile.SaveName;
-                    ProfileStore.Save(Profile);
-                    AddLine(LogCategory.Tool, $"[ModderLords] no TAOM save was selected; creating '{launchProfile.SaveName}' automatically");
+                    if (launchProfile.GenerateWorldWithActiveMods)
+                        AddLine(LogCategory.Tool, $"[ModderLords] loading the existing save '{launchProfile.SaveName}'; no world is being generated");
                 }
-                var taomPaths = LaunchSession.ResolvePaths(launchProfile);
-                autoTaomCreate = !SavePreparer.Exists(taomPaths, launchProfile.SaveName);
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(launchProfile.SaveName))
+                    {
+                        launchProfile.SaveName = (isTaom ? "taom_" : "world_") + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                        Profile.SaveName = launchProfile.SaveName;
+                        ProfileStore.Save(Profile);
+                        AddLine(LogCategory.Tool, $"[ModderLords] no save was selected; creating '{launchProfile.SaveName}' automatically");
+                    }
+                    autoCreateWorld = !isTaom || TaomLaunchPolicy.HasCompleteRecipe(profileModuleIds);
+                }
             }
             var pre = await Task.Run(() =>
             {
@@ -419,7 +431,7 @@ public partial class HostViewModel : ObservableObject
             }
 
             Status = "Preparing…";
-            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowTaomWorldCreation: autoTaomCreate, experimentalCompat: experimentalCompat));
+            var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowWorldCreation: autoCreateWorld, experimentalCompat: experimentalCompat));
             _prepared = prepared;
             // Preparing can take long enough for the user to save more edits. Merge observations into
             // the latest saved document instead of overwriting it with the launch snapshot.
@@ -471,16 +483,16 @@ public partial class HostViewModel : ObservableObject
 
             ReportPrepared(prepared);
 
-            if (autoTaomCreate)
+            if (autoCreateWorld)
             {
-                Status = $"Creating TAOM world '{launchProfile.SaveName}'…";
-                AddLine(LogCategory.Milestone, $"[ModderLords] creating TAOM world '{launchProfile.SaveName}' before starting the server");
+                Status = $"Generating world '{launchProfile.SaveName}'…";
+                AddLine(LogCategory.Milestone, $"[ModderLords] generating world '{launchProfile.SaveName}' with {profileModuleIds.Count} active mod(s) before starting the server");
                 // The creation phase must start with no configured save. Otherwise a stale server-config.json can
                 // make the official host begin loading an older campaign before the creation hook gets control.
                 ServerConfig.Write(prepared.Paths, "", launchProfile.Server);
                 var creationPlan = LaunchSession.CreateWorldPlan(prepared, launchProfile.SaveName);
                 using var creationDiagnostics = CreationDiagnostics.Start(logDir, creationPlan, launchProfile.SaveName);
-                AddLine(LogCategory.Tool, $"[ModderLords] TAOM creation diagnostics -> {creationDiagnostics.ManifestPath}");
+                AddLine(LogCategory.Tool, $"[ModderLords] world creation diagnostics -> {creationDiagnostics.ManifestPath}");
                 using var creation = EngineProcess.Start(creationPlan);
                 _creationEngine = creation;
                 IsRunning = true;
@@ -511,15 +523,15 @@ public partial class HostViewModel : ObservableObject
                 if (completed != creationExit)
                 {
                     creationDiagnostics.RecordEvent($"launcher-watchdog timeout seconds={LaunchSession.DefaultCreateWorldTimeoutSeconds + 30}; process-stop-requested");
-                    AddLine(LogCategory.Error, "[ModderLords] TAOM world creation exceeded its 15-minute limit; the creation process was stopped");
+                    AddLine(LogCategory.Error, "[ModderLords] world creation exceeded its 15-minute limit; the creation process was stopped");
                 }
                 var creationSaveExists = SavePreparer.Exists(prepared.Paths, launchProfile.SaveName);
                 creationDiagnostics.Complete(creationCode, completed != creationExit, creationSaveExists);
                 FinishCreationProgress(creationCode, completed != creationExit, creationSaveExists);
                 _creationEngine = null;
                 if (creationCode != 11 || !creationSaveExists)
-                    throw new InvalidOperationException($"TAOM world creation stopped with exit code {creationCode}; no usable save was written.");
-                AddLine(LogCategory.Milestone, $"[ModderLords] TAOM world '{launchProfile.SaveName}' saved; starting the server");
+                    throw new InvalidOperationException($"World creation stopped with exit code {creationCode}; no usable save was written.");
+                AddLine(LogCategory.Milestone, $"[ModderLords] world '{launchProfile.SaveName}' saved; starting the server");
                 prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, experimentalCompat: experimentalCompat));
                 _prepared = prepared;
                 // The serve phase is a second, independently prepared plan with its own environment. Describing
