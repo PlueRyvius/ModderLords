@@ -229,6 +229,30 @@ public sealed class LaunchSession
             if (willCreateWorld || !creation.ShouldCreate) messages.Add(creationMessage);
         }
 
+        // What DependencyOnly costs, said at the one moment it matters. A mod whose code is not loaded cannot run
+        // its creation-time setup, so the generated world is missing whatever that setup would have built - and
+        // nothing said so: RBM Campaign's economy pass was found missing only by playing the world and reading the
+        // mod's own complaint. The load-order entry being present is what makes this invisible; the save header
+        // lists the mod either way.
+        if (willCreateWorld)
+        {
+            var silent = profile.EnabledMods.Where(m => m.Role == ServerRole.DependencyOnly).Select(m => m.Id).ToList();
+            if (silent.Count > 0)
+                messages.Add($"note: {string.Join(", ", silent)} {(silent.Count == 1 ? "is" : "are")} Dependency-only, so " +
+                             $"{(silent.Count == 1 ? "its" : "their")} code will not run while this world is generated. " +
+                             "Anything one of them would set up at campaign creation will be missing from it, even though " +
+                             "the save header lists the module.");
+        }
+
+        // Refused before the engine starts, because the alternative is a crash five seconds in with no explanation
+        // attached to it: four launches were spent on 2026-09-19 narrowing this down one module at a time.
+        if (ClientStackPolicy.Problem(profile) is { } clientStackProblem)
+        {
+            if (applySideEffects) throw new InvalidOperationException(clientStackProblem);
+            messages.Add("WARNING " + clientStackProblem);
+        }
+        if (ClientStackPolicy.Warning(profile) is { } clientStackWarning) messages.Add(clientStackWarning);
+
         // Refused, not warned: the old warning was one line in a long console, and on 2026-09-14 a TAOM host and join ran
         // with a generated recipe that no peer ever loaded. Ticking Server-only logic asks for gating; without Settings sync
         // it silently does nothing.
@@ -346,8 +370,12 @@ public sealed class LaunchSession
         // --dry-run, and every first launch of a new profile. Without it the most common mismatch of all (a brand
         // new world stamped from the vanilla template under a heavily modded load order) was reported only after
         // the file had already been written, and not at all in dry-run.
+        // The template is withheld when a world is being generated: FreshWorldMessages would otherwise announce a
+        // bootstrap from default_new_game.sav that is not going to happen, and advise running create-world - which
+        // is exactly what this launch is doing. It contradicted the generation messages three lines above it.
         messages.AddRange(SaveModuleCheck.MessagesForLaunch(
-            paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections), SavePreparer.FindTemplate(paths)));
+            paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections),
+            willCreateWorld ? null : SavePreparer.FindTemplate(paths)));
 
         ModderLords.Analysis.CompatibilityPlan? operationPlan = null;
         // Full operation analysis is explicit in the UI. Launch performs it when an approved managed adapter
