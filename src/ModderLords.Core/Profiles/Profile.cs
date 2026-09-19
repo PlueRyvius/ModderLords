@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using ModderLords.Core.Launch;
 using ModderLords.Core.Overlay;
@@ -92,6 +92,22 @@ public sealed class Profile
     /// the original. See <see cref="Coop.Saves.DistanceCacheOverride"/> for the crash it fixes.
     /// </summary>
     public bool UseModDistanceCache { get; set; }
+
+    /// <summary>
+    /// When a save has to be <i>created</i>, run the engine once with this profile's mods loaded and generate the
+    /// campaign, instead of copying the pre-baked vanilla template.
+    ///
+    /// It only ever applies to creation. A save that already exists is loaded untouched — generating over someone's
+    /// campaign is not a thing a tick box should be able to do.
+    ///
+    /// Off by default because generation costs a full extra engine run (up to the 15-minute budget in
+    /// <c>LaunchSession.DefaultCreateWorldTimeoutSeconds</c>), so it stays a deliberate choice. With it off and mods
+    /// enabled, the launch says out loud that the world it made is a vanilla one — which is the failure this exists
+    /// for: <c>default_new_game.sav</c> lists Native;SandBoxCore;Sandbox;Coop and nothing else, so a modded server
+    /// that bootstraps from it silently serves a world its mods were never part of.
+    /// </summary>
+    public bool GenerateWorldWithActiveMods { get; set; }
+
     public ServerSettings Server { get; set; } = new();
 
     /// <summary>
