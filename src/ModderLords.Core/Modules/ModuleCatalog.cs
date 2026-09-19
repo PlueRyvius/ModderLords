@@ -1,3 +1,4 @@
+using ModderLords.Core.Profiles;
 using System.Xml;
 using Bannerlord.ModuleManager;
 
@@ -72,19 +73,87 @@ public sealed class ModuleCatalog
         return new ModuleCatalog(modules, problems);
     }
 
+    /// <summary>
+    /// How far below a scan root a module may be buried. Mods are increasingly shipped as a <i>package</i> - a
+    /// container folder holding <c>Client/&lt;Id&gt;</c> and <c>Server/&lt;Id&gt;</c> - and a person drops the whole
+    /// thing into Modules exactly as downloaded. At one level deep that package was invisible: the container has no
+    /// SubModule.xml, so both halves were skipped and nothing said why (COOP Family 1.4, 2026-09-19).
+    ///
+    /// Three is container -> Client|Server -> Id with a level to spare. It is a bound, not a target: a well-formed
+    /// install never recurses at all, because every real module folder stops the walk immediately.
+    /// </summary>
+    private const int MaxContainerDepth = 3;
+
     private static void ScanRoot(string root, ModuleSourceKind kind, List<DiscoveredModule> modules, List<string> problems)
     {
         if (!Directory.Exists(root)) return;
-        foreach (var dir in Directory.EnumerateDirectories(root))
+        foreach (var dir in EnumerateOrEmpty(root))
+            ScanDir(dir, kind, modules, problems, depth: 0);
+    }
+
+    private static void ScanDir(string dir, ModuleSourceKind kind, List<DiscoveredModule> modules, List<string> problems, int depth)
+    {
+        if (IsOurs(dir)) return;
+        var isLink = IsReparsePoint(dir);
+
+        // Junctions inside the server's engine\Modules are our own overlay entries, not stock modules. Deliberately
+        // still scoped to ServerStock: a junction that IS a module folder is how the isolated client view exposes a
+        // chosen copy (ClientModuleView), so skipping links outright would make that view discover nothing.
+        if (kind == ModuleSourceKind.ServerStock && isLink) return;
+
+        // A folder with a manifest IS the module. Never descend into it: mods legitimately carry nested folders that
+        // contain manifests of their own (TAOM.Dependencies), and treating those as modules invents entries the game
+        // will never load. This is also what keeps the walk cheap - the common case stops here, at depth 0.
+        if (File.Exists(Path.Combine(dir, "SubModule.xml")))
         {
-            // Junctions inside the server's engine\Modules are our own overlay entries, not stock modules.
-            if (kind == ModuleSourceKind.ServerStock && new DirectoryInfo(dir).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
-            var manifest = Path.Combine(dir, "SubModule.xml");
-            if (!File.Exists(manifest)) continue;
             var parsed = TryParse(dir, kind, out var problem);
             if (parsed is not null) modules.Add(parsed);
             else if (problem is not null) problems.Add(problem);
+            return;
         }
+
+        // Recursion is the new part, so this is the new hazard: descending THROUGH a link can re-enter a tree that is
+        // already being scanned (or loop). A link that turned out to be a module was handled above; one that is not a
+        // module has nothing we need badly enough to risk walking it.
+        if (isLink) return;
+
+        if (depth >= MaxContainerDepth) return;
+        foreach (var child in EnumerateOrEmpty(dir)) ScanDir(child, kind, modules, problems, depth + 1);
+    }
+
+    /// <summary>
+    /// Per-directory, not per-root: one unreadable folder - a permissions hole, an antivirus quarantine, a dangling
+    /// junction - must cost that folder and nothing else. Letting it throw would abandon every later root as well.
+    /// </summary>
+    private static IEnumerable<string> EnumerateOrEmpty(string dir)
+    {
+        try { return Directory.EnumerateDirectories(dir).ToList(); }
+        catch (IOException) { return Array.Empty<string>(); }
+        catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
+    }
+
+    private static bool IsReparsePoint(string dir)
+    {
+        try { return new DirectoryInfo(dir).Attributes.HasFlag(FileAttributes.ReparsePoint); }
+        catch { return true; }   // cannot tell = do not walk into it
+    }
+
+    /// <summary>
+    /// Anything under our own data directory: overlays, shadow copies, module backups, the isolated client view.
+    /// Those hold real SubModule.xml files, so a custom root pointing at or above them would otherwise discover
+    /// ModderLords' own working copies as if they were installed mods. Derived from <see cref="ProfileStore.RootDir"/>
+    /// rather than matched by folder name, so renaming any of those folders cannot silently defeat this.
+    /// </summary>
+    private static bool IsOurs(string dir)
+    {
+        try
+        {
+            var ours = Path.GetFullPath(ProfileStore.RootDir);
+            var full = Path.GetFullPath(dir);
+            return full.Equals(ours, StringComparison.OrdinalIgnoreCase)
+                   || full.StartsWith(ours.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
     }
 
     /// <summary>
