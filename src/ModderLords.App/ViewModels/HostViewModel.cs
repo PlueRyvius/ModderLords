@@ -453,8 +453,23 @@ public partial class HostViewModel : ObservableObject
             if (rotatedCrashes > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedCrashes} old engine crash report(s)");
             if (rotatedEngineLogs > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedEngineLogs} old engine error log(s)");
 
-            foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
-            foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
+            // Kept so a crash can repeat them at the bottom. Preparation runs before the engine starts, so its
+            // warnings land in the first few lines and the crash lands thousands of lines later - on 2026-09-19 a
+            // warning that named the cause exactly sat on line 3 of a 2,687-line log while the failure was on line
+            // 2,687. Having said it once, off-screen, is not the same as having told anyone.
+            var launchWarnings = new List<string>();
+            void Report(string m)
+            {
+                AddLine(LogCategory.Tool, "[ModderLords] " + m);
+                if (m.Contains("WARNING", StringComparison.Ordinal)) launchWarnings.Add(m);
+            }
+            void ReportPrepared(LaunchSession.Prepared p)
+            {
+                foreach (var m in p.Messages) Report(m);
+                foreach (var l in p.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries)) Report(l.TrimEnd());
+            }
+
+            ReportPrepared(prepared);
 
             if (autoTaomCreate)
             {
@@ -507,12 +522,14 @@ public partial class HostViewModel : ObservableObject
                 AddLine(LogCategory.Milestone, $"[ModderLords] TAOM world '{launchProfile.SaveName}' saved; starting the server");
                 prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, experimentalCompat: experimentalCompat));
                 _prepared = prepared;
-                foreach (var m in prepared.Messages) AddLine(LogCategory.Tool, "[ModderLords] " + m);
                 // The serve phase is a second, independently prepared plan with its own environment. Describing
                 // only the creation plan hid a real divergence between the two: the served world loaded the vanilla
                 // map while the generated one used TAOM's, and the env that decides it was never written down.
-                foreach (var l in prepared.Plan.Describe().Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                    AddLine(LogCategory.Tool, "[ModderLords] " + l.TrimEnd());
+                //
+                // Its warnings replace the creation plan's rather than adding to them: this is the plan that will
+                // actually serve, so repeating the other one's at the end would attribute the wrong cause.
+                launchWarnings.Clear();
+                ReportPrepared(prepared);
             }
 
             _engine = EngineProcess.Start(prepared.Plan);
@@ -577,6 +594,14 @@ public partial class HostViewModel : ObservableObject
             // What was collapsed, so a quietened console still ends with the honest totals.
             foreach (var (message, count) in _repeats.Totals.Take(5).Select(kv => (kv.Key, kv.Value)))
                 AddLine(LogCategory.Warning, $"[ModderLords] repeated {count:N0} times: {message}");
+            // Repeat the preparation warnings at the point of failure. 11 is a deliberate stop (world created), and a
+            // clean exit needs no post-mortem; everything else is a crash the user now has to explain, and the
+            // explanation is almost always something we already said before the engine started.
+            if (code != 0 && code != 11 && launchWarnings.Count > 0)
+            {
+                AddLine(LogCategory.Warning, $"[ModderLords] {launchWarnings.Count} warning(s) were raised before this launch; the cause is usually among them:");
+                foreach (var w in launchWarnings) AddLine(LogCategory.Warning, "[ModderLords]   " + w);
+            }
             Status = $"Engine exited with {code}: {ExitCodeExplainer.Explain(code)}";
             AddLine(LogCategory.Milestone, "[ModderLords] " + Status);
             _launchLog?.Dispose(); _launchLog = null;

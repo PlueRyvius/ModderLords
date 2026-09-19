@@ -121,12 +121,20 @@ public static class OverlayPlanner
         // server whether or not the mod bothered to tag itself client-only, because the assembly is absent from the
         // server's runtime rather than merely unsafe to touch - so the method holding the call site cannot even be
         // compiled headless. Gating this on the manifest would miss every mod that forgot the tag.
+        //
+        // This downgrades rather than warns, for the same reason the missing-class check above does: the failure is
+        // not a risk, it is a certainty, and the two cases deserve the same answer. Warning alone was tried and does
+        // not work - on 2026-09-19 DismembermentPlus was warned about on line 3 of a 2,687-line log and then killed
+        // the server anyway, 2,684 lines later. A guard nobody reads in time is not a guard.
         var desktop = scanned?.DesktopAssemblies ?? [];
         if (desktop.Count > 0)
+        {
             notes.Add("WARNING: its code references " + string.Join(", ", desktop)
-                      + ", which the dedicated server's runtime does not ship - Run will crash the server on load, "
-                      + "not only if the feature is used. Use AsShipped to let the engine skip it, or DependencyOnly "
-                      + "to keep its data and load-order entry without loading its code.");
+                      + ", which the dedicated server's runtime does not ship - Run would crash the server on load, "
+                      + "not only if the feature is used. Falling back to DependencyOnly: data and load-order entry "
+                      + "kept, code not loaded. Set it to AsShipped instead if you want the engine to decide.");
+            return sel with { Role = ServerRole.DependencyOnly };
+        }
 
         if (!mod.HasHeadlessExclusions) return sel;
 
