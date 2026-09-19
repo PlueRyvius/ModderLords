@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -403,6 +403,39 @@ public partial class MainWindow : Window
     }
 
     private void Profiles_DropDownOpened(object sender, System.EventArgs e) => ViewModel.RefreshProfileList();
+
+    /// <summary>
+    /// Ctrl+C over the console copies the selected rows. Handled here rather than by a command because the selection
+    /// lives on the ListBox, and ListBox.SelectedItems is not a bindable dependency property.
+    /// </summary>
+    private void ConsoleList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.C && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            CopySelectedConsoleLines();
+            e.Handled = true;
+        }
+    }
+
+    private void ConsoleCopySelected_Click(object sender, RoutedEventArgs e) => CopySelectedConsoleLines();
+
+    private void ConsoleSelectAll_Click(object sender, RoutedEventArgs e) => ConsoleList.SelectAll();
+
+    /// <summary>
+    /// Copies in the order the console shows, not the order the rows happened to be clicked: a pasted excerpt whose
+    /// lines are out of sequence is worse than useless for reading a launch back.
+    /// </summary>
+    private void CopySelectedConsoleLines()
+    {
+        if (ViewModel.Host is not { } host) return;
+        var selected = ConsoleList.SelectedItems.Cast<ConsoleLine>().ToHashSet();
+        if (selected.Count == 0) { host.CopyShownCommand.Execute(null); return; }
+
+        var text = string.Join(Environment.NewLine,
+            host.ConsoleView.Cast<ConsoleLine>().Where(selected.Contains).Select(HostViewModel.Format));
+        if (host.TrySetClipboard(text))
+            host.CommandStatus = $"Copied {selected.Count} selected line(s) to the clipboard.";
+    }
 
     private void Command_KeyDown(object sender, KeyEventArgs e)
     {
