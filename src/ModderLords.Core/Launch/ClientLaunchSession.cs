@@ -72,7 +72,7 @@ public static class ClientLaunchSession
 
         // Roles are a dedicated-server concept (they decide what the overlay strips out of a manifest). On the
         // player's own machine every enabled mod simply loads, so the selection is used for its module list only.
-        var mods = ModuleSelector.Select(profile, catalog, messages).Select(s => s.Module).ToList();
+        var mods = ModuleSelector.Select(profile, catalog, messages, ModuleSelector.ModuleSide.Client).Select(s => s.Module).ToList();
 
         var order = LoadOrder.Compute(officials, mods, profile.Mods.Select(m => m.Id).ToList(), LoadOrder.Profile.Client,
             profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest,
