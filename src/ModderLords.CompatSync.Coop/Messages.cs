@@ -62,3 +62,26 @@ public sealed class NetworkRelayResult : IEvent
     [ProtoMember(4)] public string Reason { get; set; } = "";
     [ProtoMember(5)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>Client -> server (TAOM sessions): the joining player's TAOM character-creation choices, sent once.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomJoinChoices : ICommand
+{
+    /// <summary>The character-creation hero's id on the client (the hero the join replaced).</summary>
+    [ProtoMember(1)] public string HeroId { get; set; } = "";
+    [ProtoMember(2)] public string CultureId { get; set; } = "";
+    [ProtoMember(3)] public int RaceId { get; set; } = -1;
+    [ProtoMember(4)] public string CareerId { get; set; } = "";
+    [ProtoMember(5)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Server -> the sending client: what happened to its TAOM join package.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomJoinResult : IEvent
+{
+    [ProtoMember(1)] public bool Applied { get; set; }
+    [ProtoMember(2)] public string Detail { get; set; } = "";
+    [ProtoMember(3)] public int ProtocolVersion { get; set; }
+    /// <summary>False when the server could not act yet (player or hero not known); the client sends again later.</summary>
+    [ProtoMember(4)] public bool Final { get; set; }
+}
