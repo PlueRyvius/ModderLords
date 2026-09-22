@@ -69,6 +69,10 @@ public sealed record ModListFile
         // Roles come from the profile, not from the selections: a player's prepare has no roles to report (every mod
         // simply loads), so reading them from there would make a player's export differ from a host's.
         var roles = profile.Mods.ToDictionary(m => m.Id, m => m.Role, StringComparer.OrdinalIgnoreCase);
+        // A link set on the profile wins over one read from the folder name: it is how a mod installed by hand into
+        // Modules, which has no Workshop folder to read, still reaches the importer with somewhere to get it.
+        var links = profile.Mods.Where(m => !string.IsNullOrWhiteSpace(m.DownloadUrl))
+            .ToDictionary(m => m.Id, m => m.DownloadUrl!, StringComparer.OrdinalIgnoreCase);
         ServerRole RoleOf(string id) => roles.TryGetValue(id, out var r) ? r : ServerRole.AsShipped;
 
         var coop = ClientOrder.Coop(prepared);
@@ -83,7 +87,7 @@ public sealed record ModListFile
         var mods = exported
             .OrderBy(m => position.TryGetValue(m.Id, out var i) ? i : int.MaxValue)
             .ThenBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(m => new ModEntry(m.Id, m.Version, ClientManifest.WorkshopUrl(m.FolderPath),
+            .Select(m => new ModEntry(m.Id, m.Version, links.GetValueOrDefault(m.Id) ?? ClientManifest.WorkshopUrl(m.FolderPath),
                                       RoleOf(m.Id), authoritative.Contains(m.Id)))
             .ToList();
 

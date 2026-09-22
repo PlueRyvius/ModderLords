@@ -62,6 +62,21 @@ public class ProfileWorkflowTests
         Assert.Equal("https://example.test/download", imported.DownloadUrl);
     }
 
+    [Theory]
+    [InlineData(@"C:\Game\Modules\HandInstalled", "https://steamcommunity.com/sharedfiles/filedetails/?id=3000000002", "https://steamcommunity.com/sharedfiles/filedetails/?id=3000000002")]
+    [InlineData(@"C:\Steam\workshop\content\261550\2859188632", null, "https://steamcommunity.com/sharedfiles/filedetails/?id=2859188632")]
+    [InlineData(@"C:\Steam\workshop\content\261550\2859188632", "https://example.test/mirror", "https://example.test/mirror")]
+    [InlineData(@"C:\Game\Modules\HandInstalled", null, null)]
+    public void InstalledModsExportTheProfileLinkBeforeTheFolderOne(string folder, string? profileLink, string? expected)
+    {
+        var profile = new Profile { Mods = [new ProfileMod { Id = "Linked", DownloadUrl = profileLink }] };
+        var catalog = ModuleCatalog.Scan("", null, [], []);
+        var module = new DiscoveredModule("Linked", "v1.0.0", folder, ModuleSourceKind.Custom,
+            new Bannerlord.ModuleManager.ModuleInfoExtended { Id = "Linked", Name = "Linked" });
+        var prepared = new ModuleSelectionResult(catalog, [new ModSelection(module, ServerRole.Run)], new LoadOrder.Result(["Linked"], []));
+        Assert.Equal(expected, Assert.Single(ModListFile.From(prepared, profile).Mods).Source);
+    }
+
     [Fact]
     public void SettingsSidecarsAreNotListedAsProfiles()
     {
