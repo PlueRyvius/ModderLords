@@ -266,6 +266,7 @@
                                     <MenuItem Header="Subscribe to missing mods on the Workshop…" Command="{Binding SubscribeMissingCommand}" />
                                     <Separator />
                                     <MenuItem Header="Open folder" Command="{Binding OpenModFolderCommand}" />
+                                    <MenuItem Header="Set download link…" Command="{Binding SetSourceLinkCommand}" />
                                 </ContextMenu>
                             </DataGrid.ContextMenu>
                             <DataGrid.RowStyle>

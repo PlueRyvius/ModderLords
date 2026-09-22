@@ -1003,6 +1003,7 @@ public partial class MainViewModel : ObservableObject
         NotifyMoveability();
         RemoveModCommand.NotifyCanExecuteChanged();
         OpenModFolderCommand.NotifyCanExecuteChanged();
+        SetSourceLinkCommand.NotifyCanExecuteChanged();
     }
 
     // ---- removing mods that are gone ---------------------------------------------------------------
@@ -1077,8 +1078,61 @@ public partial class MainViewModel : ObservableObject
         };
         win.ShowDialog();
         // The folder watch would get there too, a few seconds later; a rescan now shows the result as the window closes.
-        if (win.AnyInstalled && !IsDirty) Rescan();
+        if (!win.AnyInstalled || IsDirty) return;
+        Rescan();
+        ReportVersionMismatches(workshop.Select(w => w.ModId));
     }
+
+    /// <summary>
+    /// The Workshop only ever serves an item's latest version, so a freshly downloaded mod can be newer than the one
+    /// the list was made with, and a server running the older one will turn the player away. Say so rather than let
+    /// "installed" read as "ready".
+    /// </summary>
+    private void ReportVersionMismatches(IEnumerable<string> ids)
+    {
+        var mismatches = VersionMismatches(ids);
+        if (mismatches.Count == 0) return;
+        foreach (var m in mismatches)
+            Log(LogCategory.Warning, $"[ModderLords] {m.Id}: the list wants {m.Wanted}, the Workshop gave {m.Installed}");
+        MessageBox.Show(
+            "These mods downloaded at a different version from the one in the list. The Workshop only serves the latest, "
+            + "so the host may need to update too, or send you the version they run:\n\n"
+            + string.Join("\n", mismatches.Select(m => $"{m.Id}: list {m.Wanted}, installed {m.Installed}")),
+            "Version mismatch", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    /// <summary>Mods in <paramref name="ids"/> installed at a version other than the one the profile recorded.</summary>
+    internal List<(string Id, string Wanted, string Installed)> VersionMismatches(IEnumerable<string> ids)
+    {
+        var found = new List<(string, string, string)>();
+        foreach (var id in ids.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var wanted = Profile.Mods.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))?.LastVersion;
+            if (string.IsNullOrWhiteSpace(wanted)) continue;
+            var installed = Mods.Where(r => !r.IsMissing && r.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).ToList();
+            // Any installed copy at the wanted version will do: it is the one the launch can pin.
+            if (installed.Count == 0 || installed.Any(r => SaveHeaderReader.VersionsEqual(r.Version, wanted))) continue;
+            found.Add((id, wanted, installed[0].Version));
+        }
+        return found;
+    }
+
+    /// <summary>Records where the selected mod can be downloaded, so exported lists can tell importers.</summary>
+    [RelayCommand(CanExecute = nameof(CanSetSourceLink))]
+    private void SetSourceLink()
+    {
+        if (SelectedMod is not { IsGameModule: false } row) return;
+        CollectProfileFromRows();
+        var pm = Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
+        if (pm is null) return;
+        var win = new SourceLinkWindow(row.Id, pm.DownloadUrl ?? ClientManifest.WorkshopUrl(row.Folder)) { Owner = Application.Current.MainWindow };
+        if (win.ShowDialog() != true) return;
+        pm.DownloadUrl = win.Link.Length == 0 ? null : win.Link;
+        IsDirty = true;
+        Status = $"{row.Id}: download link {(pm.DownloadUrl is null ? "removed" : "set")}. Save to keep it.";
+    }
+
+    private bool CanSetSourceLink() => SelectedMod is { IsGameModule: false };
 
     /// <summary>Removes every missing row without asking. The command asks first; tests call this directly.</summary>
     internal void RemoveMissingRows()
