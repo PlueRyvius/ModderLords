@@ -291,6 +291,13 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Subscribe to an imported list's missing Workshop mods through Steam. Opt-in, remembered in UiState.</summary>
     [ObservableProperty] private bool _autoSubscribeWorkshop;
 
+    /// <summary>Make sure the Bannerlord Coop Workshop item is subscribed whenever a list is imported. Remembered in UiState.</summary>
+    [ObservableProperty] private bool _alwaysSubscribeCoop = true;
+
+    /// <summary>Whether Steam has the Coop Workshop item on disk in any library.</summary>
+    private static bool CoopOnWorkshop() => GamePaths.SteamLibraries().Any(lib => Directory.Exists(
+        Path.Combine(lib, "steamapps", "workshop", "content", GamePaths.BannerlordAppId.ToString(), ServerPaths.CoopWorkshopItemId.ToString())));
+
     /// <summary>The experimental columns and buttons are shown only in Host mode with experimental compatibility on.</summary>
     public bool ShowExperimentalCompat => IsHost && ExperimentalCompat;
 
@@ -1042,7 +1049,8 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Subscribes to the missing mods on the Workshop (or, with auto-subscribe off, offers their pages).</summary>
     [RelayCommand(CanExecute = nameof(HasMissing))]
-    private void SubscribeMissing() => SubscribeToMissing(auto: AutoSubscribeWorkshop || AskToSubscribe());
+    private void SubscribeMissing() => SubscribeToMissing(auto: AutoSubscribeWorkshop || AskToSubscribe(),
+        includeCoop: AlwaysSubscribeCoop && !CoopOnWorkshop());
 
     private bool AskToSubscribe() => MessageBox.Show(
         "Subscribe to the missing mods through Steam? Steam shows you as playing Bannerlord for as long as it takes.\n\n"
@@ -1066,11 +1074,15 @@ public partial class MainViewModel : ObservableObject
         return (workshop, manual);
     }
 
-    private void SubscribeToMissing(bool auto)
+    /// <param name="includeCoop">Add the Bannerlord Coop Workshop item, which no list names as a missing mod.</param>
+    /// <param name="onlyCoop">Subscribe to Coop and nothing else (the Coop toggle is on, general auto-subscribe is off).</param>
+    private void SubscribeToMissing(bool auto, bool includeCoop = false, bool onlyCoop = false)
     {
-        var ids = Mods.Where(r => r.IsMissing && r.Enabled).Select(r => r.Id)
+        var ids = onlyCoop ? [] : Mods.Where(r => r.IsMissing && r.Enabled).Select(r => r.Id)
             .Concat(Profile.PendingLauncherApply ? ModListFile.AsListed(Profile).NotInstalled(InstalledClientSide()) : []);
         var (workshop, manual) = MissingBySource(ids);
+        if ((includeCoop || onlyCoop) && !workshop.Any(w => w.WorkshopId == (ulong)ServerPaths.CoopWorkshopItemId))
+            workshop.Insert(0, ((ulong)ServerPaths.CoopWorkshopItemId, "Bannerlord Coop"));
         if (workshop.Count == 0 && manual.Count == 0) return;
         var win = new WorkshopSubscribeWindow(workshop, manual, ClientLauncher.ResolveGameRoot(Profile), auto)
         {
@@ -1604,9 +1616,10 @@ public partial class MainViewModel : ObservableObject
         try { file = ModListFile.Read(dlg.FileName); }
         catch (Exception ex) { Status = ex.Message; Messages.Add("import: " + ex.Message); return; }
 
-        var win = new ImportListWindow(file, dlg.FileName, ProfileStore.List().ToList(), AutoSubscribeWorkshop) { Owner = Application.Current.MainWindow };
+        var win = new ImportListWindow(file, dlg.FileName, ProfileStore.List().ToList(), AutoSubscribeWorkshop, AlwaysSubscribeCoop) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         AutoSubscribeWorkshop = win.AutoSubscribe;
+        AlwaysSubscribeCoop = win.AlwaysSubscribeCoop;
 
         try
         {
@@ -1627,7 +1640,9 @@ public partial class MainViewModel : ObservableObject
                                            + $"Profile “{imported.Name}” keeps them; once they are downloaded you will be offered the launcher update again.");
             }
             // Before the launcher update, so whatever downloads while the window is open goes into LauncherData.xml too.
-            if (missing.Count > 0 && AutoSubscribeWorkshop) SubscribeToMissing(auto: true);
+            var coop = AlwaysSubscribeCoop && !CoopOnWorkshop();
+            if (AutoSubscribeWorkshop && (missing.Count > 0 || coop)) SubscribeToMissing(auto: true, includeCoop: coop);
+            else if (coop) SubscribeToMissing(auto: true, onlyCoop: true);
             if (win.ApplyToLauncher) ApplyListToLauncher(file, "the shared file");
             Status = missing.Count > 0 ? $"Import done — {missing.Count} mods still to download." : "Import done.";
         }

@@ -42,6 +42,9 @@ public sealed class UiState
     /// <summary>Subscribe to a shared list's missing Workshop mods through Steam when importing it. Opt-in: it changes the Steam account.</summary>
     public bool AutoSubscribeWorkshop { get; set; }
 
+    /// <summary>On import, make sure the Bannerlord Coop Workshop item is subscribed, whatever the list says. On by default: nobody joins without it.</summary>
+    public bool AlwaysSubscribeCoop { get; set; } = true;
+
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }
