@@ -1,0 +1,18 @@
+<Window x:Class="ModderLords.App.WorkshopSubscribeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
+        Title="Subscribe to missing Workshop mods" Height="420" Width="640" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" x:Name="Header" FontWeight="Bold" Margin="0,0,0,4" TextWrapping="Wrap" />
+        <TextBlock DockPanel.Dock="Top" x:Name="Note" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Text="Steam will show you as playing Bannerlord while this runs. Downloads continue in Steam if you close this window." />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Right" FlowDirection="RightToLeft">
+            <Button x:Name="CloseButton" Content="Cancel" Click="Close_Click" MinWidth="80" Margin="4,0" />
+            <Button x:Name="OpenButton" Content="Open on Workshop" Click="Open_Click" MinWidth="140" Margin="4,0" Visibility="Collapsed" />
+        </StackPanel>
+
+        <ListBox x:Name="Items" FontFamily="Consolas" Background="Transparent" Foreground="{DynamicResource Foreground}" />
+    </DockPanel>
+</Window>

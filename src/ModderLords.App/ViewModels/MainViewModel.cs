@@ -288,6 +288,9 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     [ObservableProperty] private bool _experimentalCompat;
 
+    /// <summary>Subscribe to an imported list's missing Workshop mods through Steam. Opt-in, remembered in UiState.</summary>
+    [ObservableProperty] private bool _autoSubscribeWorkshop;
+
     /// <summary>The experimental columns and buttons are shown only in Host mode with experimental compatibility on.</summary>
     public bool ShowExperimentalCompat => IsHost && ExperimentalCompat;
 
@@ -1036,6 +1039,47 @@ public partial class MainViewModel : ObservableObject
 
     private bool HasMissing() => MissingCount > 0;
 
+    /// <summary>Subscribes to the missing mods on the Workshop (or, with auto-subscribe off, offers their pages).</summary>
+    [RelayCommand(CanExecute = nameof(HasMissing))]
+    private void SubscribeMissing() => SubscribeToMissing(auto: AutoSubscribeWorkshop || AskToSubscribe());
+
+    private bool AskToSubscribe() => MessageBox.Show(
+        "Subscribe to the missing mods through Steam? Steam shows you as playing Bannerlord for as long as it takes.\n\n"
+        + "No opens their Workshop pages instead, so you can subscribe to each yourself.",
+        "Subscribe to missing mods", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    /// <summary>
+    /// The profile's missing mods, split into those with a Workshop id (from the link the list carried) and those
+    /// nothing here can fetch.
+    /// </summary>
+    internal (List<(ulong WorkshopId, string ModId)> Workshop, List<(string ModId, string? Link)> Manual) MissingBySource(IEnumerable<string> missingIds)
+    {
+        var workshop = new List<(ulong, string)>();
+        var manual = new List<(string, string?)>();
+        foreach (var id in missingIds.Where(id => !OfficialModules.IsGameModule(id)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var link = Profile.Mods.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))?.DownloadUrl;
+            if (Core.Workshop.WorkshopEvent.ParseWorkshopId(link) is { } wid) workshop.Add((wid, id));
+            else manual.Add((id, link));
+        }
+        return (workshop, manual);
+    }
+
+    private void SubscribeToMissing(bool auto)
+    {
+        var ids = Mods.Where(r => r.IsMissing && r.Enabled).Select(r => r.Id)
+            .Concat(Profile.PendingLauncherApply ? ModListFile.AsListed(Profile).NotInstalled(InstalledClientSide()) : []);
+        var (workshop, manual) = MissingBySource(ids);
+        if (workshop.Count == 0 && manual.Count == 0) return;
+        var win = new WorkshopSubscribeWindow(workshop, manual, ClientLauncher.ResolveGameRoot(Profile), auto)
+        {
+            Owner = Application.Current.MainWindow,
+        };
+        win.ShowDialog();
+        // The folder watch would get there too, a few seconds later; a rescan now shows the result as the window closes.
+        if (win.AnyInstalled && !IsDirty) Rescan();
+    }
+
     /// <summary>Removes every missing row without asking. The command asks first; tests call this directly.</summary>
     internal void RemoveMissingRows()
     {
@@ -1075,6 +1119,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(MissingCount));
         RemoveModCommand.NotifyCanExecuteChanged();
         RemoveAllMissingCommand.NotifyCanExecuteChanged();
+        SubscribeMissingCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand(CanExecute = nameof(CanOpenModFolder))]
@@ -1505,19 +1550,20 @@ public partial class MainViewModel : ObservableObject
         try { file = ModListFile.Read(dlg.FileName); }
         catch (Exception ex) { Status = ex.Message; Messages.Add("import: " + ex.Message); return; }
 
-        var win = new ImportListWindow(file, dlg.FileName, ProfileStore.List().ToList()) { Owner = Application.Current.MainWindow };
+        var win = new ImportListWindow(file, dlg.FileName, ProfileStore.List().ToList(), AutoSubscribeWorkshop) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
+        AutoSubscribeWorkshop = win.AutoSubscribe;
 
         try
         {
             // Mods the launcher cannot be given yet. Without a profile to hold them they would only be logged and
             // then forgotten, and downloading them would mean importing the file all over again.
-            var missing = win.ApplyToLauncher ? file.NotInstalled(InstalledClientSide()) : [];
-            if (win.CreateProfile || missing.Count > 0)
+            var missing = file.NotInstalled(InstalledClientSide());
+            if (win.CreateProfile || (win.ApplyToLauncher && missing.Count > 0))
             {
                 var name = win.ProfileNameText.Length > 0 ? win.ProfileNameText : "shared";
                 var imported = file.ToProfile(name);
-                imported.PendingLauncherApply = missing.Count > 0;
+                imported.PendingLauncherApply = win.ApplyToLauncher && missing.Count > 0;
                 ProfileStore.Save(imported);
                 LoadProfileList();
                 SelectedProfileName = imported.Name;
@@ -1526,6 +1572,8 @@ public partial class MainViewModel : ObservableObject
                     Log(LogCategory.Warning, $"[ModderLords] {missing.Count} mods from the shared list are not installed: {string.Join(", ", missing)}. "
                                            + $"Profile “{imported.Name}” keeps them; once they are downloaded you will be offered the launcher update again.");
             }
+            // Before the launcher update, so whatever downloads while the window is open goes into LauncherData.xml too.
+            if (missing.Count > 0 && AutoSubscribeWorkshop) SubscribeToMissing(auto: true);
             if (win.ApplyToLauncher) ApplyListToLauncher(file, "the shared file");
             Status = missing.Count > 0 ? $"Import done — {missing.Count} mods still to download." : "Import done.";
         }

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using ModderLords.Core.Profiles;
+using ModderLords.Core.Workshop;
 
 namespace ModderLords.App;
 
@@ -11,6 +12,10 @@ public partial class App : Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Helper mode: the app starts itself to talk to Steam, so only that short-lived process ever loads the Steam
+        // library and shows the user as playing Bannerlord. No window, no data-dir work; report on stdout and exit.
+        if (e.Args.Length > 0 && e.Args[0] == SteamWorkshop.SubscribeArg) Environment.Exit(WorkshopHelper.Run(e.Args));
+
         base.OnStartup(e);
         // Log instead of dying: an exception in a UI handler must never take the server console down with it.
         DispatcherUnhandledException += (_, args) =>

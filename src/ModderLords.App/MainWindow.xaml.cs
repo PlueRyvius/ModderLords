@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         var mode = _ui.Mode;
         if (mode is null) mode = AskForMode();
         ViewModel.ExperimentalCompat = _ui.ExperimentalCompat;
+        ViewModel.AutoSubscribeWorkshop = _ui.AutoSubscribeWorkshop;
         ViewModel.ApplyMode(mode.Value);
         _baseTitle = Title;
         ViewModel.Update = new UpdateViewModel(ViewModel, _ui);
@@ -92,6 +93,11 @@ public partial class MainWindow : Window
         {
             ApplyModeToColumns(ViewModel.Mode == AppMode.Host);
             _ui.ExperimentalCompat = ViewModel.ExperimentalCompat;
+            UiStateStore.Save(_ui);
+        }
+        if (e.PropertyName == nameof(MainViewModel.AutoSubscribeWorkshop))
+        {
+            _ui.AutoSubscribeWorkshop = ViewModel.AutoSubscribeWorkshop;
             UiStateStore.Save(_ui);
         }
         if (e.PropertyName != nameof(MainViewModel.Mode)) return;

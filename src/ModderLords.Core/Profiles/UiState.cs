@@ -39,6 +39,9 @@ public sealed class UiState
     /// <summary>Experimental compatibility (Server tab, Advanced). Off by default; see MainViewModel.ExperimentalCompat.</summary>
     public bool ExperimentalCompat { get; set; }
 
+    /// <summary>Subscribe to a shared list's missing Workshop mods through Steam when importing it. Opt-in: it changes the Steam account.</summary>
+    public bool AutoSubscribeWorkshop { get; set; }
+
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }

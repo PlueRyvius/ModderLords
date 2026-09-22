@@ -263,6 +263,7 @@
                                     <MenuItem Header="Remove from profile" Command="{Binding RemoveModCommand}" InputGestureText="Del"
                                               ToolTip="Take a mod you have deleted off this list. Only entries that are no longer installed can be removed; untick an installed mod instead." />
                                     <MenuItem Header="Remove all missing mods" Command="{Binding RemoveAllMissingCommand}" />
+                                    <MenuItem Header="Subscribe to missing mods on the Workshop…" Command="{Binding SubscribeMissingCommand}" />
                                     <Separator />
                                     <MenuItem Header="Open folder" Command="{Binding OpenModFolderCommand}" />
                                 </ContextMenu>

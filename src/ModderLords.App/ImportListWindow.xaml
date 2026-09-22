@@ -14,6 +14,8 @@
 
         <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
             <CheckBox x:Name="ApplyBox" Content="Set up my Bannerlord launcher to match (you will see what changes first)" IsChecked="True" Margin="0,0,0,6" />
+            <CheckBox x:Name="SubscribeBox" Margin="0,0,0,6"
+                      Content="Subscribe to missing Workshop mods automatically (Steam shows you playing Bannerlord briefly)" />
             <StackPanel Orientation="Horizontal">
                 <CheckBox x:Name="ProfileBox" Content="Create a server profile called" VerticalAlignment="Center" />
                 <TextBox x:Name="ProfileName" Width="180" Margin="6,0,0,0" VerticalAlignment="Center" />
