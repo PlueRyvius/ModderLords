@@ -12,10 +12,12 @@ public partial class ImportListWindow : Window
     public bool ApplyToLauncher => ApplyBox.IsChecked == true;
     public bool CreateProfile => ProfileBox.IsChecked == true;
     public string ProfileNameText => ProfileName.Text.Trim();
+    public bool AutoSubscribe => SubscribeBox.IsChecked == true;
 
-    public ImportListWindow(ModListFile file, string path, IReadOnlyList<string> existingProfiles)
+    public ImportListWindow(ModListFile file, string path, IReadOnlyList<string> existingProfiles, bool autoSubscribe = false)
     {
         InitializeComponent();
+        SubscribeBox.IsChecked = autoSubscribe;
         Header.Text = $"{file.Mods.Count} mods" + (file.Name is null ? "" : $" from “{file.Name}”")
                       + (file.Coop is null ? "" : $", Coop {file.Coop.Version}");
         SourceLine.Text = $"{path}\nExported {file.ExportedAt.LocalDateTime:g}"

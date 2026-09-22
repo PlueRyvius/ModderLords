@@ -28,6 +28,9 @@ These are referenced with `ExcludeAssets="runtime"`, so they are compiled agains
 - **Mount & Blade II: Bannerlord** (TaleWorlds Entertainment). The launcher starts the game's own
   dedicated server executable, already installed by the user through Steam. No game file is copied,
   patched, or redistributed.
+- **Steamworks API** (Valve). Subscribing to Workshop mods loads the game's own
+  `bin\Win64_Shipping_Client\steam_api64.dll` from the user's Bannerlord install, in a short-lived helper
+  process. No Valve file is copied or redistributed.
 - **Bannerlord Coop** (Steam Workshop item 3770450698, source-available). The launcher locates the
   Coop workshop item on the user's machine and runs the server that ships inside it. Coop's own code is
   never bundled or modified — this was a deliberate design boundary from the start, and the compatibility
