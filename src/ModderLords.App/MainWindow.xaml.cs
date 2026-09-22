@@ -38,6 +38,7 @@ public partial class MainWindow : Window
         if (mode is null) mode = AskForMode();
         ViewModel.ExperimentalCompat = _ui.ExperimentalCompat;
         ViewModel.AutoSubscribeWorkshop = _ui.AutoSubscribeWorkshop;
+        ViewModel.AlwaysSubscribeCoop = _ui.AlwaysSubscribeCoop;
         ViewModel.ApplyMode(mode.Value);
         _baseTitle = Title;
         ViewModel.Update = new UpdateViewModel(ViewModel, _ui);
@@ -98,6 +99,11 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainViewModel.AutoSubscribeWorkshop))
         {
             _ui.AutoSubscribeWorkshop = ViewModel.AutoSubscribeWorkshop;
+            UiStateStore.Save(_ui);
+        }
+        if (e.PropertyName == nameof(MainViewModel.AlwaysSubscribeCoop))
+        {
+            _ui.AlwaysSubscribeCoop = ViewModel.AlwaysSubscribeCoop;
             UiStateStore.Save(_ui);
         }
         if (e.PropertyName != nameof(MainViewModel.Mode)) return;
