@@ -855,6 +855,8 @@ public partial class MainViewModel : ObservableObject
 
             if (IsHost && Host is not null && paths is not null) Host.RefreshSaves(paths);
             RefreshPreview();
+            UpdateModFolderWatch(gameRoot);
+            OfferPendingLauncherApply();
             if (IsHost)
             {
                 Host?.RefreshDrift();
@@ -1508,36 +1510,140 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            if (win.CreateProfile)
+            // Mods the launcher cannot be given yet. Without a profile to hold them they would only be logged and
+            // then forgotten, and downloading them would mean importing the file all over again.
+            var missing = win.ApplyToLauncher ? file.NotInstalled(InstalledClientSide()) : [];
+            if (win.CreateProfile || missing.Count > 0)
             {
-                var imported = file.ToProfile(win.ProfileNameText);
+                var name = win.ProfileNameText.Length > 0 ? win.ProfileNameText : "shared";
+                var imported = file.ToProfile(name);
+                imported.PendingLauncherApply = missing.Count > 0;
                 ProfileStore.Save(imported);
                 LoadProfileList();
                 SelectedProfileName = imported.Name;
                 Log(LogCategory.Tool, $"[ModderLords] imported profile “{imported.Name}” with {file.Mods.Count} mods");
+                if (missing.Count > 0)
+                    Log(LogCategory.Warning, $"[ModderLords] {missing.Count} mods from the shared list are not installed: {string.Join(", ", missing)}. "
+                                           + $"Profile “{imported.Name}” keeps them; once they are downloaded you will be offered the launcher update again.");
             }
-            if (win.ApplyToLauncher)
-            {
-                var path = ClientManifest.DefaultLauncherDataPath();
-                // A format 2 list knows where Coop loads on a player, so the sync may place it. Format 1 does not.
-                var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide(),
-                    file.ClientOfficialModules?.ToHashSet(StringComparer.OrdinalIgnoreCase),
-                    orderIncludesCoopPosition: file.FormatVersion >= 2);
-                if (file.CoopPositionUnknown)
-                    Log(LogCategory.Warning, "[ModderLords] shared list: written by an older ModderLords and does not record where Coop loads. "
-                                           + "Coop has been left where it is; if you use mods that patch Coop, drag it above them.");
-                foreach (var b in plan.Blockers) Log(LogCategory.Warning, $"[ModderLords] shared list: {b.Id} — {b.Detail}");
-                var confirm = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
-                if (confirm.ShowDialog() == true)
-                {
-                    var applied = LauncherDataSync.Apply(plan, path, LauncherDataSync.DefaultBackupRoot());
-                    if (applied is not null)
-                        Log(LogCategory.Tool, $"[ModderLords] launcher mod list set from the shared file (backup: {applied.BackupPath})");
-                }
-            }
-            Status = "Import done.";
+            if (win.ApplyToLauncher) ApplyListToLauncher(file, "the shared file");
+            Status = missing.Count > 0 ? $"Import done — {missing.Count} mods still to download." : "Import done.";
         }
         catch (Exception ex) { Status = ex.Message; Log(LogCategory.Error, "[ModderLords] import: " + ex); }
+    }
+
+    /// <summary>
+    /// Shows what bringing LauncherData.xml in line with <paramref name="file"/> would change and, on confirmation,
+    /// does it. Returns whether the launcher list was written.
+    /// </summary>
+    private bool ApplyListToLauncher(ModListFile file, string what)
+    {
+        var path = ClientManifest.DefaultLauncherDataPath();
+        // A format 2 list knows where Coop loads on a player, so the sync may place it. Format 1 does not.
+        var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide(),
+            file.ClientOfficialModules?.ToHashSet(StringComparer.OrdinalIgnoreCase),
+            orderIncludesCoopPosition: file.FormatVersion >= 2);
+        if (file.CoopPositionUnknown)
+            Log(LogCategory.Warning, "[ModderLords] shared list: written by an older ModderLords and does not record where Coop loads. "
+                                   + "Coop has been left where it is; if you use mods that patch Coop, drag it above them.");
+        foreach (var b in plan.Blockers) Log(LogCategory.Warning, $"[ModderLords] shared list: {b.Id} — {b.Detail}");
+        var confirm = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot()) { Owner = Application.Current.MainWindow };
+        if (confirm.ShowDialog() != true) return false;
+        var applied = LauncherDataSync.Apply(plan, path, LauncherDataSync.DefaultBackupRoot());
+        if (applied is null) return false;
+        Log(LogCategory.Tool, $"[ModderLords] launcher mod list set from {what} (backup: {applied.BackupPath})");
+        return true;
+    }
+
+    /// <summary>Missing-mod count last seen per pending profile, so the offer is made when it drops, not on every scan.</summary>
+    private readonly Dictionary<string, int> _pendingMissingSeen = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// After a scan: if this profile holds an imported list the launcher could not fully take, and some of what was
+    /// missing has since been installed, offer to apply it again. Runs after the scan returns, never inside it.
+    /// </summary>
+    private void OfferPendingLauncherApply()
+    {
+        if (!Profile.PendingLauncherApply || Application.Current is null) return;
+        var file = ModListFile.AsListed(Profile);
+        var missing = file.NotInstalled(InstalledClientSide());
+        var name = Profile.Name;
+        var seen = _pendingMissingSeen.TryGetValue(name, out var s) ? s : (int?)null;
+        _pendingMissingSeen[name] = missing.Count;
+        if (missing.Count > 0 && (seen is null || missing.Count >= seen)) return;
+
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            if (!Profile.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return;
+            var text = missing.Count == 0
+                ? $"Every mod from the list imported into “{name}” is now installed. Set up the Bannerlord launcher to match?"
+                : $"Some mods from the list imported into “{name}” are now installed ({missing.Count} still missing). Update the Bannerlord launcher with what is here so far?";
+            if (MessageBox.Show(text, "Imported mod list", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            try
+            {
+                if (!ApplyListToLauncher(file, $"profile “{name}”") || missing.Count > 0) return;
+                // Cleared on the stored copy too, without saving any unsaved edits in the list along with it.
+                var stored = ProfileStore.Load(name);
+                if (stored is not null) { stored.PendingLauncherApply = false; ProfileStore.Save(stored); }
+                Profile.PendingLauncherApply = false;
+                _pendingMissingSeen.Remove(name);
+                Status = $"Launcher set up from “{name}” — nothing left to download.";
+            }
+            catch (Exception ex) { Status = ex.Message; Log(LogCategory.Error, "[ModderLords] pending import: " + ex); }
+        });
+    }
+
+    // ---- watching for downloads -------------------------------------------------------------------
+
+    private readonly List<FileSystemWatcher> _modFolderWatchers = new();
+    private System.Windows.Threading.DispatcherTimer? _modFolderDebounce;
+
+    /// <summary>
+    /// While the list has mods that are not installed, watch the Workshop content folder and the game's Modules so a
+    /// finished download is picked up without anyone pressing Rescan. Stopped as soon as nothing is missing.
+    /// </summary>
+    private void UpdateModFolderWatch(string? gameRoot)
+    {
+        foreach (var w in _modFolderWatchers) w.Dispose();
+        _modFolderWatchers.Clear();
+        if (Application.Current is null || !(Profile.PendingLauncherApply || Mods.Any(r => r.IsMissing && r.Enabled))) return;
+
+        var folders = GamePaths.SteamLibraries()
+            .Select(lib => Path.Combine(lib, "steamapps", "workshop", "content", GamePaths.BannerlordAppId.ToString()))
+            .Append(gameRoot is null ? "" : Path.Combine(gameRoot, "Modules"))
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var folder in folders)
+        {
+            try
+            {
+                var w = new FileSystemWatcher(folder) { NotifyFilter = NotifyFilters.DirectoryName, IncludeSubdirectories = false };
+                w.Created += OnModFolderChanged;
+                w.Renamed += OnModFolderChanged;
+                w.EnableRaisingEvents = true;
+                _modFolderWatchers.Add(w);
+            }
+            catch (Exception ex) { Log(LogCategory.Warning, $"[ModderLords] cannot watch {folder} for downloads: {ex.Message}"); }
+        }
+    }
+
+    private void OnModFolderChanged(object sender, FileSystemEventArgs e) =>
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            // Steam creates the item folder as the download lands; wait for it to go quiet before scanning.
+            _modFolderDebounce ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _modFolderDebounce.Tick -= ModFolderSettled;
+            _modFolderDebounce.Tick += ModFolderSettled;
+            _modFolderDebounce.Stop();
+            _modFolderDebounce.Start();
+        });
+
+    private void ModFolderSettled(object? sender, EventArgs e)
+    {
+        _modFolderDebounce?.Stop();
+        // A rescan rebuilds the rows from the saved profile, so it would throw away unsaved ticks and drags.
+        if (IsDirty) { Status = "New mods were downloaded — save, then Rescan to pick them up."; return; }
+        Rescan();
     }
 
     /// <summary>
