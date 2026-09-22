@@ -109,6 +109,25 @@ public sealed record ModListFile
         };
     }
 
+    /// <summary>
+    /// The list a profile holds, exactly as written: its enabled mods in its order, installed or not. The inverse of
+    /// <see cref="ToProfile"/>, used to re-apply an imported list to the launcher once its missing mods are downloaded.
+    /// Unlike <see cref="From"/> it needs no scan, so the entries still missing on this PC keep their place.
+    /// </summary>
+    public static ModListFile AsListed(Profile profile) => new()
+    {
+        Name = profile.Name,
+        Mods = profile.EnabledMods
+            .Where(m => !ClientManifest.IsServerOnly(m.Id) && !OfficialModules.IsGameModule(m.Id))
+            .Select(m => new ModEntry(m.Id, m.LastVersion ?? "", m.DownloadUrl, m.Role, m.ServerAuthoritative))
+            .ToList(),
+        ClientOfficialModules = profile.ClientOfficialModules.ToList(),
+    };
+
+    /// <summary>Ids in the list (Coop aside) that are not among <paramref name="installed"/>.</summary>
+    public IReadOnlyList<string> NotInstalled(IReadOnlySet<string> installed) =>
+        ToClientEntries().Select(e => e.Id).Where(id => !installed.Contains(id)).ToList();
+
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 
     public static void Write(string path, ModListFile file)

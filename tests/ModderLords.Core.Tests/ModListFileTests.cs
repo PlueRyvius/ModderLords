@@ -198,3 +198,56 @@ public class CoopOrderCheckTests
         => Assert.Empty(CoopOrderCheck.UnplacedCoopBinders(
             [M("SomeNewMod", enabled: false), M("CoopNightly")], ["SomeNewMod"], [], NothingDeclaresOrder));
 }
+
+/// <summary>
+/// An imported list whose mods are not all installed is kept as a profile, and later rebuilt from it to apply to the
+/// launcher again. The rebuild must give back the same list, missing mods included, in the same order.
+/// </summary>
+public class ModListFilePendingTests
+{
+    private static readonly ModListFile Shared = new()
+    {
+        Name = "friends",
+        Mods =
+        [
+            new("Harmony", "2.3", "https://steamcommunity.com/sharedfiles/filedetails/?id=2859188632", ServerRole.DependencyOnly, false),
+            new("NotYetDownloaded", "1.0", "https://steamcommunity.com/sharedfiles/filedetails/?id=3000000001", ServerRole.Run, true),
+            new("CoopNightly", "0.9", null, ServerRole.AsShipped, false),
+            new("PatchesCoop", "1.1", null, ServerRole.Run, false),
+        ],
+        ClientOfficialModules = ["Native", "SandBoxCore", "SandBox"],
+    };
+
+    [Fact]
+    public void AsListed_round_trips_an_imported_list()
+    {
+        var back = ModListFile.AsListed(Shared.ToProfile("friends"));
+        Assert.Equal(Shared.Mods, back.Mods);
+        Assert.Equal(Shared.ClientOfficialModules, back.ClientOfficialModules);
+        Assert.Equal(Shared.ToOrder().ModuleIds, back.ToOrder().ModuleIds);
+    }
+
+    [Fact]
+    public void AsListed_leaves_out_unticked_mods()
+    {
+        var profile = Shared.ToProfile("friends");
+        profile.Mods.Single(m => m.Id == "PatchesCoop").Enabled = false;
+        Assert.DoesNotContain(ModListFile.AsListed(profile).Mods, m => m.Id == "PatchesCoop");
+    }
+
+    [Fact]
+    public void NotInstalled_names_only_what_is_absent_and_never_Coop()
+    {
+        var installed = new HashSet<string>(["harmony", "PatchesCoop"], StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(["NotYetDownloaded"], Shared.NotInstalled(installed));
+    }
+
+    [Fact]
+    public void Pending_flag_survives_a_save()
+    {
+        var profile = Shared.ToProfile("friends");
+        profile.PendingLauncherApply = true;
+        var json = System.Text.Json.JsonSerializer.Serialize(profile);
+        Assert.True(System.Text.Json.JsonSerializer.Deserialize<Profile>(json)!.PendingLauncherApply);
+    }
+}

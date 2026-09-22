@@ -70,6 +70,12 @@ public sealed class Profile
     /// </summary>
     public bool AutoSyncLauncherData { get; set; }
     /// <summary>
+    /// Set when a shared mod list was imported into the Bannerlord launcher while some of its mods were not installed.
+    /// LauncherData.xml cannot hold a mod that is not on disk, so this profile remembers the rest of the list and the
+    /// app offers to apply it again once they appear, rather than making the player import the file a second time.
+    /// </summary>
+    public bool PendingLauncherApply { get; set; }
+    /// <summary>
     /// Take the mod order in <see cref="Mods"/> exactly as written, instead of moving mods to satisfy the ordering
     /// their manifests declare.
     ///
