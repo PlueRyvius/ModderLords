@@ -31,6 +31,8 @@
                     <!-- One click, no restart. Which half of the app you get is the first thing you chose and the
                          easiest thing to change; see FirstRunWindow. -->
                     <Button x:Name="ModeButton" Content="Player mode" Click="Mode_Click" MinWidth="92" Margin="4,0,4,0" />
+                    <Button Content="Report a problem…" Click="ReportProblem_Click" MinWidth="116" Margin="4,0"
+                            ToolTip="Create a private-on-this-PC, redacted support ZIP, then open the public GitHub bug-report form. Nothing is uploaded automatically." />
                     <Button Content="Updates" Command="{Binding Update.CheckNowCommand}" MinWidth="64" Margin="4,0,4,0"
                             ToolTip="Check GitHub for a newer ModderLords release now. Nothing is downloaded unless you then click Update now." />
                     <Button x:Name="ThemeButton" Content="Dark" Click="Theme_Click" MinWidth="52" Margin="4,0,12,0"

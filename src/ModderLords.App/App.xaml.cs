@@ -21,8 +21,12 @@ public partial class App : Application
         DispatcherUnhandledException += (_, args) =>
         {
             LogCrash(args.Exception);
-            MessageBox.Show(args.Exception.Message, "ModderLords: error (logged)", MessageBoxButton.OK, MessageBoxImage.Warning);
+            var report = MessageBox.Show(args.Exception.Message +
+                "\n\nThe error was logged. Create a reviewed support bundle now? Nothing is uploaded automatically.",
+                "ModderLords: error (logged)", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             args.Handled = true;
+            if (report == MessageBoxResult.Yes && Current.MainWindow is MainWindow window)
+                Current.Dispatcher.BeginInvoke(async () => await window.ShowSupportReportAsync());
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) => LogCrash(args.ExceptionObject as Exception);
 

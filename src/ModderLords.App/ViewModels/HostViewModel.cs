@@ -1058,6 +1058,9 @@ public partial class HostViewModel : ObservableObject
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(d) { UseShellExecute = true });
     }
 
+    /// <summary>Make the active buffered launch log visible to a support snapshot before it is copied.</summary>
+    internal void FlushSupportLogs() => _launchLog?.Flush();
+
     public async Task OnClosingAsync()
     {
         if (_engine is { IsRunning: true }) await _engine.StopAsync(TimeSpan.FromSeconds(20));
