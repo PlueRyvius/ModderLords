@@ -33,6 +33,7 @@ public sealed class TaomSurfaceTests
             ["System.String", "System.String", "System.Int32", "System.String"], "System.Void" },
         { "TAOM.Features.FieldCamp.CampService", "Establish", ["TAOM.Features.FieldCamp.Domain.CampType"], "System.Boolean" },
         { "TAOM.Features.FieldCamp.CampService", "Fortify", [], "System.Boolean" },
+        { "TAOM.Features.FieldCamp.CampService", "CanEstablish", ["TAOM.Features.FieldCamp.Domain.CampType"], "TAOM.Features.FieldCamp.CampBlockReason" },
         { "TAOM.Features.FieldCamp.CampService", "ToggleForaging", [], "System.Boolean" },
         { "TAOM.Features.FieldCamp.CampService", "BreakPlayerCamp", [], "System.Void" },
         { "TAOM.Features.FieldCamp.CampService", "HourlyTick", [], "System.Void" },
