@@ -85,3 +85,24 @@ public sealed class NetworkTaomJoinResult : IEvent
     /// <summary>False when the server could not act yet (player or hero not known); the client sends again later.</summary>
     [ProtoMember(4)] public bool Final { get; set; }
 }
+
+/// <summary>Client -> server (TAOM sessions): a Field Camp operation the player just made from TAOM's camp menu.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomCampOp : ICommand
+{
+    /// <summary>establish, fortify, foraging or break.</summary>
+    [ProtoMember(1)] public string Op { get; set; } = "";
+    /// <summary>TAOM's CampType value, for establish.</summary>
+    [ProtoMember(2)] public int CampType { get; set; }
+    [ProtoMember(3)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Server -> the sending client: whether TAOM ran the camp operation for that player.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomCampResult : IEvent
+{
+    [ProtoMember(1)] public string Op { get; set; } = "";
+    [ProtoMember(2)] public bool Ran { get; set; }
+    [ProtoMember(3)] public string Detail { get; set; } = "";
+    [ProtoMember(4)] public int ProtocolVersion { get; set; }
+}

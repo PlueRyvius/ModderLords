@@ -35,13 +35,30 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             active = true;
             broker.Subscribe<CampaignReady>(HandleCampaignReady);
             broker.Subscribe<NetworkTaomJoinResult>(HandleResult);
+            broker.Subscribe<NetworkTaomCampResult>(HandleCampResult);
+            TaomFieldCamp.Send = (op, campType) =>
+            {
+                network.SendAll(new NetworkTaomCampOp { Op = op, CampType = campType, ProtocolVersion = ProtocolVersion });
+                Log.Info("TAOM layer: field-camp sent '" + op + "' to the server");
+            };
         }
 
         public void Dispose()
         {
             if (!active) return;
+            TaomFieldCamp.Send = null;
             broker.Unsubscribe<CampaignReady>(HandleCampaignReady);
             broker.Unsubscribe<NetworkTaomJoinResult>(HandleResult);
+            broker.Unsubscribe<NetworkTaomCampResult>(HandleCampResult);
+        }
+
+        private void HandleCampResult(MessagePayload<NetworkTaomCampResult> payload)
+        {
+            var r = payload.What;
+            Log.Info("TAOM layer: field-camp server answer: " + r.Detail);
+            if (r.Ran || r.Op != TaomFieldCamp.OpEstablish) return;
+            // The menu raised the camp locally before the server was asked; the server said no, so fold it again.
+            GameThread.RunSafe(TaomFieldCamp.UndoLocalEstablish, false, "ModderLords TAOM field-camp undo");
         }
 
         private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
@@ -85,11 +102,49 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             if (!CoopProbe.Present) return;
             active = true;
             broker.Subscribe<NetworkTaomJoinChoices>(HandleChoices);
+            broker.Subscribe<NetworkTaomCampOp>(HandleCampOp);
         }
 
         public void Dispose()
         {
-            if (active) broker.Unsubscribe<NetworkTaomJoinChoices>(HandleChoices);
+            if (!active) return;
+            broker.Unsubscribe<NetworkTaomJoinChoices>(HandleChoices);
+            broker.Unsubscribe<NetworkTaomCampOp>(HandleCampOp);
+        }
+
+        private void HandleCampOp(MessagePayload<NetworkTaomCampOp> payload)
+        {
+            if (payload.Who is not NetPeer peer) return;
+            var msg = payload.What;
+            void Reply(bool ran, string detail)
+            {
+                Log.Info("TAOM layer: field-camp: " + detail);
+                network.Send(peer, new NetworkTaomCampResult
+                {
+                    Op = msg.Op, Ran = ran, Detail = detail,
+                    ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion,
+                });
+            }
+            if (!ContainerProvider.TryResolve<IPlayerManager>(out var players) || !players.TryGetPlayer(peer, out var player) || player is null)
+            {
+                Reply(false, "the sender is not a known player");
+                return;
+            }
+            GameThread.RunSafe(() =>
+            {
+                try
+                {
+                    if (!ContainerProvider.TryResolve<IObjectManager>(out var objects) || !objects.TryGetObject<Hero>(player.HeroId, out var hero) || hero is null)
+                    {
+                        Reply(false, "the player's hero was not found on the server");
+                        return;
+                    }
+                    objects.TryGetObject<MobileParty>(player.MobilePartyId, out var party);
+                    var (ran, detail) = TaomFieldCamp.ServerRun(hero, party, msg.Op, msg.CampType);
+                    Reply(ran, detail);
+                }
+                catch (Exception ex) { Reply(false, "failed: " + ex.GetBaseException().Message); }
+            }, false, "ModderLords TAOM field-camp");
         }
 
         private void HandleChoices(MessagePayload<NetworkTaomJoinChoices> payload)

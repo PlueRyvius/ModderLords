@@ -48,6 +48,7 @@ public static class TaomLayer
         new CoopDetectionCheck(),
         new ServerBinaryCheck(),
         new JoinGrantComponent(),
+        new FieldCampComponent(),
     };
 
     private static bool _done;
