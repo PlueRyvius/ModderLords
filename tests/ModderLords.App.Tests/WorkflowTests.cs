@@ -6,6 +6,7 @@ using ModderLords.Core.Launch;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Overlay;
+using ModderLords.Core.Support;
 using ModderLords.Coop.Launch;
 using Xunit;
 using System.Windows.Controls;
@@ -15,6 +16,54 @@ namespace ModderLords.App.Tests;
 
 public class WorkflowTests
 {
+    [Fact]
+    public void Support_destination_opens_the_issue_then_selects_the_generated_bundle()
+    {
+        var launcher = new FakeSupportLauncher();
+        var result = new ModderLords.Core.Support.SupportBundleResult("id", @"C:\Reports\bundle.zip", null,
+            123, null, [], []);
+
+        SupportDestination.Open(result, launcher);
+
+        Assert.Equal(["issue:" + SupportReportService.IssueUrl, @"file:C:\Reports\bundle.zip"], launcher.Actions);
+    }
+
+    private sealed class FakeSupportLauncher : ISupportDestinationLauncher
+    {
+        public List<string> Actions { get; } = new();
+        public void SelectFile(string path) => Actions.Add("file:" + path);
+        public void OpenIssueForm(string url) => Actions.Add("issue:" + url);
+    }
+
+    [Fact]
+    public void Support_dialog_defaults_to_no_save_and_disables_save_attachments_while_hosting() => Sta(() =>
+    {
+        var save = new SupportSaveInfo(@"C:\Saves\campaign.sav", "campaign", "v1", ["Native"],
+            new Dictionary<string, string>(), 1, DateTime.UtcNow, 10);
+        SupportReportContext Context(bool running) => new()
+        {
+            Profile = new Profile(),
+            Environment = new SupportEnvironment("Host", "1", "1", "1", "Windows", "X64", ".NET"),
+            CatalogModules = [],
+            ModuleStates = new Dictionary<string, (bool, bool, string?)>(),
+            LoadOrder = [], Sources = [], Generated = [], Warnings = [],
+            PathTokens = new Dictionary<string, string>(), KnownSecrets = [],
+            SaveChoices = [new SupportSaveChoice("None (recommended)", null), new SupportSaveChoice("campaign", save)],
+            Categories = [new SupportCategoryEstimate("Configuration", "Sanitized", 1)],
+            ServerRunning = running,
+        };
+
+        var stopped = new SupportReportWindow(Context(false));
+        Assert.Null(stopped.SelectedSave.Save);
+        Assert.True(stopped.SaveBox.IsEnabled);
+        Assert.Contains("No save is included by default", stopped.SaveNote.Text);
+
+        var running = new SupportReportWindow(Context(true));
+        Assert.Null(running.SelectedSave.Save);
+        Assert.False(running.SaveBox.IsEnabled);
+        Assert.Contains("Stop the server", running.SaveNote.Text);
+    });
+
     [Fact]
     public void ExperimentalSwitchPreservesSettingsAndManualChoices() => Sta(() =>
     {

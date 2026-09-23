@@ -568,6 +568,7 @@ Per-profile things without a tab of their own:
 | Mod settings overrides / cache | `%LOCALAPPDATA%\ModderLords\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModderLords\cache\<profile>.settings-cache.json` |
 | Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModderLords\overlay\<profile>\` |
 | Launcher logs | `%LOCALAPPDATA%\ModderLords\logs\launch-*.log`, `app-errors.log` |
+| Support bundles you created | `%LOCALAPPDATA%\ModderLords\support\` |
 | Server data (saves, server-config.json, server logs, config backups) | `Documents\Mount and Blade II Bannerlord\CoopData\DedicatedServer\` |
 | Gameplay config | `Documents\Mount and Blade II Bannerlord\CoopData\mod-config.json` |
 | The server itself (untouched except for links under `engine\Modules`) | `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\` |
@@ -617,6 +618,12 @@ library (a GOG or Xbox install, or a copied folder). Click **Folders…** on the
 (the one containing `bin` and `Modules`), and press OK; the list rescans straight away. Mods kept somewhere other than
 the game's `Modules` folder or the Workshop can be added there too, under **Extra mod folders**.
 
+**Reporting a problem.** Click **Report a problem…** at the top of the window. ModderLords shows what it found, then
+creates a redacted support ZIP and opens the GitHub bug-report form with the ZIP selected in Explorer. Drag it into
+the form. Nothing is uploaded automatically. GitHub issues and attachments are public, so review the ZIP before
+posting it. Saves are never included unless you choose one, are packaged separately, and cannot be captured while
+the server is running.
+
 ---
 
 ## Notes
@@ -625,7 +632,8 @@ the game's `Modules` folder or the Workshop can be added there too, under **Extr
   and relies only on their public interfaces; it contains none of their code.
 - Mods loaded with the **Run** role on a server were mostly written for single player. Many work, some need fixes like
   those CoopModPatch provides. See `ROADMAP.md` for where this is heading.
-- Report problems with the launcher log from `%LOCALAPPDATA%\ModderLords\logs` attached.
+- Report problems with **Report a problem…**; its bundle includes the relevant launcher, server and crash logs plus
+  the exact mod inventory and redacted configuration.
 
 ## Settings sync (optional, players install one extra mod)
 

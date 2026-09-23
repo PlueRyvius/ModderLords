@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using ModderLords.App.ViewModels;
 using ModderLords.Core.Profiles;
+using ModderLords.Core.Support;
 
 namespace ModderLords.App;
 
@@ -391,6 +392,64 @@ public partial class MainWindow : Window
         if (_restoring) return;
         _ui.Theme = _theme.ToString();
         UiStateStore.Save(_ui);
+    }
+
+    private async void ReportProblem_Click(object sender, RoutedEventArgs e) => await ShowSupportReportAsync();
+
+    /// <summary>Also called by the global UI-exception handler, so an error can lead straight to the same reviewed,
+    /// user-initiated workflow. The bundle is built off the UI thread; capturing the current bound state is not.</summary>
+    public async Task ShowSupportReportAsync()
+    {
+        SupportReportContext context;
+        try { context = SupportReportService.Capture(ViewModel); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "Could not inspect the current diagnostics: " + ex.Message, "Report a problem",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var review = new SupportReportWindow(context) { Owner = this };
+        if (review.ShowDialog() != true) return;
+        // SaveBox is a WPF control and must only be read on the dispatcher thread. Capture its plain-data value
+        // before moving the expensive module fingerprinting and request construction to the worker thread.
+        var selectedSave = review.SelectedSave.Save;
+
+        var previousCursor = Cursor;
+        SupportBundleResult result;
+        try
+        {
+            Cursor = Cursors.Wait;
+            IsEnabled = false;
+            ViewModel.Status = "Creating redacted support bundle…";
+            var request = await Task.Run(() => context.BuildRequest(selectedSave));
+            result = await SupportBundleBuilder.CreateAsync(request);
+            ViewModel.Status = $"Support bundle created: {result.DiagnosticPath}";
+        }
+        catch (Exception ex)
+        {
+            ViewModel.Status = "Support bundle: " + ex.Message;
+            MessageBox.Show(this, ex.Message, "Could not create support bundle", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        finally
+        {
+            IsEnabled = true;
+            Cursor = previousCursor;
+        }
+
+        if (result.Warnings.Count > 0)
+            MessageBox.Show(this, "The diagnostics bundle was created with these notes:\n\n" +
+                string.Join("\n", result.Warnings.Select(w => "• " + w)) +
+                "\n\nClick OK to open the GitHub report form and show the bundle in Explorer.",
+                "Support bundle created", MessageBoxButton.OK, MessageBoxImage.Information);
+        try { SupportDestination.Open(result, new WindowsSupportDestinationLauncher()); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The bundle was created, but Windows could not open GitHub or Explorer.\n\n" +
+                result.DiagnosticPath + "\n\n" + ex.Message, "Support bundle created",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     // ---- the rest --------------------------------------------------------------------------------------

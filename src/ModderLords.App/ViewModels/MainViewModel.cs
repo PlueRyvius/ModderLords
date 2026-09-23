@@ -1773,6 +1773,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void LaunchClient()
     {
+        var clientLog = BeginClientLaunchLog();
         try
         {
             if (ClientLauncher.IsClientRunning())
@@ -1787,8 +1788,11 @@ public partial class MainViewModel : ObservableObject
             {
                 if (!Host.SyncLauncherData()) return;
                 var client = Host.PrepareClientLaunch();
+                AppendClientLaunchLog(clientLog, client.Plan.Describe());
+                foreach (var message in client.Messages) AppendClientLaunchLog(clientLog, message);
                 var process = ClientLaunchSession.Start(client.Plan);
                 Status = $"Client started for server profile '{Host.ClientProfile.Name}' (pid {process.Id}).";
+                AppendClientLaunchLog(clientLog, $"started pid={process.Id}");
                 return;
             }
 
@@ -1799,15 +1803,34 @@ public partial class MainViewModel : ObservableObject
             var prepared = ClientLaunchSession.Prepare(Profile);
 
             foreach (var m in prepared.Messages) Log(LogCategory.Tool, "[ModderLords] " + m);
+            AppendClientLaunchLog(clientLog, prepared.Plan.Describe());
+            foreach (var message in prepared.Messages) AppendClientLaunchLog(clientLog, message);
             var p = ClientLaunchSession.Start(prepared.Plan);
             Status = $"Bannerlord started with {prepared.Order.ModuleIds.Count} modules (pid {p.Id}).";
             Log(LogCategory.Tool, $"[ModderLords] Play: {prepared.Plan.Exe} (pid {p.Id})");
+            AppendClientLaunchLog(clientLog, $"started pid={p.Id}");
         }
         catch (Exception ex)
         {
             Status = "Play: " + ex.Message;
             Log(LogCategory.Error, "[ModderLords] Play: " + ex);
+            AppendClientLaunchLog(clientLog, "FAILED\n" + ex);
         }
+    }
+
+    private string BeginClientLaunchLog()
+    {
+        var directory = Path.Combine(ProfileStore.RootDir, "logs");
+        Directory.CreateDirectory(directory);
+        Preflight.RotateLogs(directory, "client-launch-*.log", keep: 20, maxTotalBytes: 64L * 1024 * 1024);
+        var path = Path.Combine(directory, $"client-launch-{DateTime.Now:yyyyMMdd-HHmmss-fff}.log");
+        AppendClientLaunchLog(path, $"{DateTimeOffset.Now:O} mode={Mode} profile={Profile.Name}");
+        return path;
+    }
+
+    private static void AppendClientLaunchLog(string path, string text)
+    {
+        try { File.AppendAllText(path, text + Environment.NewLine); } catch { }
     }
 
 }

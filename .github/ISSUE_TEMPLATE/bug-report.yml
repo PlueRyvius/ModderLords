@@ -1,0 +1,85 @@
+name: Bug report
+description: Report a ModderLords problem and attach its redacted support bundle
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where did the problem happen?
+      options:
+        - Player mode / launching Bannerlord
+        - Host mode / starting or running a server
+        - Mods, load order, or compatibility
+        - Saves or world creation
+        - Performance
+        - Updating ModderLords
+        - ModderLords interface
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened?
+      description: Include the exact message if one was shown.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Select profile ...
+        2. Enable ...
+        3. Click ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Sometimes
+        - Once
+        - Not sure
+    validations:
+      required: true
+
+  - type: upload
+    id: support_bundle
+    attributes:
+      label: Support bundle
+      description: Use “Report a problem…” in ModderLords, then drag the selected ModderLords-support ZIP here. Attach the separate save ZIP only when you deliberately chose one.
+      accept: ".zip"
+    validations:
+      required: false
+
+  - type: upload
+    id: screenshots
+    attributes:
+      label: Screenshots or video
+      description: Optional. Please remove anything private first.
+      accept: ".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Public report acknowledgement
+      description: GitHub issues and their attachments are public.
+      options:
+        - label: I reviewed the files I am attaching and understand that they will be public.
+          required: true
