@@ -59,6 +59,12 @@ internal sealed class FieldCampComponent : ITaomComponent
         foreach (var effect in new[] { TaomFieldCamp.AddMorale, TaomFieldCamp.ForageHour })
             if (effect != null)
                 harmony.Patch(effect, prefix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.SkipOnClientPrefix)));
+        if (TaomFieldCamp.Stationary != null)
+            harmony.Patch(TaomFieldCamp.Stationary, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.StationaryPostfix)));
+        if (TaomFieldCamp.ServiceMoving != null)
+            harmony.Patch(TaomFieldCamp.ServiceMoving, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.ServiceMovingPostfix)));
+        if (TaomFieldCamp.Refresh != null)
+            harmony.Patch(TaomFieldCamp.Refresh, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.RefreshPostfix)));
         if (TaomFieldCamp.OpenMenu != null)
             harmony.Patch(TaomFieldCamp.OpenMenu, prefix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.OpenMenuPrefix)));
         return "client forwards camp operations to the server";
@@ -85,6 +91,10 @@ internal static class TaomFieldCamp
     internal static MethodInfo? HourlyTick { get; private set; }
     internal static MethodInfo? OpenMenu { get; private set; }
     internal static MethodInfo? AddMorale { get; private set; }
+    internal static MethodInfo? Stationary { get; private set; }
+    internal static MethodInfo? Refresh { get; private set; }
+    internal static MethodInfo? ServiceMoving { get; private set; }
+    private static PropertyInfo? _canMakeCamp;
     internal static MethodInfo? ForageHour { get; private set; }
     internal static string? MissingSurface { get; private set; } = "not bound";
 
@@ -108,12 +118,17 @@ internal static class TaomFieldCamp
         HourlyTick = service?.GetMethod("HourlyTick", Type.EmptyTypes);
         _playerCamp = service?.GetProperty("PlayerCamp");
         const BindingFlags inst = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        ServiceMoving = service?.GetMethod("IsMainPartyMoving", inst, null, Type.EmptyTypes, null);
         AddMorale = service?.GetMethod("AddMoraleToMainParty", inst, null, new[] { typeof(float) }, null);
         var state = taom.GetType("TAOM.Features.FieldCamp.Domain.CampState", false);
         ForageHour = state == null ? null : service?.GetMethod("ForageHour", inst, null, new[] { state }, null);
         var overlay = taom.GetType("TAOM.Features.FieldCamp.UI.FieldCampOverlayVM", false);
         OpenMenu = overlay?.GetMethod("ExecuteOpenCampMenu", Type.EmptyTypes);
         _activation = overlay?.GetField("_activation", BindingFlags.Instance | BindingFlags.NonPublic);
+        Refresh = overlay?.GetMethod("Refresh", Type.EmptyTypes);
+        _canMakeCamp = overlay?.GetProperty("CanMakeCamp");
+        Stationary = taom.GetType("TAOM.Features.FieldCamp.UI.MapScreenCampMenuActivationQuery", false)
+            ?.GetProperty("IsMainPartyStationary")?.GetGetMethod();
 
         var missing = new List<string>();
         if (_serviceInterface == null) missing.Add("ICampService");
@@ -125,6 +140,7 @@ internal static class TaomFieldCamp
         if (Break == null) missing.Add("CampService.BreakPlayerCamp()");
         if (HourlyTick == null) missing.Add("CampService.HourlyTick()");
         if (_playerCamp == null) missing.Add("CampService.PlayerCamp");
+        if (ServiceMoving?.ReturnType != typeof(bool)) missing.Add("CampService.IsMainPartyMoving()");
         if (AddMorale == null) missing.Add("CampService.AddMoraleToMainParty(float)");
         if (ForageHour == null) missing.Add("CampService.ForageHour(CampState)");
         MissingSurface = missing.Count == 0 ? null : "TAOM changed; not found: " + string.Join(", ", missing);
@@ -151,6 +167,68 @@ internal static class TaomFieldCamp
     {
         // Sent before the local call removes the camp; nothing is sent when there is no camp to break.
         if (_playerCamp?.GetValue(__instance) != null) Forward(OpBreak, 0);
+    }
+
+    // ---- the Make Camp button on a co-op client ------------------------------------------------------
+
+    private static TaleWorlds.Library.Vec2 _lastPosition;
+    private static DateTime _stillSince = DateTime.MaxValue;
+    private const double StillSeconds = 0.5;
+
+    /// <summary>
+    /// TAOM enables Make Camp only while MobileParty.MainParty.IsMoving is false. For the main party that is vanilla's
+    /// !Campaign.IsMainPartyWaiting, refreshed only by the campaign's own map-time tick from the party's movement
+    /// target; on a Coop client the server moves the party, the local target is stale, and "moving" can stay true while
+    /// the party stands still. The button is IsEnabled="@CanMakeCamp", and a disabled Gauntlet button lets the click
+    /// through to the map, so the player walks instead of camping (reported 2026-09-22). During a session a client
+    /// answers from what is on screen instead: the party has not moved for half a second.
+    /// </summary>
+    internal static void StationaryPostfix(ref bool __result)
+    {
+        if (Send == null || __result) return;
+        __result = SeenStill();
+    }
+
+    /// <summary>
+    /// CampService has its own copy of the same check (IsMainPartyMoving), used by CanEstablish (so the menu would
+    /// refuse with "moving") and by the per-frame move guard (so a standing camp would prompt "break camp and move?"
+    /// straight away). Same on-screen answer during a session.
+    /// </summary>
+    internal static void ServiceMovingPostfix(ref bool __result)
+    {
+        if (Send == null || !__result) return;
+        __result = !SeenStill();
+    }
+
+    /// <summary>The main party's on-screen position has not changed for <see cref="StillSeconds"/>.</summary>
+    private static bool SeenStill()
+    {
+        var party = MobileParty.MainParty;
+        if (party == null) return false;
+        var here = party.Position.ToVec2();
+        var now = DateTime.UtcNow;
+        if ((here - _lastPosition).LengthSquared > 1E-06f) { _lastPosition = here; _stillSince = now; return false; }
+        if (_stillSince == DateTime.MaxValue) _stillSince = now;
+        return (now - _stillSince).TotalSeconds >= StillSeconds;
+    }
+
+    private static bool? _lastCanMakeCamp;
+
+    /// <summary>Client diagnostic: when the button's enabled state flips, log which of TAOM's five guards held.</summary>
+    internal static void RefreshPostfix(object __instance)
+    {
+        try
+        {
+            if (_canMakeCamp?.GetValue(__instance) is not bool can || can == _lastCanMakeCamp) return;
+            _lastCanMakeCamp = can;
+            var q = _activation?.GetValue(__instance);
+            if (q == null) return;
+            bool P(string name) => q.GetType().GetProperty(name)?.GetValue(q) is true;
+            Log.Info("TAOM layer: field-camp button " + (can ? "enabled" : "disabled") + ": mapScreenClear=" + P("IsMapScreenClear") +
+                     " stationary=" + P("IsMainPartyStationary") + " inSettlement=" + P("IsMainPartyInSettlement") +
+                     " inEncounter=" + P("IsMainPartyInEncounter") + " disorganized=" + P("IsMainPartyDisorganized"));
+        }
+        catch { }
     }
 
     /// <summary>Client, during a live session only (Send is set): the server applies this effect instead.</summary>

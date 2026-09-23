@@ -39,6 +39,9 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.FieldCamp.CampService", "AddMoraleToMainParty", ["System.Single"], "System.Void" },
         { "TAOM.Features.FieldCamp.CampService", "ForageHour", ["TAOM.Features.FieldCamp.Domain.CampState"], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM", "ExecuteOpenCampMenu", [], "System.Void" },
+        { "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM", "Refresh", [], "System.Void" },
+        { "TAOM.Features.FieldCamp.CampService", "IsMainPartyMoving", [], "System.Boolean" },
+        { "TAOM.Features.FieldCamp.UI.MapScreenCampMenuActivationQuery", "get_IsMainPartyStationary", [], "System.Boolean" },
     };
 
     [Theory]
@@ -63,6 +66,7 @@ public sealed class TaomSurfaceTests
             module.GetType("TAOM.Features.PlayerPossession.PlayerPossessionBehavior")?.Fields.FirstOrDefault(f => f.Name == "_reconciledHeroIds")?.FieldType.FullName);
         Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.CampService")?.Properties.FirstOrDefault(p => p.Name == "PlayerCamp"));
         Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.UI.FieldCampOverlayVM")?.Fields.FirstOrDefault(f => f.Name == "_activation"));
+        Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.UI.FieldCampOverlayVM")?.Properties.FirstOrDefault(p => p.Name == "CanMakeCamp"));
         Assert.True(module.GetType("TAOM.Features.FieldCamp.Domain.CampType")?.IsEnum == true);
         Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.ICampService"));
         var resolve = module.GetType("TAOM.IoC")?.Methods.FirstOrDefault(m => m.Name == "Resolve" && m.IsStatic && m.Parameters.Count == 0);
