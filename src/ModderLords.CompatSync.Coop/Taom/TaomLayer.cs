@@ -66,6 +66,7 @@ public static class TaomLayer
         new NoticeComponent(),
         new FieldCommissionComponent(),
         new BattleGateComponent(),
+        new EnlistmentGuardComponent(),
     };
 
     private static bool _done;

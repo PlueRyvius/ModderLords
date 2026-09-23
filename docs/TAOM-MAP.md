@@ -40,11 +40,10 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
       components; owner and banner answer from the party's clan instead of Hero.MainHero.
 - [ ] Career quests: created client-side; only one quest exists in TAOM (captain_of_osgiliath_t2). Plan: client
       tracks, server receives completion and rewards.
-- [ ] Enlistment (read 2026-09-23, ~13k lines): ONE process-wide enlistment record (`_store.Record`) for "the
-      player", every world-changing handler host-only, and following the lord is done by moving/attaching the
-      player's party each frame. In Coop the client moves its own party, so the follow half must run on the client
-      while wages, battle joining, duties and rewards run on the server against a per-player record (swap the record
-      under PlayerScope). A project of its own; not started.
+- [~] Enlistment: not possible from this layer. Enlisting parks the player's party (IsActive/IsVisible false, pinned
+      to the lord every frame) and the player fights inside the lord's formation; in Coop the player's party state and
+      battle spawning are Coop's own. TAOM refused silently on clients (oath sworn, nothing happens); the offer is now
+      greyed out with the reason on co-op clients (enlistment-guard). Would need Coop support for parked players.
 - [b] Field Commission: client owns its merit bank; TAOM's kill counting (own party only, so once per kill), battle
       scoring and offer prompts run on the co-op client; the promotion (hero creation, soldier removed) is relayed
       and completed by the server for that player. Limit: merit restarts after a reconnect. Live check: does the
@@ -103,7 +102,7 @@ the battle host (`BattleSession.IsLocalHost`, migrated if it leaves); every agen
       agents this client controls (and battle-wide effects only on the battle host).
       [b] Built as measure-then-gate (battle-gate component): during a Coop battle every TAOM battle-behaviour action
       (blow, death, morale, teleport, speed/scripted movement) on an agent another machine controls is logged with
-      the TAOM class; classes listed in Configs\ModLogs	aom-battle-gate-client.txt (or *) are skipped for such
+      the TAOM class; classes listed in Configs\ModLogs\taom-battle-gate-client.txt (or *) are skipped for such
       agents. No file = measure only. Next: one two-player battle, read the log, list the offenders.
 - [s] Presentation only (no agent changes found): mixed formations UI, battle action bar view, diagnostics, shader
       precompile, war ram and mumakil behaviours (they delegate; re-check if a live battle shows trouble).
