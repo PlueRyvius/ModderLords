@@ -11,14 +11,17 @@ namespace ModderLords.CompatSync.Coop.Taom;
 /// <summary>The server's answer to one relayed TAOM action: whether it happened, and the line to show the player.</summary>
 internal readonly struct TaomActionOutcome
 {
-    public TaomActionOutcome(bool ok, string message)
+    public TaomActionOutcome(bool ok, string message, IList<string>? data = null)
     {
         Ok = ok;
         Message = message;
+        Data = data;
     }
 
     public bool Ok { get; }
     public string Message { get; }
+    /// <summary>Optional data for the client's apply hook for this feature.</summary>
+    public IList<string>? Data { get; }
 
     public static TaomActionOutcome Fail(string message) => new TaomActionOutcome(false, message);
 }
@@ -43,6 +46,18 @@ internal static class TaomActions
     internal static bool IsCoopClient => Send != null;
 
     internal static void Register(string feature, Handler handler) => Handlers[feature] = handler;
+
+    private static readonly Dictionary<string, Action<IList<string>>> ClientApply = new Dictionary<string, Action<IList<string>>>(StringComparer.Ordinal);
+
+    /// <summary>Client: what to do with the Data the server returns for this feature (runs on the game thread).</summary>
+    internal static void RegisterClientApply(string feature, Action<IList<string>> apply) => ClientApply[feature] = apply;
+
+    internal static void ApplyOnClient(string feature, IList<string>? data)
+    {
+        if (data == null || data.Count == 0 || !ClientApply.TryGetValue(feature, out var apply)) return;
+        try { apply(data); }
+        catch (Exception ex) { Log.Warn($"TAOM layer: could not apply the server's {feature} data: {ex.GetBaseException().Message}"); }
+    }
 
     /// <summary>Server, game thread.</summary>
     internal static TaomActionOutcome Run(Hero hero, MobileParty? party, string feature, string op, IList<string> args)

@@ -132,6 +132,8 @@ public sealed class NetworkTaomActionResult : IEvent
     /// <summary>Shown to the player as an on-screen message (already resolved on the server).</summary>
     [ProtoMember(5)] public string Message { get; set; } = "";
     [ProtoMember(6)] public int ProtocolVersion { get; set; }
+    /// <summary>Feature data the client applies (e.g. the player's special-resource balances after a purchase).</summary>
+    [ProtoMember(7)] public List<string>? Data { get; set; }
 }
 
 /// <summary>Server -> client(s) (TAOM sessions): one TAOM behaviour's SyncData values, for the client to load.</summary>

@@ -108,14 +108,17 @@ internal sealed class EmissaryComponent : ITaomComponent
         var resource = result.GetType().GetProperty("ResourceDisplayName")?.GetValue(result) as string ?? "";
         var troopName = MBObjectManager.Instance?.GetObject<CharacterObject>(troopId)?.Name?.ToString() ?? troopId;
 
+        // The player's balances as the server now holds them, so the client adopts the charge before it reports again.
+        var balances = SpecialResourceSyncComponent.BalancesFor(hero.StringId);
+
         // The same lines TAOM shows for a host purchase.
         return status switch
         {
             "Success" => new TaomActionOutcome(true, new TextObject("{=taom_emissary_bought}Recruited {QTY} {TROOP} for {COST} {RESOURCE}.")
                 .SetTextVariable("QTY", I("Quantity")).SetTextVariable("TROOP", troopName)
-                .SetTextVariable("COST", I("TotalCost")).SetTextVariable("RESOURCE", resource).ToString()),
-            "Unaffordable" => TaomActionOutcome.Fail(new TextObject("{=taom_emissary_cant_afford}Not enough {RESOURCE} — need {COST}.")
-                .SetTextVariable("RESOURCE", resource).SetTextVariable("COST", I("TotalCost")).ToString()),
+                .SetTextVariable("COST", I("TotalCost")).SetTextVariable("RESOURCE", resource).ToString(), balances),
+            "Unaffordable" => new TaomActionOutcome(false, new TextObject("{=taom_emissary_cant_afford}Not enough {RESOURCE} — need {COST}.")
+                .SetTextVariable("RESOURCE", resource).SetTextVariable("COST", I("TotalCost")).ToString(), balances),
             "NoResource" => TaomActionOutcome.Fail(new TextObject("{=taom_emissary_no_resource}There is no emissary trade in this settlement.").ToString()),
             _ => TaomActionOutcome.Fail(new TextObject("{=taom_emissary_failed}The emissary could not complete the deal.").ToString()),
         };

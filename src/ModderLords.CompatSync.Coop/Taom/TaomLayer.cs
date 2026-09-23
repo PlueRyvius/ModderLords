@@ -53,6 +53,7 @@ public static class TaomLayer
         new SiegeDefenseComponent(),
         new MessengerNoticeComponent(),
         new StateMirrorComponent(),
+        new SpecialResourceSyncComponent(),
     };
 
     private static bool _done;

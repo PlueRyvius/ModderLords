@@ -68,8 +68,13 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         private void HandleActionResult(MessagePayload<NetworkTaomActionResult> payload)
         {
             var r = payload.What;
-            Log.Info($"TAOM layer: {r.Feature} '{r.Op}' server answer: {(r.Ok ? "done" : "refused")}: {r.Message}");
-            GameThread.RunSafe(() => TaomActions.ShowToPlayer(r.Ok, r.Message), false, "ModderLords TAOM action result");
+            if (r.Message.Length > 0 || !r.Ok)
+                Log.Info($"TAOM layer: {r.Feature} '{r.Op}' server answer: {(r.Ok ? "done" : "refused")}: {r.Message}");
+            GameThread.RunSafe(() =>
+            {
+                TaomActions.ApplyOnClient(r.Feature, r.Data);
+                TaomActions.ShowToPlayer(r.Ok, r.Message);
+            }, false, "ModderLords TAOM action result");
         }
 
         private void HandleCampResult(MessagePayload<NetworkTaomCampResult> payload)
@@ -165,12 +170,13 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
         {
             if (payload.Who is not NetPeer peer) return;
             var msg = payload.What;
-            void Reply(bool ok, string message)
+            void Reply(bool ok, string message, System.Collections.Generic.IList<string>? data = null)
             {
-                Log.Info($"TAOM layer: {msg.Feature} '{msg.Op}': {(ok ? "done" : "refused")}: {message}");
+                if (message.Length > 0 || !ok) Log.Info($"TAOM layer: {msg.Feature} '{msg.Op}': {(ok ? "done" : "refused")}: {message}");
                 network.Send(peer, new NetworkTaomActionResult
                 {
                     Feature = msg.Feature, Op = msg.Op, Sequence = msg.Sequence, Ok = ok, Message = message,
+                    Data = data == null ? null : new System.Collections.Generic.List<string>(data),
                     ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion,
                 });
             }
@@ -190,7 +196,7 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
                     }
                     objects.TryGetObject<MobileParty>(player.MobilePartyId, out var party);
                     var outcome = TaomActions.Run(hero, party, msg.Feature, msg.Op, msg.Args ?? new System.Collections.Generic.List<string>());
-                    Reply(outcome.Ok, outcome.Message);
+                    Reply(outcome.Ok, outcome.Message, outcome.Data);
                 }
                 catch (Exception ex)
                 {
