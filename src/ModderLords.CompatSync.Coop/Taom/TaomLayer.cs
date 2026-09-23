@@ -61,6 +61,8 @@ public static class TaomLayer
         new RefugeComponent(),
         new SupplyLinesComponent(),
         new PlayerSwitcherGuardComponent(),
+        new PlayerModelsComponent(),
+        new AlignmentDesertionComponent(),
     };
 
     private static bool _done;
