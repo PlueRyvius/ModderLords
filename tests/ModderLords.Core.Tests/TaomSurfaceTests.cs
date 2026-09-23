@@ -126,6 +126,7 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.FieldCommission.Hooks.FieldCommissionBehavior", "OnTick", ["System.Single"], "System.Void" },
         { "TAOM.Features.FieldCommission.Hooks.FieldCommissionBehavior", "OnMapEventEnded", ["TaleWorlds.CampaignSystem.MapEvents.MapEvent"], "System.Void" },
         { "TAOM.Features.CoopInterop.CoopSessionProvider", "get_IsAuthority", [], "System.Boolean" },
+        { "TAOM.Features.Enlistment.Hooks.EnlistmentDialogBehavior", "OfferIsClickable", ["TaleWorlds.Localization.TextObject&"], "System.Boolean" },
         { "TAOM.Features.SupplyLines.SupplyOrderService", "FrameTick", [], "System.Void" },
         { "TAOM.Features.SupplyLines.SupplyOrderService", "HourlyTick", [], "System.Void" },
         { "TAOM.Features.SupplyLines.SupplyOrderService", "CancelCampOrders", [], "System.Void" },

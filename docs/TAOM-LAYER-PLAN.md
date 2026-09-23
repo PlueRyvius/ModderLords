@@ -138,4 +138,4 @@ Host a TAOM world on the new build and join as a client. After each step, the ag
    (server: `promoted to companion`). If no offer ever comes, check whether the client log shows the battle ending.
 10. **Battle gate.** Fight a two-player battle with creatures. Every client log lists `battle gate: <TAOM class> ->
     Agent.<action> on an agent another machine controls`. Send me those lines; they decide what goes into
-    `Documents\Mount and Blade II Bannerlord\Configs\ModLogs	aom-battle-gate-client.txt` (one class per line).
+    `Documents\Mount and Blade II Bannerlord\Configs\ModLogs\taom-battle-gate-client.txt` (one class per line).
