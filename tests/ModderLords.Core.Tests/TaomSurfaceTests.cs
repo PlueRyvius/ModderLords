@@ -55,6 +55,9 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.Siege.SiegeDefenseService", "Resolve",
             ["System.String", "System.String", "System.String", "System.Int32", "System.Int32", "System.Int32"], "System.String" },
         { "TAOM.Features.Messengers.MessengerCampaignBehavior", "SendMessenger", ["TaleWorlds.CampaignSystem.Hero"], "System.Void" },
+        { "TAOM.Features.SpecialResources.ISpecialResourceStorageService", "GetAllData", [],
+            "System.Collections.Generic.Dictionary`2<System.String,System.Single>" },
+        { "TAOM.Features.SpecialResources.ISpecialResourceStorageService", "Set", ["System.String", "System.String", "System.Single"], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.MapScreenCampMenuActivationQuery", "get_IsMainPartyStationary", [], "System.Boolean" },
     };
 
