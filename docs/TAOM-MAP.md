@@ -46,13 +46,14 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
       greyed out with the reason on co-op clients (enlistment-guard). Would need Coop support for parked players.
 - [b] Field Commission: client owns its merit bank; TAOM's kill counting (own party only, so once per kill), battle
       scoring and offer prompts run on the co-op client; the promotion (hero creation, soldier removed) is relayed
-      and completed by the server for that player. Limit: merit restarts after a reconnect. Live check: does the
+      and completed by the server for that player. Merit is backed up on the server ("heroId|troopId" rows in its idle
+      bank) and restored on rejoin (client-state-backup). Live check: does the
       client get MapEventEnded for its battle (merit only banks on a won, eligible battle).
 - [b] Player Switcher: only offered on the character-creation face screen (Patch77). Hidden on co-op clients, since
       taking over an existing lord clashes with Coop's player hero. No mid-campaign switch exists.
 - [s] Equip Presets / Quick Actions: both apply through vanilla InventoryLogic transfer commands / vanilla sell-all,
-      which Coop's inventory sync carries. Limit: saved presets live in the client's local behaviour state and do not
-      survive a reconnect.
+      which Coop's inventory sync carries. Presets are backed up to the server's per-hero store (saved with the
+      campaign), so they survive a reconnect (client-state-backup).
 - [b] Start position: after the server applies a fresh player's join package, the client moves its party to TAOM's
       culture starting settlement (TAOM's own teleport only ran on the local character-creation campaign).
 - [s] Other players' hero race: Coop auto-syncs BasicCharacterObject.Race; join-grant sets it on the server.

@@ -67,6 +67,7 @@ public static class TaomLayer
         new FieldCommissionComponent(),
         new BattleGateComponent(),
         new EnlistmentGuardComponent(),
+        new ClientStateBackupComponent(),
     };
 
     private static bool _done;
