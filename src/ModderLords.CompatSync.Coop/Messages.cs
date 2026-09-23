@@ -152,3 +152,20 @@ public sealed class NetworkTaomStateRequest : ICommand
 {
     [ProtoMember(1)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>
+/// Server -> every client (TAOM sessions): the server just created a party with one of TAOM's own party components
+/// (a refuge, a supply caravan). Coop only knows its eight vanilla component types, so without this the client's copy
+/// of the party has no component at all. Fields are (name, kind, value) triples: s = string, v = primitive/enum
+/// (invariant culture), o = a game object's StringId.
+/// </summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomPartyComponent : IEvent
+{
+    [ProtoMember(1)] public string TypeName { get; set; } = "";
+    /// <summary>Coop object-manager id (PartyComponent_{party id}, the id Coop gives components loaded from a save).</summary>
+    [ProtoMember(2)] public string ComponentId { get; set; } = "";
+    [ProtoMember(3)] public string PartyId { get; set; } = "";
+    [ProtoMember(4)] public List<string>? Fields { get; set; }
+    [ProtoMember(5)] public int ProtocolVersion { get; set; }
+}

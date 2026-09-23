@@ -78,6 +78,40 @@ public sealed class TaomSurfaceTests
             "TAOM.Features.WarOfTheRingMomentum.Snapshots.BattleOutcomeSnapshot" },
         { "TAOM.Features.SpecialResources.ISpecialResourceStorageService", "Set", ["System.String", "System.String", "System.Single"], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.MapScreenCampMenuActivationQuery", "get_IsMainPartyStationary", [], "System.Boolean" },
+        { "TAOM.Features.Refuge.RefugeService", "CanFound", [], "TAOM.Features.Refuge.RefugeBlockReason" },
+        { "TAOM.Features.Refuge.RefugeService", "Found", ["System.String", "TAOM.Features.Refuge.RefugeBlockReason&"], "TAOM.Features.Refuge.Domain.RefugeData" },
+        { "TAOM.Features.Refuge.RefugeService", "Upgrade", ["TAOM.Features.Refuge.Domain.RefugeData"], "System.Boolean" },
+        { "TAOM.Features.Refuge.RefugeService", "Dismantle", ["TAOM.Features.Refuge.Domain.RefugeData"], "System.Void" },
+        { "TAOM.Features.Refuge.RefugeService", "GetByPartyId", ["System.String"], "TAOM.Features.Refuge.Domain.RefugeData" },
+        { "TAOM.Features.Refuge.RefugeService", "NearestManageable", [], "TAOM.Features.Refuge.Domain.RefugeData" },
+        { "TAOM.Features.Refuge.RefugeService", "NearestDismantlable", [], "TAOM.Features.Refuge.Domain.RefugeData" },
+        { "TAOM.Features.Refuge.RefugeService", "OnMapEventStarted", ["System.String"], "System.Void" },
+        { "TAOM.Features.Refuge.RefugeService", "OnMapEventEnded", ["System.String"], "System.Void" },
+        { "TAOM.Features.Refuge.RefugeService", "OnPartyDisbandStarted", ["System.String"], "System.Void" },
+        { "TAOM.Features.Refuge.RefugeService", "OnPeaceMade", [], "System.Void" },
+        { "TAOM.Features.Refuge.RefugeService", "OnGameLoaded", [], "System.Void" },
+        { "TAOM.Features.Refuge.Hooks.RefugeMenuController", "OnWardenChosen",
+            ["System.Collections.Generic.List`1<TaleWorlds.Core.InquiryElement>"], "System.Void" },
+        { "TAOM.Features.Refuge.Hooks.RefugeMenuController", "ReasonText", ["TAOM.Features.Refuge.RefugeBlockReason", "System.Int32"], "TaleWorlds.Localization.TextObject" },
+        { "TAOM.Features.Refuge.IWardenService", "Candidates", [],
+            "System.Collections.Generic.IReadOnlyList`1<TAOM.Features.Refuge.WardenCandidate>" },
+        { "TAOM.Features.Refuge.IWardenService", "ResolveWarden",
+            ["TAOM.Features.Refuge.WardenCandidate", "System.Boolean&", "System.String&"], "System.String" },
+        { "TAOM.Features.Refuge.IWardenService", "UnwindPromotion", ["System.String", "System.String"], "System.Void" },
+        { "TAOM.Features.Refuge.Visuals.RefugeVisualService", "TickWind", [], "System.Void" },
+        { "TAOM.Features.SupplyLines.SupplyOrderService", "TryPlaceOrder",
+            ["TAOM.Features.SupplyLines.SupplySourceInfo",
+             "System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.Int32>",
+             "System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.Int32>",
+             "TAOM.Features.SupplyLines.Domain.SupplyEscortOption", "System.String&", "System.Boolean"],
+            "TAOM.Features.SupplyLines.Domain.SupplyOrder" },
+        { "TAOM.Features.SupplyLines.SupplyOrderService", "FrameTick", [], "System.Void" },
+        { "TAOM.Features.SupplyLines.SupplyOrderService", "HourlyTick", [], "System.Void" },
+        { "TAOM.Features.SupplyLines.SupplyOrderService", "CancelCampOrders", [], "System.Void" },
+        { "TAOM.Features.SupplyLines.SupplyOrderService", "OnCaravanDestroyed", ["System.String"], "System.Void" },
+        { "TAOM.Features.SupplyLines.SupplyRouteVisualService", "Update", [], "System.Void" },
+        { "TAOM.Features.SupplyLines.ISupplySourceService", "GetSources", [],
+            "System.Collections.Generic.IReadOnlyList`1<TAOM.Features.SupplyLines.SupplySourceInfo>" },
     };
 
     [Theory]
@@ -135,6 +169,29 @@ public sealed class TaomSurfaceTests
         "System.Collections.Generic.Dictionary`2<System.String,System.Int32>",
         "System.Collections.Generic.Dictionary`2<System.String,System.Single>",
     };
+
+    /// <summary>
+    /// Refuge and Supply Lines save a Dictionary&lt;string, record&gt; (MirrorStore carries it as the record's public
+    /// fields). Every field of those records must itself be something the mirror can rebuild.
+    /// </summary>
+    [Theory]
+    [InlineData("TAOM.Features.Refuge.Hooks.RefugeCampaignBehavior", "TAOM.Features.Refuge.Domain.RefugeData")]
+    [InlineData("TAOM.Features.SupplyLines.Hooks.SupplyLinesCampaignBehavior", "TAOM.Features.SupplyLines.Domain.SupplyOrder")]
+    public void MirroredRecordBooksCarryOnlyPlainFields(string behaviour, string record)
+    {
+        if (TaomDll() is not { } dll) return;
+        using var module = ModuleDefinition.ReadModule(dll);
+        var syncData = module.GetType(behaviour)?.Methods.FirstOrDefault(m => m.Name == "SyncData" && m.Parameters.Count == 1);
+        Assert.True(syncData?.HasBody == true, $"{behaviour}.SyncData is missing");
+        var book = $"System.Collections.Generic.Dictionary`2<System.String,{record}>";
+        var used = syncData!.Body.Instructions.Select(i => i.Operand).OfType<GenericInstanceMethod>()
+            .Where(m => m.Name == "SyncData" && m.DeclaringType.FullName == "TaleWorlds.CampaignSystem.IDataStore")
+            .Select(m => m.GenericArguments[0].FullName).ToList();
+        Assert.All(used, t => Assert.True(t == book || MirrorTypes.Contains(t), $"{behaviour}.SyncData syncs a {t}"));
+        var fields = module.GetType(record)!.Fields.Where(f => f.IsPublic && !f.IsStatic).Select(f => f.FieldType.FullName);
+        Assert.All(fields, t => Assert.True(MirrorTypes.Contains(t) || t == "TaleWorlds.CampaignSystem.CampaignTime",
+            $"{record} has a field of type {t}, which the mirror does not carry"));
+    }
 
     [Theory]
     [InlineData("TAOM.Features.Diplomacy.WarOfTheRingBehavior")]

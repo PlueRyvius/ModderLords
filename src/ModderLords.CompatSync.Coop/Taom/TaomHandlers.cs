@@ -38,6 +38,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             broker.Subscribe<NetworkTaomCampResult>(HandleCampResult);
             broker.Subscribe<NetworkTaomActionResult>(HandleActionResult);
             broker.Subscribe<NetworkTaomState>(HandleState);
+            broker.Subscribe<NetworkTaomPartyComponent>(HandlePartyComponent);
             TaomActions.Send = (feature, op, args) =>
                 network.SendAll(new NetworkTaomAction
                 {
@@ -58,6 +59,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             TaomActions.Send = null;
             broker.Unsubscribe<NetworkTaomActionResult>(HandleActionResult);
             broker.Unsubscribe<NetworkTaomState>(HandleState);
+            broker.Unsubscribe<NetworkTaomPartyComponent>(HandlePartyComponent);
             broker.Unsubscribe<CampaignReady>(HandleCampaignReady);
             broker.Unsubscribe<NetworkTaomJoinResult>(HandleResult);
             broker.Unsubscribe<NetworkTaomCampResult>(HandleCampResult);
@@ -90,6 +92,13 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         {
             var msg = payload.What;
             GameThread.RunSafe(() => TaomStateMirror.ClientApply(msg.Behaviour, msg.Json), false, "ModderLords TAOM state mirror");
+        }
+
+        private void HandlePartyComponent(MessagePayload<NetworkTaomPartyComponent> payload)
+        {
+            var msg = payload.What;
+            GameThread.RunSafe(() => PartyComponentSyncComponent.ClientCreate(msg.TypeName, msg.ComponentId, msg.PartyId,
+                msg.Fields ?? new System.Collections.Generic.List<string>()), false, "ModderLords TAOM party component");
         }
 
         private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
@@ -140,6 +149,12 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Subscribe<NetworkTaomAction>(HandleAction);
             broker.Subscribe<NetworkTaomStateRequest>(HandleStateRequest);
             TaomStateMirror.Reset();
+            PartyComponentSyncComponent.Broadcast = (type, id, partyId, fields) =>
+                network.SendAll(new NetworkTaomPartyComponent
+                {
+                    TypeName = type, ComponentId = id, PartyId = partyId, Fields = fields,
+                    ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion,
+                });
             TaomStateMirror.Broadcast = (behaviour, json) =>
                 network.SendAll(new NetworkTaomState { Behaviour = behaviour, Json = json, ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion });
         }
@@ -164,6 +179,7 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Unsubscribe<NetworkTaomAction>(HandleAction);
             broker.Unsubscribe<NetworkTaomStateRequest>(HandleStateRequest);
             TaomStateMirror.Broadcast = null;
+            PartyComponentSyncComponent.Broadcast = null;
         }
 
         private void HandleAction(MessagePayload<NetworkTaomAction> payload)

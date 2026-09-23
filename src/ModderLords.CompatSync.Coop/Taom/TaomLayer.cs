@@ -57,6 +57,9 @@ public static class TaomLayer
         new CareerSyncComponent(),
         new PlayerContextComponent(),
         new DesertionRelayComponent(),
+        new PartyComponentSyncComponent(),
+        new RefugeComponent(),
+        new SupplyLinesComponent(),
     };
 
     private static bool _done;
