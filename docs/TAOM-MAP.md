@@ -24,9 +24,6 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
 - [x] Settings parity: all four TAOM MCM pages reach clients; live edits persist per profile
 - [x] Client crash in "join encounter, help attackers/defenders" (Coop reads `EncounteredBattle` too early; guarded, #119)
 - [b] Map-mod version mismatch warns at launch, still loads (#120)
-- [ ] Character-creation start position: TAOM teleports the new hero to the culture's start settlement on the client;
-      the joiner's server hero starts wherever Coop places it. Add to join-grant.
-- [ ] Hero race of *other* players: race is set on the server at join; whether Coop sends it to other clients is unchecked.
 
 ### Player actions TAOM only allows the host (relays)
 - [x] Field Camp: establish / fortify / foraging / break, per-player hourly tick (#109, #110, #114, #117)
@@ -43,14 +40,22 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
       components; owner and banner answer from the party's clan instead of Hero.MainHero.
 - [ ] Career quests: created client-side; only one quest exists in TAOM (captain_of_osgiliath_t2). Plan: client
       tracks, server receives completion and rewards.
-- [ ] Enlistment: every world-changing handler is host-only by TAOM's own design, so a client's enlistment is never
-      processed by the server. Needs reading end to end before deciding (it attaches the player to a lord's party).
-- [ ] Field Commission: merit accrues only on the authority; check whether a client's kills are counted by the
-      server-side mission logic.
-- [ ] Player Switcher / Player Possession mid-campaign: switching the controlled hero on a client would fight Coop's
-      player identity. Confirm it is character-creation-only in co-op, else hide it.
-- [ ] Equip Presets / Quick Actions: player equipment and inventory edits on the client; check Coop's equipment
-      sync covers them.
+- [ ] Enlistment (read 2026-09-23, ~13k lines): ONE process-wide enlistment record (`_store.Record`) for "the
+      player", every world-changing handler host-only, and following the lord is done by moving/attaching the
+      player's party each frame. In Coop the client moves its own party, so the follow half must run on the client
+      while wages, battle joining, duties and rewards run on the server against a per-player record (swap the record
+      under PlayerScope). A project of its own; not started.
+- [ ] Field Commission (read 2026-09-23): merit counts kills by the main party's troops in the mission, authority
+      only; the promotion offer at battle end is an inquiry that creates a companion hero. Needs client-counted merit
+      reported to the server (special-resource pattern) plus a relayed offer choice. Not started.
+- [b] Player Switcher: only offered on the character-creation face screen (Patch77). Hidden on co-op clients, since
+      taking over an existing lord clashes with Coop's player hero. No mid-campaign switch exists.
+- [s] Equip Presets / Quick Actions: both apply through vanilla InventoryLogic transfer commands / vanilla sell-all,
+      which Coop's inventory sync carries. Limit: saved presets live in the client's local behaviour state and do not
+      survive a reconnect.
+- [b] Start position: after the server applies a fresh player's join package, the client moves its party to TAOM's
+      culture starting settlement (TAOM's own teleport only ran on the local character-creation campaign).
+- [s] Other players' hero race: Coop auto-syncs BasicCharacterObject.Race; join-grant sets it on the server.
 
 ### Player state the server must own or know
 - [b] Special-resource balances: client owns, server stores and saves (#115)

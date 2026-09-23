@@ -60,6 +60,7 @@ public static class TaomLayer
         new PartyComponentSyncComponent(),
         new RefugeComponent(),
         new SupplyLinesComponent(),
+        new PlayerSwitcherGuardComponent(),
     };
 
     private static bool _done;
