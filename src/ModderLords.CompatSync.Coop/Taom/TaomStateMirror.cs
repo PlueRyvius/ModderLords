@@ -150,8 +150,29 @@ internal static class TaomStateMirror
         {
             behavior.SyncData(MirrorStore.ForLoading(json));
             Log.Info($"TAOM layer: state mirror applied {Short(name)} from the server ({json.Length} chars)");
+            ReportPlayerEvents(behavior);
         }
         catch (Exception ex) { Log.Warn($"TAOM layer: state mirror could not apply {Short(name)}: {ex.GetBaseException().Message}"); }
+    }
+
+    private static int _lastPlayerEvents = -1;
+
+    /// <summary>
+    /// Momentum only: says when the server recorded a new PLAYER event (a battle, siege or raid the players took part
+    /// in, which is what counts toward TAOM's player participation), so "did I contribute?" is answered by the log.
+    /// </summary>
+    private static void ReportPlayerEvents(CampaignBehaviorBase behavior)
+    {
+        try
+        {
+            var store = behavior.GetType().GetField("_stateStore", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(behavior);
+            if (store?.GetType().GetProperty("PlayerEvents")?.GetValue(store) is not System.Collections.IList events) return;
+            if (events.Count == _lastPlayerEvents) return;
+            var added = _lastPlayerEvents < 0 ? "" : " (new: " + string.Join(", ", events.Cast<object>().Skip(Math.Max(0, _lastPlayerEvents)).Select(e => e.ToString())) + ")";
+            _lastPlayerEvents = events.Count;
+            Log.Info($"TAOM layer: War of the Ring player events recorded by the server: {events.Count}{added}");
+        }
+        catch { }
     }
 
     /// <summary>A new session starts from nothing sent: the first capture goes out in full.</summary>
