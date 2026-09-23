@@ -57,6 +57,11 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.Messengers.MessengerCampaignBehavior", "SendMessenger", ["TaleWorlds.CampaignSystem.Hero"], "System.Void" },
         { "TAOM.Features.SpecialResources.ISpecialResourceStorageService", "GetAllData", [],
             "System.Collections.Generic.Dictionary`2<System.String,System.Single>" },
+        { "TAOM.Features.CareerSystem.ICareerDataService", "GetAllData", [],
+            "System.Collections.Generic.Dictionary`2<System.String,TAOM.Features.CareerSystem.Domain.HeroCareerData>" },
+        { "TAOM.Features.CareerSystem.ICareerDataService", "GetOrCreateData", ["System.String"], "TAOM.Features.CareerSystem.Domain.HeroCareerData" },
+        { "TAOM.Features.CareerSystem.ICareerPassiveService", "RefreshCache",
+            ["TAOM.Features.CareerSystem.ICareerDataService", "TAOM.Features.CareerSystem.ICareerRegistry"], "System.Void" },
         { "TAOM.Features.SpecialResources.ISpecialResourceStorageService", "Set", ["System.String", "System.String", "System.Single"], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.MapScreenCampMenuActivationQuery", "get_IsMainPartyStationary", [], "System.Boolean" },
     };
@@ -94,6 +99,12 @@ public sealed class TaomSurfaceTests
         Assert.NotNull(config?.Properties.FirstOrDefault(p => p.Name == "RewardInfluence"));
         Assert.NotNull(config?.Properties.FirstOrDefault(p => p.Name == "RewardRelation"));
         Assert.NotNull(module.GetType("TAOM.Features.Siege.ISiegeDefenseService"));
+        var career = module.GetType("TAOM.Features.CareerSystem.Domain.HeroCareerData");
+        foreach (var name in new[] { "CareerStringId", "ChoiceIds", "TierUnlocks", "Flags" })
+            Assert.True(career?.Properties.FirstOrDefault(p => p.Name == name)?.SetMethod != null, $"HeroCareerData.{name} needs a public setter");
+        var registry = module.GetType("TAOM.Features.CareerSystem.ICareerRegistry");
+        Assert.NotNull(registry?.Methods.FirstOrDefault(m => m.Name == "GetCareer"));
+        Assert.NotNull(registry?.Methods.FirstOrDefault(m => m.Name == "GetChoice"));
         Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.ICampService"));
         var resolve = module.GetType("TAOM.IoC")?.Methods.FirstOrDefault(m => m.Name == "Resolve" && m.IsStatic && m.Parameters.Count == 0);
         Assert.True(resolve is { HasGenericParameters: true }, "TAOM.IoC.Resolve<T>() is missing");
