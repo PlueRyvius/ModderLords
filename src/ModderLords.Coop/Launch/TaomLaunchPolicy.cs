@@ -31,6 +31,58 @@ public static class TaomLaunchPolicy
         return ids.Contains("TAOM") && ids.Contains("TAOM_Map") && ids.Contains("LOTRLOME_Armory");
     }
 
+    /// <summary>
+    /// Folders that are never empty in a working install. Measured 2026-09-22: a TAOM install whose content folders
+    /// had been emptied (only its DLLs and manifest left) still loaded, logged each missing file, and showed players
+    /// a blank culture list at character creation, which reads as a co-op bug. Checking for content catches that at
+    /// launch instead.
+    /// </summary>
+    private static readonly (string ModuleId, string RelativePath)[] RequiredContent =
+    {
+        ("TAOM", "ModuleData"), ("TAOM", "GUI"),
+        ("TAOM.Dependencies", "ModuleData"),
+        ("TAOM_Map", "ModuleData"),
+        ("LOTRLOME_Armory", "ModuleData"),
+    };
+
+    /// <summary>
+    /// One line per selected TAOM module whose install is missing content, naming the folder. Empty when every
+    /// selected module looks complete. Modules that are not selected are not checked.
+    /// </summary>
+    public static IReadOnlyList<string> InstallProblems(IEnumerable<(string Id, string FolderPath)> modules)
+    {
+        var problems = new List<string>();
+        foreach (var (id, folder) in modules)
+        {
+            var missing = RequiredContent
+                .Where(r => r.ModuleId.Equals(id, StringComparison.OrdinalIgnoreCase))
+                .Select(r => r.RelativePath)
+                .Where(rel => !HasAnyFile(Path.Combine(folder, rel)))
+                .ToList();
+            if (missing.Count > 0)
+                problems.Add($"{id} is installed without its {string.Join(" and ", missing)} content ({folder}). " +
+                             "The game would load it and show players a broken character creation. Reinstall " + id + ".");
+        }
+        return problems;
+    }
+
+    private static bool HasAnyFile(string dir)
+    {
+        try { return Directory.Exists(dir) && Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Any(); }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    /// <summary>
+    /// TAOM's co-op support ships in the shared ModderLords.Compat module, which the launcher loads only with Settings
+    /// sync on. Without it TAOM runs on every peer as if it were alone.
+    /// </summary>
+    public static string? SyncProblem(IEnumerable<string> moduleIds, bool settingsSync) =>
+        !settingsSync && IsTaom(moduleIds)
+            ? "TAOM needs Settings sync on: ModderLords' TAOM co-op support is in the ModderLords.Compat module, which " +
+              "the server and every player load only with Settings sync. Turn it on in the Server tab."
+            : null;
+
     /// <summary>Returns a plain-language blocker, or null when the selected save is usable.</summary>
     public static string? MessageFor(IEnumerable<string> moduleIds, string? saveName, Func<string, bool> saveExists)
     {

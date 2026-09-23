@@ -62,3 +62,47 @@ public sealed class NetworkRelayResult : IEvent
     [ProtoMember(4)] public string Reason { get; set; } = "";
     [ProtoMember(5)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>Client -> server (TAOM sessions): the joining player's TAOM character-creation choices, sent once.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomJoinChoices : ICommand
+{
+    /// <summary>The character-creation hero's id on the client (the hero the join replaced).</summary>
+    [ProtoMember(1)] public string HeroId { get; set; } = "";
+    [ProtoMember(2)] public string CultureId { get; set; } = "";
+    [ProtoMember(3)] public int RaceId { get; set; } = -1;
+    [ProtoMember(4)] public string CareerId { get; set; } = "";
+    [ProtoMember(5)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Server -> the sending client: what happened to its TAOM join package.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomJoinResult : IEvent
+{
+    [ProtoMember(1)] public bool Applied { get; set; }
+    [ProtoMember(2)] public string Detail { get; set; } = "";
+    [ProtoMember(3)] public int ProtocolVersion { get; set; }
+    /// <summary>False when the server could not act yet (player or hero not known); the client sends again later.</summary>
+    [ProtoMember(4)] public bool Final { get; set; }
+}
+
+/// <summary>Client -> server (TAOM sessions): a Field Camp operation the player just made from TAOM's camp menu.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomCampOp : ICommand
+{
+    /// <summary>establish, fortify, foraging or break.</summary>
+    [ProtoMember(1)] public string Op { get; set; } = "";
+    /// <summary>TAOM's CampType value, for establish.</summary>
+    [ProtoMember(2)] public int CampType { get; set; }
+    [ProtoMember(3)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Server -> the sending client: whether TAOM ran the camp operation for that player.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomCampResult : IEvent
+{
+    [ProtoMember(1)] public string Op { get; set; } = "";
+    [ProtoMember(2)] public bool Ran { get; set; }
+    [ProtoMember(3)] public string Detail { get; set; } = "";
+    [ProtoMember(4)] public int ProtocolVersion { get; set; }
+}

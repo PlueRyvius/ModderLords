@@ -136,7 +136,7 @@ public static class ServerRelay
     }
 
     /// <summary>Swaps "the player" to one player for the duration of a call, and restores it even when the call throws.</summary>
-    private sealed class PlayerScope : IDisposable
+    internal sealed class PlayerScope : IDisposable
     {
         private static readonly MethodInfo? MainPartySetter = AccessTools.PropertySetter(typeof(Campaign), "MainParty");
         private static readonly MethodInfo? FactionSetter = AccessTools.PropertySetter(typeof(Campaign), "PlayerDefaultFaction");
