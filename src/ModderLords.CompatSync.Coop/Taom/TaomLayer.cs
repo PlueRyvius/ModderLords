@@ -54,6 +54,7 @@ public static class TaomLayer
         new MessengerNoticeComponent(),
         new StateMirrorComponent(),
         new SpecialResourceSyncComponent(),
+        new CareerSyncComponent(),
     };
 
     private static bool _done;

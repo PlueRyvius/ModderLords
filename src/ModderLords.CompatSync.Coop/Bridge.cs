@@ -19,6 +19,7 @@ public static class Bridge
         Taom.TaomLayer.Tick();
         Taom.TaomStateMirror.ServerTick();
         Taom.SpecialResourceSyncComponent.ClientTick();
+        Taom.CareerSyncComponent.ClientTick();
         Operations.OperationRuntime.JoinBarrier?.Tick();
         global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.OperationServerHandler.Current?.RemoveDisconnectedPeers();
         BehaviorGate.RetryPendingPostfixes();
