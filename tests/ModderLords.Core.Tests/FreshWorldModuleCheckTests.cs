@@ -115,3 +115,23 @@ public class FreshWorldModuleCheckTests
         finally { Directory.Delete(dir, true); }
     }
 }
+
+public sealed class MapModVersionWarningTests
+{
+    [Fact]
+    public void MapModVersionChangeIsAWarningThatStillLaunches()
+    {
+        var line = ModderLords.Core.Saves.SaveModuleCheck.VersionChangeLine("taom_world", "TAOM_Map", "v2.0.27", "v2.0.28", isMapMod: true);
+        Assert.StartsWith("WARNING", line);
+        Assert.Contains("create a new world", line);
+        Assert.Contains("Launching anyway", line);
+    }
+
+    [Fact]
+    public void OtherVersionChangesStayPlain()
+    {
+        var line = ModderLords.Core.Saves.SaveModuleCheck.VersionChangeLine("taom_world", "TAOM", "v2.0.27", "v2.0.28", isMapMod: false);
+        Assert.DoesNotContain("WARNING", line);
+        Assert.Equal("save 'taom_world': TAOM was v2.0.27, this launch has v2.0.28", line);
+    }
+}

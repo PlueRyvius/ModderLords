@@ -399,9 +399,13 @@ public sealed class LaunchSession
         // The template is withheld when a world is being generated: FreshWorldMessages would otherwise announce a
         // bootstrap from default_new_game.sav that is not going to happen, and advise running create-world - which
         // is exactly what this launch is doing. It contradicted the generation messages three lines above it.
+        // Mods that replace the campaign map: a version change on one of these is the one worth a WARNING.
+        var mapModuleIds = new HashSet<string>(
+            selections.Where(s => Directory.Exists(Path.Combine(s.Module.FolderPath, "SceneObj", "Main_map"))).Select(s => s.Module.Id),
+            StringComparer.OrdinalIgnoreCase);
         messages.AddRange(SaveModuleCheck.MessagesForLaunch(
             paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections),
-            willCreateWorld ? null : SavePreparer.FindTemplate(paths)));
+            willCreateWorld ? null : SavePreparer.FindTemplate(paths), mapModuleIds));
 
         ModderLords.Analysis.CompatibilityPlan? operationPlan = null;
         // Full operation analysis is explicit in the UI. Launch performs it when an approved managed adapter

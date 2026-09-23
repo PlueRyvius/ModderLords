@@ -64,13 +64,14 @@ public static class SaveModuleCheck
         string savesDir,
         string? saveName,
         IReadOnlyDictionary<string, string> plannedCommunityVersions,
-        string? templatePath = null)
+        string? templatePath = null,
+        ISet<string>? mapModuleIds = null)
     {
         var implicitly_ = string.IsNullOrWhiteSpace(saveName);
         var name = implicitly_ ? CoopAutoSaveName : saveName!;
         var savePath = Path.Combine(savesDir, name + ".sav");
         var messages = File.Exists(savePath)
-            ? Messages(savePath, plannedCommunityVersions)
+            ? Messages(savePath, plannedCommunityVersions, mapModuleIds)
             : FreshWorldMessages(name, templatePath, plannedCommunityVersions);
         if (messages.Count == 0 || !implicitly_) return messages;
         return messages.Select(m => m + $" (no save was named, so Coop will load its autosave '{name}')").ToList();
@@ -114,7 +115,8 @@ public static class SaveModuleCheck
     /// The launch messages for a save that already exists. Empty when the save is absent (a fresh world is about to
     /// be created from the template and there is nothing to disagree with), unreadable, or in agreement.
     /// </summary>
-    public static IReadOnlyList<string> Messages(string savePath, IReadOnlyDictionary<string, string> plannedCommunityVersions)
+    public static IReadOnlyList<string> Messages(string savePath, IReadOnlyDictionary<string, string> plannedCommunityVersions,
+        ISet<string>? mapModuleIds = null)
     {
         if (!File.Exists(savePath)) return Array.Empty<string>();
         var header = SaveHeaderReader.TryRead(savePath, out var error);
@@ -134,7 +136,21 @@ public static class SaveModuleCheck
                 "The engine will force the load and the campaign may stall during world init. A world has to be created with the modules it will run under.");
         }
         foreach (var d in r.VersionChanges)
-            messages.Add($"save '{r.SaveName}': {d.ModuleId} was {d.SaveVersion}, this launch has {d.CurrentVersion}");
+            messages.Add(VersionChangeLine(r.SaveName, d.ModuleId, d.SaveVersion, d.CurrentVersion,
+                mapModuleIds?.Contains(d.ModuleId) == true));
         return messages;
     }
+
+    /// <summary>
+    /// One line per module whose version differs from the save's. A map-replacing mod gets a WARNING: its new version
+    /// can ship a different campaign map (TAOM 2.0.27 -> 2.0.28 changed the navmesh), and an old world served on a new
+    /// map crashed the server while it read the distance cache, or re-entered the map without end (2026-09-22). The
+    /// launch still goes ahead: the maintainer's call is to warn, not refuse, since a version bump often changes nothing.
+    /// </summary>
+    public static string VersionChangeLine(string saveName, string moduleId, string saveVersion, string currentVersion, bool isMapMod) =>
+        isMapMod
+            ? $"WARNING save '{saveName}': map mod {moduleId} was {saveVersion} when this world was made, this launch has {currentVersion}. " +
+              "A new version of a map mod can change the campaign map under an old world; if the server crashes while loading " +
+              "or keeps reloading the map, create a new world. Launching anyway."
+            : $"save '{saveName}': {moduleId} was {saveVersion}, this launch has {currentVersion}";
 }
