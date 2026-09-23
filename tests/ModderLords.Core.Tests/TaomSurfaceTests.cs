@@ -67,6 +67,12 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.CareerSystem.ICareerDataService", "GetOrCreateData", ["System.String"], "TAOM.Features.CareerSystem.Domain.HeroCareerData" },
         { "TAOM.Features.CareerSystem.ICareerPassiveService", "RefreshCache",
             ["TAOM.Features.CareerSystem.ICareerDataService", "TAOM.Features.CareerSystem.ICareerRegistry"], "System.Void" },
+        { "TAOM.Adapters.PlayerContextAdapter", "GetPlayerKingdomId", [], "System.String" },
+        { "TAOM.Adapters.PlayerContextAdapter", "GetPlayerCultureId", [], "System.String" },
+        { "TAOM.Adapters.PlayerContextAdapter", "IsUnderMercenaryService", [], "System.Boolean" },
+        { "TAOM.Adapters.WarEventSnapshotAdapter", "IsPlayerRelated", ["TaleWorlds.CampaignSystem.Party.PartyBase", "System.String"], "System.Boolean" },
+        { "TAOM.Adapters.WarEventSnapshotAdapter", "FromMapEvent", ["TaleWorlds.CampaignSystem.MapEvents.MapEvent"],
+            "TAOM.Features.WarOfTheRingMomentum.Snapshots.BattleOutcomeSnapshot" },
         { "TAOM.Features.SpecialResources.ISpecialResourceStorageService", "Set", ["System.String", "System.String", "System.Single"], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.MapScreenCampMenuActivationQuery", "get_IsMainPartyStationary", [], "System.Boolean" },
     };
@@ -107,6 +113,8 @@ public sealed class TaomSurfaceTests
         var career = module.GetType("TAOM.Features.CareerSystem.Domain.HeroCareerData");
         foreach (var name in new[] { "CareerStringId", "ChoiceIds", "TierUnlocks", "Flags" })
             Assert.True(career?.Properties.FirstOrDefault(p => p.Name == name)?.SetMethod != null, $"HeroCareerData.{name} needs a public setter");
+        Assert.True(module.GetType("TAOM.Features.WarOfTheRingMomentum.Snapshots.BattleOutcomeSnapshot")
+            ?.Properties.FirstOrDefault(p => p.Name == "PlayerInvolved")?.SetMethod != null, "BattleOutcomeSnapshot.PlayerInvolved needs a setter");
         var registry = module.GetType("TAOM.Features.CareerSystem.ICareerRegistry");
         Assert.NotNull(registry?.Methods.FirstOrDefault(m => m.Name == "GetCareer"));
         Assert.NotNull(registry?.Methods.FirstOrDefault(m => m.Name == "GetChoice"));

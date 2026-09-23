@@ -149,8 +149,14 @@ public static class ServerRelay
         private readonly Clan? _faction;
         private readonly object? _resolved;
 
+        [ThreadStatic] private static int _depth;
+
+        /// <summary>True while some call is running with one player standing in as "the player".</summary>
+        internal static bool Active => _depth > 0;
+
         public PlayerScope(Hero hero, MobileParty? party)
         {
+            _depth++;
             _game = Game.Current;
             _campaign = Campaign.Current;
             _troop = _game?.PlayerTroop;
@@ -169,6 +175,7 @@ public static class ServerRelay
 
         public void Dispose()
         {
+            _depth--;
             Resolved?.SetValue(null, _resolved);
             if (_campaign != null)
             {

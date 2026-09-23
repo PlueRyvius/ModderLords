@@ -55,6 +55,7 @@ public static class TaomLayer
         new StateMirrorComponent(),
         new SpecialResourceSyncComponent(),
         new CareerSyncComponent(),
+        new PlayerContextComponent(),
     };
 
     private static bool _done;
