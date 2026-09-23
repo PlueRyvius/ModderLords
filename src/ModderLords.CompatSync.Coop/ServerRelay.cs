@@ -150,6 +150,11 @@ public static class ServerRelay
         private readonly object? _resolved;
 
         [ThreadStatic] private static int _depth;
+        [ThreadStatic] private static Hero? _current;
+        private readonly Hero? _previous;
+
+        /// <summary>The player standing in as "the player" on this thread, or null outside any scope.</summary>
+        internal static Hero? CurrentHero => _current;
 
         /// <summary>True while some call is running with one player standing in as "the player".</summary>
         internal static bool Active => _depth > 0;
@@ -157,6 +162,8 @@ public static class ServerRelay
         public PlayerScope(Hero hero, MobileParty? party)
         {
             _depth++;
+            _previous = _current;
+            _current = hero;
             _game = Game.Current;
             _campaign = Campaign.Current;
             _troop = _game?.PlayerTroop;
@@ -176,6 +183,7 @@ public static class ServerRelay
         public void Dispose()
         {
             _depth--;
+            _current = _previous;
             Resolved?.SetValue(null, _resolved);
             if (_campaign != null)
             {

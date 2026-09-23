@@ -39,6 +39,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             broker.Subscribe<NetworkTaomActionResult>(HandleActionResult);
             broker.Subscribe<NetworkTaomState>(HandleState);
             broker.Subscribe<NetworkTaomPartyComponent>(HandlePartyComponent);
+            broker.Subscribe<NetworkTaomNotice>(HandleNotice);
             TaomActions.Send = (feature, op, args) =>
                 network.SendAll(new NetworkTaomAction
                 {
@@ -60,6 +61,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             broker.Unsubscribe<NetworkTaomActionResult>(HandleActionResult);
             broker.Unsubscribe<NetworkTaomState>(HandleState);
             broker.Unsubscribe<NetworkTaomPartyComponent>(HandlePartyComponent);
+            broker.Unsubscribe<NetworkTaomNotice>(HandleNotice);
             broker.Unsubscribe<CampaignReady>(HandleCampaignReady);
             broker.Unsubscribe<NetworkTaomJoinResult>(HandleResult);
             broker.Unsubscribe<NetworkTaomCampResult>(HandleCampResult);
@@ -92,6 +94,12 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         {
             var msg = payload.What;
             GameThread.RunSafe(() => TaomStateMirror.ClientApply(msg.Behaviour, msg.Json), false, "ModderLords TAOM state mirror");
+        }
+
+        private void HandleNotice(MessagePayload<NetworkTaomNotice> payload)
+        {
+            var msg = payload.What;
+            GameThread.RunSafe(() => NoticeComponent.Show(msg.Text, msg.Color, msg.Quick), false, "ModderLords TAOM notice");
         }
 
         private void HandlePartyComponent(MessagePayload<NetworkTaomPartyComponent> payload)
@@ -152,6 +160,15 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Subscribe<NetworkTaomAction>(HandleAction);
             broker.Subscribe<NetworkTaomStateRequest>(HandleStateRequest);
             TaomStateMirror.Reset();
+            NoticeComponent.Send = (controllerId, text, color, quick) =>
+            {
+                if (ContainerProvider.TryResolve<IPlayerManager>(out var pm) && pm.TryGetPeer(controllerId, out var peer) && peer != null)
+                    network.Send(peer, new NetworkTaomNotice
+                    {
+                        Text = text, Color = color, Quick = quick,
+                        ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion,
+                    });
+            };
             PartyComponentSyncComponent.Broadcast = (type, id, partyId, fields) =>
                 network.SendAll(new NetworkTaomPartyComponent
                 {
@@ -183,6 +200,7 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Unsubscribe<NetworkTaomStateRequest>(HandleStateRequest);
             TaomStateMirror.Broadcast = null;
             PartyComponentSyncComponent.Broadcast = null;
+            NoticeComponent.Send = null;
         }
 
         private void HandleAction(MessagePayload<NetworkTaomAction> payload)
