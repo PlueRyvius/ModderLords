@@ -129,3 +129,13 @@ Host a TAOM world on the new build and join as a client. After each step, the ag
 6. **Culture conversion** mirror: client logs `state mirror applied CultureConversionBehavior`.
 7. **One battle with wargs, elephants or spiders** (for the battle review): note anything that looks doubled, or
    agents dying on one screen only.
+
+### Additions (modules 0.1.24 to 0.1.26)
+8. **Messages.** When a caravan arrives, the "supplies have arrived" line appears on YOUR screen (it used to print
+   only on the server).
+9. **Field Commission.** Win a battle against the odds with your own troops getting kills. Afterwards, if a troop type
+   has enough merit, TAOM offers a promotion. Accept and name them: a new companion appears and one soldier leaves
+   (server: `promoted to companion`). If no offer ever comes, check whether the client log shows the battle ending.
+10. **Battle gate.** Fight a two-player battle with creatures. Every client log lists `battle gate: <TAOM class> ->
+    Agent.<action> on an agent another machine controls`. Send me those lines; they decide what goes into
+    `Documents\Mount and Blade II Bannerlord\Configs\ModLogs	aom-battle-gate-client.txt` (one class per line).

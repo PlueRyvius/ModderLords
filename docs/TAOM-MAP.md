@@ -100,8 +100,11 @@ the battle host (`BattleSession.IsLocalHost`, migrated if it leaves); every agen
       deaths, morale, movement, dismounts) on every client that runs the battle, including agents another client
       controls. Expected symptoms: doubled or fighting effects (double trample/morale hits, AI tugged between
       clients), agents dying on one screen only. Proposed fix: one "agent authority" gate that lets TAOM act only on
-      agents this client controls (and battle-wide effects only on the battle host). **Needs a two-player battle
-      first** to see which of these actually misbehave; not built blind.
+      agents this client controls (and battle-wide effects only on the battle host).
+      [b] Built as measure-then-gate (battle-gate component): during a Coop battle every TAOM battle-behaviour action
+      (blow, death, morale, teleport, speed/scripted movement) on an agent another machine controls is logged with
+      the TAOM class; classes listed in Configs\ModLogs	aom-battle-gate-client.txt (or *) are skipped for such
+      agents. No file = measure only. Next: one two-player battle, read the log, list the offenders.
 - [s] Presentation only (no agent changes found): mixed formations UI, battle action bar view, diagnostics, shader
       precompile, war ram and mumakil behaviours (they delegate; re-check if a live battle shows trouble).
 - [u] Picking up fired arrows: Coop rejects items it has no shared identity for (`uncorrelated-runtime-identity`)
