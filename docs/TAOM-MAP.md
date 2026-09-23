@@ -66,18 +66,30 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
 
 ### TAOM state clients never hear about (state mirror)
 - [x] War of the Ring phase and Momentum (#113; bar moves on the client)
-- [ ] Culture conversion (pending conversions): server-only, mirror when a client needs to see it
+- [b] Culture conversion (pending conversions): mirrored from the server
 - [ ] Siege defence active events: host-owned timeline; clients prune nothing (TAOM notes it is harmless)
 - [b] Refuge book and Supply order book (mirror now carries TAOM record dictionaries; refuge visuals of removed rows
       are cleared on the client)
 - [ ] Enlistment / Field Commission state: after their relays exist
 - [s] Hero race map, banner injection, Nazgul family, race ages: deterministic on every peer from shipped data
 
-### Battles (not started)
-- [ ] Read how Coop splits a battle between server and clients (Coop `Missions`), then check TAOM mission logic for
-      doubled or missing effects: advanced combat, banner bearers, dread aura, mount despawn, smart cavalry AI,
-      elephants / mumakil / wargs / spiders / war rams, siege dismount, mixed formations, companion tactics, career
-      abilities, field-commission merit.
+### Battles (reviewed 2026-09-23, nothing changed yet)
+How Coop runs a battle (its `Missions` assembly): the battle runs on the CLIENTS, never on the server. One client is
+the battle host (`BattleSession.IsLocalHost`, migrated if it leaves); every agent has one controlling client
+(`agentRegistry.TryTransferAuthority`), the host owning the AI; the result is committed to the server afterwards
+(`BattleResultCommitter`). Consequences for TAOM's ~25 mission behaviours:
+- [ ] **Authority-gated logic never runs.** TAOM's `IsAuthority` is false on every client and the server has no
+      mission, so Field Commission merit (`FieldCommissionMissionLogic`) is never earned in co-op. Fix belongs with
+      the Field Commission item: count on the client, report to the server.
+- [ ] **Ungated agent logic runs on every client.** Wargs, spiders, elephants, advanced combat, smart cavalry AI,
+      siege dismount, mount despawn, banner bearers, dread aura and career perk effects all change agents (blows,
+      deaths, morale, movement, dismounts) on every client that runs the battle, including agents another client
+      controls. Expected symptoms: doubled or fighting effects (double trample/morale hits, AI tugged between
+      clients), agents dying on one screen only. Proposed fix: one "agent authority" gate that lets TAOM act only on
+      agents this client controls (and battle-wide effects only on the battle host). **Needs a two-player battle
+      first** to see which of these actually misbehave; not built blind.
+- [s] Presentation only (no agent changes found): mixed formations UI, battle action bar view, diagnostics, shader
+      precompile, war ram and mumakil behaviours (they delegate; re-check if a live battle shows trouble).
 - [u] Picking up fired arrows: Coop rejects items it has no shared identity for (`uncorrelated-runtime-identity`)
 
 ### Upstream and out of scope

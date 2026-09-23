@@ -107,3 +107,25 @@ Then:
 - Every PR: `dotnet build ModderLords.slnx`, then `dotnet test` on Core and App tests. Log test output to a file first; piping it into `Select-Object` kills the run.
 - Every batch: one short live checklist like Step 1. The agent reads the logs listed there.
 - After server-side changes, also smoke-test a vanilla-map launch.
+
+## Live test script (batch of 2026-09-23: modules 0.1.20 to 0.1.22)
+
+Host a TAOM world on the new build and join as a client. After each step, the agent reads
+`ModderLords.Compat-server.log` / `-client.log` for the `TAOM layer:` lines shown.
+
+1. **Start-up.** Both logs show `party-components on`, `refuge on`, `supply-lines on` and, on the client,
+   `player-switcher-guard on`.
+2. **New character.** No hero picker appears on the face screen (client: `hero picker hidden`). After joining, the
+   party stands at the culture's start settlement (client: `party placed at <culture>'s starting settlement`).
+3. **Supply order.** In a town: Order Supplies, pick goods, confirm. The screen closes, "A supply caravan has set out"
+   appears, and a caravan party shows on the map (server: `supply order ... placed for <you>`; server:
+   `sent SupplyCaravanComponent`; client: `SupplyCaravanComponent attached`). Wait for it: the goods arrive in your
+   inventory and gold went down once.
+4. **Refuge.** Camp (field or fortified), wait until ready, camp menu: Establish a refuge here, pick a warden. The
+   party screen for the refuge opens (server: `refuge '...' founded for <you>`; client: `RefugePartyComponent
+   attached`). Move troops in. Wait for the raise, then walk away and back: Enter refuge shows your garrison.
+   Try Dismantle: the troops return to your party.
+5. **Second player** (if available): they must not see or manage your refuge, and their caravans go to them.
+6. **Culture conversion** mirror: client logs `state mirror applied CultureConversionBehavior`.
+7. **One battle with wargs, elephants or spiders** (for the battle review): note anything that looks doubled, or
+   agents dying on one screen only.
