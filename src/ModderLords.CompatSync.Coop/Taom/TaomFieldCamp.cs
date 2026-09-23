@@ -47,6 +47,7 @@ internal sealed class FieldCampComponent : ITaomComponent
         if (context.IsServer)
         {
             harmony.Patch(TaomFieldCamp.HourlyTick!, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.HourlyTickPostfix)));
+            harmony.Patch(TaomFieldCamp.ServiceMoving!, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.ServerMovingPostfix)));
             return "server runs players' camp operations and ticks every player's camp hourly";
         }
         harmony.Patch(TaomFieldCamp.Establish!, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.EstablishPostfix)));
@@ -94,6 +95,7 @@ internal static class TaomFieldCamp
     internal static MethodInfo? Stationary { get; private set; }
     internal static MethodInfo? Refresh { get; private set; }
     internal static MethodInfo? ServiceMoving { get; private set; }
+    private static MethodInfo? _canEstablish;
     private static PropertyInfo? _canMakeCamp;
     internal static MethodInfo? ForageHour { get; private set; }
     internal static string? MissingSurface { get; private set; } = "not bound";
@@ -112,6 +114,7 @@ internal static class TaomFieldCamp
         _campType = taom.GetType("TAOM.Features.FieldCamp.Domain.CampType", false);
         _resolve = taom.GetType("TAOM.IoC", false)?.GetMethod("Resolve", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
         Establish = _campType == null ? null : service?.GetMethod("Establish", new[] { _campType });
+        _canEstablish = _campType == null ? null : service?.GetMethod("CanEstablish", new[] { _campType });
         Fortify = service?.GetMethod("Fortify", Type.EmptyTypes);
         ToggleForaging = service?.GetMethod("ToggleForaging", Type.EmptyTypes);
         Break = service?.GetMethod("BreakPlayerCamp", Type.EmptyTypes);
@@ -135,6 +138,7 @@ internal static class TaomFieldCamp
         if (_campType == null || !_campType.IsEnum) missing.Add("CampType");
         if (_resolve == null || !_resolve.IsGenericMethodDefinition) missing.Add("TAOM.IoC.Resolve<T>()");
         if (Establish?.ReturnType != typeof(bool)) missing.Add("CampService.Establish(CampType)");
+        if (_canEstablish == null || !_canEstablish.ReturnType.IsEnum) missing.Add("CampService.CanEstablish(CampType)");
         if (Fortify?.ReturnType != typeof(bool)) missing.Add("CampService.Fortify()");
         if (ToggleForaging?.ReturnType != typeof(bool)) missing.Add("CampService.ToggleForaging()");
         if (Break == null) missing.Add("CampService.BreakPlayerCamp()");
@@ -198,6 +202,20 @@ internal static class TaomFieldCamp
     {
         if (Send == null || !__result) return;
         __result = !SeenStill();
+    }
+
+    /// <summary>
+    /// Server, only while this layer runs a camp operation for a player: PlayerScope makes the player's party the
+    /// campaign's MainParty, and vanilla answers MainParty.IsMoving from Campaign.IsMainPartyWaiting, a campaign-wide
+    /// flag the server computes each tick for its OWN idle party. So TAOM's server-side check asked about the wrong
+    /// party and refused Establish as "Moving" (seen live 2026-09-22). Answered from the player's party instead, with
+    /// the same per-party test vanilla uses to set that flag (ComputeIsWaiting: at its target, or holding).
+    /// </summary>
+    internal static void ServerMovingPostfix(ref bool __result)
+    {
+        if (!_replaying && !_tickingPlayers) return;
+        var party = MobileParty.MainParty;
+        if (party != null) __result = !party.ComputeIsWaiting();
     }
 
     /// <summary>The main party's on-screen position has not changed for <see cref="StillSeconds"/>.</summary>
@@ -299,7 +317,21 @@ internal static class TaomFieldCamp
 
         if (result is "unknown") return (false, "unknown camp operation '" + op + "'");
         var ran = result is not bool b || b;
-        return (ran, ran ? $"{op} ran for {hero.Name}" : $"TAOM refused {op} for {hero.Name} on the server");
+        if (ran) return (true, $"{op} ran for {hero.Name}");
+        return (false, $"TAOM refused {op} for {hero.Name} on the server" + (op == OpEstablish ? ": " + WhyNot(service, hero, party, campType) : ""));
+    }
+
+    /// <summary>TAOM's own reason (CampBlockReason) for refusing an Establish, asked the same way the menu asks it.</summary>
+    private static string WhyNot(object service, Hero hero, MobileParty party, int campType)
+    {
+        try
+        {
+            _replaying = true;
+            using (new ServerRelay.PlayerScope(hero, party))
+                return _canEstablish!.Invoke(service, new[] { Enum.ToObject(_campType!, campType) })?.ToString() ?? "?";
+        }
+        catch (Exception ex) { return "reason unavailable (" + ex.GetBaseException().Message + ")"; }
+        finally { _replaying = false; }
     }
 
     /// <summary>
