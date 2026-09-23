@@ -45,9 +45,10 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
       player's party each frame. In Coop the client moves its own party, so the follow half must run on the client
       while wages, battle joining, duties and rewards run on the server against a per-player record (swap the record
       under PlayerScope). A project of its own; not started.
-- [ ] Field Commission (read 2026-09-23): merit counts kills by the main party's troops in the mission, authority
-      only; the promotion offer at battle end is an inquiry that creates a companion hero. Needs client-counted merit
-      reported to the server (special-resource pattern) plus a relayed offer choice. Not started.
+- [b] Field Commission: client owns its merit bank; TAOM's kill counting (own party only, so once per kill), battle
+      scoring and offer prompts run on the co-op client; the promotion (hero creation, soldier removed) is relayed
+      and completed by the server for that player. Limit: merit restarts after a reconnect. Live check: does the
+      client get MapEventEnded for its battle (merit only banks on a won, eligible battle).
 - [b] Player Switcher: only offered on the character-creation face screen (Patch77). Hidden on co-op clients, since
       taking over an existing lord clashes with Coop's player hero. No mid-campaign switch exists.
 - [s] Equip Presets / Quick Actions: both apply through vanilla InventoryLogic transfer commands / vanilla sell-all,
