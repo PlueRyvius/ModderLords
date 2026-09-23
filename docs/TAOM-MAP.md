@@ -34,8 +34,8 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
       as the owner, refuge ticks are server-only; each player sees and counts only their own refuges. Garrison and
       stash use TAOM's own screens on the refuge party (Coop's party-screen sync; stash unverified).
 - [b] **Supply Lines**: order placement relayed; server moves, delivers and cancels each player's caravans for that
-      player (book narrowed per owner); clients show only their own routes. Server messages (delivered/lost) are not
-      shown on the client yet.
+      player (book narrowed per owner); clients show only their own routes. TAOM's messages shown while the server acts
+      for a player (delivered, lost, refuge raised, desertion) are forwarded to that player (notices component).
 - [b] TAOM's own party components (refuge, supply caravan) sent to clients, which Coop does not do for non-vanilla
       components; owner and banner answer from the party's clan instead of Hero.MainHero.
 - [ ] Career quests: created client-side; only one quest exists in TAOM (captain_of_osgiliath_t2). Plan: client

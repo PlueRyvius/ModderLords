@@ -45,6 +45,9 @@ internal static class TaomActions
     /// <summary>True on a client in a live co-op session: TAOM's host-only actions should be sent, not refused.</summary>
     internal static bool IsCoopClient => Send != null;
 
+    /// <summary>Server: true while a relayed action runs; its reply carries the message, so nothing else is forwarded.</summary>
+    [ThreadStatic] internal static bool Running;
+
     internal static void Register(string feature, Handler handler) => Handlers[feature] = handler;
 
     private static readonly Dictionary<string, Action<IList<string>>> ClientApply = new Dictionary<string, Action<IList<string>>>(StringComparer.Ordinal);
@@ -64,8 +67,13 @@ internal static class TaomActions
     {
         if (!Handlers.TryGetValue(feature, out var handler))
             return TaomActionOutcome.Fail($"This server has no TAOM handler for '{feature}'; update ModderLords on the host.");
-        using (new ServerRelay.PlayerScope(hero, party))
-            return handler(hero, party, op, args);
+        Running = true;
+        try
+        {
+            using (new ServerRelay.PlayerScope(hero, party))
+                return handler(hero, party, op, args);
+        }
+        finally { Running = false; }
     }
 
     /// <summary>Client: shows the server's answer the way TAOM shows its own messages.</summary>

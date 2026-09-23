@@ -169,3 +169,18 @@ public sealed class NetworkTaomPartyComponent : IEvent
     [ProtoMember(4)] public List<string>? Fields { get; set; }
     [ProtoMember(5)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>
+/// Server -> one client (TAOM sessions): a message TAOM showed while the server was acting for that player (a caravan
+/// arrived, a refuge was raised, ...). On a dedicated server nobody would see it otherwise.
+/// </summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomNotice : IEvent
+{
+    [ProtoMember(1)] public string Text { get; set; } = "";
+    /// <summary>ARGB of the line's colour (0 = default).</summary>
+    [ProtoMember(2)] public uint Color { get; set; }
+    /// <summary>True for the centre-screen banner (MBInformationManager.AddQuickInformation).</summary>
+    [ProtoMember(3)] public bool Quick { get; set; }
+    [ProtoMember(4)] public int ProtocolVersion { get; set; }
+}
