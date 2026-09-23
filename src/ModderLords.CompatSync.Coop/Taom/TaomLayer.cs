@@ -63,7 +63,7 @@ public static class TaomLayer
             var taom = Loaded("TAOM");
             if (taom == null) return;   // TAOM's DLL loads with its submodule; try again next tick
             _done = true;
-            InstallAll(new TaomContext(taom, Loaded("TAOM.Dependencies"), Common.ModInformation.IsServer));
+            InstallAll(new TaomContext(taom, Loaded("TAOM.Dependencies"), IsServerProcess()));
         }
         catch (Exception ex)
         {
@@ -90,6 +90,22 @@ public static class TaomLayer
                 Log.Warn($"TAOM layer: {component.Id} failed and is off: {ex.GetBaseException().Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Whether this process is the dedicated server. Coop's ModInformation.IsServer is still false when the layer
+    /// installs (it is set when hosting starts, and is sticky afterwards), so ask the process instead: the server runs
+    /// from a Win64_Shipping_Server folder. Measured 2026-09-22: the server logged "loaded (client)" and installed the
+    /// client half before this.
+    /// </summary>
+    private static bool IsServerProcess()
+    {
+        try
+        {
+            return System.IO.Directory.GetCurrentDirectory().EndsWith("Win64_Shipping_Server", StringComparison.OrdinalIgnoreCase)
+                || Common.ModInformation.IsServer;
+        }
+        catch { return Common.ModInformation.IsServer; }
     }
 
     internal static Assembly? Loaded(string name) =>
