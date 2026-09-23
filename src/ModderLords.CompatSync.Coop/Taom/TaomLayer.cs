@@ -64,6 +64,7 @@ public static class TaomLayer
         new PlayerModelsComponent(),
         new AlignmentDesertionComponent(),
         new NoticeComponent(),
+        new FieldCommissionComponent(),
     };
 
     private static bool _done;
