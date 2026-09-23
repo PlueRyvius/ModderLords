@@ -8,21 +8,75 @@ The backlog for `ModderLords.TAOM`: every TAOM feature, what co-op does to it, a
 own co-op patch, used as a map; not licensed for reuse). Built from code, not play. Claims marked **[verify]** need a
 live session.
 
-## Status (2026-09-22, after the first live sessions on TAOM 2.0.28)
+## Checklist (updated 2026-09-23)
 
-| Item | State |
-|---|---|
-| 0.1 install integrity | **Done** (launcher refuses a TAOM module without its content) |
-| 0.2 co-op detection | **Done**; verified live: TAOM sees `CoopNightly` on both sides |
-| 0.3 server binaries | **Done** (check runs; server now detected by process folder) |
-| 0.5 join hand-off | **Done, verified live**: server applied culture gold, career and resource seed to the joiner's hero. Client-side gold re-grant is a no-op (Coop's `GiveGoldAction` prefix is server-only), so no double bonus |
-| P2 Field Camp | **Built** (#109, #110): relay of Establish/Fortify/Foraging/Break, per-player hourly tick on the server, client "moving" check fixed. Awaiting a live click |
-| P5 settings parity | **Already working**: all four TAOM MCM classes arrive from the server on join |
-| Other P2 relays, P3, P4, P6 | Open (below) |
+Legend: **[x] verified** in a live session · **[b] built**, not yet exercised live · **[ ] open** · **[~] partial** ·
+**[u] upstream** (Bannerlord Coop, not ours to fix) · **[s] safe** by design (checked in code, nothing to do).
 
-**Bug class to remember:** anything TAOM asks about the main party that vanilla derives from local movement or time
-state can be wrong on a Coop client, because the server moves the party. Field Camp was the only TAOM user of
-`MainParty.IsMoving` (checked 2026-09-22).
+Source of the open items: a scan of TAOM 2.0.28 for code that changes server-owned state (troops, items, gold,
+relations, influence, heroes, wars, settlements, parties, skills, new game objects) and whether a co-op gate or our
+layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; rerun it on a new TAOM version).
+
+### Getting in and staying up
+- [x] Install integrity refused at launch (hollowed TAOM, #109)
+- [x] Co-op detection: TAOM sees `CoopNightly` on both sides
+- [x] Join hand-off: culture gold, career, resource seed applied on the server (join-grant)
+- [x] Settings parity: all four TAOM MCM pages reach clients; live edits persist per profile
+- [x] Client crash in "join encounter, help attackers/defenders" (Coop reads `EncounteredBattle` too early; guarded, #119)
+- [b] Map-mod version mismatch warns at launch, still loads (#120)
+- [ ] Character-creation start position: TAOM teleports the new hero to the culture's start settlement on the client;
+      the joiner's server hero starts wherever Coop places it. Add to join-grant.
+- [ ] Hero race of *other* players: race is set on the server at join; whether Coop sends it to other clients is unchecked.
+
+### Player actions TAOM only allows the host (relays)
+- [x] Field Camp: establish / fortify / foraging / break, per-player hourly tick (#109, #110, #114, #117)
+- [b] Elite emissary purchase (#112)
+- [b] Siege defence reward (#112); the prompt itself runs on every peer [s]
+- [~] Messengers: not relayable (arrival fakes an encounter Coop validates); player is told (#112)
+- [ ] **Refuge** (found / upgrade / warden / garrison): no co-op gate anywhere; founding creates a hero and party on
+      the client, which Coop blocks; hourly upkeep runs on every peer. Needs a relay plus server-side per-player tick.
+- [ ] **Supply Lines** (town menu order -> caravan): no co-op gate; the caravan party, its cargo and the gold charge
+      are made on the client. Needs a relay plus server-side per-player delivery.
+- [ ] Career quests: created client-side; only one quest exists in TAOM (captain_of_osgiliath_t2). Plan: client
+      tracks, server receives completion and rewards.
+- [ ] Enlistment: every world-changing handler is host-only by TAOM's own design, so a client's enlistment is never
+      processed by the server. Needs reading end to end before deciding (it attaches the player to a lord's party).
+- [ ] Field Commission: merit accrues only on the authority; check whether a client's kills are counted by the
+      server-side mission logic.
+- [ ] Player Switcher / Player Possession mid-campaign: switching the controlled hero on a client would fight Coop's
+      player identity. Confirm it is character-creation-only in co-op, else hide it.
+- [ ] Equip Presets / Quick Actions: player equipment and inventory edits on the client; check Coop's equipment
+      sync covers them.
+
+### Player state the server must own or know
+- [b] Special-resource balances: client owns, server stores and saves (#115)
+- [b] Upkeep desertion runs on the server (#121)
+- [x] Careers: client reports, server stores and applies perks (#116)
+- [b] "The player" on the server = connected players: War of the Ring credit, player kingdom, siege watch, execution
+      relations (#118). Limit: one representative player for single-answer questions.
+
+### TAOM state clients never hear about (state mirror)
+- [x] War of the Ring phase and Momentum (#113; bar moves on the client)
+- [ ] Culture conversion (pending conversions): server-only, mirror when a client needs to see it
+- [ ] Siege defence active events: host-owned timeline; clients prune nothing (TAOM notes it is harmless)
+- [ ] Refuge / Supply Lines / Enlistment / Field Commission state: after their relays exist
+- [s] Hero race map, banner injection, Nazgul family, race ages: deterministic on every peer from shipped data
+
+### Battles (not started)
+- [ ] Read how Coop splits a battle between server and clients (Coop `Missions`), then check TAOM mission logic for
+      doubled or missing effects: advanced combat, banner bearers, dread aura, mount despawn, smart cavalry AI,
+      elephants / mumakil / wargs / spiders / war rams, siege dismount, mixed formations, companion tactics, career
+      abilities, field-commission merit.
+- [u] Picking up fired arrows: Coop rejects items it has no shared identity for (`uncorrelated-runtime-identity`)
+
+### Upstream and out of scope
+- [u] Quests and issues: Coop disables them all (upstream #2642 / #2800); TAOM's own issues (LotrIssues) are
+      blocked by the same switch
+- [u] Arrow pickup (above); siege ammo (#2879, #2603)
+- [s] Time controls: TAOM hides them under co-op
+- [s] Troop weight: forced off by the compat database (per-peer model)
+- [s] Diplomacy vetoes: classified in TAOM's `CoopVetoClassificationTests`
+- [s] Uncapturable heroes, race-age offspring, marriage model: same answer on every peer from shipped data
 
 ## What TAOM already does for itself
 
