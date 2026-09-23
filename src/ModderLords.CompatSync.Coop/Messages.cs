@@ -106,3 +106,30 @@ public sealed class NetworkTaomCampResult : IEvent
     [ProtoMember(3)] public string Detail { get; set; } = "";
     [ProtoMember(4)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>
+/// Client -> server (TAOM sessions): a TAOM action the player took that TAOM itself only lets the host perform
+/// (elite emissary purchase, messenger, ...). Feature + Op pick the server-side handler; Args are plain strings.
+/// </summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomAction : ICommand
+{
+    [ProtoMember(1)] public string Feature { get; set; } = "";
+    [ProtoMember(2)] public string Op { get; set; } = "";
+    [ProtoMember(3)] public List<string>? Args { get; set; }
+    [ProtoMember(4)] public int Sequence { get; set; }
+    [ProtoMember(5)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Server -> the sending client: the outcome of a TAOM action, with the line to show the player.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomActionResult : IEvent
+{
+    [ProtoMember(1)] public string Feature { get; set; } = "";
+    [ProtoMember(2)] public string Op { get; set; } = "";
+    [ProtoMember(3)] public int Sequence { get; set; }
+    [ProtoMember(4)] public bool Ok { get; set; }
+    /// <summary>Shown to the player as an on-screen message (already resolved on the server).</summary>
+    [ProtoMember(5)] public string Message { get; set; } = "";
+    [ProtoMember(6)] public int ProtocolVersion { get; set; }
+}

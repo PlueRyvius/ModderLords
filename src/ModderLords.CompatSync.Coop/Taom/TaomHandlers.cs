@@ -36,6 +36,13 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             broker.Subscribe<CampaignReady>(HandleCampaignReady);
             broker.Subscribe<NetworkTaomJoinResult>(HandleResult);
             broker.Subscribe<NetworkTaomCampResult>(HandleCampResult);
+            broker.Subscribe<NetworkTaomActionResult>(HandleActionResult);
+            TaomActions.Send = (feature, op, args) =>
+                network.SendAll(new NetworkTaomAction
+                {
+                    Feature = feature, Op = op, Args = new System.Collections.Generic.List<string>(args),
+                    Sequence = ++actionSequence, ProtocolVersion = ProtocolVersion,
+                });
             TaomFieldCamp.Send = (op, campType) =>
             {
                 network.SendAll(new NetworkTaomCampOp { Op = op, CampType = campType, ProtocolVersion = ProtocolVersion });
@@ -47,9 +54,20 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         {
             if (!active) return;
             TaomFieldCamp.Send = null;
+            TaomActions.Send = null;
+            broker.Unsubscribe<NetworkTaomActionResult>(HandleActionResult);
             broker.Unsubscribe<CampaignReady>(HandleCampaignReady);
             broker.Unsubscribe<NetworkTaomJoinResult>(HandleResult);
             broker.Unsubscribe<NetworkTaomCampResult>(HandleCampResult);
+        }
+
+        private int actionSequence;
+
+        private void HandleActionResult(MessagePayload<NetworkTaomActionResult> payload)
+        {
+            var r = payload.What;
+            Log.Info($"TAOM layer: {r.Feature} '{r.Op}' server answer: {(r.Ok ? "done" : "refused")}: {r.Message}");
+            GameThread.RunSafe(() => TaomActions.ShowToPlayer(r.Ok, r.Message), false, "ModderLords TAOM action result");
         }
 
         private void HandleCampResult(MessagePayload<NetworkTaomCampResult> payload)
@@ -103,6 +121,7 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             active = true;
             broker.Subscribe<NetworkTaomJoinChoices>(HandleChoices);
             broker.Subscribe<NetworkTaomCampOp>(HandleCampOp);
+            broker.Subscribe<NetworkTaomAction>(HandleAction);
         }
 
         public void Dispose()
@@ -110,6 +129,46 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             if (!active) return;
             broker.Unsubscribe<NetworkTaomJoinChoices>(HandleChoices);
             broker.Unsubscribe<NetworkTaomCampOp>(HandleCampOp);
+            broker.Unsubscribe<NetworkTaomAction>(HandleAction);
+        }
+
+        private void HandleAction(MessagePayload<NetworkTaomAction> payload)
+        {
+            if (payload.Who is not NetPeer peer) return;
+            var msg = payload.What;
+            void Reply(bool ok, string message)
+            {
+                Log.Info($"TAOM layer: {msg.Feature} '{msg.Op}': {(ok ? "done" : "refused")}: {message}");
+                network.Send(peer, new NetworkTaomActionResult
+                {
+                    Feature = msg.Feature, Op = msg.Op, Sequence = msg.Sequence, Ok = ok, Message = message,
+                    ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion,
+                });
+            }
+            if (!ContainerProvider.TryResolve<IPlayerManager>(out var players) || !players.TryGetPlayer(peer, out var player) || player is null)
+            {
+                Reply(false, "The server does not know you yet; try again in a moment.");
+                return;
+            }
+            GameThread.RunSafe(() =>
+            {
+                try
+                {
+                    if (!ContainerProvider.TryResolve<IObjectManager>(out var objects) || !objects.TryGetObject<Hero>(player.HeroId, out var hero) || hero is null)
+                    {
+                        Reply(false, "Your hero was not found on the server.");
+                        return;
+                    }
+                    objects.TryGetObject<MobileParty>(player.MobilePartyId, out var party);
+                    var outcome = TaomActions.Run(hero, party, msg.Feature, msg.Op, msg.Args ?? new System.Collections.Generic.List<string>());
+                    Reply(outcome.Ok, outcome.Message);
+                }
+                catch (Exception ex)
+                {
+                    var inner = ex is System.Reflection.TargetInvocationException { InnerException: { } ie } ? ie : ex;
+                    Reply(false, "The server could not do that: " + inner.GetBaseException().Message);
+                }
+            }, false, "ModderLords TAOM action");
         }
 
         private void HandleCampOp(MessagePayload<NetworkTaomCampOp> payload)
