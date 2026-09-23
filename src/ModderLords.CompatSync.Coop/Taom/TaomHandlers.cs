@@ -37,6 +37,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             broker.Subscribe<NetworkTaomJoinResult>(HandleResult);
             broker.Subscribe<NetworkTaomCampResult>(HandleCampResult);
             broker.Subscribe<NetworkTaomActionResult>(HandleActionResult);
+            broker.Subscribe<NetworkTaomState>(HandleState);
             TaomActions.Send = (feature, op, args) =>
                 network.SendAll(new NetworkTaomAction
                 {
@@ -56,6 +57,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             TaomFieldCamp.Send = null;
             TaomActions.Send = null;
             broker.Unsubscribe<NetworkTaomActionResult>(HandleActionResult);
+            broker.Unsubscribe<NetworkTaomState>(HandleState);
             broker.Unsubscribe<CampaignReady>(HandleCampaignReady);
             broker.Unsubscribe<NetworkTaomJoinResult>(HandleResult);
             broker.Unsubscribe<NetworkTaomCampResult>(HandleCampResult);
@@ -79,8 +81,17 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             GameThread.RunSafe(TaomFieldCamp.UndoLocalEstablish, false, "ModderLords TAOM field-camp undo");
         }
 
+        private void HandleState(MessagePayload<NetworkTaomState> payload)
+        {
+            var msg = payload.What;
+            GameThread.RunSafe(() => TaomStateMirror.ClientApply(msg.Behaviour, msg.Json), false, "ModderLords TAOM state mirror");
+        }
+
         private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
         {
+            // The joined campaign exists now, so there is somewhere to load the server's TAOM state into.
+            network.SendAll(new NetworkTaomStateRequest { ProtocolVersion = ProtocolVersion });
+
             var pending = TaomJoinGrant.Pending;
             if (pending == null) return;
             network.SendAll(new NetworkTaomJoinChoices
@@ -122,6 +133,22 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Subscribe<NetworkTaomJoinChoices>(HandleChoices);
             broker.Subscribe<NetworkTaomCampOp>(HandleCampOp);
             broker.Subscribe<NetworkTaomAction>(HandleAction);
+            broker.Subscribe<NetworkTaomStateRequest>(HandleStateRequest);
+            TaomStateMirror.Reset();
+            TaomStateMirror.Broadcast = (behaviour, json) =>
+                network.SendAll(new NetworkTaomState { Behaviour = behaviour, Json = json, ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion });
+        }
+
+        private void HandleStateRequest(MessagePayload<NetworkTaomStateRequest> payload)
+        {
+            if (payload.Who is not NetPeer peer) return;
+            GameThread.RunSafe(() =>
+            {
+                var all = TaomStateMirror.CaptureAll();
+                foreach (var (behaviour, json) in all)
+                    network.Send(peer, new NetworkTaomState { Behaviour = behaviour, Json = json, ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion });
+                Log.Info($"TAOM layer: state mirror sent {all.Count} TAOM behaviour(s) to a joining client");
+            }, false, "ModderLords TAOM state request");
         }
 
         public void Dispose()
@@ -130,6 +157,8 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Unsubscribe<NetworkTaomJoinChoices>(HandleChoices);
             broker.Unsubscribe<NetworkTaomCampOp>(HandleCampOp);
             broker.Unsubscribe<NetworkTaomAction>(HandleAction);
+            broker.Unsubscribe<NetworkTaomStateRequest>(HandleStateRequest);
+            TaomStateMirror.Broadcast = null;
         }
 
         private void HandleAction(MessagePayload<NetworkTaomAction> payload)

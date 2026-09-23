@@ -17,6 +17,7 @@ public static class Bridge
         EncounterOptionGate.Tick();
         BattleScenePick.EnsureInstalled();
         Taom.TaomLayer.Tick();
+        Taom.TaomStateMirror.ServerTick();
         Operations.OperationRuntime.JoinBarrier?.Tick();
         global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.OperationServerHandler.Current?.RemoveDisconnectedPeers();
         BehaviorGate.RetryPendingPostfixes();

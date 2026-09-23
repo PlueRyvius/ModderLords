@@ -133,3 +133,20 @@ public sealed class NetworkTaomActionResult : IEvent
     [ProtoMember(5)] public string Message { get; set; } = "";
     [ProtoMember(6)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>Server -> client(s) (TAOM sessions): one TAOM behaviour's SyncData values, for the client to load.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomState : IEvent
+{
+    /// <summary>The TAOM behaviour's full type name.</summary>
+    [ProtoMember(1)] public string Behaviour { get; set; } = "";
+    [ProtoMember(2)] public string Json { get; set; } = "";
+    [ProtoMember(3)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Client -> server (TAOM sessions): send me the current state of every mirrored TAOM behaviour.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkTaomStateRequest : ICommand
+{
+    [ProtoMember(1)] public int ProtocolVersion { get; set; }
+}

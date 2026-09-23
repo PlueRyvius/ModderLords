@@ -94,4 +94,49 @@ public sealed class TaomSurfaceTests
         var resolve = module.GetType("TAOM.IoC")?.Methods.FirstOrDefault(m => m.Name == "Resolve" && m.IsStatic && m.Parameters.Count == 0);
         Assert.True(resolve is { HasGenericParameters: true }, "TAOM.IoC.Resolve<T>() is missing");
     }
+
+    // Keep in step with MirrorStore.Supported and TaomStateMirror.Mirrored (src/ModderLords.CompatSync.Coop/Taom).
+    private static readonly HashSet<string> MirrorTypes = new()
+    {
+        "System.Int32", "System.Int64", "System.Single", "System.Double", "System.Boolean", "System.String",
+        "System.Collections.Generic.List`1<System.String>", "System.Collections.Generic.List`1<System.Int32>",
+        "System.Collections.Generic.Dictionary`2<System.String,System.String>",
+        "System.Collections.Generic.Dictionary`2<System.String,System.Int32>",
+        "System.Collections.Generic.Dictionary`2<System.String,System.Single>",
+    };
+
+    [Theory]
+    [InlineData("TAOM.Features.Diplomacy.WarOfTheRingBehavior")]
+    [InlineData("TAOM.Features.WarOfTheRingMomentum.WarOfTheRingMomentumBehavior")]
+    public void MirroredBehaviourSyncsOnlyCarriedTypes(string type)
+    {
+        if (TaomDll() is not { } dll) return;
+        using var module = ModuleDefinition.ReadModule(dll);
+        var syncData = module.GetType(type)?.Methods.FirstOrDefault(m => m.Name == "SyncData" && m.Parameters.Count == 1);
+        Assert.True(syncData?.HasBody == true, $"{type}.SyncData is missing");
+        var used = syncData!.Body.Instructions
+            .Select(i => i.Operand).OfType<GenericInstanceMethod>()
+            .Where(m => m.Name == "SyncData" && m.DeclaringType.FullName == "TaleWorlds.CampaignSystem.IDataStore")
+            .Select(m => m.GenericArguments[0].FullName)
+            .ToList();
+        Assert.NotEmpty(used);
+        Assert.All(used, t => Assert.True(MirrorTypes.Contains(t), $"{type}.SyncData syncs a {t}, which the state mirror does not carry"));
+    }
+
+    /// <summary>
+    /// The IL check above can fail: Field Camp saves CampState objects, which the mirror cannot carry. It is not in
+    /// TaomStateMirror.Mirrored for that reason (camps are relayed by the field-camp component instead).
+    /// </summary>
+    [Fact]
+    public void FieldCampSyncsATypeTheMirrorCannotCarry()
+    {
+        if (TaomDll() is not { } dll) return;
+        using var module = ModuleDefinition.ReadModule(dll);
+        var used = module.Types.SelectMany(t => t.Methods)
+            .Where(m => m.Name == "SyncData" && m.HasBody && m.DeclaringType.Namespace.StartsWith("TAOM.Features.FieldCamp"))
+            .SelectMany(m => m.Body.Instructions).Select(i => i.Operand).OfType<GenericInstanceMethod>()
+            .Where(m => m.Name == "SyncData" && m.DeclaringType.FullName == "TaleWorlds.CampaignSystem.IDataStore")
+            .Select(m => m.GenericArguments[0].FullName).ToList();
+        Assert.Contains(used, t => !MirrorTypes.Contains(t));
+    }
 }
