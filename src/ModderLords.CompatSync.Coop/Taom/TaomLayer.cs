@@ -49,6 +49,9 @@ public static class TaomLayer
         new ServerBinaryCheck(),
         new JoinGrantComponent(),
         new FieldCampComponent(),
+        new EmissaryComponent(),
+        new SiegeDefenseComponent(),
+        new MessengerNoticeComponent(),
     };
 
     private static bool _done;

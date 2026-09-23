@@ -41,6 +41,19 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM", "ExecuteOpenCampMenu", [], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM", "Refresh", [], "System.Void" },
         { "TAOM.Features.FieldCamp.CampService", "IsMainPartyMoving", [], "System.Boolean" },
+        { "TAOM.Features.EliteEmissary.Hooks.EliteEmissaryInquiryPresenter", "ExecutePurchase",
+            ["TAOM.Adapters.SettlementOwnerInfo", "System.String", "System.String", "System.Int32"], "System.Void" },
+        { "TAOM.Features.EliteEmissary.IEliteEmissaryService", "Purchase",
+            ["System.String", "System.String", "System.String", "System.String", "System.Int32"], "TAOM.Features.EliteEmissary.Domain.EmissaryPurchaseResult" },
+        { "TAOM.Features.EliteEmissary.IEliteEmissaryService", "IsKeySettlement", ["System.String"], "System.Boolean" },
+        { "TAOM.Features.EliteEmissary.Hooks.EliteEmissaryBehavior", "IsEmissaryAccessBlocked", ["TaleWorlds.CampaignSystem.Settlements.Settlement"], "System.Boolean" },
+        { "TAOM.Adapters.ISettlementOwnerAdapter", "GetOwnerInfo", ["TaleWorlds.CampaignSystem.Settlements.Settlement"], "TAOM.Adapters.SettlementOwnerInfo" },
+        { "TAOM.Features.Siege.SiegeDefenseService", "GrantReward", ["TAOM.Features.Siege.Models.ActiveSiegeDefenseEvent"], "System.Void" },
+        { "TAOM.Features.Siege.SiegeDefenseService", "UntrackSettlement", ["System.String"], "System.Void" },
+        { "TAOM.Features.Siege.SiegeDefenseService", "GetMessages", ["System.String"], "TAOM.Features.Siege.Models.KingdomSiegeMessages" },
+        { "TAOM.Features.Siege.SiegeDefenseService", "Resolve",
+            ["System.String", "System.String", "System.String", "System.Int32", "System.Int32", "System.Int32"], "System.String" },
+        { "TAOM.Features.Messengers.MessengerCampaignBehavior", "SendMessenger", ["TaleWorlds.CampaignSystem.Hero"], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.MapScreenCampMenuActivationQuery", "get_IsMainPartyStationary", [], "System.Boolean" },
     };
 
@@ -68,6 +81,15 @@ public sealed class TaomSurfaceTests
         Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.UI.FieldCampOverlayVM")?.Fields.FirstOrDefault(f => f.Name == "_activation"));
         Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.UI.FieldCampOverlayVM")?.Properties.FirstOrDefault(p => p.Name == "CanMakeCamp"));
         Assert.True(module.GetType("TAOM.Features.FieldCamp.Domain.CampType")?.IsEnum == true);
+        var siege = module.GetType("TAOM.Features.Siege.SiegeDefenseService");
+        Assert.Equal("System.Collections.Generic.HashSet`1<System.String>", siege?.Fields.FirstOrDefault(f => f.Name == "_locallyClaimed")?.FieldType.FullName);
+        Assert.NotNull(siege?.Fields.FirstOrDefault(f => f.Name == "_config"));
+        var messages = module.GetType("TAOM.Features.Siege.Models.KingdomSiegeMessages");
+        Assert.NotNull(messages?.Properties.FirstOrDefault(p => p.Name == "RewardMessage"));
+        var config = module.GetType("TAOM.Features.Siege.Models.SiegeDefenseConfig");
+        Assert.NotNull(config?.Properties.FirstOrDefault(p => p.Name == "RewardInfluence"));
+        Assert.NotNull(config?.Properties.FirstOrDefault(p => p.Name == "RewardRelation"));
+        Assert.NotNull(module.GetType("TAOM.Features.Siege.ISiegeDefenseService"));
         Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.ICampService"));
         var resolve = module.GetType("TAOM.IoC")?.Methods.FirstOrDefault(m => m.Name == "Resolve" && m.IsStatic && m.Parameters.Count == 0);
         Assert.True(resolve is { HasGenericParameters: true }, "TAOM.IoC.Resolve<T>() is missing");
