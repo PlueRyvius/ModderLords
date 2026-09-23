@@ -64,6 +64,48 @@ public static class EncounterOptionGate
         }
         if (installed.Count > 0)
             Log.Info($"encounter option gate installed for {EncounterOptionGatePolicy.Describe(installed)}: held until the server's battle reaches this client");
+
+        // The "join the encounter" options crash instead of waiting. Coop's raid postfix on these conditions reads
+        // PlayerEncounter.EncounteredBattle unguarded, and the getter throws while the encounter menu is open before the
+        // server's battle has arrived (client crash 2026-09-22 23:20, NullReferenceException in
+        // PlayerEncounter.get_EncounteredBattle under ..._help_attackers_on_condition). A finalizer wraps the original
+        // and every postfix, so it catches that and leaves the option off for this refresh; the next refresh, once the
+        // battle is here, decides normally.
+        foreach (var name in JoinConditions)
+        {
+            try
+            {
+                var condition = AccessTools.Method(typeof(EncounterGameMenuBehavior), name);
+                if (condition == null) { Log.Warn($"join encounter guard: {name} not found"); continue; }
+                Harmony.Patch(condition, finalizer: new HarmonyMethod(typeof(EncounterOptionGate), nameof(JoinConditionFinalizer)));
+            }
+            catch (Exception ex) { Log.Warn($"join encounter guard: {name} not guarded: {ex.GetBaseException().Message}"); }
+        }
+    }
+
+    private static readonly string[] JoinConditions =
+    {
+        "game_menu_join_encounter_help_attackers_on_condition",
+        "game_menu_join_encounter_help_defenders_on_condition",
+    };
+
+    private static bool _joinGuardReported;
+
+    public static Exception? JoinConditionFinalizer(Exception? __exception, ref bool __result, MenuCallbackArgs __0)
+    {
+        if (__exception is not NullReferenceException) return __exception;
+        __result = false;
+        if (__0 != null)
+        {
+            __0.IsEnabled = false;
+            __0.Tooltip = WaitingTooltip;
+        }
+        if (!_joinGuardReported)
+        {
+            _joinGuardReported = true;
+            Log.Info("join encounter guard: a join option was checked before the server's battle arrived; held until it does (Coop reads EncounteredBattle unguarded)");
+        }
+        return null;
     }
 
     public static void ConditionPostfix(MenuCallbackArgs __0, bool __result, MethodBase __originalMethod)
