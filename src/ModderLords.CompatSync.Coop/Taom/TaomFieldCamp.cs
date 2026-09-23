@@ -48,6 +48,11 @@ internal sealed class FieldCampComponent : ITaomComponent
         {
             harmony.Patch(TaomFieldCamp.HourlyTick!, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.HourlyTickPostfix)));
             harmony.Patch(TaomFieldCamp.ServiceMoving!, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.ServerMovingPostfix)));
+            // Headless: the camp's map visuals live in SandBox.View, which a dedicated server cannot load. A prefix
+            // that skips the original is not enough (the original body still has to compile, and compiling it loads
+            // SandBox.View), so the bodies are replaced outright: Show/IsShown answer false, the rest do nothing.
+            foreach (var visual in TaomFieldCamp.VisualMethods)
+                harmony.Patch(visual, transpiler: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.EmptyBodyTranspiler)));
             return "server runs players' camp operations and ticks every player's camp hourly";
         }
         harmony.Patch(TaomFieldCamp.Establish!, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.EstablishPostfix)));
@@ -95,6 +100,7 @@ internal static class TaomFieldCamp
     internal static MethodInfo? Stationary { get; private set; }
     internal static MethodInfo? Refresh { get; private set; }
     internal static MethodInfo? ServiceMoving { get; private set; }
+    internal static List<MethodInfo> VisualMethods { get; } = new List<MethodInfo>();
     private static MethodInfo? _canEstablish;
     private static PropertyInfo? _canMakeCamp;
     internal static MethodInfo? ForageHour { get; private set; }
@@ -115,6 +121,11 @@ internal static class TaomFieldCamp
         _resolve = taom.GetType("TAOM.IoC", false)?.GetMethod("Resolve", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
         Establish = _campType == null ? null : service?.GetMethod("Establish", new[] { _campType });
         _canEstablish = _campType == null ? null : service?.GetMethod("CanEstablish", new[] { _campType });
+        VisualMethods.Clear();
+        var visuals = taom.GetType("TAOM.Features.FieldCamp.CampVisualService", false);
+        foreach (var name in new[] { "Show", "IsShown", "Remove", "ClearAll" })
+            if (visuals?.GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly) is { } m)
+                VisualMethods.Add(m);
         Fortify = service?.GetMethod("Fortify", Type.EmptyTypes);
         ToggleForaging = service?.GetMethod("ToggleForaging", Type.EmptyTypes);
         Break = service?.GetMethod("BreakPlayerCamp", Type.EmptyTypes);
@@ -139,6 +150,7 @@ internal static class TaomFieldCamp
         if (_resolve == null || !_resolve.IsGenericMethodDefinition) missing.Add("TAOM.IoC.Resolve<T>()");
         if (Establish?.ReturnType != typeof(bool)) missing.Add("CampService.Establish(CampType)");
         if (_canEstablish == null || !_canEstablish.ReturnType.IsEnum) missing.Add("CampService.CanEstablish(CampType)");
+        if (VisualMethods.Count != 4) missing.Add("CampVisualService.Show/IsShown/Remove/ClearAll");
         if (Fortify?.ReturnType != typeof(bool)) missing.Add("CampService.Fortify()");
         if (ToggleForaging?.ReturnType != typeof(bool)) missing.Add("CampService.ToggleForaging()");
         if (Break == null) missing.Add("CampService.BreakPlayerCamp()");
@@ -205,17 +217,25 @@ internal static class TaomFieldCamp
     }
 
     /// <summary>
-    /// Server, only while this layer runs a camp operation for a player: PlayerScope makes the player's party the
-    /// campaign's MainParty, and vanilla answers MainParty.IsMoving from Campaign.IsMainPartyWaiting, a campaign-wide
-    /// flag the server computes each tick for its OWN idle party. So TAOM's server-side check asked about the wrong
-    /// party and refused Establish as "Moving" (seen live 2026-09-22). Answered from the player's party instead, with
-    /// the same per-party test vanilla uses to set that flag (ComputeIsWaiting: at its target, or holding).
+    /// Server, only while this layer runs a camp operation for a player: TAOM refuses to camp a moving party, but the
+    /// server cannot tell whether a client's party is moving. Under PlayerScope vanilla answers from
+    /// Campaign.IsMainPartyWaiting (a flag computed for the server's own idle party), and even the per-party test behind
+    /// it (ComputeIsWaiting: at the move target, or holding) says "moving" for a party Coop moves by position updates,
+    /// whose local target is never reached. Both were seen live on 2026-09-22 ("Moving" on every attempt). The client
+    /// only sends a camp operation after TAOM's own check passed there, and on a client that check is answered from the
+    /// party's on-screen position being still for half a second; so the server takes the client's word.
     /// </summary>
+    /// <summary>Server: a method body that returns false (bool methods) or nothing, and references nothing else.</summary>
+    internal static IEnumerable<CodeInstruction> EmptyBodyTranspiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
+    {
+        if (original is MethodInfo m && m.ReturnType == typeof(bool))
+            yield return new CodeInstruction(System.Reflection.Emit.OpCodes.Ldc_I4_0);
+        yield return new CodeInstruction(System.Reflection.Emit.OpCodes.Ret);
+    }
+
     internal static void ServerMovingPostfix(ref bool __result)
     {
-        if (!_replaying && !_tickingPlayers) return;
-        var party = MobileParty.MainParty;
-        if (party != null) __result = !party.ComputeIsWaiting();
+        if (_replaying || _tickingPlayers) __result = false;
     }
 
     /// <summary>The main party's on-screen position has not changed for <see cref="StillSeconds"/>.</summary>
