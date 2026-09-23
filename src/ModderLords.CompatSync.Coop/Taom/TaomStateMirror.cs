@@ -124,6 +124,7 @@ internal static class TaomStateMirror
     {
         ("TAOM.Features.Diplomacy.WarOfTheRingBehavior", "phase and outcome, changed only by the host's daily check"),
         ("TAOM.Features.WarOfTheRingMomentum.WarOfTheRingMomentumBehavior", "momentum, scored only on the host"),
+        ("TAOM.Features.CultureConversion.Hooks.CultureConversionBehavior", "pending culture conversions, matured only by the host's daily tick"),
         ("TAOM.Features.Refuge.Hooks.RefugeCampaignBehavior", "the refuge book; founding, upgrades and dismantling run on the server (RefugeComponent)"),
         ("TAOM.Features.SupplyLines.Hooks.SupplyLinesCampaignBehavior", "the supply order book; orders are placed and advanced on the server (SupplyLinesComponent)"),
     };

@@ -196,6 +196,7 @@ public sealed class TaomSurfaceTests
     [Theory]
     [InlineData("TAOM.Features.Diplomacy.WarOfTheRingBehavior")]
     [InlineData("TAOM.Features.WarOfTheRingMomentum.WarOfTheRingMomentumBehavior")]
+    [InlineData("TAOM.Features.CultureConversion.Hooks.CultureConversionBehavior")]
     public void MirroredBehaviourSyncsOnlyCarriedTypes(string type)
     {
         if (TaomDll() is not { } dll) return;
