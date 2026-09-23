@@ -14,7 +14,7 @@ namespace ModderLords.CompatSync;
 /// </summary>
 public sealed class SyncSubModule : MBSubModuleBase
 {
-    public const string Version = "0.1.18";
+    public const string Version = "0.1.19";
     private const string AdapterFileName = "ModderLords.CompatSync.Coop.dll";
 
     private float _sinceTick;
