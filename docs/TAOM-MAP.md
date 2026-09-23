@@ -64,6 +64,19 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
 - [b] "The player" on the server = connected players: War of the Ring credit, player kingdom, siege watch, execution
       relations (#118). Limit: one representative player for single-answer questions.
 
+- [b] Player-sensitive TAOM models computed on the server (second audit, 2026-09-23): pregnancy (player/spouse rule),
+      volunteer recruitment across alignments, prisoner-recruitment morale waiver, player caravan trade limits, naval
+      capability. They compared with Hero.MainHero (the idle server hero), so players got AI rules; now computed with
+      the player concerned in scope (game thread only; parallel party ticks keep TAOM's plain answer).
+- [b] Alignment desertion: ran on every client (local-only roster loss, like #121) and treated players as AI on the
+      server. Now server-only, run as the owning player for their parties and fiefs.
+- [s] Second audit, confirmed fine: Fief Management (remote town screen; the settlement swap is a local field write,
+      and Coop syncs build queues, projects, gold boosts and governors: check live), Castle Recruitment (vanilla
+      recruit screen), Wanderer Allegiance (local dialog refusal), army targeting / lord templates / return to army /
+      execution / uncapturable heroes / Nazgul family / race age (engine-path patches that run where the engine runs).
+- [ ] Other players' career perks on your screen: clients hold only their own career record, so models a client
+      computes for another player's hero (e.g. that player's party size in a tooltip) use no perks. Display only.
+
 ### TAOM state clients never hear about (state mirror)
 - [x] War of the Ring phase and Momentum (#113; bar moves on the client)
 - [b] Culture conversion (pending conversions): mirrored from the server
