@@ -83,8 +83,11 @@ internal static class TaomJoinGrant
 
     private static readonly HashSet<string> AppliedThisSession = new HashSet<string>(StringComparer.Ordinal);
 
+    private static Assembly? _taom;
+
     internal static void Bind(Assembly taom)
     {
+        _taom = taom;
         _choicesType = taom.GetType("TAOM.Features.PlayerPossession.PlayerCharacterCreationChoices", false);
         _choicesCtor = _choicesType?.GetConstructor(new[] { typeof(string), typeof(string), typeof(int), typeof(string) });
         var service = taom.GetType("TAOM.Features.PlayerPossession.PlayerPossessionService", false);
@@ -125,6 +128,30 @@ internal static class TaomJoinGrant
 
     /// <summary>Client: the server answered, so nothing is left to send.</summary>
     internal static void Answered() => Pending = null;
+
+    /// <summary>
+    /// Client, game thread, once the server applied a fresh player's package: TAOM starts a new character at their
+    /// culture's starting settlement (CharacterCreationContentService.TeleportToStartingSettlement), but that ran on the
+    /// local character-creation campaign, and Coop places the joined party wherever it spawns players. The client moves
+    /// its own party in Coop, so it goes to the culture's start here, as TAOM would have put it.
+    /// </summary>
+    internal static void PlaceAtStart(string cultureId)
+    {
+        try
+        {
+            if (_taom == null || MobileParty.MainParty == null) return;
+            var provider = TaomActions.Resolve(_taom, "TAOM.Features.CharacterCreation.ICultureCreationDataProvider");
+            var data = provider?.GetType().GetMethod("GetCultureData", new[] { typeof(string) })?.Invoke(provider, new object[] { cultureId });
+            var settlementId = data?.GetType().GetProperty("StartingSettlement")?.GetValue(data) as string;
+            if (string.IsNullOrEmpty(settlementId)) { Log.Info($"TAOM layer: culture '{cultureId}' has no starting settlement; party left where Coop placed it"); return; }
+            var settlement = TaleWorlds.CampaignSystem.Settlements.Settlement.Find(settlementId);
+            if (settlement == null) { Log.Warn($"TAOM layer: starting settlement '{settlementId}' not found"); return; }
+            var gate = settlement.GatePosition;
+            MobileParty.MainParty.Position = gate.IsNonZero() ? gate : settlement.Position;
+            Log.Info($"TAOM layer: party placed at {cultureId}'s starting settlement '{settlementId}'");
+        }
+        catch (Exception ex) { Log.Warn("TAOM layer: could not place the party at the culture's start: " + ex.GetBaseException().Message); }
+    }
 
     /// <summary>
     /// Server, on the game thread: applies a joining player's package to their hero. Returns whether TAOM applied

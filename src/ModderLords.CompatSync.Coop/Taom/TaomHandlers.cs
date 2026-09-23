@@ -123,7 +123,10 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         {
             // A non-final answer means the server did not know this player yet (a send from the local
             // character-creation campaign, before the join); keep the choices for the next CampaignReady.
+            var culture = TaomJoinGrant.Pending?.CultureId;
             if (payload.What.Final) TaomJoinGrant.Answered();
+            if (payload.What.Final && payload.What.Applied && !string.IsNullOrEmpty(culture))
+                GameThread.RunSafe(() => TaomJoinGrant.PlaceAtStart(culture!), false, "ModderLords TAOM start position");
             Log.Info("TAOM layer: join-grant server answer: " + payload.What.Detail + (payload.What.Final ? "" : " (will send again)"));
         }
     }
