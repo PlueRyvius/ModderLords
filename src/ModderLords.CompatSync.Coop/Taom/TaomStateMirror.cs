@@ -41,17 +41,69 @@ internal sealed class MirrorStore : IDataStore
 
     public bool SyncData<T>(string key, ref T data)
     {
-        if (!Supported.Contains(typeof(T)))
+        if (!Supported.Contains(typeof(T)) && !TaomRecords.IsRecordBook(typeof(T)))
             throw new NotSupportedException($"key '{key}' has type {typeof(T).Name}, which the mirror does not carry");
+        var serializer = TaomRecords.Serializer;
         if (IsSaving)
         {
-            _values[key] = data == null ? JValue.CreateNull() : JToken.FromObject(data);
+            _values[key] = data == null ? JValue.CreateNull() : JToken.FromObject(data, serializer);
             return true;
         }
         // A key the server did not send is left alone, exactly as the engine leaves it for a key absent from a save.
         if (!_values.TryGetValue(key, out var token)) return false;
-        data = token.Type == JTokenType.Null ? default! : token.ToObject<T>()!;
+        data = token.Type == JTokenType.Null ? default! : token.ToObject<T>(serializer)!;
         return true;
+    }
+}
+
+/// <summary>
+/// TAOM's own saved record classes (a refuge row, a supply order): plain classes of public fields, kept by TAOM in a
+/// Dictionary&lt;string, record&gt; book. They travel as their public fields only (their properties are views over
+/// the same fields), with CampaignTime carried as its tick count.
+/// </summary>
+internal static class TaomRecords
+{
+    /// <summary>Dictionary&lt;string, X&gt; where X is a TAOM class: a record book the mirror can carry.</summary>
+    internal static bool IsRecordBook(Type t) =>
+        t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+        && t.GetGenericArguments()[0] == typeof(string) && IsRecord(t.GetGenericArguments()[1]);
+
+    internal static bool IsRecord(Type t) =>
+        t.IsClass && t.Namespace != null && t.Namespace.StartsWith("TAOM.", StringComparison.Ordinal)
+        && t.GetConstructor(Type.EmptyTypes) != null;
+
+    internal static readonly JsonSerializer Serializer = JsonSerializer.Create(new JsonSerializerSettings
+    {
+        ContractResolver = new FieldsOnlyResolver(),
+        Converters = { new CampaignTimeConverter() },
+    });
+
+    private sealed class FieldsOnlyResolver : Newtonsoft.Json.Serialization.DefaultContractResolver
+    {
+        protected override List<MemberInfo> GetSerializableMembers(Type objectType) =>
+            IsRecord(objectType)
+                ? objectType.GetFields(BindingFlags.Public | BindingFlags.Instance).Cast<MemberInfo>().ToList()
+                : base.GetSerializableMembers(objectType);
+    }
+
+    /// <summary>CampaignTime is a struct over one private tick count; its public members are all derived views.</summary>
+    internal sealed class CampaignTimeConverter : JsonConverter
+    {
+        private static readonly FieldInfo? Ticks = typeof(CampaignTime)
+            .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            .FirstOrDefault(f => f.FieldType == typeof(long));
+
+        public override bool CanConvert(Type objectType) => objectType == typeof(CampaignTime);
+
+        public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer) =>
+            writer.WriteValue(value == null || Ticks == null ? 0L : (long)Ticks.GetValue(value));
+
+        public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
+        {
+            object boxed = default(CampaignTime);
+            if (Ticks != null && reader.Value != null) Ticks.SetValue(boxed, Convert.ToInt64(reader.Value));
+            return boxed;
+        }
     }
 }
 
@@ -72,7 +124,14 @@ internal static class TaomStateMirror
     {
         ("TAOM.Features.Diplomacy.WarOfTheRingBehavior", "phase and outcome, changed only by the host's daily check"),
         ("TAOM.Features.WarOfTheRingMomentum.WarOfTheRingMomentumBehavior", "momentum, scored only on the host"),
+        ("TAOM.Features.Refuge.Hooks.RefugeCampaignBehavior", "the refuge book; founding, upgrades and dismantling run on the server (RefugeComponent)"),
+        ("TAOM.Features.SupplyLines.Hooks.SupplyLinesCampaignBehavior", "the supply order book; orders are placed and advanced on the server (SupplyLinesComponent)"),
     };
+
+    /// <summary>Client, per behaviour: runs after the server's values were loaded (e.g. to drop visuals of rows that went away).</summary>
+    private static readonly Dictionary<string, Action<CampaignBehaviorBase>> AfterApply = new Dictionary<string, Action<CampaignBehaviorBase>>(StringComparer.Ordinal);
+
+    internal static void OnApplied(string behaviour, Action<CampaignBehaviorBase> action) => AfterApply[behaviour] = action;
 
     private const double CaptureIntervalSeconds = 10;
 
@@ -151,6 +210,7 @@ internal static class TaomStateMirror
             behavior.SyncData(MirrorStore.ForLoading(json));
             Log.Info($"TAOM layer: state mirror applied {Short(name)} from the server ({json.Length} chars)");
             ReportPlayerEvents(behavior);
+            if (AfterApply.TryGetValue(name, out var after)) after(behavior);
         }
         catch (Exception ex) { Log.Warn($"TAOM layer: state mirror could not apply {Short(name)}: {ex.GetBaseException().Message}"); }
     }

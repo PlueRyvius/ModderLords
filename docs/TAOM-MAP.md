@@ -33,10 +33,14 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
 - [b] Elite emissary purchase (#112)
 - [b] Siege defence reward (#112); the prompt itself runs on every peer [s]
 - [~] Messengers: not relayable (arrival fakes an encounter Coop validates); player is told (#112)
-- [ ] **Refuge** (found / upgrade / warden / garrison): no co-op gate anywhere; founding creates a hero and party on
-      the client, which Coop blocks; hourly upkeep runs on every peer. Needs a relay plus server-side per-player tick.
-- [ ] **Supply Lines** (town menu order -> caravan): no co-op gate; the caravan party, its cargo and the gold charge
-      are made on the client. Needs a relay plus server-side per-player delivery.
+- [b] **Refuge**: founding (warden pick), upgrade and dismantle relayed; server runs them for the sender, militia runs
+      as the owner, refuge ticks are server-only; each player sees and counts only their own refuges. Garrison and
+      stash use TAOM's own screens on the refuge party (Coop's party-screen sync; stash unverified).
+- [b] **Supply Lines**: order placement relayed; server moves, delivers and cancels each player's caravans for that
+      player (book narrowed per owner); clients show only their own routes. Server messages (delivered/lost) are not
+      shown on the client yet.
+- [b] TAOM's own party components (refuge, supply caravan) sent to clients, which Coop does not do for non-vanilla
+      components; owner and banner answer from the party's clan instead of Hero.MainHero.
 - [ ] Career quests: created client-side; only one quest exists in TAOM (captain_of_osgiliath_t2). Plan: client
       tracks, server receives completion and rewards.
 - [ ] Enlistment: every world-changing handler is host-only by TAOM's own design, so a client's enlistment is never
@@ -59,7 +63,9 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
 - [x] War of the Ring phase and Momentum (#113; bar moves on the client)
 - [ ] Culture conversion (pending conversions): server-only, mirror when a client needs to see it
 - [ ] Siege defence active events: host-owned timeline; clients prune nothing (TAOM notes it is harmless)
-- [ ] Refuge / Supply Lines / Enlistment / Field Commission state: after their relays exist
+- [b] Refuge book and Supply order book (mirror now carries TAOM record dictionaries; refuge visuals of removed rows
+      are cleared on the client)
+- [ ] Enlistment / Field Commission state: after their relays exist
 - [s] Hero race map, banner injection, Nazgul family, race ages: deterministic on every peer from shipped data
 
 ### Battles (not started)

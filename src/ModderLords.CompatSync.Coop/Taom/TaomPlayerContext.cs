@@ -77,7 +77,7 @@ internal sealed class PlayerContextComponent : ITaomComponent
     private static DateTime _cachedAt = DateTime.MinValue;
     private static List<(Hero Hero, MobileParty? Party)> _players = new List<(Hero, MobileParty?)>();
 
-    private static List<(Hero Hero, MobileParty? Party)> Players()
+    internal static List<(Hero Hero, MobileParty? Party)> Players()
     {
         if ((DateTime.UtcNow - _cachedAt).TotalSeconds < 1) return _players;
         _cachedAt = DateTime.UtcNow;
