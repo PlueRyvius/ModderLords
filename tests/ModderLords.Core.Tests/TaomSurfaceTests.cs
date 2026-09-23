@@ -40,6 +40,7 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.FieldCamp.CampService", "ForageHour", ["TAOM.Features.FieldCamp.Domain.CampState"], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM", "ExecuteOpenCampMenu", [], "System.Void" },
         { "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM", "Refresh", [], "System.Void" },
+        { "TAOM.Features.FieldCamp.CampService", "IsMainPartyMoving", [], "System.Boolean" },
         { "TAOM.Features.FieldCamp.UI.MapScreenCampMenuActivationQuery", "get_IsMainPartyStationary", [], "System.Boolean" },
     };
 

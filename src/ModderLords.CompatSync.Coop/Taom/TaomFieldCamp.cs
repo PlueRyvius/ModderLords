@@ -61,6 +61,8 @@ internal sealed class FieldCampComponent : ITaomComponent
                 harmony.Patch(effect, prefix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.SkipOnClientPrefix)));
         if (TaomFieldCamp.Stationary != null)
             harmony.Patch(TaomFieldCamp.Stationary, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.StationaryPostfix)));
+        if (TaomFieldCamp.ServiceMoving != null)
+            harmony.Patch(TaomFieldCamp.ServiceMoving, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.ServiceMovingPostfix)));
         if (TaomFieldCamp.Refresh != null)
             harmony.Patch(TaomFieldCamp.Refresh, postfix: new HarmonyMethod(typeof(TaomFieldCamp), nameof(TaomFieldCamp.RefreshPostfix)));
         if (TaomFieldCamp.OpenMenu != null)
@@ -91,6 +93,7 @@ internal static class TaomFieldCamp
     internal static MethodInfo? AddMorale { get; private set; }
     internal static MethodInfo? Stationary { get; private set; }
     internal static MethodInfo? Refresh { get; private set; }
+    internal static MethodInfo? ServiceMoving { get; private set; }
     private static PropertyInfo? _canMakeCamp;
     internal static MethodInfo? ForageHour { get; private set; }
     internal static string? MissingSurface { get; private set; } = "not bound";
@@ -115,6 +118,7 @@ internal static class TaomFieldCamp
         HourlyTick = service?.GetMethod("HourlyTick", Type.EmptyTypes);
         _playerCamp = service?.GetProperty("PlayerCamp");
         const BindingFlags inst = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        ServiceMoving = service?.GetMethod("IsMainPartyMoving", inst, null, Type.EmptyTypes, null);
         AddMorale = service?.GetMethod("AddMoraleToMainParty", inst, null, new[] { typeof(float) }, null);
         var state = taom.GetType("TAOM.Features.FieldCamp.Domain.CampState", false);
         ForageHour = state == null ? null : service?.GetMethod("ForageHour", inst, null, new[] { state }, null);
@@ -136,6 +140,7 @@ internal static class TaomFieldCamp
         if (Break == null) missing.Add("CampService.BreakPlayerCamp()");
         if (HourlyTick == null) missing.Add("CampService.HourlyTick()");
         if (_playerCamp == null) missing.Add("CampService.PlayerCamp");
+        if (ServiceMoving?.ReturnType != typeof(bool)) missing.Add("CampService.IsMainPartyMoving()");
         if (AddMorale == null) missing.Add("CampService.AddMoraleToMainParty(float)");
         if (ForageHour == null) missing.Add("CampService.ForageHour(CampState)");
         MissingSurface = missing.Count == 0 ? null : "TAOM changed; not found: " + string.Join(", ", missing);
@@ -181,13 +186,30 @@ internal static class TaomFieldCamp
     internal static void StationaryPostfix(ref bool __result)
     {
         if (Send == null || __result) return;
+        __result = SeenStill();
+    }
+
+    /// <summary>
+    /// CampService has its own copy of the same check (IsMainPartyMoving), used by CanEstablish (so the menu would
+    /// refuse with "moving") and by the per-frame move guard (so a standing camp would prompt "break camp and move?"
+    /// straight away). Same on-screen answer during a session.
+    /// </summary>
+    internal static void ServiceMovingPostfix(ref bool __result)
+    {
+        if (Send == null || !__result) return;
+        __result = !SeenStill();
+    }
+
+    /// <summary>The main party's on-screen position has not changed for <see cref="StillSeconds"/>.</summary>
+    private static bool SeenStill()
+    {
         var party = MobileParty.MainParty;
-        if (party == null) return;
+        if (party == null) return false;
         var here = party.Position.ToVec2();
         var now = DateTime.UtcNow;
-        if ((here - _lastPosition).LengthSquared > 1E-06f) { _lastPosition = here; _stillSince = now; return; }
+        if ((here - _lastPosition).LengthSquared > 1E-06f) { _lastPosition = here; _stillSince = now; return false; }
         if (_stillSince == DateTime.MaxValue) _stillSince = now;
-        __result = (now - _stillSince).TotalSeconds >= StillSeconds;
+        return (now - _stillSince).TotalSeconds >= StillSeconds;
     }
 
     private static bool? _lastCanMakeCamp;
