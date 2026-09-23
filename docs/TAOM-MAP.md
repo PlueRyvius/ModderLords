@@ -8,6 +8,22 @@ The backlog for `ModderLords.TAOM`: every TAOM feature, what co-op does to it, a
 own co-op patch, used as a map; not licensed for reuse). Built from code, not play. Claims marked **[verify]** need a
 live session.
 
+## Status (2026-09-22, after the first live sessions on TAOM 2.0.28)
+
+| Item | State |
+|---|---|
+| 0.1 install integrity | **Done** (launcher refuses a TAOM module without its content) |
+| 0.2 co-op detection | **Done**; verified live: TAOM sees `CoopNightly` on both sides |
+| 0.3 server binaries | **Done** (check runs; server now detected by process folder) |
+| 0.5 join hand-off | **Done, verified live**: server applied culture gold, career and resource seed to the joiner's hero. Client-side gold re-grant is a no-op (Coop's `GiveGoldAction` prefix is server-only), so no double bonus |
+| P2 Field Camp | **Built** (#109, #110): relay of Establish/Fortify/Foraging/Break, per-player hourly tick on the server, client "moving" check fixed. Awaiting a live click |
+| P5 settings parity | **Already working**: all four TAOM MCM classes arrive from the server on join |
+| Other P2 relays, P3, P4, P6 | Open (below) |
+
+**Bug class to remember:** anything TAOM asks about the main party that vanilla derives from local movement or time
+state can be wrong on a Coop client, because the server moves the party. Field Camp was the only TAOM user of
+`MainParty.IsMoving` (checked 2026-09-22).
+
 ## What TAOM already does for itself
 
 TAOM is co-op-aware. `TAOM.Features.CoopInterop` answers three separate questions, and every gate in TAOM uses one:
