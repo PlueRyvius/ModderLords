@@ -3,7 +3,7 @@
   <Name value="ModderLords Compat" />
   <!-- Community module: must be enabled on the server AND on every client (Coop's validator matches it like any mod). -->
   <Id value="ModderLords.Compat" />
-  <Version value="v0.1.28" />
+  <Version value="v0.1.29" />
   <SingleplayerModule value="true" />
   <MultiplayerModule value="false" />
   <ModuleCategory value="Singleplayer" />
