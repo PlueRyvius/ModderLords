@@ -23,6 +23,7 @@ public static class Bridge
         Taom.PartyComponentSyncComponent.ClientTick();
         Taom.RefugeComponent.ClientTick();
         Taom.ClientStateBackupComponent.ClientTick();
+        Taom.FieldCommissionComponent.ClientTick();
         Operations.OperationRuntime.JoinBarrier?.Tick();
         global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.OperationServerHandler.Current?.RemoveDisconnectedPeers();
         BehaviorGate.RetryPendingPostfixes();

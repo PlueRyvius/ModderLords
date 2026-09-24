@@ -45,6 +45,9 @@ internal static class TaomActions
     /// <summary>True on a client in a live co-op session: TAOM's host-only actions should be sent, not refused.</summary>
     internal static bool IsCoopClient => Send != null;
 
+    /// <summary>Server: set by the server handler; sends feature data to one player's client unasked (their apply hook runs).</summary>
+    internal static Action<Hero, string, IList<string>>? Push { get; set; }
+
     /// <summary>Server: true while a relayed action runs; its reply carries the message, so nothing else is forwarded.</summary>
     [ThreadStatic] internal static bool Running;
 
