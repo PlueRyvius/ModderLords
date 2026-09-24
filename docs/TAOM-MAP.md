@@ -78,6 +78,10 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
 - [ ] Other players' career perks on your screen: clients hold only their own career record, so models a client
       computes for another player's hero (e.g. that player's party size in a tooltip) use no perks. Display only.
 
+- [b] Fief elections (FiefGranting): TAOM swaps the vote for its own TaomSettlementClaimantDecision, which Coop's
+      exact-type decision converter refused ("not supported"), so players never got fief votes. Now sent as the
+      vanilla base type (fief-vote-sync). The player-clan penalty exemption is evaluated per player's clan.
+
 ### TAOM state clients never hear about (state mirror)
 - [x] War of the Ring phase and Momentum (#113; bar moves on the client)
 - [b] Culture conversion (pending conversions): mirrored from the server

@@ -68,6 +68,7 @@ public static class TaomLayer
         new BattleGateComponent(),
         new EnlistmentGuardComponent(),
         new ClientStateBackupComponent(),
+        new FiefVoteSyncComponent(),
     };
 
     private static bool _done;
