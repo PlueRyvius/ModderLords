@@ -39,6 +39,7 @@ internal sealed class FieldCommissionComponent : ITaomComponent
     public string? SkipReason(TaomContext context)
     {
         var t = _taom = context.Taom;
+        BindBattleWatch(t);
         const BindingFlags inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         _isAuthority = t.GetType("TAOM.Features.CoopInterop.CoopSessionProvider", false)?.GetProperty("IsAuthority")?.GetGetMethod();
         var offer = t.GetType("TAOM.Features.FieldCommission.Domain.PendingPromotionOffer", false);
@@ -142,6 +143,84 @@ internal sealed class FieldCommissionComponent : ITaomComponent
         if (_pendingFlow != null) { _close!.Invoke(_pendingFlow, null); _pendingFlow = null; }
     }
 
+    // ---- client: the battle's start and end, which Coop does not raise on a client -----------------------
+
+    private static Type? _behaviorType;
+    private static FieldInfo? _tracked;
+    private static FieldInfo? _meritField;
+    private static FieldInfo? _configField;
+    private static MethodInfo? _onStarted;
+    private static MethodInfo? _endBattle;
+    private static TaleWorlds.CampaignSystem.MapEvents.MapEvent? _watched;
+    private static TaleWorlds.Core.BattleSideEnum _watchedSide;
+
+    internal static void BindBattleWatch(Assembly taom)
+    {
+        const BindingFlags inst = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        _behaviorType = taom.GetType("TAOM.Features.FieldCommission.Hooks.FieldCommissionBehavior", false);
+        _tracked = _behaviorType?.GetField("_trackedMapEvent", inst);
+        _meritField = _behaviorType?.GetField("_merit", inst);
+        _configField = _behaviorType?.GetField("_configProvider", inst);
+        _onStarted = _behaviorType?.GetMethod("OnMapEventStarted", inst);
+        _endBattle = taom.GetType("TAOM.Features.FieldCommission.IFieldCommissionMeritService", false)?.GetMethod("EndBattle", new[] { typeof(bool) });
+    }
+
+    private static object? Behavior()
+    {
+        if (_behaviorType == null || Campaign.Current == null) return null;
+        var getter = typeof(Campaign).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefaultGeneric("GetCampaignBehavior");
+        return getter?.MakeGenericMethod(_behaviorType).Invoke(Campaign.Current, null);
+    }
+
+    /// <summary>
+    /// Client, from Bridge.Tick. Coop finalizes a battle on the server only (a client's MapEvent.FinalizeEventAux is
+    /// refused), and the game raises MapEventEnded from there, so TAOM's merit window never closed on a client and
+    /// merit never banked. The client watches its own party's battle instead: on entering it, TAOM's start handler
+    /// runs if TAOM did not already see the start; on leaving it, the battle is scored as TAOM scores it (won = the
+    /// winning side is the one the party fought on), unless TAOM's own end handler already closed the window.
+    /// </summary>
+    internal static void ClientTick()
+    {
+        if (!TaomActions.IsCoopClient || _tracked == null || _onStarted == null || _endBattle == null) return;
+        var party = MobileParty.MainParty;
+        if (party == null) return;
+        var current = party.MapEvent;
+        try
+        {
+            if (current != null && _watched == null)
+            {
+                _watched = current;
+                _watchedSide = party.MapEventSide?.MissionSide ?? TaleWorlds.Core.BattleSideEnum.None;
+                if (Behavior() is { } behavior && _tracked.GetValue(behavior) == null)
+                {
+                    _window++;
+                    try { _onStarted.Invoke(behavior, new object?[] { current, current.AttackerSide?.LeaderParty, current.DefenderSide?.LeaderParty }); }
+                    finally { _window--; }
+                }
+                return;
+            }
+            if (_watched != null && current != _watched)
+            {
+                var ended = _watched;
+                _watched = null;
+                if (Behavior() is not { } behavior || _tracked.GetValue(behavior) != ended) return;   // TAOM closed it itself
+                _tracked.SetValue(behavior, null);
+                var enabled = _configField?.GetValue(behavior) is { } cfg
+                    && cfg.GetType().GetMethod("GetConfig")?.Invoke(cfg, null) is { } config
+                    && config.GetType().GetProperty("Enabled")?.GetValue(config) is true;
+                var won = enabled && _watchedSide != TaleWorlds.Core.BattleSideEnum.None && ended.WinningSide == _watchedSide;
+                var merit = _meritField?.GetValue(behavior);
+                if (merit == null) return;
+                _window++;
+                try { _endBattle.Invoke(merit, new object[] { won }); }
+                finally { _window--; }
+                Log.Info($"TAOM layer: field-commission battle scored on this client (won={won})");
+            }
+        }
+        catch (Exception ex) { Log.Warn("TAOM layer: field-commission battle watch failed: " + ex.GetBaseException().Message); }
+    }
+
     // ---- server ----------------------------------------------------------------------------------------
 
     [ThreadStatic] private static bool _serverPromoting;
@@ -182,6 +261,13 @@ internal sealed class FieldCommissionComponent : ITaomComponent
 
 internal static class MethodListExtensions
 {
+    internal static MethodInfo? FirstOrDefaultGeneric(this MethodInfo[] methods, string name)
+    {
+        foreach (var m in methods)
+            if (m.Name == name && m.IsGenericMethodDefinition && m.GetParameters().Length == 0) return m;
+        return null;
+    }
+
     internal static MethodInfo? FirstOrDefaultNamed(this MethodInfo[] methods, string name)
     {
         foreach (var m in methods)

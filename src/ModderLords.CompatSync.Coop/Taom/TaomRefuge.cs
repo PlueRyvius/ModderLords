@@ -121,6 +121,12 @@ internal sealed class RefugeComponent : ITaomComponent
             finalizer: new HarmonyMethod(typeof(RefugeComponent), nameof(NarrowFinalizer)));
         h.Patch(_nearestManageable!, postfix: new HarmonyMethod(typeof(RefugeComponent), nameof(OwnRowPostfix)));
         h.Patch(_nearestDismantlable!, postfix: new HarmonyMethod(typeof(RefugeComponent), nameof(OwnRowPostfix)));
+        // Walking into a refuge opens TAOM's refuge menu instead of a meeting; only for your own refuge (the client's
+        // mirrored book holds every player's, and the menu would have nothing you may use).
+        var enterable = _taom?.GetType("TAOM.Features.Refuge.Hooks.RefugeEncounterPatch", false)
+            ?.GetMethod("IsEnterableRefuge", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+        if (enterable != null)
+            h.Patch(enterable, postfix: new HarmonyMethod(typeof(RefugeComponent), nameof(EnterablePostfix)));
 
         if (context.IsServer)
         {
@@ -129,9 +135,27 @@ internal sealed class RefugeComponent : ITaomComponent
             h.Patch(_onMapEventStarted!, prefix: new HarmonyMethod(typeof(RefugeComponent), nameof(AsOwnerPrefix)));
             h.Patch(_onMapEventEnded!, prefix: new HarmonyMethod(typeof(RefugeComponent), nameof(AsOwnerPrefix)));
             TaomActions.Register(Feature, ServerAction);
+            // Players cannot stock a refuge's stash in co-op (see StashPrefix), and TAOM's garrison eats from it; without
+            // this the garrison would starve. Refuge parties do not consume food on a co-op server.
+            var eats = AccessTools.Method(typeof(TaleWorlds.CampaignSystem.ComponentInterfaces.MobilePartyFoodConsumptionModel), "DoesPartyConsumeFood");
+            if (eats != null)
+            {
+                foreach (var t in AccessTools.AllTypes().Where(t => !t.IsAbstract && typeof(TaleWorlds.CampaignSystem.ComponentInterfaces.MobilePartyFoodConsumptionModel).IsAssignableFrom(t)))
+                    if (AccessTools.DeclaredMethod(t, "DoesPartyConsumeFood") is { IsAbstract: false } impl)
+                        try { h.Patch(impl, postfix: new HarmonyMethod(typeof(RefugeComponent), nameof(NoFoodPostfix))); }
+                        catch (Exception ex) { Log.Warn($"TAOM layer: could not patch {t.Name}.DoesPartyConsumeFood: {ex.GetBaseException().Message}"); }
+            }
+            else Log.Warn("TAOM layer: MobilePartyFoodConsumptionModel.DoesPartyConsumeFood not found; refuge garrisons will need food they cannot be given in co-op");
             return "server founds, upgrades and dismantles players' refuges; militia runs as the owner; no visuals";
         }
 
+        // The refuge's "Store goods" opens the game's stash screen on the refuge party's goods. Coop replaces that screen's
+        // Done with its trade sync, which reads the screen's trader (InventoryListener.GetGold()) unguarded; a stash has
+        // no trader, and Coop has no sync for another party's stash either. So in a session the stash stays closed with
+        // a message, instead of throwing on Done. Troops and prisoners (Manage garrison) are unaffected.
+        var stash = AccessTools.Method(typeof(Helpers.InventoryScreenHelper), "OpenScreenAsStash");
+        if (stash != null)
+            h.Patch(stash, prefix: new HarmonyMethod(typeof(RefugeComponent), nameof(StashPrefix)));
         h.Patch(_onWardenChosen!, prefix: new HarmonyMethod(typeof(RefugeComponent), nameof(WardenChosenPrefix)));
         h.Patch(_upgrade!, prefix: new HarmonyMethod(typeof(RefugeComponent), nameof(UpgradePrefix)));
         h.Patch(_dismantle!, prefix: new HarmonyMethod(typeof(RefugeComponent), nameof(DismantlePrefix)));
@@ -172,6 +196,11 @@ internal sealed class RefugeComponent : ITaomComponent
     {
         if (__result != null && !TaomOwners.IsCurrentPlayers(TaomOwners.FindParty(PartyIdOf(__result))))
             __result = null;
+    }
+
+    private static void EnterablePostfix(string partyId, ref bool __result)
+    {
+        if (__result && !TaomOwners.IsCurrentPlayers(TaomOwners.FindParty(partyId))) __result = false;
     }
 
     // ---- server ----------------------------------------------------------------------------------------
@@ -285,6 +314,24 @@ internal sealed class RefugeComponent : ITaomComponent
 
     /// <summary>Client, in a session: never run locally (the server does this for everyone).</summary>
     private static bool ClientSkipPrefix() => !TaomActions.IsCoopClient;
+
+    private static void NoFoodPostfix(object[] __args, ref bool __result)
+    {
+        if (__result && __args.Length > 0 && __args[0] is MobileParty party && party.PartyComponent?.GetType().Name == "RefugePartyComponent")
+            __result = false;
+    }
+
+    private static bool StashPrefix(object[] __args)
+    {
+        if (!TaomActions.IsCoopClient || __args.Length == 0 || __args[0] == null) return true;
+        foreach (var p in MobileParty.All)
+            if (p?.ItemRoster == __args[0] && p.PartyComponent?.GetType().Name == "RefugePartyComponent")
+            {
+                TaomActions.ShowToPlayer(false, "Storing goods in a refuge is not available in co-op yet.");
+                return false;
+            }
+        return true;
+    }
 
     private static bool WardenChosenPrefix(List<InquiryElement> selected)
     {

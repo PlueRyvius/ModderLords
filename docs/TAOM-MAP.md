@@ -82,6 +82,13 @@ layer covers it (`scratchpad/audit_mutations.py` in the 2026-09-22 session; reru
       exact-type decision converter refused ("not supported"), so players never got fief votes. Now sent as the
       vanilla base type (fief-vote-sync). The player-clan penalty exemption is evaluated per player's clan.
 
+- [b] 1.1.1 fixes, found by checking what Coop does NOT raise on clients: a client never sees a battle end (Coop
+      finalizes on the server only), so (a) Field Commission battles are now scored by a client-side watch of the
+      party's own battle, and (b) special-resource earnings for battles, raids, hideouts and tournaments now run on the
+      server per player and are pushed to that player (TAOM's prisoner-taken earning is still not covered).
+      Refuge: walking into another player's refuge no longer opens the refuge menu; "Store goods" is closed in co-op
+      (Coop's inventory Done reads a trader a stash does not have), and refuge garrisons do not eat on a co-op server.
+
 ### TAOM state clients never hear about (state mirror)
 - [x] War of the Ring phase and Momentum (#113; bar moves on the client)
 - [b] Culture conversion (pending conversions): mirrored from the server
