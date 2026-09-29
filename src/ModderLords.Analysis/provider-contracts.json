@@ -922,5 +922,98 @@
       }
     ],
     "SurfacesCoverTargets": true
+  },
+  {
+    "Id": "bellum-civile.commands",
+    "Version": "1",
+    "Module": "BellumCivile",
+    "Operation": "Actor-aware Bellum player actions",
+    "Provider": "ModderLords",
+    "Authority": "Campaign",
+    "ActorBinding": "Authenticated Coop player hero and clan; client-supplied actor identities are ignored",
+    "Effects": [
+      "campaign-mutation"
+    ],
+    "Transport": "Authenticated ID-only ModderLords operation commands with expected snapshot revision",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "BellumCivile",
+        "Name": "BellumCivile.dll",
+        "Sha256": "154485500A0BAB12538182198E7B00800D0B6B45D66CC4FEBABF5A4E90A20824",
+        "Side": "Client",
+        "Strict": true
+      },
+      {
+        "Module": "BellumCivile",
+        "Name": "BellumCivile.dll",
+        "Sha256": "154485500A0BAB12538182198E7B00800D0B6B45D66CC4FEBABF5A4E90A20824",
+        "Side": "Server",
+        "Strict": true
+      }
+    ],
+    "Targets": [
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::StartPlayerFabrication",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerUsurpation",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerDissolution",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerRename",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerServiceChange",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerGrant",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerRevocation",
+      "BellumCivile.Behaviors.SuccessionLawBehavior::TryApplyPlayerGenderLaw",
+      "BellumCivile.Behaviors.SuccessionLawBehavior::TryApplyPlayerSuccessionLaw"
+    ],
+    "Suppressed": false,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": "bellum-civile.commands.v1",
+    "TargetSurfaces": [
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::StartPlayerFabrication",
+        "BodyHash": "3B25FA73D71ECFF4C25817372A58C9732E378C2D4C12FD86223B9910830EC481",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerUsurpation",
+        "BodyHash": "CD3538A6C85B0323150CA71C377B9945D0EDAB5F89D365D5A06EDA46073836CE",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerDissolution",
+        "BodyHash": "A88C119D7E376643299A1C956138C153B5F32F5A06104E2BE965EC3EB8A7330B",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerRename",
+        "BodyHash": "6BF8B91CADD2842FDEF42611EBCA669827A6E80B7794BBCB159191F2AB8F9560",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerServiceChange",
+        "BodyHash": "150B707F46651B3A05F3EEB4A54CE6600ECDEAE9518794B37DE0E7190CE70A43",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerGrant",
+        "BodyHash": "915563CE1A1DC7ED8457AC22DF2ED76D922204517EC4DB7F5FA6D4D813591C61",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerRevocation",
+        "BodyHash": "4B0FEB4A9DBFBF25D441D129DB5620AFD329731F883F44D1A3D2E8C744E7B685",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.SuccessionLawBehavior::TryApplyPlayerGenderLaw",
+        "BodyHash": "FBAACB114A179CB80B6D6923767A94A9BF9003BC8497D0F69645525B5836D544",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.SuccessionLawBehavior::TryApplyPlayerSuccessionLaw",
+        "BodyHash": "E7D8762ADFABCD0665604130EF06AB5C0EBB960B62C5FFBFD5807585ED6FF41C",
+        "Callers": 1
+      }
+    ],
+    "SurfacesCoverTargets": true
   }
 ]

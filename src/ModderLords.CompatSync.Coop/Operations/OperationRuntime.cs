@@ -107,6 +107,7 @@ public static class OperationRuntime
                 ICompatibilityAdapter adapter = adapterId == "clans-resource-adder.v1" ? new ClansResourceAdderAdapter()
                     : adapterId == "bellum-civile.v1" ? new BellumCivileAdapter()
                     : adapterId == "bellum-civile.authority.v1" ? new BellumCivileAuthorityAdapter()
+                    : adapterId == "bellum-civile.commands.v1" ? new BellumCivileCommandAdapter()
                     : throw new InvalidOperationException("Unknown compiled adapter");
                 if (!adapter.ValidateTargets(out reason)) throw new InvalidOperationException(reason);
                 pending.Add(adapter);

@@ -15,6 +15,7 @@ public static class OperationValidationMode
     {
         "bellum-civile.state",
         "bellum-civile.authority",
+        "bellum-civile.commands",
     };
 
     public static bool Allows(string? contractId)

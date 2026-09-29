@@ -93,6 +93,10 @@ public sealed class CommandDispatcher
             if (!operation.Validate(actor, command.Payload, out var reason)) receipt.Result = Reject(reason);
             else receipt.Result = new OperationResult(command.RequestId, RequestState.Completed, "Completed", operation.Execute(actor, command.Payload), ++revision);
         }
+        catch (OperationRejectedException ex)
+        {
+            receipt.Result = Reject(string.IsNullOrWhiteSpace(ex.Message) ? "Operation rejected" : ex.Message);
+        }
         catch (Exception)
         {
             // Failed operations are never retried automatically: a feature must provide its own atomic mutation.

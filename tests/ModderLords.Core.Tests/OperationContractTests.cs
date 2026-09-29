@@ -112,14 +112,15 @@ public sealed class OperationContractTests
         Assert.Equal("fixture.dll", narrowed.Fingerprints[0].Name);
         Assert.True(ModderLords.Operations.OperationValidationMode.Allows("bellum-civile.state", ModderLords.Operations.OperationValidationMode.Bellum131Token));
         Assert.True(ModderLords.Operations.OperationValidationMode.Allows("bellum-civile.authority", ModderLords.Operations.OperationValidationMode.Bellum131Token));
+        Assert.True(ModderLords.Operations.OperationValidationMode.Allows("bellum-civile.commands", ModderLords.Operations.OperationValidationMode.Bellum131Token));
         Assert.False(ModderLords.Operations.OperationValidationMode.Allows("fixture", ModderLords.Operations.OperationValidationMode.Bellum131Token));
         Assert.False(ModderLords.Operations.OperationValidationMode.Allows("bellum-civile.state", "1"));
     }
 
-    [Fact] public void BellumIsPinnedButCoopIsNotAndBothBellumTiersRemainDisabledPendingIntegration()
+    [Fact] public void BellumIsPinnedButCoopIsNotAndAllBellumTiersRemainDisabledPendingIntegration()
     {
         var bellum = CompatibilityPlanner.BundledContracts().Where(c => c.Module == "BellumCivile").ToArray();
-        Assert.Equal(2, bellum.Length);
+        Assert.Equal(3, bellum.Length);
         Assert.All(bellum, c =>
         {
             Assert.False(c.OfflineValidated);
@@ -135,6 +136,9 @@ public sealed class OperationContractTests
         Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnDailyTick", authority.Targets);
         Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnTick", authority.Targets);
         Assert.DoesNotContain("BellumCivile.UI.Map.WarScoreMapWidgetVM::OnTick", authority.Targets);
+        var commands = Assert.Single(bellum, c => c.Id == "bellum-civile.commands");
+        Assert.Equal(9, commands.Targets.Length);
+        Assert.Equal(commands.Targets.Length, commands.TargetSurfaces.Length);
     }
 
     [Fact] public void StagingAnotherPlanCannotModifyExistingSessionFile()

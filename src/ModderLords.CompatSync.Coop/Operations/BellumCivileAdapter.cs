@@ -20,6 +20,7 @@ namespace ModderLords.CompatSync.Coop.Operations;
 public sealed class BellumCivileAdapter : ICompatibilityAdapter
 {
     internal const string OperationId = "bellum-civile.state.v1";
+    private static BellumStateOperation? currentServerOperation;
     private BellumStateOperation? operation;
     private bool clientBound;
     public string Id => "bellum-civile.v1";
@@ -35,6 +36,7 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
         if (OperationProcessSide.IsServer)
         {
             operation = new BellumStateOperation();
+            currentServerOperation = operation;
             global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.OperationServerHandler.Register(operation);
             Readiness = AdapterReadiness.Ready;
             Detail = "Server-authoritative Bellum read model registered";
@@ -54,6 +56,7 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
     {
         if (operation != null) global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.OperationServerHandler.Unregister(operation);
         if (clientBound) global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.OperationClientHandler.Current?.UnbindSnapshot(OperationId);
+        if (ReferenceEquals(currentServerOperation, operation)) currentServerOperation = null;
         operation = null; clientBound = false; Readiness = AdapterReadiness.Disabled; Detail = "Disabled";
         BellumSnapshotBroadcast.Reset();
         BellumStateMirror.Clear();
@@ -71,6 +74,7 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
         public bool CanReadSnapshot(Actor actor) => !string.IsNullOrEmpty(actor.ControllerId) && Campaign.Current != null;
         public string CaptureSnapshot(Actor actor) => CaptureCurrent();
         public string CaptureSharedSnapshot() => CaptureCurrent();
+        internal long RefreshRevision() { CaptureCurrent(); return revision; }
         private string CaptureCurrent()
         {
             var snapshot = BellumStateReader.Capture(revision);
@@ -81,6 +85,8 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
             return BellumStateCodec.Serialize(snapshot);
         }
     }
+
+    internal static long RefreshServerRevision() => currentServerOperation?.RefreshRevision() ?? -1;
 }
 
 /// <summary>Coalesces authoritative Bellum mutations before broadcasting one actor-independent snapshot.</summary>

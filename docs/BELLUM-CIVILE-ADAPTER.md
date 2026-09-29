@@ -40,9 +40,21 @@ Coop is not. This adapter does not modify or redistribute Bellum files.
   mercenary departure presentation, treaty daily/presentation processing, and the war-score map widget. Their
   authoritative state and UI handoff must be completed before activation.
 - The isolated dedicated-server activation now passes end to end. The plan freezes both adapters before campaign
-  initialization, the save reaches `SERVING`, Bellum mutation handlers execute only on the server, and shutdown
-  saves cleanly. A bounded real-client startup also passes the current Coop capability probes and installs the
-  client save-load admission barrier. No client has joined this validation save yet.
+  initialization, the save reaches `SERVING`, and Bellum mutation handlers execute only on the server.
+- Native client validation on 2026-09-29 completed initial admission, campaign-map entry, more than one in-game day,
+  disconnect and reconnect. Both joins agreed the same operation plan. The reconnect transferred all 62 save
+  chunks, restored the player party, and returned the player to the map. Shared Bellum snapshots advanced through
+  revision 11. The server recorded 4,708 executions across 23 authority-gated handlers with zero client-side runs;
+  the client recorded 1,338 suppressed mutation calls with zero server-side runs. The available Kingdom and Clan
+  views remained stable. Bellum-specific action controls were unavailable because the disposable character did not
+  meet their political eligibility requirements, not because navigation or the adapter failed.
+- The first actor-aware command slice is implemented behind a third disabled contract, `bellum-civile.commands`.
+  It covers title fabrication, usurpation, dissolution, rename, service-level change, grant and revocation, plus
+  gender and house succession-law changes. Bellum's native confirmation UI remains local; only the final mutation callback is
+  intercepted. Requests contain stable IDs, never Bellum objects, and the server replaces any claimed actor with
+  the authenticated Coop hero/clan before rerunning Bellum's own eligibility checks. An expected snapshot revision
+  rejects stale confirmations. The client reports completion only after the correlated server result and then asks
+  for a fresh authoritative snapshot. All nine patched Bellum 1.3.1 methods have pinned IL surfaces.
 
 ## Live snapshot evidence
 
@@ -68,15 +80,21 @@ Evidence:
 - Snapshot: `D:\Design\Bannerlord Mods\_bellum-civile-analysis-data\live\BellumCompatSmoke-full-family-projection-snapshot.json`
 - Isolated two-adapter server activation: `C:\Users\A\AppData\Local\Temp\modderlords-launch-20260928-195407.log`
 - Client startup/admission log: `C:\Users\A\Documents\Mount and Blade II Bannerlord\Configs\ModLogs\ModderLords.Compat-client.log`
+- Successful joined-client and reconnect run: the 2026-09-29 01:53-02:12 entries in the same client log and the
+  corresponding `ModderLords.Compat-server.log`; the server launch log records module validation acceptance,
+  62-chunk save transfer, campaign entry, party restoration, and map entry.
 
 ## Deliberately not claimed
 
-The adapter is not playable compatibility yet. The first simulation-authority and full read-model tiers are
-implemented but deliberately disabled pending native client admission and UI/action work. Player actions are not
-yet actor-aware server commands, and the five mixed callbacks remain outside the authority gate. No successful
-client admission, late join, reconnect, political command, dynamic-object replication, or long soak is claimed.
-The validation flags must remain false until those paths pass the integration matrix.
+The adapter is not full playable compatibility yet. The first simulation-authority and full read-model tiers are
+implemented and have passed one native client admission/reconnect run, but remain deliberately isolated pending
+UI/action work. Nine initial player actions now have an actor-aware command path, but the remaining faction,
+treaty, council, formation and player-targeted decisions do not. The five mixed callbacks remain outside
+the authority gate. No political command has passed native validation; no two-simultaneous-player run,
+dynamic-object replication stress case, save/restart verification after political changes, or long soak is claimed.
+The validation flags must remain false
+until those paths pass the integration matrix.
 
-Next validation/implementation order: join one disposable client and verify authenticated plan agreement plus the
-initial full snapshot; then add faction/title/treaty/council/succession commands with ownership and
-expected-revision checks; player-targeted decisions; two-player, reconnect, save/restart and soak validation.
+Next validation/implementation order: validate the initial title/succession command slice with a politically
+eligible disposable character; add formation, faction, treaty and council commands; add player-targeted
+decisions; then run two-player, reconnect, save/restart and soak validation.

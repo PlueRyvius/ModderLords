@@ -14,6 +14,13 @@ public sealed class OperationProtocolTests
         public bool Validate(Actor actor, string payload, out string reason) { reason = "Not the owner"; return Allowed && actor.ClanId == "owned" && payload == "increment"; }
         public string Execute(Actor actor, string payload) { if (Fail) throw new InvalidOperationException(); return (++Value).ToString(); }
     }
+    private sealed class DomainReject : IServerOperation
+    {
+        public string Id => "fixture.reject";
+        public int MaxPayloadBytes => 16;
+        public bool Validate(Actor actor, string payload, out string reason) { reason = ""; return true; }
+        public string Execute(Actor actor, string payload) => throw new OperationRejectedException("Not eligible now");
+    }
     private static readonly Actor Player = new("controller", "hero", "owned");
     private static OperationCommand Command(string? id = null, string payload = "increment", string epoch = "epoch") => new("digest", epoch, id ?? Guid.NewGuid().ToString("N"), "fixture.counter", payload);
 
@@ -35,6 +42,30 @@ public sealed class OperationProtocolTests
         Assert.Equal(RequestState.Rejected, host.Execute(Command(), new Actor("controller", "hero", "other-clan")).State);
         op.Fail = true; var request = Command(); var result = host.Execute(request, Player); op.Fail = false;
         Assert.Equal(RequestState.Rejected, result.State); Assert.Same(result, host.Execute(request, Player)); Assert.Equal(0, op.Value);
+    }
+    [Fact] public void ExpectedDomainRefusalsAreReturnedWithoutLeakingUnexpectedFailures()
+    {
+        var rejected = new CommandDispatcher("digest", "epoch", [new DomainReject()]);
+        var request = new OperationCommand("digest", "epoch", Guid.NewGuid().ToString("N"), "fixture.reject", "x");
+        Assert.Equal("Not eligible now", rejected.Execute(request, Player).Detail);
+
+        var failed = new Counter { Fail = true };
+        Assert.Equal("Operation failed; authoritative state must be refreshed",
+            new CommandDispatcher("digest", "epoch", [failed]).Execute(Command(), Player).Detail);
+    }
+    [Fact] public void BellumCommandsAreVersionedBoundedAndRejectUnknownFields()
+    {
+        var command = new BellumCommand
+        {
+            Kind = "title.rename",
+            ExpectedRevision = 7,
+            Arguments = new(StringComparer.Ordinal) { ["titleId"] = "empire_duchy", ["name"] = "New Name" }
+        };
+        var parsed = BellumCommandCodec.Deserialize(BellumCommandCodec.Serialize(command));
+        Assert.Equal(command.Kind, parsed.Kind); Assert.Equal(7, parsed.ExpectedRevision);
+        Assert.ThrowsAny<Exception>(() => BellumCommandCodec.Deserialize("{\"SchemaVersion\":1,\"Kind\":\"x\",\"ExpectedRevision\":0,\"Arguments\":{},\"extra\":true}"));
+        command.Kind = "";
+        Assert.ThrowsAny<Exception>(() => BellumCommandCodec.Serialize(command));
     }
     [Fact] public void ReceiptCapacityNeverEvictsAndReexecutesOldMutations()
     {
