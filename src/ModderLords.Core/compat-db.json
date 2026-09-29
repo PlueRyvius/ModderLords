@@ -153,6 +153,18 @@
       "Notes": "Adapter host for per-mod Coop compatibility shims. Order-independent: each adapter initialises and then waits for Coop before arming, so it is safe either side of Coop in the load order. Verified 2026-09-18 from a client run where Coop loaded last and every adapter still came up ('initialized, waiting for Coop before arming'). Do NOT set ClientLoadsAfterCoop on it.",
       "Url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3786391685",
       "UpdatedAt": "2026-09-18T00:00:00Z"
+    },
+    {
+      "Id": "BetterEconomy",
+      "Verdict": "Unknown",
+      "TestedVersions": [],
+      "DefaultRole": "Run",
+      "IgnoreSettingsTypes": [
+        "BetterEconomy.Config.RuntimeSettings"
+      ],
+      "Notes": "Bannerlord Living Economy (ISKL, Nexus 10796). ModderLords ships a co-op layer for it inside ModderLords.Compat (docs/LIVING-ECONOMY-LAYER.md): the server runs the economy, players' towns and gold are treated as players', menu actions are carried out by the server, and the mod's records are mirrored to players. Needs Settings sync on (the launch is refused without it). Leave Server-only logic OFF for it. Its 583 tuning values (BetterEconomySettings) follow the host through Settings sync; RuntimeSettings is left out on purpose because it holds each player's own ledger preferences. Not yet tested live.",
+      "Url": "https://www.nexusmods.com/mountandblade2bannerlord/mods/10796",
+      "UpdatedAt": "2026-09-29T00:00:00Z"
     }
   ]
 }

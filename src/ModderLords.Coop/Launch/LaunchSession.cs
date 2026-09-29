@@ -205,11 +205,15 @@ public sealed class LaunchSession
         // carries ModderLords' TAOM support. Both would start and then fail in ways that look like co-op bugs.
         var taomProblems = TaomLaunchPolicy.InstallProblems(selections.Select(s => (s.Module.Id, s.Module.FolderPath))).ToList();
         if (TaomLaunchPolicy.SyncProblem(selections.Select(s => s.Module.Id), profile.SettingsSync) is { } taomSync) taomProblems.Add(taomSync);
+        // Same for Living Economy: its co-op layer is in that module too (docs/LIVING-ECONOMY-LAYER.md).
+        if (LivingEconomyLaunchPolicy.SyncProblem(selections.Select(s => s.Module.Id), profile.SettingsSync) is { } leSync) taomProblems.Add(leSync);
         foreach (var problem in taomProblems)
         {
             if (applySideEffects) throw new InvalidOperationException(problem);
             messages.Add("WARNING " + problem);
         }
+        if (LivingEconomyLaunchPolicy.ServerOnlyLogicProblem(ServerOnlyMods(profile, experimentalCompat)) is { } leServerOnly)
+            messages.Add("WARNING " + leServerOnly);
 
         // The one decision both halves of world creation read: this block's messages, and the EnsureExists guard
         // further down. Computing it once is what keeps them from disagreeing about whether a world is being made.
