@@ -53,7 +53,7 @@ public sealed class ClansResourceAdderAdapter : ICompatibilityAdapter
     {
         var adapter = current;
         if (adapter == null || !OperationRuntime.SessionActive) return true;
-        if (!Common.ModInformation.IsServer) return false;
+        if (!OperationProcessSide.IsServer) return false;
         try
         {
             if (!OperationRuntime.CheckReadiness()) return adapter.Degrade(OperationRuntime.Failure);
@@ -81,7 +81,7 @@ public sealed class ClansResourceAdderAdapter : ICompatibilityAdapter
     private static bool IsAiPrefix(Clan clan, ref bool __result)
     {
         if (current == null || !OperationRuntime.SessionActive) return true;
-        __result = Common.ModInformation.IsServer && current.policy.IsAiClan(clan?.StringId ?? "", true, false);
+        __result = OperationProcessSide.IsServer && current.policy.IsAiClan(clan?.StringId ?? "", true, false);
         return false;
     }
     public void Dispose()

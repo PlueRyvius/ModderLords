@@ -69,6 +69,29 @@ public sealed class OperationProtocolTests
         Assert.True(session.Freeze("first")); Assert.False(session.Freeze("second")); Assert.False(session.Admit("other"));
         var late = new SessionActivation(); late.MarkCampaignStarted(); Assert.False(late.Freeze("first"));
     }
+    [Fact] public void SnapshotChunksRoundTripUtf8OutOfOrderAndRejectConflicts()
+    {
+        var payload = string.Concat(Enumerable.Repeat("politics-🏰-", 30000));
+        var chunks = SnapshotTransfer.Split(payload);
+        Assert.True(chunks.Count > 1); Assert.All(chunks, c => Assert.True(System.Text.Encoding.UTF8.GetByteCount(c) <= SnapshotTransfer.MaxChunkBytes));
+        var receiver = new SnapshotReassembler(); receiver.BeginSession("epoch"); var complete = "";
+        for (var i = chunks.Count - 1; i >= 0; i--)
+            if (receiver.Offer("epoch", 7, i, chunks.Count, chunks[i], out var value)) complete = value;
+        Assert.Equal(payload, complete);
+        Assert.False(receiver.Offer("epoch", 7, 0, 1, "old", out _));
+
+        receiver.BeginSession("epoch");
+        Assert.False(receiver.Offer("epoch", 8, 0, 2, "first", out _));
+        Assert.False(receiver.Offer("epoch", 8, 0, 2, "different", out _));
+        Assert.False(receiver.Offer("wrong", 9, 0, 1, "unauthenticated", out _));
+    }
+    [Fact] public void SnapshotTransferEnforcesTotalAndChunkBounds()
+    {
+        Assert.Throws<ArgumentException>(() => SnapshotTransfer.Split(new string('x', SnapshotTransfer.MaxSnapshotBytes + 1)));
+        var receiver = new SnapshotReassembler(); receiver.BeginSession("epoch");
+        Assert.False(receiver.Offer("epoch", 1, 0, SnapshotTransfer.MaxChunks + 1, "x", out _));
+        Assert.False(receiver.Offer("epoch", 1, 0, 1, new string('x', SnapshotTransfer.MaxChunkBytes + 1), out _));
+    }
     [Fact] public void ResourcePolicyIncludesDisconnectedOwnersAndPreservesSinglePlayer()
     {
         var policy = new ResourceAdderPolicy();

@@ -58,21 +58,25 @@ public sealed class OperationContractTests
         Assert.Equal(ActivationDecision.ValidationRequired, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [partial]).Contracts[0].Decision);
         // A contract that installs nothing describes someone else's implementation, so it pins no surfaces.
         Assert.Equal(ActivationDecision.RecognizedExternal, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [Contract(provider: "provider") with { AdapterId = null }]).Contracts[0].Decision);
+        // A reflection-only adapter that patches no provider method has no method surface to pin. Its broad provider
+        // dependency must instead remain a strict required fingerprint.
+        var reader = Contract() with { Targets = [], TargetSurfaces = [], Requires = [new("fixture", "fixture.dll", "ABC", Strict: true)] };
+        Assert.Equal(ActivationDecision.Activate, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [reader]).Contracts[0].Decision);
     }
 
-    [Fact] public void AProviderPinnedByItsSurfacesSurvivesAnUnrelatedUpdateButCoopDoesNot()
+    [Fact] public void AProviderAndCapabilityCheckedCoopSurviveUnrelatedFileChangesButMustBePresent()
     {
         var contract = Contract() with
         {
-            Requires = [new("fixture", "fixture.dll", "ABC", ExecutionSide.Client, Strict: false), new("coop", "Coop.Core.dll", "DEF", ExecutionSide.Client)],
+            Requires = [new("fixture", "fixture.dll", "ABC", ExecutionSide.Client, Strict: false), new("coop", "Coop.Core.dll", "DEF", ExecutionSide.Client, Strict: false)],
             TargetSurfaces = [new("Fixture.Behavior::Tick", "HASH", 1)],
         };
         var coop = new InputFingerprint("coop", "Coop.Core.dll", "DEF", ExecutionSide.Client);
         Assert.Equal(ActivationDecision.Activate, CompatibilityPlanner.Build(Request(), [Fingerprint, coop], [], [contract]).Contracts[0].Decision);
         // The provider shipped an unrelated change: still planned, because the methods it patches are what is pinned.
         Assert.Equal(ActivationDecision.Activate, CompatibilityPlanner.Build(Request(), [Fingerprint with { Sha256 = "moved" }, coop], [], [contract]).Contracts[0].Decision);
-        // Coop moved: refused, because an adapter reaches across that assembly too widely for methods to stand in.
-        Assert.Equal(ActivationDecision.Diagnostic, CompatibilityPlanner.Build(Request(), [Fingerprint, coop with { Sha256 = "moved" }], [], [contract]).Contracts[0].Decision);
+        // A compatible Coop auto-update remains plannable. Runtime capability probes own its API support boundary.
+        Assert.Equal(ActivationDecision.Activate, CompatibilityPlanner.Build(Request(), [Fingerprint, coop with { Sha256 = "moved" }], [], [contract]).Contracts[0].Decision);
         // Absent entirely is still a refusal, whether or not the file hash matters.
         Assert.Equal(ActivationDecision.Diagnostic, CompatibilityPlanner.Build(Request(), [coop], [], [contract]).Contracts[0].Decision);
     }
@@ -83,14 +87,54 @@ public sealed class OperationContractTests
         Assert.NotEmpty(shipped);
         foreach (var contract in shipped.Where(c => c.AdapterId != null))
         {
-            Assert.True(contract.SurfacesCoverTargets, contract.Id + " installs an adapter without a surface for every target");
+            Assert.True(contract.SurfacesCoverTargets, contract.Id + " installs an adapter without a surface for every patched target");
             Assert.All(contract.TargetSurfaces, s => Assert.Equal(64, s.BodyHash.Length));
             // A recorded caller count is what makes a NEW caller appearing a refusal rather than a surprise.
             Assert.All(contract.TargetSurfaces, s => Assert.True(s.Callers > 0, s.Method + " records no call sites"));
-            // The provider's own assembly is pinned by those surfaces; Coop's is still pinned by file.
-            Assert.All(contract.Requires.Where(r => r.Module == contract.Module), r => Assert.False(r.Strict));
-            Assert.All(contract.Requires.Where(r => r.Module != contract.Module), r => Assert.True(r.Strict));
+            // A reflection-only adapter has no method boundary, so its provider assembly must be pinned. Patching
+            // adapters may also deliberately pin a provider (Bellum is version-pinned by policy); their method
+            // surfaces still prove that the compiled target list is complete and make review changes explicit.
+            if (contract.Targets.Length == 0) Assert.All(contract.Requires.Where(r => r.Module == contract.Module), r => Assert.True(r.Strict));
+            Assert.All(contract.Requires.Where(r => r.Module == "CoopNightly"), r => Assert.False(r.Strict));
         }
+    }
+    [Fact] public void ExplicitValidationOverrideIsNarrowAndDoesNotChangeNormalPlanning()
+    {
+        var unvalidated = Contract(false) with { Id = "bellum-civile.state" };
+        Assert.Equal(ActivationDecision.ValidationRequired, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [unvalidated]).Contracts[0].Decision);
+        Assert.Equal(ActivationDecision.Activate, CompatibilityPlanner.Build(Request(), [Fingerprint], [], [unvalidated],
+            new HashSet<string>(StringComparer.Ordinal) { "bellum-civile.state" }).Contracts[0].Decision);
+        var narrowed = CompatibilityPlanner.Build(Request(), [Fingerprint, new("unrelated", "other.dll", "DEF")],
+            [new("fixture", "expected-validation-noise", "diagnostic")], [unvalidated],
+            new HashSet<string>(StringComparer.Ordinal) { "bellum-civile.state" });
+        Assert.Equal(ActivationDecision.Activate, narrowed.Contracts[0].Decision);
+        Assert.Single(narrowed.Fingerprints);
+        Assert.Equal("fixture.dll", narrowed.Fingerprints[0].Name);
+        Assert.True(ModderLords.Operations.OperationValidationMode.Allows("bellum-civile.state", ModderLords.Operations.OperationValidationMode.Bellum131Token));
+        Assert.True(ModderLords.Operations.OperationValidationMode.Allows("bellum-civile.authority", ModderLords.Operations.OperationValidationMode.Bellum131Token));
+        Assert.False(ModderLords.Operations.OperationValidationMode.Allows("fixture", ModderLords.Operations.OperationValidationMode.Bellum131Token));
+        Assert.False(ModderLords.Operations.OperationValidationMode.Allows("bellum-civile.state", "1"));
+    }
+
+    [Fact] public void BellumIsPinnedButCoopIsNotAndBothBellumTiersRemainDisabledPendingIntegration()
+    {
+        var bellum = CompatibilityPlanner.BundledContracts().Where(c => c.Module == "BellumCivile").ToArray();
+        Assert.Equal(2, bellum.Length);
+        Assert.All(bellum, c =>
+        {
+            Assert.False(c.OfflineValidated);
+            Assert.False(c.RuntimeValidated);
+            Assert.All(c.Requires.Where(r => r.Module == "BellumCivile"), r => Assert.True(r.Strict));
+            Assert.All(c.Requires.Where(r => r.Module == "CoopNightly"), r => Assert.False(r.Strict));
+        });
+        var authority = Assert.Single(bellum, c => c.Id == "bellum-civile.authority");
+        Assert.Equal(71, authority.Targets.Length);
+        Assert.Equal(authority.Targets.Length, authority.TargetSurfaces.Length);
+        Assert.DoesNotContain("BellumCivile.Behaviors.CouncilIncidentBehavior::OnTick", authority.Targets);
+        Assert.DoesNotContain("BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnTick", authority.Targets);
+        Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnDailyTick", authority.Targets);
+        Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnTick", authority.Targets);
+        Assert.DoesNotContain("BellumCivile.UI.Map.WarScoreMapWidgetVM::OnTick", authority.Targets);
     }
 
     [Fact] public void StagingAnotherPlanCannotModifyExistingSessionFile()

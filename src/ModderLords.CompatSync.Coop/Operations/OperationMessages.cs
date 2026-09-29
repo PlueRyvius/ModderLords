@@ -54,4 +54,7 @@ public sealed class OperationSnapshotV1 : IEvent
     [ProtoMember(2)] public string OperationId { get; set; } = "";
     [ProtoMember(3)] public long Revision { get; set; }
     [ProtoMember(4)] public string Payload { get; set; } = "";
+    // Appended fields preserve the original wire members. Zero ChunkCount is accepted as one legacy chunk.
+    [ProtoMember(5)] public int ChunkIndex { get; set; }
+    [ProtoMember(6)] public int ChunkCount { get; set; }
 }

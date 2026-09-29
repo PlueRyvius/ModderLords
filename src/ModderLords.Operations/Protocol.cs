@@ -55,6 +55,14 @@ public interface ISnapshotOperation : IServerOperation
     long SnapshotRevision { get; }
     string CaptureSnapshot(Actor actor);
 }
+/// <summary>
+/// A snapshot whose bytes are identical for every authorized reader. The server may capture it once and fan the
+/// same bounded chunks out to all admitted peers; actor-specific snapshots must not implement this interface.
+/// </summary>
+public interface ISharedSnapshotOperation : ISnapshotOperation
+{
+    string CaptureSharedSnapshot();
+}
 /// <summary>Called on the game thread, after transport authentication and peer-plan admission.</summary>
 public sealed class CommandDispatcher
 {

@@ -1,7 +1,9 @@
 using ModderLords.Core.Compat.Authority;
+using ModderLords.Core.Compat;
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
 using ModderLords.Coop.Launch;
+using ModderLords.Coop.Compat;
 using ModderLords.Core.Logs;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Overlay;
@@ -37,7 +39,7 @@ if (!opts.ContainsKey("data-dir") && opts.GetValueOrDefault("cmd") != "analyze")
 if (!opts.TryGetValue("cmd", out var cmd))
 {
     Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--join-port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
-    Console.WriteLine("          play --profile NAME [--dry-run]   (start the player's own game with a profile's mods)");
+    Console.WriteLine("          play --profile NAME|--profile-file PATH [--dry-run]   (start the player's own game with a profile's mods)");
     Console.WriteLine("          analyze --profile NAME [--root DedicatedServer] [--json] [--cache-dir PATH]   (read-only operation analysis)");
     Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH] [--bundle-root PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
@@ -84,9 +86,21 @@ if (cmd == "analyze")
 
 if (cmd == "play")
 {
-    var profileName = opts.GetValueOrDefault("profile") ?? "default";
-    var playProfile = ProfileStore.Load(profileName);
-    if (playProfile is null) { Console.Error.WriteLine($"No profile named '{profileName}'. Try: profiles"); return 2; }
+    var profileFile = opts.GetValueOrDefault("profile-file");
+    var profileName = opts.GetValueOrDefault("profile");
+    Profile? playProfile;
+    try
+    {
+        playProfile = profileFile != null
+            ? System.Text.Json.JsonSerializer.Deserialize<Profile>(File.ReadAllText(profileFile), ModderLords.Analysis.AnalysisJson.Options)
+            : ProfileStore.Load(profileName ?? "default");
+    }
+    catch (Exception ex) { Console.Error.WriteLine("Could not read player profile: " + ex.Message); return 2; }
+    if (playProfile is null)
+    {
+        Console.Error.WriteLine(profileFile != null ? $"No readable profile at '{profileFile}'." : $"No profile named '{profileName ?? "default"}'. Try: profiles");
+        return 2;
+    }
 
     ClientLaunchSession.Prepared prepared;
     try { prepared = ClientLaunchSession.Prepare(playProfile); }
@@ -409,6 +423,43 @@ switch (cmd)
                 var dirs = HookSetup.SearchDirs(paths, (overlayPlan ?? OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections)).Entries, gameRoot);
                 foreach (var kv in HookSetup.Environment(hook, dirs, verbose: opts.ContainsKey("hook-verbose"), sidecarPath: diagnosticData is null ? HookSetup.SidecarPathFor(DateTime.Now) : Path.Combine(paths.LogsDir, $"hook-{Guid.NewGuid():N}.log"), desktopDir: HookSetup.DesktopFrameworkDir(gameRoot))) extraEnv[kv.Key] = kv.Value;
             }
+        }
+
+        // The normal desktop/profile path prepares validated operation sessions. Diagnostic --data-dir launches use
+        // this equivalent path only for the explicit, exact Bellum 1.3.1 acceptance token; contract metadata stays
+        // unvalidated and all other ad-hoc launches remain unchanged.
+        var validationEligible = ModderLords.Analysis.CompatibilityPlanner.BundledContracts().Any(c =>
+            ModderLords.Operations.OperationValidationMode.Allows(c.Id) && selections.Any(s => s.Module.Id == c.Module));
+        if (validationEligible)
+        {
+            if (!selections.Any(s => s.Module.Id == ModderLords.Coop.Launch.LaunchSession.SyncModuleId))
+            {
+                Console.Error.WriteLine("[ModderLords] isolated Bellum validation requires --settings-sync");
+                return 2;
+            }
+            var validationProfile = new Profile { AutomaticCompatibility = true };
+            validationProfile.Mods = selections.Select(s => new ProfileMod
+            {
+                Id = s.Module.Id, Role = s.Role, Enabled = true, SourcePath = s.Module.FolderPath,
+            }).ToList();
+            var operationReport = OperationAnalysisService.Analyze(OperationAnalysisService.CreateRequest(validationProfile,
+                new(catalog, selections, order), gameRoot ?? "", paths.ServerBin), cacheDirectory: Path.Combine(paths.DataDir, "analysis-cache"));
+            foreach (var decision in operationReport.Plan.Contracts)
+                Console.WriteLine($"[ModderLords] operations: {decision.Contract.Operation}: {decision.Decision} — {decision.Reason}");
+            foreach (var gap in operationReport.Gaps)
+                Console.WriteLine($"[ModderLords] operations gap: {gap.Module}: {gap.Code} — {gap.Detail}");
+            if (!operationReport.Plan.RequiresRuntime)
+            {
+                Console.Error.WriteLine("[ModderLords] isolated Bellum validation did not produce an active runtime plan");
+                return 2;
+            }
+            if (!opts.ContainsKey("dry-run"))
+            {
+                var operationPath = OperationPreparation.Stage(operationReport.Plan, Path.Combine(paths.DataDir, "operation-sessions"));
+                extraEnv[OperationPreparation.PlanEnvironmentVariable] = operationPath;
+                extraEnv[OperationPreparation.InputsEnvironmentVariable] = OperationPreparation.StageInputs(operationReport, Path.GetDirectoryName(operationPath)!);
+            }
+            Console.WriteLine("[ModderLords] WARNING Bellum 1.3.1 adapters enabled for this isolated validation process only; production flags remain false");
         }
 
         var plan = new LaunchPlan

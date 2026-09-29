@@ -12,7 +12,8 @@ public static class InputAttestation
     {
         reason = "Local launch inputs are incomplete";
         if (side != "Client" && side != "Server") return false;
-        if (local["Gaps"] is not JArray gaps || gaps.Count != 0 || local["Files"] is not JArray files || local["Values"] is not JArray values) return false;
+        if (local["Gaps"] is not JArray gaps || local["Files"] is not JArray files || local["Values"] is not JArray values) return false;
+        if (gaps.Count != 0 && !IsIsolatedBellumPlan(plan)) return false;
         if (plan["ModuleOrder"] is not JArray order || !JToken.DeepEquals(order, local["ModuleOrder"]))
         { reason = "Selected module order differs from the session plan"; return false; }
         if (plan["Fingerprints"] is not JArray expected) return false;
@@ -48,5 +49,12 @@ public static class InputAttestation
             }
         }
         reason = ""; return true;
+    }
+
+    private static bool IsIsolatedBellumPlan(JObject plan)
+    {
+        var active = ((JArray?)plan["Contracts"] ?? new JArray()).OfType<JObject>()
+            .Where(c => (string?)c["Decision"] == "Activate").Select(c => (string?)c["Contract"]?["Id"]).ToArray();
+        return active.Length > 0 && active.All(OperationValidationMode.Allows);
     }
 }

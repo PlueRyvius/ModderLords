@@ -1,9 +1,7 @@
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Security.Cryptography;
 using Common.Messaging;
 using Coop.Core.Server.Connections.Messages;
 using Coop.Core.Server.Connections.States;
@@ -17,7 +15,6 @@ namespace ModderLords.CompatSync.Coop.Operations;
 internal sealed class CoopJoinBarrier : IDisposable
 {
     private const string Owner = "ModderLords.Operations.CoopJoin.v1";
-    private const string CoopHash = "90121C59FF8B6D379933CE01D9A4C4BB842FCFE730CD5131C1072D4332A47CF1";
     private readonly Harmony harmony = new Harmony(Owner);
     private readonly object gate = new object();
     private readonly Stopwatch clock = Stopwatch.StartNew();
@@ -31,19 +28,18 @@ internal sealed class CoopJoinBarrier : IDisposable
     public void Install()
     {
         if (current != null) throw new InvalidOperationException("Coop admission barrier already installed");
-        var assembly = typeof(ResolveCharacterState).Assembly;
-        using (var sha = SHA256.Create())
-        using (var file = File.OpenRead(assembly.Location))
-            if (BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "") != CoopHash)
-                throw new InvalidOperationException("Coop admission barrier does not support this Coop.Core fingerprint");
-        target = Common.ModInformation.IsServer
-            ? AccessTools.DeclaredMethod(typeof(ResolveCharacterState), "Handle_ClientValidate", new[] { typeof(MessagePayload<NetworkClientValidate>) })
-            : AccessTools.DeclaredMethod(typeof(global::Coop.Core.Client.States.ReceivingSavedDataState), "Handle_NetworkGameSaveDataReceived",
-                new[] { typeof(MessagePayload<global::Coop.Core.Client.Messages.NetworkGameSaveDataReceived>) });
-        if (target == null || target.IsStatic || target.ReturnType != typeof(void)) throw new InvalidOperationException("Exact Coop admission signature missing");
+        var isServer = OperationProcessSide.IsServer;
+        if (!CoopAdmissionCapabilities.TryResolve(isServer, out target, out var reason))
+            throw new InvalidOperationException("Coop admission capability unavailable: " + reason);
         CheckOwnership();
         current = this;
-        try { harmony.Patch(target, prefix: new HarmonyMethod(typeof(CoopJoinBarrier), Common.ModInformation.IsServer ? nameof(ValidatePrefix) : nameof(LoadPrefix))); }
+        try
+        {
+            harmony.Patch(target, prefix: new HarmonyMethod(typeof(CoopJoinBarrier), isServer ? nameof(ValidatePrefix) : nameof(LoadPrefix)));
+            if (Harmony.GetPatchInfo(target)?.Owners.Contains(Owner) != true)
+                throw new InvalidOperationException("Coop admission hook did not become active");
+            Log.Info("operation admission capability active: " + CoopAdmissionCapabilities.Describe(isServer));
+        }
         catch { Dispose(); throw; }
     }
     private void CheckOwnership()

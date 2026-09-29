@@ -92,7 +92,8 @@ public static class ClientLaunchSession
         var problems = plan.Validate().ToList();
         if (problems.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, problems));
         if (profile.AutomaticCompatibility && ModderLords.Analysis.CompatibilityPlanner.BundledContracts().Any(c =>
-            c.Provider == "ModderLords" && c.OfflineValidated && c.RuntimeValidated && mods.Any(m => m.Id == c.Module)))
+            c.Provider == "ModderLords" && ((c.OfflineValidated && c.RuntimeValidated) || ModderLords.Operations.OperationValidationMode.Allows(c.Id)) &&
+            mods.Any(m => m.Id == c.Module)))
         {
             var inputs = Compat.OperationAnalysisService.CreateRequest(profile,
                 new(catalog, mods.Select(m => new Overlay.ModSelection(m, Overlay.ServerRole.AsShipped)).ToList(), order), gameRoot);

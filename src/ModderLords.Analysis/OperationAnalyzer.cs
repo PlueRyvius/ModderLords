@@ -117,7 +117,9 @@ public sealed class OperationAnalyzer(string cacheDirectory)
             }
         }
         var fp = fingerprints.Distinct().ToImmutableArray(); var gapArray = gaps.Distinct().ToImmutableArray();
-        var plan = CompatibilityPlanner.Build(request, fp, gapArray);
+        var validationOverrides = CompatibilityPlanner.BundledContracts().Where(c => ModderLords.Operations.OperationValidationMode.Allows(c.Id))
+            .Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+        var plan = CompatibilityPlanner.Build(request, fp, gapArray, validationOverrides: validationOverrides);
         return new(RulesVersion, plan.Digest, fp, gapArray, operations.ToImmutableArray(), plan) { LocalFiles = localFiles.Distinct().ToImmutableArray() };
 
         void Load(AssemblyInput input)

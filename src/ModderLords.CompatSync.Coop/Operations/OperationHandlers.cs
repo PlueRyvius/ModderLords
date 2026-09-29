@@ -20,11 +20,13 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
         private readonly IObjectManager objects;
         private readonly object admissionGate = new object();
         private readonly Dictionary<NetPeer, string> admitted = new Dictionary<NetPeer, string>();
+        private readonly Dictionary<string, long> broadcastRevisions = new Dictionary<string, long>(StringComparer.Ordinal);
         private readonly string epoch = Guid.NewGuid().ToString("N");
         private CommandDispatcher? dispatcher;
         // A compiled adapter may register its domain operations before the session dispatcher is frozen.
         private static readonly List<IServerOperation> registered = new List<IServerOperation>();
         public static void Register(IServerOperation operation) { if (Current?.dispatcher != null) throw new InvalidOperationException("Operation registry is frozen"); registered.Add(operation); }
+        public static void Unregister(IServerOperation operation) { if (Current?.dispatcher == null) registered.Remove(operation); }
         public static OperationServerHandler? Current { get; private set; }
         public OperationServerHandler(IMessageBroker broker, INetwork network, IPlayerManager players, IObjectManager objects)
         {
@@ -99,8 +101,46 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             var operation = registered.OfType<ISnapshotOperation>().SingleOrDefault(o => o.Id == operationId);
             if (operation == null || !operation.CanReadSnapshot(actor)) return;
             var snapshot = operation.CaptureSnapshot(actor);
-            if (snapshot == null || System.Text.Encoding.UTF8.GetByteCount(snapshot) > 256 * 1024) return;
-            network.Send(peer, new OperationSnapshotV1 { Epoch = epoch, OperationId = operationId, Revision = operation.SnapshotRevision, Payload = snapshot });
+            if (snapshot == null) return;
+            SendSnapshotPayload(peer, operationId, operation.SnapshotRevision, snapshot);
+        }
+        private void SendSnapshotPayload(NetPeer peer, string operationId, long revision, string snapshot)
+        {
+            IReadOnlyList<string> chunks;
+            try { chunks = SnapshotTransfer.Split(snapshot); }
+            catch (ArgumentException ex) { ModderLords.CompatSync.Log.Warn("operation snapshot refused: " + ex.Message); return; }
+            for (var i = 0; i < chunks.Count; i++)
+                network.Send(peer, new OperationSnapshotV1 { Epoch = epoch, OperationId = operationId, Revision = revision,
+                    Payload = chunks[i], ChunkIndex = i, ChunkCount = chunks.Count });
+        }
+        /// <summary>
+        /// Captures one actor-independent snapshot and broadcasts it to every currently admitted actor. Calls are
+        /// expected on the game thread. Revisions already broadcast are suppressed, including when a join request
+        /// happened to capture the same state first.
+        /// </summary>
+        public bool BroadcastSharedSnapshot(string operationId)
+        {
+            var operation = registered.OfType<ISharedSnapshotOperation>().SingleOrDefault(o => o.Id == operationId);
+            if (operation == null) return false;
+            NetPeer[] peers;
+            lock (admissionGate) peers = admitted.Keys.Where(p => p.ConnectionState == ConnectionState.Connected).ToArray();
+            var authorized = peers.Select(peer => new { Peer = peer, Actor = ResolveActor(peer) })
+                .Where(x => x.Actor != null && operation.CanReadSnapshot(x.Actor)).ToArray();
+            if (authorized.Length == 0) return false;
+            var snapshot = operation.CaptureSharedSnapshot();
+            var revision = operation.SnapshotRevision;
+            if (broadcastRevisions.TryGetValue(operationId, out var sent) && revision <= sent) return true;
+            IReadOnlyList<string> chunks;
+            try { chunks = SnapshotTransfer.Split(snapshot); }
+            catch (ArgumentException ex) { ModderLords.CompatSync.Log.Warn("shared operation snapshot refused: " + ex.Message); return false; }
+            foreach (var target in authorized)
+                for (var i = 0; i < chunks.Count; i++)
+                    network.Send(target.Peer, new OperationSnapshotV1 { Epoch = epoch, OperationId = operationId,
+                        Revision = revision, Payload = chunks[i], ChunkIndex = i, ChunkCount = chunks.Count });
+            broadcastRevisions[operationId] = revision;
+            ModderLords.CompatSync.Log.Info("operation snapshot broadcast: " + operationId + " revision=" + revision
+                + " bytes=" + System.Text.Encoding.UTF8.GetByteCount(snapshot) + " peers=" + authorized.Length);
+            return true;
         }
         private Actor? ResolveActor(NetPeer peer)
         {
@@ -115,7 +155,7 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
         {
             broker.Unsubscribe<OperationHelloV1>(Hello); broker.Unsubscribe<OperationPlanAckV1>(Ack); broker.Unsubscribe<OperationCommandV1>(Command);
             broker.Unsubscribe<OperationSnapshotRequestV1>(SnapshotRequest);
-            lock (admissionGate) admitted.Clear(); registered.Clear(); Current = null; OperationRuntime.EndSession();
+            lock (admissionGate) admitted.Clear(); broadcastRevisions.Clear(); registered.Clear(); Current = null; OperationRuntime.EndSession();
         }
     }
 }
@@ -131,6 +171,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         private sealed class SnapshotSink
         {
             public ClientOperationState State = new ClientOperationState();
+            public SnapshotReassembler Reassembler = new SnapshotReassembler();
             public Func<bool> Ready = null!;
             public Action<string> Apply = null!;
             public Action Refresh = null!;
@@ -155,7 +196,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         {
             State.Disconnect();
             if (OperationRuntime.JoinBarrier != null) OperationRuntime.JoinBarrier.ClientAgreed = false;
-            foreach (var sink in snapshots.Values) sink.State.Disconnect();
+            foreach (var sink in snapshots.Values) { sink.State.Disconnect(); sink.Reassembler.Disconnect(); }
             server = null; epoch = "";
             // Preserve the frozen campaign plan. A reconnect may agree with it, never replace it.
         }
@@ -173,7 +214,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
                     if (!OperationRuntime.TryActivate(json, out _)) { peer.Disconnect(); return; }
                     server = peer;
                     OperationRuntime.JoinBarrier!.ClientAgreed = true;
-                    if (epoch != incomingEpoch) { epoch = incomingEpoch; State.BeginSession(epoch); foreach (var sink in snapshots.Values) sink.State.BeginSession(epoch); }
+                    if (epoch != incomingEpoch) { epoch = incomingEpoch; State.BeginSession(epoch); foreach (var sink in snapshots.Values) { sink.State.BeginSession(epoch); sink.Reassembler.BeginSession(epoch); } }
                     network.Send(peer, new OperationPlanAckV1 { Digest = OperationRuntime.Activation.Digest!, Epoch = epoch });
                     foreach (var operationId in snapshots.Keys) RequestSnapshot(operationId);
                 }
@@ -202,21 +243,27 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         public void BindSnapshot(string operationId, Func<bool> ready, Action<string> apply, Action refresh)
         {
             var sink = new SnapshotSink { Ready = ready, Apply = apply, Refresh = refresh };
-            if (epoch.Length > 0) sink.State.BeginSession(epoch);
+            if (epoch.Length > 0) { sink.State.BeginSession(epoch); sink.Reassembler.BeginSession(epoch); }
             snapshots.Add(operationId, sink); RequestSnapshot(operationId);
         }
+        public void UnbindSnapshot(string operationId) => snapshots.Remove(operationId);
         public void RequestSnapshot(string operationId)
         {
             if (server != null && epoch.Length > 0) network.Send(server, new OperationSnapshotRequestV1 { Digest = OperationRuntime.Activation.Digest!, Epoch = epoch, OperationId = operationId });
         }
         private void Snapshot(MessagePayload<OperationSnapshotV1> payload)
         {
-            if (!ReferenceEquals(server, payload.Who) || payload.What == null || payload.What.Payload == null || payload.What.Payload.Length > 256 * 1024) return;
+            if (!ReferenceEquals(server, payload.Who) || payload.What == null || payload.What.Payload == null ||
+                System.Text.Encoding.UTF8.GetByteCount(payload.What.Payload) > SnapshotTransfer.MaxChunkBytes) return;
             var message = payload.What;
             GameThread.RunSafe(() =>
             {
                 if (snapshots.TryGetValue(message.OperationId, out var sink))
-                    sink.State.OfferSnapshot(message.Epoch, message.Revision, message.Payload, sink.Ready, sink.Apply, sink.Refresh);
+                {
+                    var count = message.ChunkCount == 0 ? 1 : message.ChunkCount;
+                    if (sink.Reassembler.Offer(message.Epoch, message.Revision, message.ChunkIndex, count, message.Payload, out var complete))
+                        sink.State.OfferSnapshot(message.Epoch, message.Revision, complete, sink.Ready, sink.Apply, sink.Refresh);
+                }
             });
         }
         public void ApplyPendingSnapshots()
@@ -229,7 +276,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             broker.Unsubscribe<OperationSnapshotV1>(Snapshot);
             broker.Unsubscribe<global::Coop.Core.Client.Messages.NetworkConnected>(Connected);
             broker.Unsubscribe<global::Coop.Core.Client.Messages.NetworkDisconnected>(Disconnected);
-            foreach (var sink in snapshots.Values) sink.State.Disconnect(); snapshots.Clear();
+            foreach (var sink in snapshots.Values) { sink.State.Disconnect(); sink.Reassembler.Disconnect(); } snapshots.Clear();
             State.Disconnect(); server = null; Current = null; OperationRuntime.EndSession();
         }
     }

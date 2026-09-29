@@ -26,7 +26,7 @@ public static class OperationRuntime
         { Failure = orderReason; return false; }
         if (runtimeFingerprints == null || Interlocked.Exchange(ref assembliesChanged, 0) == 0) return true;
             var loaded = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic).Select(a => new KeyValuePair<string, string>(a.GetName().Name, a.Location));
-            if (!LoadedAssemblyAttestation.Validate(runtimeFingerprints, Common.ModInformation.IsServer ? "Server" : "Client", loaded, HashFile, out var reason))
+            if (!LoadedAssemblyAttestation.Validate(runtimeFingerprints, OperationProcessSide.IsServer ? "Server" : "Client", loaded, HashFile, out var reason))
             { Failure = reason; Log.Warn("Operation readiness lost: " + reason); return false; }
             return true;
         }
@@ -72,11 +72,11 @@ public static class OperationRuntime
                 var inputsPath = Environment.GetEnvironmentVariable("MODDERLORDS_OPERATION_INPUTS");
                 if (string.IsNullOrEmpty(inputsPath)) throw new InvalidOperationException("Required local launch attestation is missing");
                 var inputs = PlanIntegrity.Parse(File.ReadAllText(inputsPath));
-                if (!InputAttestation.Validate(plan, inputs, Common.ModInformation.IsServer ? "Server" : "Client", HashFile, out reason))
+                if (!InputAttestation.Validate(plan, inputs, OperationProcessSide.IsServer ? "Server" : "Client", HashFile, out reason))
                     throw new InvalidOperationException(reason);
                 var loaded = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic)
                     .Select(a => new KeyValuePair<string, string>(a.GetName().Name, a.Location));
-                if (!LoadedAssemblyAttestation.Validate((JArray)plan["Fingerprints"]!, Common.ModInformation.IsServer ? "Server" : "Client", loaded, HashFile, out reason))
+                if (!LoadedAssemblyAttestation.Validate((JArray)plan["Fingerprints"]!, OperationProcessSide.IsServer ? "Server" : "Client", loaded, HashFile, out reason))
                     throw new InvalidOperationException(reason);
             }
             var pending = new List<ICompatibilityAdapter>();
@@ -85,23 +85,29 @@ public static class OperationRuntime
                 var id = (string?)item["Contract"]?["Id"];
                 var contract = catalog.OfType<JObject>().SingleOrDefault(c => (string?)c["Id"] == id) ?? throw new InvalidOperationException("Unknown compiled contract");
                 if (!JToken.DeepEquals(contract, item["Contract"])) throw new InvalidOperationException(id + " differs from the locally shipped contract");
-                if ((bool?)contract["OfflineValidated"] != true || (bool?)contract["RuntimeValidated"] != true) throw new InvalidOperationException(id + " has not completed required validation");
+                var isolatedValidation = OperationValidationMode.Allows(id);
+                if (((bool?)contract["OfflineValidated"] != true || (bool?)contract["RuntimeValidated"] != true) && !isolatedValidation)
+                    throw new InvalidOperationException(id + " has not completed required validation");
+                if (isolatedValidation) Log.Warn(id + " is active only for the explicit Bellum 1.3.1 isolated validation run; production validation remains withheld");
                 foreach (var required in (JArray)contract["Requires"]!)
                 {
                     var side = (string?)required["Side"];
-                    if (side != null && side != (Common.ModInformation.IsServer ? "Server" : "Client")) continue;
+                    if (side != null && side != (OperationProcessSide.IsServer ? "Server" : "Client")) continue;
                     var name = Path.GetFileNameWithoutExtension((string)required["Name"]!);
                     var assembly = AppDomain.CurrentDomain.GetAssemblies().SingleOrDefault(a => !a.IsDynamic && a.GetName().Name == name);
                     if (assembly == null) throw new InvalidOperationException("Required assembly is not loaded: " + name);
-                    // A strict requirement is pinned to the file, because the adapter reaches across it by reflection
-                    // and any change can move something it depends on. A provider mod pinned by target surfaces is
-                    // not: refusing there on an unrelated update would only teach people to ignore the refusal.
+                    // A strict requirement intentionally pins a provider file whose broad serialized/reflected surface
+                    // is the dependency. Narrow provider patches use target surfaces. Coop uses a separate runtime
+                    // capability/signature contract so compatible auto-updates do not require a ModderLords release.
                     if ((bool?)required["Strict"] != false && HashFile(assembly.Location) != (string?)required["Sha256"])
                         throw new InvalidOperationException("Required assembly fingerprint mismatch: " + name);
                 }
                 var adapterId = (string?)contract["AdapterId"];
                 if (adapterId != null && TargetSurfaceCheck.Problem(contract) is { } surfaceProblem) throw new InvalidOperationException(surfaceProblem);
-                ICompatibilityAdapter adapter = adapterId == "clans-resource-adder.v1" ? new ClansResourceAdderAdapter() : throw new InvalidOperationException("Unknown compiled adapter");
+                ICompatibilityAdapter adapter = adapterId == "clans-resource-adder.v1" ? new ClansResourceAdderAdapter()
+                    : adapterId == "bellum-civile.v1" ? new BellumCivileAdapter()
+                    : adapterId == "bellum-civile.authority.v1" ? new BellumCivileAuthorityAdapter()
+                    : throw new InvalidOperationException("Unknown compiled adapter");
                 if (!adapter.ValidateTargets(out reason)) throw new InvalidOperationException(reason);
                 pending.Add(adapter);
             }
@@ -135,7 +141,8 @@ public static class OperationRuntime
         AppDomain.CurrentDomain.AssemblyLoad -= AssemblyLoaded; runtimeFingerprints = null; runtimeModuleOrder = null; assembliesChanged = 0;
         Activation = new SessionActivation(); PlanJson = ""; Failure = "";
     }
-    public static string Report() => Failure.Length > 0 ? "operation failure: " + Failure : string.Join("; ", Adapters.Select(a => a.Id + ": " + a.Readiness + " — " + a.Detail));
+    public static string Report() => Failure.Length > 0 ? "operation failure: " + Failure : string.Join("; ", Adapters.Select(a => a.Id + ": " + a.Readiness + " — " + a.Detail))
+        + (Adapters.Any(a => a is BellumCivileAuthorityAdapter) ? "; " + BellumCivileAuthorityAdapter.VerificationSummary() : "");
     private static JArray ReadCatalog()
     {
         using (var stream = typeof(OperationRuntime).Assembly.GetManifestResourceStream("ModderLords.OperationContracts")!)

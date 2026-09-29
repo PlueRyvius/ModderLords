@@ -361,42 +361,42 @@
         "Name": "GameInterface.dll",
         "Sha256": "216233E7739380DD4954C9766F875A32078EC8F6927785CF85B6FB76017ED27A",
         "Side": "Client",
-        "Strict": true
+        "Strict": false
       },
       {
         "Module": "CoopNightly",
         "Name": "GameInterface.dll",
         "Sha256": "216233E7739380DD4954C9766F875A32078EC8F6927785CF85B6FB76017ED27A",
         "Side": "Server",
-        "Strict": true
+        "Strict": false
       },
       {
         "Module": "CoopNightly",
         "Name": "Common.dll",
         "Sha256": "4D69296C41B16E5ED87F6BA453A1B420FA42BF8D43A8EF49680C06A06665233D",
         "Side": "Client",
-        "Strict": true
+        "Strict": false
       },
       {
         "Module": "CoopNightly",
         "Name": "Common.dll",
         "Sha256": "4D69296C41B16E5ED87F6BA453A1B420FA42BF8D43A8EF49680C06A06665233D",
         "Side": "Server",
-        "Strict": true
+        "Strict": false
       },
       {
         "Module": "CoopNightly",
         "Name": "Coop.Core.dll",
         "Sha256": "90121C59FF8B6D379933CE01D9A4C4BB842FCFE730CD5131C1072D4332A47CF1",
         "Side": "Client",
-        "Strict": true
+        "Strict": false
       },
       {
         "Module": "CoopNightly",
         "Name": "Coop.Core.dll",
         "Sha256": "90121C59FF8B6D379933CE01D9A4C4BB842FCFE730CD5131C1072D4332A47CF1",
         "Side": "Server",
-        "Strict": true
+        "Strict": false
       }
     ],
     "Targets": [
@@ -417,6 +417,508 @@
         "Method": "ClansResourceAdder.ResourcesAdderEvents::is_ai_clan",
         "BodyHash": "28B7D84EB8DDD458C0D0B0A90507F792574D4732EF8D916C53D09F9024F452F5",
         "Callers": 1
+      }
+    ],
+    "SurfacesCoverTargets": true
+  },
+  {
+    "Id": "bellum-civile.state",
+    "Version": "1",
+    "Module": "BellumCivile",
+    "Operation": "Authoritative political state snapshot",
+    "Provider": "ModderLords",
+    "Authority": "Campaign",
+    "ActorBinding": "Authenticated Coop player registry; read-only state is filtered by the compiled adapter",
+    "Effects": [
+      "state-read"
+    ],
+    "Transport": "Chunked authenticated ModderLords operation snapshots",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "BellumCivile",
+        "Name": "BellumCivile.dll",
+        "Sha256": "154485500A0BAB12538182198E7B00800D0B6B45D66CC4FEBABF5A4E90A20824",
+        "Side": "Client",
+        "Strict": true
+      },
+      {
+        "Module": "BellumCivile",
+        "Name": "BellumCivile.dll",
+        "Sha256": "154485500A0BAB12538182198E7B00800D0B6B45D66CC4FEBABF5A4E90A20824",
+        "Side": "Server",
+        "Strict": true
+      }
+    ],
+    "Targets": [],
+    "Suppressed": false,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": "bellum-civile.v1",
+    "TargetSurfaces": [],
+    "SurfacesCoverTargets": true
+  },
+  {
+    "Id": "bellum-civile.authority",
+    "Version": "1",
+    "Module": "BellumCivile",
+    "Operation": "Server authority for Bellum campaign simulation",
+    "Provider": "ModderLords",
+    "Authority": "Campaign",
+    "ActorBinding": "Dedicated server simulation; Bellum presentation remains local on authenticated clients",
+    "Effects": [
+      "campaign-mutation"
+    ],
+    "Transport": "Bellum state snapshots and actor-aware operation commands",
+    "Lifecycle": "Before campaign callbacks; immutable for the session",
+    "Requires": [
+      {
+        "Module": "BellumCivile",
+        "Name": "BellumCivile.dll",
+        "Sha256": "154485500A0BAB12538182198E7B00800D0B6B45D66CC4FEBABF5A4E90A20824",
+        "Side": "Client",
+        "Strict": true
+      },
+      {
+        "Module": "BellumCivile",
+        "Name": "BellumCivile.dll",
+        "Sha256": "154485500A0BAB12538182198E7B00800D0B6B45D66CC4FEBABF5A4E90A20824",
+        "Side": "Server",
+        "Strict": true
+      }
+    ],
+    "Targets": [
+      "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnHeroKilled",
+      "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnHourlyTick",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::OnClanChangedKingdom",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::OnClanDestroyed",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.ClaimFeudWarBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.ClientKingdomBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.ClientKingdomBehavior::OnMakePeace",
+      "BellumCivile.Behaviors.ClientKingdomBehavior::OnWarDeclared",
+      "BellumCivile.Behaviors.ComradesInArmsBehavior::OnDailyTickHero",
+      "BellumCivile.Behaviors.ComradesInArmsBehavior::OnMapEventEnded",
+      "BellumCivile.Behaviors.ComradesInArmsBehavior::OnSettlementOwnerChanged",
+      "BellumCivile.Behaviors.CouncilIncidentBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnClanDestroyed",
+      "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnDailyTickClan",
+      "BellumCivile.Behaviors.DynamicRelationBehavior::OnHeroGainedSkill",
+      "BellumCivile.Behaviors.DynamicRelationBehavior::OnPlayerTraitChanged",
+      "BellumCivile.Behaviors.DynasticClaimBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.DynasticHeirBehavior::OnBeforeHeroesMarried",
+      "BellumCivile.Behaviors.DynasticHeirBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.DynasticHeirBehavior::OnHourlyTick",
+      "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnWeeklyTick",
+      "BellumCivile.Behaviors.FactionManagerBehavior::OnClanChangedKingdom",
+      "BellumCivile.Behaviors.FactionManagerBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.FactionManagerBehavior::OnKingdomDestroyed",
+      "BellumCivile.Behaviors.FactionManagerBehavior::OnMakePeace",
+      "BellumCivile.Behaviors.FactionManagerBehavior::OnRulingClanChanged",
+      "BellumCivile.Behaviors.FactionManagerBehavior::OnWeeklyTick",
+      "BellumCivile.Behaviors.FeudalClaimFabricationBehavior::OnClanChangedKingdom",
+      "BellumCivile.Behaviors.FeudalClaimFabricationBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.FeudalClaimFabricationBehavior::OnHeroKilled",
+      "BellumCivile.Behaviors.FeudalClaimFabricationBehavior::OnSettlementOwnerChanged",
+      "BellumCivile.Behaviors.FeudalPoliticalOptionsBehavior::OnClanChangedKingdom",
+      "BellumCivile.Behaviors.FeudalPoliticalOptionsBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.FeudalTitleBehavior::OnBeforeHeroesMarried",
+      "BellumCivile.Behaviors.FeudalTitleBehavior::OnHeroKilled",
+      "BellumCivile.Behaviors.FeudalTitleBehavior::OnWeeklyTick",
+      "BellumCivile.Behaviors.ForeignPolicyBehavior::OnWarDeclared",
+      "BellumCivile.Behaviors.ForeignTreatyBehavior::OnHourlyTick",
+      "BellumCivile.Behaviors.IdeologyBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.MercenaryRelationMemoryBehavior::OnClanChangedKingdom",
+      "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnHourlyTick",
+      "BellumCivile.Behaviors.PrivyCouncilBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.PrivyCouncilBehavior::OnSettlementEntered",
+      "BellumCivile.Behaviors.PrivyCouncilBehavior::OnWeeklyTick",
+      "BellumCivile.Behaviors.ProxyWarBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.RegencyBehavior::OnBeforeHeroKilled",
+      "BellumCivile.Behaviors.RegencyBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.RetainedTreatyPrisonerBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.StrategicMarriageBehavior::OnDailyTickHero",
+      "BellumCivile.Behaviors.SuccessionLawBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.SuccessionLawBehavior::OnHourlyTick",
+      "BellumCivile.Behaviors.WarPeaceRevampBehavior::OnClanChangedKingdom",
+      "BellumCivile.Behaviors.WarPeaceRevampBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.WarPeaceRevampBehavior::OnPeaceMade",
+      "BellumCivile.Behaviors.WarPeaceRevampBehavior::OnTick",
+      "BellumCivile.Behaviors.WarScoreBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.WarScoreBehavior::OnHeroPrisonerTaken",
+      "BellumCivile.Behaviors.WarScoreBehavior::OnMapEventEnded",
+      "BellumCivile.Behaviors.WarScoreBehavior::OnSettlementOwnerChanged",
+      "BellumCivile.Behaviors.WarScoreBehavior::OnVillageLooted",
+      "BellumCivile.Behaviors.ArmySummonsConversationBehavior::JoinConversationLordToPlayerArmy",
+      "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::ReconcileBands",
+      "BellumCivile.Behaviors.ForeignTreatyBehavior::ProcessTributes",
+      "BellumCivile.Behaviors.ForeignTreatyBehavior::ResolvePendingParley",
+      "BellumCivile.Behaviors.ProxyWarBehavior::CleanUpStuckHighwaymenParties",
+      "BellumCivile.Behaviors.ProxyWarBehavior::SeedMissingAiEvaluationSchedules"
+    ],
+    "Suppressed": false,
+    "OfflineValidated": false,
+    "RuntimeValidated": false,
+    "AdapterId": "bellum-civile.authority.v1",
+    "TargetSurfaces": [
+      {
+        "Method": "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnDailyTick",
+        "BodyHash": "A130D0BA56D51BD9F032482A061DFBEBA4653FFDB3D7C41219307E94C22B1B7C",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnHeroKilled",
+        "BodyHash": "A1FF185B4EA30A3F40AB048A5067ACE9BCD7D467382A849BEFFDC0B8670F5494",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnHourlyTick",
+        "BodyHash": "0047F80276D594777B6579F92E2B1142B82EEF38A546CACF199EB5AE43A199F8",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::OnClanChangedKingdom",
+        "BodyHash": "2B684DDDBA148BDA9FB8E8B4CEA7B66C4985877682D4B305DA0387BECEA669D6",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::OnClanDestroyed",
+        "BodyHash": "E7EE77B616AA37EB4A9E631A7BF029DF0A55159285D265C46D12893CA7143853",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::OnDailyTick",
+        "BodyHash": "3041F51C750CF0C455D464432F983C37F067773D18267091EA6CEB4B80B399C4",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudWarBehavior::OnDailyTick",
+        "BodyHash": "474B6EB8A9B54A1F22D415695404603E0EFCF4CB73C85BE4AA562BD789665F09",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClientKingdomBehavior::OnDailyTick",
+        "BodyHash": "702E73C30A2658D86E9279235C957B615777ABB1A40C63E62B47B890A6E2F1FF",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClientKingdomBehavior::OnMakePeace",
+        "BodyHash": "1CE1C20A7EFF65057E95A54BEBD64D8F818948D692D24A66E91CC63BA381A490",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClientKingdomBehavior::OnWarDeclared",
+        "BodyHash": "04157F2910C71A5BCA85035323F106B33B631BCAB12B024196BB216C74E85685",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ComradesInArmsBehavior::OnDailyTickHero",
+        "BodyHash": "48387237F156FC8BC38CC20D6D035E6F0258A78A01FC234976C133C5022AB515",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ComradesInArmsBehavior::OnMapEventEnded",
+        "BodyHash": "AAEBA983BD4E434E660A5BE20C4C6BD4BAFCCE08EBFABFC545FE323F5DA653F2",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ComradesInArmsBehavior::OnSettlementOwnerChanged",
+        "BodyHash": "7511FFE7B51035217B7D9F70E31D8DA5D33D3BA771F05E051A9B384552976A45",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.CouncilIncidentBehavior::OnDailyTick",
+        "BodyHash": "031B89DE6C25D5FDAAFCE60230C46067E9988C7A2BDE2E1652BE5DF776FB7AE8",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnClanDestroyed",
+        "BodyHash": "E491FB07E9B09DD099516EA17115FFCB4B8A64BC50AFCB6D6A39098A7872454C",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnDailyTick",
+        "BodyHash": "AA60E02253533C55CAE4BF8629E52FA3179AD29E80ADBFB344E803028FDC35AA",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnDailyTickClan",
+        "BodyHash": "DC2097990A7AFBE936EC20D81FBA7B8C880D201103055BA5B0A65AA4A6E201A0",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynamicRelationBehavior::OnHeroGainedSkill",
+        "BodyHash": "627271814AC52711D8B9316AF62F5EE35D95490FE323D89991F645E3EB581370",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynamicRelationBehavior::OnPlayerTraitChanged",
+        "BodyHash": "AE23E917EFD3F13EA10575E79E9ECDC23504B92C5A03B82466AD5F6C766D31DE",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynasticClaimBehavior::OnDailyTick",
+        "BodyHash": "806A784484940F15229FA5074821B4AA6D80FC53EACDBBC7DB65F5F23BCA0428",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynasticHeirBehavior::OnBeforeHeroesMarried",
+        "BodyHash": "020E173D22A737BBDD3C5363657FACEE793B58F022F80D725C66D59A768A2B93",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynasticHeirBehavior::OnDailyTick",
+        "BodyHash": "846ACEACCCAF173E26E9F40595C80735BEE483C8DC486745E34B315893362D06",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynasticHeirBehavior::OnHourlyTick",
+        "BodyHash": "54FA442D6120E3030E6720FCF67DB2FEA28D6B75D1B3D880440BA903B1434D0C",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnDailyTick",
+        "BodyHash": "222A4059AAEB053D1C3CDF40CFC798E192DA5938EEB715C5EC51B92C049E0CC8",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnWeeklyTick",
+        "BodyHash": "02A0B7102871C0A19459E1B167B8664F4A5260D509959C92FA9AEAB7269B4739",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FactionManagerBehavior::OnClanChangedKingdom",
+        "BodyHash": "221284EB10F527E3EED495B32B519CA52EE84A5ED4F36BB55AEF0B8BF79F20D0",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FactionManagerBehavior::OnDailyTick",
+        "BodyHash": "F8AA3A9EE6D9A41DDACC5C489D2375B8D8C8C270FF30AA647DDF65B53020A723",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FactionManagerBehavior::OnKingdomDestroyed",
+        "BodyHash": "952489E46C46CFC6706736BF09A80EAA408FD8816CB9E124B8815031A352FB83",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FactionManagerBehavior::OnMakePeace",
+        "BodyHash": "40C5F7FA6AD82DB1B95E5465AB7B1277EBBD64D5868BB22C4837A081E1E16E45",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FactionManagerBehavior::OnRulingClanChanged",
+        "BodyHash": "37C021129E8BF40E1323A535721AFA0F8F9F9B5F203CB7C65D98071C48C44D03",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FactionManagerBehavior::OnWeeklyTick",
+        "BodyHash": "D8828416DBB3FAF3C3CB0DEB92E9D5C92A5267057679D0F2A1562F5F41A0AF68",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalClaimFabricationBehavior::OnClanChangedKingdom",
+        "BodyHash": "A4A362A172378C25C4EBE8D9D89A6E193CA7732C5AF502705D10C9E1E401010D",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalClaimFabricationBehavior::OnDailyTick",
+        "BodyHash": "9BDD7B5171E3C9699629B7BC299A5C50F8385134202107740CB14E3F6A759D96",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalClaimFabricationBehavior::OnHeroKilled",
+        "BodyHash": "FCD2559ED7901BDCFC00A05770F83B19CC5E45BF7D4C44F1164AA5CCCE0570B2",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalClaimFabricationBehavior::OnSettlementOwnerChanged",
+        "BodyHash": "53E81ADA22907131D186C4A09369CBF32E98A73251DE8D133542CE6FD614E108",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalPoliticalOptionsBehavior::OnClanChangedKingdom",
+        "BodyHash": "B52653A8E59D475E02DDB4F7EF0793392D4F966B2CBB9B625F0FE1A86005DE47",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalPoliticalOptionsBehavior::OnDailyTick",
+        "BodyHash": "A6770734BAD3FB8F7DF060F2C22DDD5CABFCEF45AA82CABB11E0D26E82965860",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalTitleBehavior::OnBeforeHeroesMarried",
+        "BodyHash": "62C5073BFFFD68A1DE753BAB570DB968CF1597A21ED61A3B150F9BCB527D488F",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalTitleBehavior::OnHeroKilled",
+        "BodyHash": "EBD6745F0A4D8D8D51085FAA3A108544BE75BFBB9E8862C9CB3C8C09CC7B82FF",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalTitleBehavior::OnWeeklyTick",
+        "BodyHash": "89E046319C9565E5E74128DD9E44D5B5281683B99C3BEEDCE114681CE5B5C2E6",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ForeignPolicyBehavior::OnWarDeclared",
+        "BodyHash": "48BCF22BF736333D8B97C6234CBB741A167A4461819889E580675262FC85E9BC",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ForeignTreatyBehavior::OnHourlyTick",
+        "BodyHash": "2233ABF3AF44B851430308D644953947409119203B88BEA5A4750FFFD1DE3831",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.IdeologyBehavior::OnDailyTick",
+        "BodyHash": "E1B03851C3E8A8B83B2376871D0B7E7C05E5B614D445B487CB6C2A6E611525C6",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.MercenaryRelationMemoryBehavior::OnClanChangedKingdom",
+        "BodyHash": "21E58BED9306B8B0596B528905C693C8AF0F62C2C4D02A1DA7CBF5FC577170B6",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnDailyTick",
+        "BodyHash": "CED7E39C295883F5A9FF6511209310D66D80D64CA9A7796E2CECDF02EAEC9B2D",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnHourlyTick",
+        "BodyHash": "4DCF007ED84C14CA6817E535A4804D0A6099B8867D51F5B4B4D46BB65C2CE9DB",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.PrivyCouncilBehavior::OnDailyTick",
+        "BodyHash": "D1FBFACDB9A819ED97A72B66D73CC722E30BE23B466A50BF2A76FA9F499749AF",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.PrivyCouncilBehavior::OnSettlementEntered",
+        "BodyHash": "F55A7A1198233A0A7F855FC71E325E46ED7C61259497F9471B39B2153B962DFC",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.PrivyCouncilBehavior::OnWeeklyTick",
+        "BodyHash": "8DDC0ECE17D3FAE4E1A9534E33EF00B67B02C0D8A4293A90E112890DF91B43C6",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ProxyWarBehavior::OnDailyTick",
+        "BodyHash": "ADDE53443BB7E70D6925CA4D3909C2809CDB003798D3404E13778DB6B48FB90B",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.RegencyBehavior::OnBeforeHeroKilled",
+        "BodyHash": "34F688281ECBEBD39346BB695ED3271CFE1D68201D42BC3CA4FA8EDD5DA29A9B",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.RegencyBehavior::OnDailyTick",
+        "BodyHash": "F26551709C701790B2EAAB48A986CB5100D406EF1E7E24AA0B78A84B2C424AE6",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.RetainedTreatyPrisonerBehavior::OnDailyTick",
+        "BodyHash": "4027A5B2D188B36E64C17E01E0FF5BD2DD311FC43DAE50F08A66CBFA7C89C198",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.StrategicMarriageBehavior::OnDailyTickHero",
+        "BodyHash": "7E1F6FD677D662B35A994CCEBAFCD4AA8219E45164B3E5CF07F46BCACB7703E3",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.SuccessionLawBehavior::OnDailyTick",
+        "BodyHash": "FAE4438B86E1B904124801089097212DAFF05341C85C2E3FEF8CCA16EB6923D8",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.SuccessionLawBehavior::OnHourlyTick",
+        "BodyHash": "F48B2199F10E6A44F3C049ACA7878F999F4B3BBB4314FFF059707F26AE09A063",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarPeaceRevampBehavior::OnClanChangedKingdom",
+        "BodyHash": "8C5BA1274B80E28BE259AA96436FE3771EC980E1C0CA7356C8796161925AB5CA",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarPeaceRevampBehavior::OnDailyTick",
+        "BodyHash": "4285AAE9A0DF330F91C1484C2A33D6BA026B36FB1D95E300480C74EE2A282F24",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarPeaceRevampBehavior::OnPeaceMade",
+        "BodyHash": "068C256FB5D78A33E192DBBF4A21B285C2A85868E8CC5990B2A08624098BFEA5",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarPeaceRevampBehavior::OnTick",
+        "BodyHash": "2A7B632FE163DB22CD7A1528D9EB4560BF5D9184A61A63E37D6C32C3126210C6",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarScoreBehavior::OnDailyTick",
+        "BodyHash": "0CC142B18162B4C8B6F2BA4430956F72F9CE37B7E723452A4ABBE452E0C8B224",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarScoreBehavior::OnHeroPrisonerTaken",
+        "BodyHash": "27155E47370DA5C2C1F928D63AA6F1E67E99E51BDC3E33318834F937D36A9D1E",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarScoreBehavior::OnMapEventEnded",
+        "BodyHash": "06A07AEC70BCBB63EEF70A5F3922612F48E1042B0F8EE0BD6FFC3B50E03B7482",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarScoreBehavior::OnSettlementOwnerChanged",
+        "BodyHash": "3B50E2D8810CFF4F5F80636781322B4145065CB010D381BB81F05E57DC98E842",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.WarScoreBehavior::OnVillageLooted",
+        "BodyHash": "464A4F7BE6322967E6D3303E48570C6F97486676B579A631272BF8DF50C9D0AA",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ArmySummonsConversationBehavior::JoinConversationLordToPlayerArmy",
+        "BodyHash": "0682BA860A8E2C24D7B73DBB39EE62DD1E94EF07CD1D96FC09DDE3E8567A00A4",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::ReconcileBands",
+        "BodyHash": "81C4725DAEC1E7DE08EBA58DCD477D74E0597920D0FE58FDEB844EE8600308EA",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ForeignTreatyBehavior::ProcessTributes",
+        "BodyHash": "1C05B2BE34B19C209470F143C678D5CA1E963F2A5EB3572878A5983E64C4BB1A",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ForeignTreatyBehavior::ResolvePendingParley",
+        "BodyHash": "5F4F4F23934DA1B82A760EC180D7B8181E523BA6558E28495F2510393BEE13E9",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ProxyWarBehavior::CleanUpStuckHighwaymenParties",
+        "BodyHash": "83F8A63F9F94D5039D106AB96F6A20839FCEE518139D17EB55FFBDFCD0DA0D83",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ProxyWarBehavior::SeedMissingAiEvaluationSchedules",
+        "BodyHash": "81035D7B94911A853DD91C9E252F860E81897186DDB8CEC1DC20E1AA577C1D7F",
+        "Callers": 2
       }
     ],
     "SurfacesCoverTargets": true

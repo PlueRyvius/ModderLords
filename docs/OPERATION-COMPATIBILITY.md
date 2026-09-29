@@ -35,16 +35,19 @@ The inspected AutoSync path is: Hero.Gold property prefix / Clan._influence fiel
 
 ## What a contract pins: the methods, not the file
 
-A contract used to be pinned to whole files: every required DLL by SHA-256, refused on any mismatch. That is the
-right guard for Coop's own assemblies, which an adapter reaches into by reflection across a wide surface — there is
-no small set of methods that stands for the dependency. It was the wrong guard for the provider mod itself. An
-adapter depends on the handful of methods it patches, so pinning the file meant a texture fix, an unrelated bug fix
-or a plain rebuild silently disabled the contract, and a per-update maintenance cost bought nothing.
+A contract used to be pinned to whole files: every required DLL by SHA-256, refused on any mismatch. That remains
+appropriate for a version-pinned provider when its serialized state or broad reflected surface is the compatibility
+boundary. It is deliberately not used for Coop itself. The operation transport and join barrier instead probe the
+exact admission signatures and transport/identity capabilities they consume, so a compatible Coop update continues
+to work while a moved or missing seam fails closed before managed campaign admission. For narrow provider patches,
+whole-file pinning was also the wrong guard: an adapter depends on the handful of methods it patches, so an unrelated
+texture fix, bug fix or rebuild should not silently disable it.
 
 Contracts now carry a `TargetSurfaces` entry per target: the method's signature and body, hashed, plus how many call
-sites it has in the provider's own assembly. `Requires` gains `Strict`. Coop's assemblies stay strict and still
-refuse on any file change; the provider's own assembly is no longer strict, because its surfaces are the dependency.
-Every required file must still be present and loaded.
+sites it has in the provider's own assembly. `Requires` gains `Strict`. A provider requirement may stay strict when
+the adapter intentionally pins that provider version, or use target surfaces when those methods are the complete
+dependency. Coop is protected separately by the runtime capability contract and session attestation, not a historical
+DLL hash. Every required provider file must still be present and loaded.
 
 **Raw IL cannot be hashed directly.** Operand tokens are metadata row indices that renumber whenever anything else
 in the assembly changes, so a raw IL hash would move on every rebuild — the same false alarm as the file hash. Both

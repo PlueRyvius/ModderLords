@@ -410,7 +410,9 @@ public sealed class LaunchSession
         ModderLords.Analysis.CompatibilityPlan? operationPlan = null;
         // Full operation analysis is explicit in the UI. Launch performs it when an approved managed adapter
         // is relevant; unvalidated contracts cannot alter a running game merely by being discovered.
-        var eligibleOperations = ModderLords.Analysis.CompatibilityPlanner.BundledContracts().Any(c => c.Provider == "ModderLords" && c.OfflineValidated && c.RuntimeValidated && selections.Any(s => s.Module.Id == c.Module));
+        var eligibleOperations = ModderLords.Analysis.CompatibilityPlanner.BundledContracts().Any(c => c.Provider == "ModderLords" &&
+            ((c.OfflineValidated && c.RuntimeValidated) || ModderLords.Operations.OperationValidationMode.Allows(c.Id)) &&
+            selections.Any(s => s.Module.Id == c.Module));
         if (profile.AutomaticCompatibility && eligibleOperations)
         {
             var request = OperationAnalysisService.CreateRequest(profile, new(catalog, selections, order), gameRoot ?? "", paths.ServerBin);

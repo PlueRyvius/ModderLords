@@ -24,11 +24,19 @@ var folders = new Dictionary<string, string>
     ["MyLittleWarband"] = Path.Combine(workshop.FullName, "3627538517"),
     ["Europe1100"] = Path.Combine(workshop.FullName, "2968204274"),
     ["CoopNightly"] = Path.Combine(workshop.FullName, "3770450698"),
+    ["BellumCivile"] = Path.Combine(game.FullName, "BellumCivile"),
 };
 
-// Coop's own assemblies stay pinned to the file: adapters reach into them by reflection over a wide surface, so
-// there is no small set of methods that would stand for the dependency.
-var strictModules = new HashSet<string> { "CoopNightly" };
+// Coop auto-updates independently of ModderLords. Its admission, transport and identity ABI is checked at runtime by
+// CoopAdmissionCapabilities, while session input/loaded-assembly attestation still requires both peers to use their
+// captured bytes. Do not turn an observed Coop hash into a historical support pin here.
+var strictModules = new HashSet<string> { "BellumCivile" };
+var only = args.Length == 2 && args[0] == "--contract" ? args[1] : null;
+if (args.Length != 0 && only == null)
+{
+    Console.Error.WriteLine("usage: CaptureProviderContracts [--contract ID]");
+    return 2;
+}
 
 var destination = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
     "src", "ModderLords.Analysis", "provider-contracts.json");
@@ -38,6 +46,11 @@ var contracts = JsonSerializer.Deserialize<ImmutableArray<OperationContract>>(Fi
 var updated = new List<OperationContract>();
 foreach (var contract in contracts)
 {
+    if (only != null && contract.Id != only)
+    {
+        updated.Add(contract);
+        continue;
+    }
     if (!Directory.Exists(folders.GetValueOrDefault(contract.Module, "")))
     {
         Console.WriteLine($"skip   {contract.Id}: {contract.Module} is not installed here");
@@ -71,6 +84,7 @@ foreach (var contract in contracts)
 
 File.WriteAllText(destination, JsonSerializer.Serialize(updated.ToImmutableArray(), AnalysisJson.Options) + "\n");
 Console.WriteLine($"\nwrote {destination}");
+return 0;
 
 string? Find(string module, string name, ExecutionSide? side)
 {

@@ -25,6 +25,8 @@ public static class Bridge
         Taom.ClientStateBackupComponent.ClientTick();
         Taom.FieldCommissionComponent.ClientTick();
         Operations.OperationRuntime.JoinBarrier?.Tick();
+        Operations.BellumSnapshotProbe.Tick();
+        Operations.BellumSnapshotBroadcast.Tick();
         global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.OperationServerHandler.Current?.RemoveDisconnectedPeers();
         BehaviorGate.RetryPendingPostfixes();
         global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.OperationClientHandler.Current?.ApplyPendingSnapshots();
