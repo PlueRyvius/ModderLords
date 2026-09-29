@@ -89,8 +89,12 @@ public sealed class OperationContractTests
         {
             Assert.True(contract.SurfacesCoverTargets, contract.Id + " installs an adapter without a surface for every patched target");
             Assert.All(contract.TargetSurfaces, s => Assert.Equal(64, s.BodyHash.Length));
-            // A recorded caller count is what makes a NEW caller appearing a refusal rather than a surprise.
-            Assert.All(contract.TargetSurfaces, s => Assert.True(s.Callers > 0, s.Method + " records no call sites"));
+            // Most patched methods must have an IL caller. Public UI Execute methods are invoked by Gauntlet data
+            // binding, so zero assembly call sites is expected; their declaring UI type and body are still pinned.
+            Assert.All(contract.TargetSurfaces, s => Assert.True(s.Callers > 0
+                || (s.Method.StartsWith("BellumCivile.UI.", StringComparison.Ordinal)
+                    && s.Method.Substring(s.Method.IndexOf("::", StringComparison.Ordinal) + 2).StartsWith("Execute", StringComparison.Ordinal)),
+                s.Method + " records no call sites and is not a data-bound UI command"));
             // A reflection-only adapter has no method boundary, so its provider assembly must be pinned. Patching
             // adapters may also deliberately pin a provider (Bellum is version-pinned by policy); their method
             // surfaces still prove that the compiled target list is complete and make review changes explicit.
@@ -137,7 +141,7 @@ public sealed class OperationContractTests
         Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnTick", authority.Targets);
         Assert.DoesNotContain("BellumCivile.UI.Map.WarScoreMapWidgetVM::OnTick", authority.Targets);
         var commands = Assert.Single(bellum, c => c.Id == "bellum-civile.commands");
-        Assert.Equal(9, commands.Targets.Length);
+        Assert.Equal(14, commands.Targets.Length);
         Assert.Equal(commands.Targets.Length, commands.TargetSurfaces.Length);
     }
 

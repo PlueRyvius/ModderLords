@@ -49,12 +49,12 @@ Coop is not. This adapter does not modify or redistribute Bellum files.
   views remained stable. Bellum-specific action controls were unavailable because the disposable character did not
   meet their political eligibility requirements, not because navigation or the adapter failed.
 - The first actor-aware command slice is implemented behind a third disabled contract, `bellum-civile.commands`.
-  It covers title fabrication, usurpation, dissolution, rename, service-level change, grant and revocation, plus
-  gender and house succession-law changes. Bellum's native confirmation UI remains local; only the final mutation callback is
+  It covers title fabrication, usurpation, formation, dissolution, rename, service-level change, grant and revocation, plus
+  gender and house succession-law changes, claim-feud petitions, crown-enforced feud peace, and privy-council appointments and dismissals. Bellum's native confirmation UI remains local; only the final mutation callback is
   intercepted. Requests contain stable IDs, never Bellum objects, and the server replaces any claimed actor with
   the authenticated Coop hero/clan before rerunning Bellum's own eligibility checks. An expected snapshot revision
   rejects stale confirmations. The client reports completion only after the correlated server result and then asks
-  for a fresh authoritative snapshot. All nine patched Bellum 1.3.1 methods have pinned IL surfaces.
+  for a fresh authoritative snapshot. All fourteen patched Bellum 1.3.1 methods have pinned IL surfaces.
 
 ## Live snapshot evidence
 
@@ -88,13 +88,13 @@ Evidence:
 
 The adapter is not full playable compatibility yet. The first simulation-authority and full read-model tiers are
 implemented and have passed one native client admission/reconnect run, but remain deliberately isolated pending
-UI/action work. Nine initial player actions now have an actor-aware command path, but the remaining faction,
-treaty, council, formation and player-targeted decisions do not. The five mixed callbacks remain outside
+UI/action work. Fourteen initial player actions now have an actor-aware command path, but the remaining faction,
+treaty and player-targeted decisions do not. The five mixed callbacks remain outside
 the authority gate. No political command has passed native validation; no two-simultaneous-player run,
 dynamic-object replication stress case, save/restart verification after political changes, or long soak is claimed.
 The validation flags must remain false
 until those paths pass the integration matrix.
 
 Next validation/implementation order: validate the initial title/succession command slice with a politically
-eligible disposable character; add formation, faction, treaty and council commands; add player-targeted
+eligible disposable character; add faction and treaty commands; add player-targeted
 decisions; then run two-player, reconnect, save/restart and soak validation.

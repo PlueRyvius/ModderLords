@@ -22,7 +22,7 @@ public static class BellumCommandCodec
     public const int MaxBytes = 16 * 1024;
     private const int MaxArguments = 12;
     private const int MaxKeyLength = 64;
-    private const int MaxValueLength = 512;
+    private const int MaxValueLength = 4096;
 
     public static string Serialize(BellumCommand command)
     {

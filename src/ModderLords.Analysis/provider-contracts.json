@@ -955,13 +955,18 @@
     "Targets": [
       "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::StartPlayerFabrication",
       "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerUsurpation",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerFormation",
       "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerDissolution",
       "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerRename",
       "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerServiceChange",
       "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerGrant",
       "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerRevocation",
       "BellumCivile.Behaviors.SuccessionLawBehavior::TryApplyPlayerGenderLaw",
-      "BellumCivile.Behaviors.SuccessionLawBehavior::TryApplyPlayerSuccessionLaw"
+      "BellumCivile.Behaviors.SuccessionLawBehavior::TryApplyPlayerSuccessionLaw",
+      "BellumCivile.UI.ClaimFeudItemVM::ExecutePetition",
+      "BellumCivile.UI.ClaimFeudItemVM::CompleteEnforcePeace",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::ExecutePropose",
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::CompleteDismissal"
     ],
     "Suppressed": false,
     "OfflineValidated": false,
@@ -976,6 +981,11 @@
       {
         "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerUsurpation",
         "BodyHash": "CD3538A6C85B0323150CA71C377B9945D0EDAB5F89D365D5A06EDA46073836CE",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM::CompletePlayerFormation",
+        "BodyHash": "9F1AC972E62118BE674FD706191AC4FE974D155450B475769531F942CC854D0A",
         "Callers": 2
       },
       {
@@ -1011,6 +1021,26 @@
       {
         "Method": "BellumCivile.Behaviors.SuccessionLawBehavior::TryApplyPlayerSuccessionLaw",
         "BodyHash": "E7D8762ADFABCD0665604130EF06AB5C0EBB960B62C5FFBFD5807585ED6FF41C",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.ClaimFeudItemVM::ExecutePetition",
+        "BodyHash": "7E7358F524DE9999118C4B4E24B70DC10EFB618D2EF70728531A0D05CF4979DA",
+        "Callers": 0
+      },
+      {
+        "Method": "BellumCivile.UI.ClaimFeudItemVM::CompleteEnforcePeace",
+        "BodyHash": "C7ADF6215AEA78D8980E84BAD9C685CFA18108CBAA84B69E12B880392445F32E",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::ExecutePropose",
+        "BodyHash": "F27B2368CFF7E6BB83D6ECD04D6AF1EC6C5F427AD7E541D039B7C87955EF9EBD",
+        "Callers": 0
+      },
+      {
+        "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::CompleteDismissal",
+        "BodyHash": "405A85DDD8773FE7A0FBCD540E4FB46A554B7AB5C005D1608AAC4A0DFA81C00E",
         "Callers": 1
       }
     ],
