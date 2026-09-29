@@ -216,6 +216,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
                     OperationRuntime.JoinBarrier!.ClientAgreed = true;
                     if (epoch != incomingEpoch) { epoch = incomingEpoch; State.BeginSession(epoch); foreach (var sink in snapshots.Values) { sink.State.BeginSession(epoch); sink.Reassembler.BeginSession(epoch); } }
                     network.Send(peer, new OperationPlanAckV1 { Digest = OperationRuntime.Activation.Digest!, Epoch = epoch });
+                    ModderLords.CompatSync.Log.Info("operation plan agreed with server: " + OperationRuntime.Activation.Digest);
                     foreach (var operationId in snapshots.Keys) RequestSnapshot(operationId);
                 }
                 finally { System.Threading.Interlocked.Exchange(ref planQueued, 0); }
@@ -242,7 +243,17 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         }
         public void BindSnapshot(string operationId, Func<bool> ready, Action<string> apply, Action refresh)
         {
-            var sink = new SnapshotSink { Ready = ready, Apply = apply, Refresh = refresh };
+            var sink = new SnapshotSink
+            {
+                Ready = ready,
+                Apply = payload =>
+                {
+                    apply(payload);
+                    ModderLords.CompatSync.Log.Info("operation snapshot applied: " + operationId
+                        + " bytes=" + System.Text.Encoding.UTF8.GetByteCount(payload));
+                },
+                Refresh = refresh
+            };
             if (epoch.Length > 0) { sink.State.BeginSession(epoch); sink.Reassembler.BeginSession(epoch); }
             snapshots.Add(operationId, sink); RequestSnapshot(operationId);
         }
