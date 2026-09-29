@@ -42,4 +42,15 @@ public sealed class InputAttestationTests
         Assert.False(InputAttestation.Validate(plan, local, "Client", _ => throw new IOException(), out var reason));
         Assert.Contains("unreadable", reason);
     }
+    [Fact] public void Server_only_and_repositioned_connection_modules_do_not_reject_a_client()
+    {
+        var (plan, local) = Inputs();
+        plan["ModuleOrder"] = new JArray("dependency", "fixture", "ModderLords.Compat", "DedicatedServer.ModderLordsCompat", "CoopNightly");
+        local["ModuleOrder"] = new JArray("dependency", "fixture", "CoopNightly", "ModderLords.Compat");
+        Assert.True(InputAttestation.Validate(plan, local, "Client", _ => Hash, out var reason), reason);
+
+        local["ModuleOrder"] = new JArray("fixture", "dependency", "CoopNightly", "ModderLords.Compat");
+        Assert.False(InputAttestation.Validate(plan, local, "Client", _ => Hash, out reason));
+        Assert.Contains("order", reason, StringComparison.OrdinalIgnoreCase);
+    }
 }
