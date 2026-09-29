@@ -48,7 +48,13 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
         {
             lock (admissionGate) foreach (var peer in admitted.Keys.Where(p => p.ConnectionState != ConnectionState.Connected).ToArray()) admitted.Remove(peer);
         }
-        private void SendPlan(NetPeer peer) => network.Send(peer, new OperationPlanV1 { Json = OperationRuntime.PlanJson, Epoch = epoch });
+        private void SendPlan(NetPeer peer)
+        {
+            // Coop drops ordinary world traffic while a newly accepted peer is still in its pre-save
+            // phase.  The operation plan is part of that connection handshake, so it must bypass the
+            // loading queue just like Coop's own validation/save-transfer messages.
+            network.SendImmediate(peer, new OperationPlanV1 { Json = OperationRuntime.PlanJson, Epoch = epoch });
+        }
         private void Ack(MessagePayload<OperationPlanAckV1> payload)
         {
             if (payload.Who is not NetPeer peer || payload.What == null) return;
@@ -215,7 +221,9 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
                     server = peer;
                     OperationRuntime.JoinBarrier!.ClientAgreed = true;
                     if (epoch != incomingEpoch) { epoch = incomingEpoch; State.BeginSession(epoch); foreach (var sink in snapshots.Values) { sink.State.BeginSession(epoch); sink.Reassembler.BeginSession(epoch); } }
-                    network.Send(peer, new OperationPlanAckV1 { Digest = OperationRuntime.Activation.Digest!, Epoch = epoch });
+                    // Keep the acknowledgement on Coop's connection-level path as well.  It is the
+                    // reliable-ordered barrier that permits the server to resume character validation.
+                    network.SendImmediate(peer, new OperationPlanAckV1 { Digest = OperationRuntime.Activation.Digest!, Epoch = epoch });
                     ModderLords.CompatSync.Log.Info("operation plan agreed with server: " + OperationRuntime.Activation.Digest);
                     foreach (var operationId in snapshots.Keys) RequestSnapshot(operationId);
                 }

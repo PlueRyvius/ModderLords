@@ -62,6 +62,10 @@ internal static class CoopAdmissionCapabilities
         var network = typeof(INetwork).GetMethods();
         if (!network.Any(m => m.Name == "Send" && m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType == typeof(NetPeer)))
             yield return "INetwork.Send(NetPeer, message)";
+        if (!network.Any(m => m.Name == "SendImmediate" && m.GetParameters().Length == 2
+            && m.GetParameters()[0].ParameterType == typeof(NetPeer)
+            && typeof(IMessage).IsAssignableFrom(m.GetParameters()[1].ParameterType)))
+            yield return "INetwork.SendImmediate(NetPeer, message)";
         if (!network.Any(m => m.Name == "SendAll" && m.GetParameters().Length == 1))
             yield return "INetwork.SendAll(message)";
 
