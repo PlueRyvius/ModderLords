@@ -41,7 +41,7 @@ internal sealed class MirrorStore : IDataStore
 
     public bool SyncData<T>(string key, ref T data)
     {
-        if (!Supported.Contains(typeof(T)) && !TaomRecords.IsRecordBook(typeof(T)))
+        if (!Supported.Contains(typeof(T)) && !TaomRecords.IsRecordBook(typeof(T)) && !TaomRecords.IsRecordList(typeof(T)))
             throw new NotSupportedException($"key '{key}' has type {typeof(T).Name}, which the mirror does not carry");
         var serializer = TaomRecords.Serializer;
         if (IsSaving)
@@ -68,8 +68,15 @@ internal static class TaomRecords
         t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Dictionary<,>)
         && t.GetGenericArguments()[0] == typeof(string) && IsRecord(t.GetGenericArguments()[1]);
 
+    /// <summary>List&lt;X&gt; where X is a record (Living Economy keeps its trade log this way).</summary>
+    internal static bool IsRecordList(Type t) =>
+        t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>) && IsRecord(t.GetGenericArguments()[0]);
+
+    /// <summary>Namespaces whose plain classes are saved records: TAOM's, and Living Economy's (LivingEconomy/LeStateMirror).</summary>
+    private static readonly string[] RecordNamespaces = { "TAOM.", "BetterEconomy.Core" };
+
     internal static bool IsRecord(Type t) =>
-        t.IsClass && t.Namespace != null && t.Namespace.StartsWith("TAOM.", StringComparison.Ordinal)
+        t.IsClass && t.Namespace != null && RecordNamespaces.Any(ns => t.Namespace.StartsWith(ns, StringComparison.Ordinal))
         && t.GetConstructor(Type.EmptyTypes) != null;
 
     internal static readonly JsonSerializer Serializer = JsonSerializer.Create(new JsonSerializerSettings
