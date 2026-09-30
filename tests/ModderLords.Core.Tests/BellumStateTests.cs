@@ -100,4 +100,13 @@ public sealed class BellumStateTests
             .Select(i => new BellumRelationMemoryState { MemoryKey = i.ToString("D8"), FirstId = "hero", SecondId = "other", ContextText = "memory" }).ToList();
         Assert.Throws<InvalidDataException>(() => BellumStateCodec.Serialize(state));
     }
+
+    [Fact]
+    public void Passing_campaign_time_is_not_a_political_change()
+    {
+        var earlier = Snapshot(); earlier.Revision = 4; earlier.CapturedDay = 100.25;
+        var later = Snapshot(); later.Revision = 9; later.CapturedDay = 100.75;
+        Assert.Equal(BellumStateCodec.PoliticalContent(earlier), BellumStateCodec.PoliticalContent(later));
+        Assert.Equal(4, earlier.Revision); Assert.Equal(100.25, earlier.CapturedDay);
+    }
 }

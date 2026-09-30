@@ -78,8 +78,7 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
         private string CaptureCurrent()
         {
             var snapshot = BellumStateReader.Capture(revision);
-            snapshot.Revision = 0;
-            var content = BellumStateCodec.Serialize(snapshot);
+            var content = BellumStateCodec.PoliticalContent(snapshot);
             if (!string.Equals(content, canonical, StringComparison.Ordinal)) { canonical = content; revision++; }
             snapshot.Revision = revision;
             return BellumStateCodec.Serialize(snapshot);
