@@ -84,6 +84,45 @@ Evidence:
   corresponding `ModderLords.Compat-server.log`; the server launch log records module validation acceptance,
   62-chunk save transfer, campaign entry, party restoration, and map entry.
 
+## Live validation, 2026-09-30
+
+First native run with a politically eligible player (solo ruler of a debug-created kingdom).
+
+Fixed during the run:
+
+- Coop's `Player.HeroId` is an object-manager id (`Hero_Player`), not the hero's `StringId` (`Player`). The command
+  adapter looked it up in `MBObjectManager` and refused every action as "Actor clan ownership changed"; TAOM and
+  Living Economy notice forwarding had the same mix-up. All four now resolve through `PlayerHeroes`.
+- The snapshot revision counted `CapturedDay`, so it moved every capture while campaign time ran. The exact-revision
+  requirement was then dropped altogether: Bellum's simulation changes political state every few seconds, and each
+  action already runs through Bellum's own `Try*` service against live state.
+- Bellum screens only re-read state when refreshed; the open screen is now refreshed once after the player's own
+  completed action.
+- Validation deploys must sync both `Win64_Shipping_Client` and `Win64_Shipping_Server`; the dedicated server loads
+  the latter.
+
+Verified: a succession-law change completed end to end, and 14 vanilla policy votes (solo ruler, two kingdoms, three
+sessions) resolved on the server and reached the client.
+
+Observed but not reproduced after the save was restored: in the original save, a resolved policy vote's decision was
+never removed on the server, so the client kept a stale decision and later votes (addressed by list index) missed.
+An A/B run without Bellum did not show it. `KingdomDecisionTrace` (validation only) records every decision/policy
+add and remove on both sides, `ApplyResolved`, the election steps with a finalizer, and the runtime list of methods
+patched by both Bellum and Coop, so a recurrence is diagnosable from logs.
+
+Known gaps found:
+
+- The authority gate covers campaign event handlers only. Bellum's 124 Harmony patch classes run on both sides; 35
+  vanilla methods are patched by both Bellum and Coop (runtime dump). Player-input patches (policy/fief/expulsion
+  proposal interception) create client-local Bellum state.
+- Bellum refers to `Clan.PlayerClan`/`Hero.MainHero` about 900 times. On a dedicated server that is the host's
+  placeholder hero, so player-specific Bellum branches never run for real players there. The deliberation systems
+  (policy, fief, expulsion votes) are the largest users and are untested with more than one clan.
+- The authority analyzer rated the deliberation daily ticks "Local — display only" although they call
+  `Kingdom.RemoveDecision`: it only treats what Coop intercepts as a world change. Its "Local" verdicts need review.
+- `PrivyCouncilBehavior.EnsureRecordIndexes` throws "same key already added" when Coop's parallel party tick calls
+  into it (thread safety).
+
 ## Deliberately not claimed
 
 The adapter is not full playable compatibility yet. The first simulation-authority and full read-model tiers are

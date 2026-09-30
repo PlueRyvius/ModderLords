@@ -33,6 +33,7 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
     public void Install()
     {
         if (!ValidateTargets(out var reason)) { Readiness = AdapterReadiness.Failed; Detail = reason; throw new InvalidOperationException(reason); }
+        KingdomDecisionTrace.Install();
         if (OperationProcessSide.IsServer)
         {
             operation = new BellumStateOperation();
