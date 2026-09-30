@@ -14,6 +14,23 @@ $declared = ([xml](Get-Content $propsPath)).Project.PropertyGroup.VersionPrefix 
 if ($declared -ne $Version) {
     throw "Directory.Build.props says $declared but you asked to package $Version. Bump VersionPrefix first (one line, then commit it)."
 }
+
+# Players' launchers replace the client ModderLords.Compat only when its SubModule.xml version goes up (or its files
+# differ at the same version). That version is bumped by hand, so refuse a release whose module code changed since the
+# last tag while the number stayed put: the players who most need the fix would be the last to get it.
+$syncModuleXml = 'src/ModderLords.CompatSync/_Module/SubModule.xml'
+$syncModuleSources = @('src/ModderLords.CompatSync', 'src/ModderLords.CompatSync.Coop', 'src/ModderLords.Operations', 'src/Shared')
+$previousTag = git -C $root describe --tags --abbrev=0 --match 'v*' --exclude "v$Version" HEAD 2>$null
+if ($LASTEXITCODE -eq 0 -and $previousTag) {
+    git -C $root diff --quiet $previousTag HEAD -- $syncModuleSources
+    $codeChanged = $LASTEXITCODE -ne 0
+    $versionOf = { param($xml) if ($xml -match '<Version value="([^"]+)"') { $Matches[1] } }
+    $before = & $versionOf ((git -C $root show "${previousTag}:$syncModuleXml") -join "`n")
+    $now = & $versionOf (Get-Content (Join-Path $root $syncModuleXml) -Raw)
+    if ($codeChanged -and $before -eq $now) {
+        throw "ModderLords.Compat code changed since $previousTag but $syncModuleXml is still $now. Bump its Version value first."
+    }
+}
 $out = Join-Path $root "artifacts\ModderLords-$Version"
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null

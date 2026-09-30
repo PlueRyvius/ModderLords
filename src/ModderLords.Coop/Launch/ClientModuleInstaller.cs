@@ -82,7 +82,11 @@ public static class ClientModuleInstaller
             ? ModuleCatalog.TryParse(target, ModuleSourceKind.GameModules, out _)?.Version
             : null;
 
-        if (installed is not null && SaveHeaderReader.CompareVersions(bundled.Version, installed) <= 0)
+        // A newer installed copy is never touched. The same version is only left alone when its files match: the
+        // module version is bumped by hand, and a release that changed the DLLs without bumping it would otherwise
+        // leave every client on the old build with nothing said.
+        var comparison = installed is null ? 1 : SaveHeaderReader.CompareVersions(bundled.Version, installed);
+        if (comparison < 0 || (comparison == 0 && SameContent(bundled.FolderPath, target)))
         {
             // A copy the player extracted by hand is usually still marked-of-the-web, which reads as a blocked DLL.
             // We are not replacing it, but clearing that costs nothing and is the difference between loading and not.
@@ -106,8 +110,9 @@ public static class ClientModuleInstaller
             return installed is null
                 ? new InstallResult(InstallOutcome.Installed, bundled.Version, bundled.Version,
                     $"installed {LaunchSession.SyncModuleId} {bundled.Version} for the client", backup)
-                : new InstallResult(InstallOutcome.Updated, bundled.Version, bundled.Version,
-                    $"updated the client's {LaunchSession.SyncModuleId} from {installed} to {bundled.Version}", backup);
+                : new InstallResult(InstallOutcome.Updated, bundled.Version, bundled.Version, comparison == 0
+                    ? $"refreshed the client's {LaunchSession.SyncModuleId} {installed}: its files differed from the launcher's build"
+                    : $"updated the client's {LaunchSession.SyncModuleId} from {installed} to {bundled.Version}", backup);
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -119,6 +124,32 @@ public static class ClientModuleInstaller
         {
             return new InstallResult(InstallOutcome.Failed, installed, bundled.Version, $"could not install the client module: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// True when the installed copy holds exactly the bundled files, byte for byte. Host-only files are ignored on
+    /// both sides; any other extra or missing file counts as a difference, since a stale DLL is itself a problem.
+    /// </summary>
+    private static bool SameContent(string bundledDir, string installedDir)
+    {
+        string[] Files(string dir) => Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
+            .Where(f => !HostOnlyFiles.Contains(Path.GetFileName(f)))
+            .Select(f => Path.GetRelativePath(dir, f))
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToArray();
+        try
+        {
+            var bundledFiles = Files(bundledDir);
+            if (!bundledFiles.SequenceEqual(Files(installedDir), StringComparer.OrdinalIgnoreCase)) return false;
+            foreach (var rel in bundledFiles)
+            {
+                var a = new FileInfo(Path.Combine(bundledDir, rel));
+                var b = new FileInfo(Path.Combine(installedDir, rel));
+                if (a.Length != b.Length || !File.ReadAllBytes(a.FullName).AsSpan().SequenceEqual(File.ReadAllBytes(b.FullName))) return false;
+            }
+            return true;
+        }
+        // Unreadable means we cannot vouch for it; the install path reports a write failure properly if it comes to that.
+        catch (Exception) { return false; }
     }
 
     private static void CopyDirectory(string source, string destination)

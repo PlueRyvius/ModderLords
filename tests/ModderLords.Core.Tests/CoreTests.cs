@@ -438,7 +438,7 @@ public class ClientModuleInstallerTests : IDisposable
     public void Removes_a_hosts_recipe_from_a_copy_it_leaves_in_place()
     {
         var game = GameRoot();
-        Install(game, "v0.2.0", "theirs");
+        Install(game, "v0.2.0", "new");
         var stale = Path.Combine(ClientModuleInstaller.TargetDir(game), RecipeSet.FileName);
         File.WriteAllText(stale, "{\"Mods\":[]}");
 
@@ -464,7 +464,7 @@ public class ClientModuleInstallerTests : IDisposable
     public void Clears_the_mark_of_the_web_on_a_copy_the_player_installed_by_hand()
     {
         var game = GameRoot();
-        Install(game, "v0.2.0", "theirs");
+        Install(game, "v0.2.0", "new");
         var marker = Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "marker.txt");
         Block(marker);
         if (!IsBlocked(marker)) return;
@@ -500,10 +500,47 @@ public class ClientModuleInstallerTests : IDisposable
     public void Leaves_a_current_copy_alone()
     {
         var game = GameRoot();
-        Install(game, "v0.2.0", "theirs");
+        Install(game, "v0.2.0", "new");
         var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
         Assert.Equal(ClientModuleInstaller.InstallOutcome.UpToDate, r.Outcome);
-        Assert.Equal("theirs", File.ReadAllText(Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "marker.txt")));
+        Assert.Null(r.BackupPath);
+    }
+
+    [Fact]
+    public void Refreshes_a_same_version_copy_whose_files_differ()
+    {
+        // The module version is bumped by hand; a release that forgot must still reach clients.
+        var game = GameRoot();
+        Install(game, "v0.2.0", "old build");
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
+
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.Updated, r.Outcome);
+        Assert.Equal("new", File.ReadAllText(Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "marker.txt")));
+        Assert.Equal("old build", File.ReadAllText(Path.Combine(r.BackupPath!, "bin", "Win64_Shipping_Client", "marker.txt")));
+    }
+
+    [Fact]
+    public void Refreshes_a_same_version_copy_carrying_a_stale_extra_dll()
+    {
+        var game = GameRoot();
+        Install(game, "v0.2.0", "new");
+        var stale = Path.Combine(ClientModuleInstaller.TargetDir(game), "bin", "Win64_Shipping_Client", "Leftover.dll");
+        File.WriteAllText(stale, "x");
+        var r = ClientModuleInstaller.Ensure(Bundled("v0.2.0"), game, Path.Combine(_dir, "backups"));
+
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.Updated, r.Outcome);
+        Assert.False(File.Exists(stale));
+    }
+
+    [Fact]
+    public void A_hosts_recipe_alone_does_not_count_as_a_difference()
+    {
+        var game = GameRoot();
+        var bundled = Bundled("v0.2.0");
+        File.WriteAllText(Path.Combine(bundled.FolderPath, RecipeSet.FileName), "{\"Mods\":[]}");
+        Install(game, "v0.2.0", "new");
+        var r = ClientModuleInstaller.Ensure(bundled, game, Path.Combine(_dir, "backups"));
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.UpToDate, r.Outcome);
     }
 
     [Fact]
