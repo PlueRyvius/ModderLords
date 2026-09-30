@@ -36,7 +36,10 @@ public sealed record ScanResult(
     IReadOnlyList<string>? CoopAssemblyReferences = null,
     /// <summary>Desktop-framework assemblies (WinForms, WPF, GDI+) the server's runtime does not ship. Optional so
     /// the many places that build a ScanResult by hand do not all have to say "none".</summary>
-    IReadOnlyList<string>? DesktopAssemblies = null)
+    IReadOnlyList<string>? DesktopAssemblies = null,
+    /// <summary>Where those references sit, when the scan could place them (<see cref="DesktopSiteScan"/>). Null means
+    /// not placed - a hand-built result or a scan that predates this - and is read as the certain-crash case.</summary>
+    DesktopSites? DesktopSites = null)
 {
     public string Summary => Verdict switch
     {
@@ -316,15 +319,23 @@ public static class AssemblyScan
         var verdict = desktop.Count > 0 || hard.Count > 0 || story.Count > 0 ? ServerVerdict.NeedsReview
             : ui.Count > 0 || guarded.Count > 0 ? ServerVerdict.Guarded
             : ServerVerdict.ServerSafe;
+        DesktopSites? desktopSites = null;
         if (desktop.Count > 0)
+        {
             notes.Add("references desktop frameworks the server's runtime does not ship (" + string.Join(", ", desktop)
                       + "); any method holding one of these call sites fails to compile headless, even in a catch block");
+            desktopSites = DesktopSiteScan.Analyze(dlls, n => DesktopFrameworkPrefixes.Any(p => n.StartsWith(p, StringComparison.OrdinalIgnoreCase)) && !IsSuppliedOnServer(n));
+            if (desktopSites.LoadSites.Count > 0)
+                notes.Add("desktop references on the load path: " + string.Join(", ", desktopSites.LoadSites.Take(4)) + (desktopSites.LoadSites.Count > 4 ? ", ..." : ""));
+            else if (desktopSites.DeferredSites.Count > 0)
+                notes.Add("desktop references only in method bodies the load path does not enter: " + string.Join(", ", desktopSites.DeferredSites.Take(4)) + (desktopSites.DeferredSites.Count > 4 ? ", ..." : ""));
+        }
         if (desktopSupplied.Count > 0)
             notes.Add("references " + string.Join(", ", desktopSupplied) + ", which the launcher supplies to the server");
         if (hard.Count > 0) notes.Add("constructs UI objects: " + string.Join(", ", hard));
         if (story.Count > 0 && storyModeOptional)
             notes.Add("StoryMode dependency is declared optional; probably fine when the reference is only in StoryMode-specific code paths");
-        return new ScanResult(moduleId, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList(), settingsClasses.ToList(), usesMcm, coopRefs.ToList(), desktop.ToList());
+        return new ScanResult(moduleId, verdict, ui.ToList(), story.ToList(), guarded.ToList(), notes, campaignBehaviors.ToList(), missionBehaviors.ToList(), settingsClasses.ToList(), usesMcm, coopRefs.ToList(), desktop.ToList(), desktopSites);
     }
 
     // ---- settings-shaped classes (metadata only) ----------------------------------------------------------------
