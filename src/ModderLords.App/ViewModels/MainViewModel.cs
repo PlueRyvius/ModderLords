@@ -336,8 +336,8 @@ public partial class MainViewModel : ObservableObject
     ///
     /// The folder alone changes nothing: the module only does anything when the Bannerlord launcher has it enabled,
     /// which is still the mod-list sync's job, and only when the server runs it too. What it buys is that "the server
-    /// has a mod you do not have" stops being reachable for this one module. Failures are not worth a line at
-    /// startup — the launch path reports them properly.
+    /// has a mod you do not have" stops being reachable for this one module. A refused write is logged: it is the one
+    /// way a player stays on an old module after updating the launcher, and the next launch may be days away.
     /// </summary>
     public async Task EnsureClientModuleAtStartupAsync()
     {
@@ -349,6 +349,8 @@ public partial class MainViewModel : ObservableObject
             var r = await Task.Run(() => ClientModuleInstaller.Ensure(ClientLauncher.ResolveGameRoot(profile)));
             if (r.Outcome is ClientModuleInstaller.InstallOutcome.Installed or ClientModuleInstaller.InstallOutcome.Updated)
                 Log(LogCategory.Tool, "[ModderLords] " + r.Message);
+            else if (r.Outcome is ClientModuleInstaller.InstallOutcome.Failed)
+                Log(LogCategory.Warning, "[ModderLords] " + r.Message);
         }
         catch (Exception ex) { Log(LogCategory.Tool, "[ModderLords] client module check skipped: " + ex.Message); }
     }
