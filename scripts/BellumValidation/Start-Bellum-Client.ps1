@@ -19,11 +19,18 @@ foreach ($required in @($cli, $template, $bundledBin, $installedBin)) {
     if (-not (Test-Path -LiteralPath $required)) { throw "Required validation input is missing: $required" }
 }
 
+# .NET directly: a window started from PowerShell 7 can inherit a module path where Windows PowerShell has no Get-FileHash.
+function Get-Sha256([string]$path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $stream = [System.IO.File]::OpenRead($path); try { [BitConverter]::ToString($sha.ComputeHash($stream)) } finally { $stream.Dispose() } }
+    finally { $sha.Dispose() }
+}
+
 foreach ($name in @('ModderLords.CompatSync.Coop.dll', 'ModderLords.Operations.dll')) {
     $bundled = Join-Path $bundledBin $name
     $installed = Join-Path $installedBin $name
     if (-not (Test-Path -LiteralPath $installed)) { throw "The validation client module is missing $installed" }
-    if ((Get-FileHash -LiteralPath $bundled).Hash -ne (Get-FileHash -LiteralPath $installed).Hash) {
+    if ((Get-Sha256 $bundled) -ne (Get-Sha256 $installed)) {
         throw "The installed client $name is not the validation build. Restage the validation build before launching."
     }
 }
