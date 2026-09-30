@@ -264,7 +264,8 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 if (!Kinds.Contains(command.Kind)) throw new OperationRejectedException("Unsupported Bellum action");
                 if (Campaign.Current == null) throw new OperationRejectedException("Campaign is unavailable");
                 var hero = ResolveHero(actor.HeroId);
-                if (hero?.Clan == null || hero.Clan.StringId != actor.ClanId) throw new OperationRejectedException("Actor clan ownership changed");
+                if (hero == null) throw new OperationRejectedException("Your hero could not be found on the server");
+                if (hero.Clan == null || hero.Clan.StringId != actor.ClanId) throw new OperationRejectedException("Actor clan ownership changed");
                 var revision = BellumCivileAdapter.RefreshServerRevision();
                 if (revision < 0 || command.ExpectedRevision != revision)
                     throw new OperationRejectedException("Political state changed; review the refreshed Bellum screen and try again");
@@ -466,7 +467,8 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 ?? throw new OperationRejectedException("The selected Bellum title no longer exists");
         }
 
-        private static Hero? ResolveHero(string id) => MBObjectManager.Instance.GetObject<Hero>(id);
+        // Actor.HeroId is a Coop object-manager id ("Hero_Player"), not a StringId.
+        private static Hero? ResolveHero(string id) => PlayerHeroes.HeroFor(id);
         private static Clan ResolveClan(string id) => Clan.All.FirstOrDefault(x => x.StringId == id)
             ?? throw new OperationRejectedException("The selected clan no longer exists");
         private static Kingdom ResolveKingdom(string id) => Kingdom.All.FirstOrDefault(x => x.StringId == id)

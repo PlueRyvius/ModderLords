@@ -9,7 +9,8 @@ Set-StrictMode -Version Latest
 
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $cli = Join-Path $repository 'src\ModderLords.Cli\bin\Release\net10.0\ModderLords.Cli.dll'
-$bundle = Join-Path $repository 'artifacts\ModderLords-1.1.1'
+$version = ([xml](Get-Content (Join-Path $repository 'Directory.Build.props'))).SelectSingleNode('//VersionPrefix').InnerText
+$bundle = Join-Path $repository "artifacts\ModderLords-$version"
 $server = Join-Path $SteamRoot 'steamapps\workshop\content\261550\3770450698\DedicatedServer'
 $game = Join-Path $SteamRoot 'steamapps\common\Mount & Blade II Bannerlord'
 $data = $DataDir

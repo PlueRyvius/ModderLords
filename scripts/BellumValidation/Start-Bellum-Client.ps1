@@ -11,7 +11,8 @@ $cli = Join-Path $repository 'src\ModderLords.Cli\bin\Release\net10.0\ModderLord
 $template = Join-Path $PSScriptRoot 'client-profile.json'
 $game = Join-Path $SteamRoot 'steamapps\common\Mount & Blade II Bannerlord'
 $workshop = Join-Path $SteamRoot 'steamapps\workshop\content\261550'
-$bundledBin = Join-Path $repository 'artifacts\ModderLords-1.1.1\compat\ModderLords.Compat\bin\Win64_Shipping_Client'
+$version = ([xml](Get-Content (Join-Path $repository 'Directory.Build.props'))).SelectSingleNode('//VersionPrefix').InnerText
+$bundledBin = Join-Path $repository "artifacts\ModderLords-$version\compat\ModderLords.Compat\bin\Win64_Shipping_Client"
 $installedBin = Join-Path $game 'Modules\ModderLords.Compat\bin\Win64_Shipping_Client'
 
 foreach ($required in @($cli, $template, $bundledBin, $installedBin)) {

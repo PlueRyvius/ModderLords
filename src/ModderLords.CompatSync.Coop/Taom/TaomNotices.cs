@@ -60,7 +60,7 @@ internal sealed class NoticeComponent : ITaomComponent
         try
         {
             if (!ContainerProvider.TryResolve<IPlayerManager>(out var players)) return;
-            var player = players.Players.FirstOrDefault(p => p.HeroId == hero.StringId);
+            var player = PlayerHeroes.PlayerFor(players, hero);
             if (player != null) Send(player.ControllerId, text!, color, quick);
         }
         catch (Exception ex) { Log.Warn("TAOM layer: could not forward a message to a player: " + ex.GetBaseException().Message); }
