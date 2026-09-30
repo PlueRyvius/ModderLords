@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$SteamRoot = $(if ($env:MODDERLORDS_STEAM_ROOT) { $env:MODDERLORDS_STEAM_ROOT } else { 'C:\Program Files (x86)\Steam' }),
+    [Parameter(Mandatory)][string]$DataDir
+)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -7,9 +10,9 @@ Set-StrictMode -Version Latest
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $cli = Join-Path $repository 'src\ModderLords.Cli\bin\Release\net10.0\ModderLords.Cli.dll'
 $bundle = Join-Path $repository 'artifacts\ModderLords-1.1.1'
-$server = 'D:\Program Files (x86)\Steam\steamapps\workshop\content\261550\3770450698\DedicatedServer'
-$game = 'D:\Program Files (x86)\Steam\steamapps\common\Mount & Blade II Bannerlord'
-$data = 'D:\Design\Bannerlord Mods\_bellum-civile-analysis-data\live'
+$server = Join-Path $SteamRoot 'steamapps\workshop\content\261550\3770450698\DedicatedServer'
+$game = Join-Path $SteamRoot 'steamapps\common\Mount & Blade II Bannerlord'
+$data = $DataDir
 
 foreach ($required in @($cli, $bundle, $server, $game, (Join-Path $data 'Game Saves\BellumCompatSmoke.sav'))) {
     if (-not (Test-Path -LiteralPath $required)) { throw "Required validation input is missing: $required" }

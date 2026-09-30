@@ -1,50 +1,50 @@
 {
   "SchemaVersion": 1,
   "Name": "Bellum isolated client validation",
-  "GameRoot": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord",
+  "GameRoot": "{GameRoot}",
   "CustomModRoots": [],
   "Mods": [
     {
       "Id": "Bannerlord.Harmony",
       "Role": "DependencyOnly",
       "Enabled": true,
-      "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\261550\\2859188632"
+      "SourcePath": "{WorkshopRoot}\\2859188632"
     },
     {
       "Id": "Bannerlord.ButterLib",
       "Role": "DependencyOnly",
       "Enabled": true,
-      "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\261550\\2859232415"
+      "SourcePath": "{WorkshopRoot}\\2859232415"
     },
     {
       "Id": "Bannerlord.UIExtenderEx",
       "Role": "DependencyOnly",
       "Enabled": true,
-      "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\261550\\2859222409"
+      "SourcePath": "{WorkshopRoot}\\2859222409"
     },
     {
       "Id": "Bannerlord.MBOptionScreen",
       "Role": "DependencyOnly",
       "Enabled": true,
-      "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\261550\\2859238197"
+      "SourcePath": "{WorkshopRoot}\\2859238197"
     },
     {
       "Id": "BellumCivile",
       "Role": "Run",
       "Enabled": true,
-      "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\BellumCivile"
+      "SourcePath": "{GameRoot}\\Modules\\BellumCivile"
     },
     {
       "Id": "CoopNightly",
       "Role": "AsShipped",
       "Enabled": true,
-      "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\261550\\3770450698"
+      "SourcePath": "{WorkshopRoot}\\3770450698"
     },
     {
       "Id": "ModderLords.Compat",
       "Role": "Run",
       "Enabled": true,
-      "SourcePath": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\ModderLords.Compat"
+      "SourcePath": "{GameRoot}\\Modules\\ModderLords.Compat"
     }
   ],
   "SettingsSync": true,
