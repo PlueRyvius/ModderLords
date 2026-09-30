@@ -92,6 +92,7 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                     ?? throw new InvalidOperationException("Operation client handler is unavailable");
                 currentClient = this;
                 client.ResultReceived += OnResult;
+                BellumStateMirror.Changed += OnStateChanged;
                 foreach (var target in Targets)
                 {
                     var prefix = target.IndexOf("SuccessionLawBehavior", StringComparison.Ordinal) >= 0
@@ -113,7 +114,8 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
     public void Dispose()
     {
         if (operation != null) global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.OperationServerHandler.Unregister(operation);
-        if (client != null) client.ResultReceived -= OnResult;
+        if (client != null) { client.ResultReceived -= OnResult; BellumStateMirror.Changed -= OnStateChanged; }
+        refreshScreenOnNextState = false;
         if (installed) harmony.UnpatchAll(HarmonyId);
         if (ReferenceEquals(currentClient, this)) currentClient = null;
         pending.Clear(); operation = null; client = null; installed = false;
@@ -157,10 +159,23 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
         pending.Remove(result.RequestId);
         if (result.State == RequestState.Completed)
         {
+            refreshScreenOnNextState = true;
             client?.RequestSnapshot(BellumCivileAdapter.OperationId);
             InformationManager.DisplayMessage(new InformationMessage("Bellum action completed: " + Friendly(kind), Colors.Green));
         }
         else InformationManager.DisplayMessage(new InformationMessage("Bellum action rejected: " + result.Detail, Colors.Red));
+    }
+
+    // Bellum's screens read state when they refresh and nothing else redraws them, so after the player's own action
+    // the open screen is refreshed once when the server's resulting state lands. Not on every snapshot: those arrive
+    // every few seconds and redrawing would keep resetting what the player is looking at.
+    private volatile bool refreshScreenOnNextState;
+
+    private void OnStateChanged()
+    {
+        if (!refreshScreenOnNextState) return;
+        refreshScreenOnNextState = false;
+        BellumScreenRefresh.RefreshOpenScreen();
     }
 
     private static BellumCommand FromCall(string method, object? instance, object[] args)
@@ -266,9 +281,11 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 var hero = ResolveHero(actor.HeroId);
                 if (hero == null) throw new OperationRejectedException("Your hero could not be found on the server");
                 if (hero.Clan == null || hero.Clan.StringId != actor.ClanId) throw new OperationRejectedException("Actor clan ownership changed");
-                var revision = BellumCivileAdapter.RefreshServerRevision();
-                if (revision < 0 || command.ExpectedRevision != revision)
-                    throw new OperationRejectedException("Political state changed; review the refreshed Bellum screen and try again");
+                // Bellum's simulation changes political state every few seconds on a live server, so requiring the
+                // client's exact revision refused almost every action. Each action runs through Bellum's own Try*
+                // service against live state, which is what decides whether it is still allowed; this only refuses a
+                // client that has never received Bellum state.
+                if (command.ExpectedRevision < 1) throw new OperationRejectedException("Bellum state has not synchronized yet");
                 ValidateArguments(command);
                 reason = ""; return true;
             }

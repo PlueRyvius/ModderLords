@@ -85,7 +85,6 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
         }
     }
 
-    internal static long RefreshServerRevision() => currentServerOperation?.RefreshRevision() ?? -1;
 }
 
 /// <summary>Coalesces authoritative Bellum mutations before broadcasting one actor-independent snapshot.</summary>
