@@ -11,10 +11,12 @@ public static class CompatibilityPlanner
         return JsonSerializer.Deserialize<ImmutableArray<OperationContract>>(stream, AnalysisJson.Options);
     }
     public static CompatibilityPlan Build(AnalysisRequest request, ImmutableArray<InputFingerprint> fingerprints,
-        ImmutableArray<CoverageGap> gaps, IEnumerable<OperationContract>? contracts = null)
+        ImmutableArray<CoverageGap> gaps, IEnumerable<OperationContract>? contracts = null,
+        IReadOnlySet<string>? validationOverrides = null)
     {
+        var availableContracts = (contracts ?? BundledContracts()).ToArray();
         var decisions = new List<ContractDecision>();
-        foreach (var contract in contracts ?? BundledContracts())
+        foreach (var contract in availableContracts)
         {
             var mod = request.Modules.FirstOrDefault(m => m.Id == contract.Module);
             if (mod == null) continue;
@@ -33,10 +35,13 @@ public static class CompatibilityPlanner
             else if (contract.Provider != "ModderLords") decisions.Add(new(contract, contract.Suppressed ? ActivationDecision.Suppressed : ActivationDecision.RecognizedExternal,
                 contract.Suppressed ? "The matching external provider suppresses this feature." : "External implementation recognized; runtime installation is not verified."));
             else if (!request.AutomaticCompatibility) decisions.Add(new(contract, ActivationDecision.Disabled, "Automatic compatibility is disabled for this profile."));
-            else if (!contract.OfflineValidated || !contract.RuntimeValidated) decisions.Add(new(contract, ActivationDecision.ValidationRequired, "Contract is implemented but has not completed its required offline and integration validation."));
+            else if ((!contract.OfflineValidated || !contract.RuntimeValidated) && validationOverrides?.Contains(contract.Id) != true) decisions.Add(new(contract, ActivationDecision.ValidationRequired, "Contract is implemented but has not completed its required offline and integration validation."));
             else if (!contract.SurfacesCoverTargets) decisions.Add(new(contract, ActivationDecision.ValidationRequired, "Contract installs an adapter without a captured surface for every target it patches."));
-            else if (gaps.Length > 0) decisions.Add(new(contract, ActivationDecision.Diagnostic, "The selected execution environment has unresolved coverage gaps."));
-            else decisions.Add(new(contract, ActivationDecision.Activate, "Compiled adapter and exact inputs have a validated contract."));
+            else if (gaps.Length > 0 && validationOverrides?.Contains(contract.Id) != true) decisions.Add(new(contract, ActivationDecision.Diagnostic, "The selected execution environment has unresolved coverage gaps."));
+            else decisions.Add(new(contract, ActivationDecision.Activate,
+                validationOverrides?.Contains(contract.Id) == true
+                    ? "Compiled adapter and exact inputs are enabled for this isolated validation run only."
+                    : "Compiled adapter and exact inputs have a validated contract."));
         }
         // No two managed contracts may own the same target. A provider's claim wins over a new adapter.
         var initialDecisions = decisions.ToArray();
@@ -49,7 +54,12 @@ public static class CompatibilityPlanner
         var contextDigest = AnalysisJson.Hash(JsonSerializer.Serialize(new { Rules = OperationAnalyzer.RulesVersion,
             Order = request.Modules.Select(m => new { m.Id, m.Version, m.RunsOnServer }),
             request.AutomaticCompatibility, Fingerprints = fingerprints, Decisions = immutable }, AnalysisJson.Options));
-        var plan = new CompatibilityPlan("", immutable, fingerprints, contextDigest, request.Modules.Select(m => m.Id).ToImmutableArray());
+        var validationRequirements = availableContracts.Where(c => validationOverrides?.Contains(c.Id) == true)
+            .SelectMany(c => c.Requires).ToArray();
+        var attestedFingerprints = validationRequirements.Length == 0 ? fingerprints : fingerprints.Where(f =>
+            f.Module == "$environment" || validationRequirements.Any(r => r.Module == f.Module && r.Name == f.Name &&
+                (r.Side == null || r.Side == f.Side))).ToImmutableArray();
+        var plan = new CompatibilityPlan("", immutable, attestedFingerprints, contextDigest, request.Modules.Select(m => m.Id).ToImmutableArray());
         var json = ModderLords.Operations.PlanIntegrity.Parse(JsonSerializer.Serialize(plan, AnalysisJson.Options));
         return plan with { Digest = ModderLords.Operations.PlanIntegrity.Compute(json) };
     }

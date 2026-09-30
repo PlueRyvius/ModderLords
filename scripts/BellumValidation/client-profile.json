@@ -1,0 +1,60 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Bellum isolated client validation",
+  "GameRoot": "{GameRoot}",
+  "CustomModRoots": [],
+  "Mods": [
+    {
+      "Id": "Bannerlord.Harmony",
+      "Role": "DependencyOnly",
+      "Enabled": true,
+      "SourcePath": "{WorkshopRoot}\\2859188632"
+    },
+    {
+      "Id": "Bannerlord.ButterLib",
+      "Role": "DependencyOnly",
+      "Enabled": true,
+      "SourcePath": "{WorkshopRoot}\\2859232415"
+    },
+    {
+      "Id": "Bannerlord.UIExtenderEx",
+      "Role": "DependencyOnly",
+      "Enabled": true,
+      "SourcePath": "{WorkshopRoot}\\2859222409"
+    },
+    {
+      "Id": "Bannerlord.MBOptionScreen",
+      "Role": "DependencyOnly",
+      "Enabled": true,
+      "SourcePath": "{WorkshopRoot}\\2859238197"
+    },
+    {
+      "Id": "BellumCivile",
+      "Role": "Run",
+      "Enabled": true,
+      "SourcePath": "{GameRoot}\\Modules\\BellumCivile"
+    },
+    {
+      "Id": "CoopNightly",
+      "Role": "AsShipped",
+      "Enabled": true,
+      "SourcePath": "{WorkshopRoot}\\3770450698"
+    },
+    {
+      "Id": "ModderLords.Compat",
+      "Role": "Run",
+      "Enabled": true,
+      "SourcePath": "{GameRoot}\\Modules\\ModderLords.Compat"
+    }
+  ],
+  "SettingsSync": true,
+  "AutomaticCompatibility": true,
+  "ManualLoadOrder": false,
+  "ClientOfficialModules": [
+    "Native",
+    "SandBoxCore",
+    "Sandbox",
+    "StoryMode",
+    "CustomBattle"
+  ]
+}

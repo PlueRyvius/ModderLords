@@ -23,10 +23,9 @@ public sealed record CapabilityStatus(CapabilityState Loading, CapabilityState A
 public sealed record OperationFinding(string Module, ExecutionSide Side, string Id, string EntryPoint, AuthorityDomain Authority,
     ImmutableArray<string> Effects, ImmutableArray<EffectWitness> Evidence, CapabilityStatus Status);
 /// <param name="Strict">
-/// Whether a changed file refuses the launch on its own. True for the Coop assemblies, which an adapter reaches into
-/// by reflection across a wide surface, so the file really is the dependency. False for a provider mod that carries
-/// TargetSurfaces: there the patched methods are the dependency, and refusing on an unrelated texture fix would only
-/// teach people that the refusal means nothing.
+/// Whether a changed file refuses the launch on its own. Use this for an intentionally version-pinned provider whose
+/// serialized/reflected surface is the dependency. False is appropriate when TargetSurfaces or an explicit runtime
+/// capability contract define the real boundary. Coop uses the latter so compatible auto-updates remain usable.
 /// </param>
 public sealed record RequiredFingerprint(string Module, string Name, string Sha256, ExecutionSide? Side = null, bool Strict = true);
 
@@ -53,7 +52,7 @@ public sealed record OperationContract(string Id, string Version, string Module,
     /// surface per target the runtime has nothing to re-check, so the planner refuses rather than trusting the file
     /// hash alone.
     /// </summary>
-    public bool SurfacesCoverTargets => AdapterId == null ||
+    public bool SurfacesCoverTargets => AdapterId == null || Targets.IsDefaultOrEmpty ||
         (!TargetSurfaces.IsDefaultOrEmpty && Targets.All(t => TargetSurfaces.Any(s => s.Method == t)));
 }
 public sealed record ContractDecision(OperationContract Contract, ActivationDecision Decision, string Reason);

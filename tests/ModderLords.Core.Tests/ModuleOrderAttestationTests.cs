@@ -3,10 +3,14 @@ namespace ModderLords.Core.Tests;
 public sealed class ModuleOrderAttestationTests
 {
     [Fact]
-    public void PlatformModulesDoNotHideSelectedOrderChanges()
+    public void ConnectionInfrastructureMayHaveSideSpecificPlacement()
     {
-        Assert.True(ModuleOrderAttestation.Validate(["CoopNightly", "fixture"], ["Native", "Sandbox", "CoopNightly", "ModderLords.Compat", "fixture"], out _));
-        Assert.False(ModuleOrderAttestation.Validate(["CoopNightly", "fixture"], ["Native", "fixture", "CoopNightly"], out _));
+        Assert.True(ModuleOrderAttestation.Validate(
+            ["dependency", "fixture", "ModderLords.Compat", "DedicatedServer.ModderLordsCompat", "CoopNightly"],
+            ["Native", "Sandbox", "dependency", "fixture", "CoopNightly", "ModderLords.Compat"], out _));
+        Assert.False(ModuleOrderAttestation.Validate(
+            ["dependency", "fixture", "ModderLords.Compat", "DedicatedServer.ModderLordsCompat", "CoopNightly"],
+            ["Native", "fixture", "dependency", "CoopNightly", "ModderLords.Compat"], out _));
     }
     [Theory]
     [InlineData("unknown")]

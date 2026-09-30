@@ -21,8 +21,12 @@ internal static class TargetSurfaceCheck
     public static string? Problem(JObject contract)
     {
         var surfaces = contract["TargetSurfaces"] as JArray;
-        var targets = ((JArray?)contract["Targets"] ?? new JArray()).Values<string>().ToArray();
+        var targets = ((JArray?)contract["Targets"] ?? new JArray()).Values<string>().Where(x => x != null).Select(x => x!).ToArray();
         var id = (string?)contract["Id"] ?? "contract";
+        // Snapshot/read-model adapters do not patch provider methods. Their reflected schema is checked by the
+        // adapter's ValidateTargets implementation and their provider assembly is strictly fingerprinted. Requiring
+        // a synthetic Harmony surface here would make that contract claim to patch code it never touches.
+        if (targets.Length == 0) return null;
         if (surfaces == null || surfaces.Count == 0)
             return id + " installs an adapter but pins no method surfaces";
 
