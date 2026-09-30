@@ -72,7 +72,7 @@ internal sealed class LeNoticeComponent : ILeComponent
         try
         {
             if (!ContainerProvider.TryResolve<IPlayerManager>(out var players)) return;
-            var player = players.Players.FirstOrDefault(p => p.HeroId == hero.StringId);
+            var player = PlayerHeroes.PlayerFor(players, hero);
             if (player != null) NoticeComponent.Send(player.ControllerId, message.Information, message.Color.ToUnsignedInteger(), false);
         }
         catch (Exception ex) { Log.Warn(LivingEconomyLayer.Tag + "could not forward a message to a player: " + ex.GetBaseException().Message); }

@@ -436,6 +436,19 @@ public static class BellumStateCodec
         return json;
     }
 
+    /// <summary>
+    /// The political content a revision stands for. Revision and CapturedDay are stamps, not state: campaign time keeps
+    /// running on a Coop server, so counting it as a change moved the revision on every capture and every player action
+    /// was refused as "Political state changed".
+    /// </summary>
+    public static string PoliticalContent(BellumStateSnapshot snapshot)
+    {
+        var revision = snapshot.Revision; var day = snapshot.CapturedDay;
+        snapshot.Revision = 0; snapshot.CapturedDay = 0;
+        try { return Serialize(snapshot); }
+        finally { snapshot.Revision = revision; snapshot.CapturedDay = day; }
+    }
+
     public static BellumStateSnapshot Deserialize(string json)
     {
         if (json == null || Encoding.UTF8.GetByteCount(json) > SnapshotTransfer.MaxSnapshotBytes) throw new InvalidDataException("Bellum snapshot exceeds transfer bounds");

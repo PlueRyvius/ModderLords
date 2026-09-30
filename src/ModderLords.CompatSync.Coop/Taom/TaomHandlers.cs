@@ -173,14 +173,13 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             TaomActions.Push = (hero, feature, data) =>
             {
                 if (!ContainerProvider.TryResolve<IPlayerManager>(out var pm)) return;
-                foreach (var p in pm.Players)
-                    if (p.HeroId == hero.StringId && pm.TryGetPeer(p.ControllerId, out var peer) && peer != null)
-                        network.Send(peer, new NetworkTaomActionResult
-                        {
-                            Feature = feature, Op = "push", Ok = true, Message = "",
-                            Data = new System.Collections.Generic.List<string>(data),
-                            ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion,
-                        });
+                if (PlayerHeroes.PlayerFor(pm, hero) is { } p && pm.TryGetPeer(p.ControllerId, out var peer) && peer != null)
+                    network.Send(peer, new NetworkTaomActionResult
+                    {
+                        Feature = feature, Op = "push", Ok = true, Message = "",
+                        Data = new System.Collections.Generic.List<string>(data),
+                        ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion,
+                    });
             };
             NoticeComponent.Send = (controllerId, text, color, quick) =>
             {

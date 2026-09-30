@@ -33,6 +33,7 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
     public void Install()
     {
         if (!ValidateTargets(out var reason)) { Readiness = AdapterReadiness.Failed; Detail = reason; throw new InvalidOperationException(reason); }
+        KingdomDecisionTrace.Install();
         if (OperationProcessSide.IsServer)
         {
             operation = new BellumStateOperation();
@@ -78,15 +79,13 @@ public sealed class BellumCivileAdapter : ICompatibilityAdapter
         private string CaptureCurrent()
         {
             var snapshot = BellumStateReader.Capture(revision);
-            snapshot.Revision = 0;
-            var content = BellumStateCodec.Serialize(snapshot);
+            var content = BellumStateCodec.PoliticalContent(snapshot);
             if (!string.Equals(content, canonical, StringComparison.Ordinal)) { canonical = content; revision++; }
             snapshot.Revision = revision;
             return BellumStateCodec.Serialize(snapshot);
         }
     }
 
-    internal static long RefreshServerRevision() => currentServerOperation?.RefreshRevision() ?? -1;
 }
 
 /// <summary>Coalesces authoritative Bellum mutations before broadcasting one actor-independent snapshot.</summary>

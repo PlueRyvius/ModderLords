@@ -88,6 +88,9 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
                 }
                 dispatcher ??= new CommandDispatcher(OperationRuntime.Activation.Digest!, epoch, registered);
                 var result = dispatcher.Execute(new OperationCommand(request.Digest, request.Epoch, request.RequestId, request.OperationId, request.Payload), actor);
+                if (result.State == RequestState.Rejected)
+                    ModderLords.CompatSync.Log.Warn("operation command rejected: " + request.OperationId + " for " + actor.ControllerId
+                        + " (hero " + actor.HeroId + ", clan " + actor.ClanId + "): " + result.Detail);
                 network.Send(peer, new OperationResultV1 { Epoch = epoch, RequestId = result.RequestId, State = (int)result.State, Detail = result.Detail, Payload = result.Payload, Revision = result.Revision });
                 SendSnapshot(peer, request.OperationId, actor);
             });
