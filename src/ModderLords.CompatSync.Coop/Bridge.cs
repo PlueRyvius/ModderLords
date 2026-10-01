@@ -27,6 +27,7 @@ public static class Bridge
         Steps.Run("KingdomVoteTimeoutAi.EnsureInstalled", () => KingdomVoteTimeoutAi.EnsureInstalled());
         Steps.Run("InventoryExchangeEvent.EnsureInstalled", () => InventoryExchangeEvent.EnsureInstalled());
         Steps.Run("SessionCheck.EnsureRegistered", () => SessionCheck.EnsureRegistered());
+        Steps.Run("Admin.PlayerAdmin.ServerTick", () => Admin.PlayerAdmin.ServerTick());
         Steps.Run("SessionCheck.ClientTick", () => SessionCheck.ClientTick());
         Steps.Run("SmokeCharacterCreation.ClientTick", () => SmokeCharacterCreation.ClientTick());
         Steps.Run("Taom.TaomLayer.Tick", () => Taom.TaomLayer.Tick());

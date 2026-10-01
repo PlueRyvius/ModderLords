@@ -407,7 +407,7 @@ one is known.
 ## The tabs
 
 **Mods** and **Share** are always there. **Saves**, **Server**, **Gameplay**, **Mod settings**, **Console**,
-**Smoke test** and **Performance** appear in Host mode only, and so do the coop-only columns of the Mods tab described below.
+**Characters**, **Smoke test** and **Performance** appear in Host mode only, and so do the coop-only columns of the Mods tab described below.
 
 ### Mods
 
@@ -523,6 +523,20 @@ Filters: **Engine** (the engine's own chatter, off by default), **Module load**,
 pins the view). **Find** filters by text. Type a server command in the box and press Enter (`help` lists them; `stop`
 shuts down). **Logs folder** opens the launcher's own per-launch logs.
 
+### Characters *(Host mode)*
+
+Everyone with a character on the running server: name, clan, level, gold, whether they are online (and in a battle or a
+siege), their Steam id and the address they connected from. The list updates by itself when someone joins or leaves.
+
+- **Kick** disconnects the selected player. Their character stays in the world and they can rejoin.
+- **Ban** disconnects them and refuses them from then on, by Steam id and by the address they connected from (an
+  address ban also refuses anyone else joining from that network). **Reason** is kept with the ban.
+- **Unban** removes the selected ban.
+
+Bans are a file, not a server setting, so they can be managed while the server is stopped and hold for every profile
+this PC hosts. A game started without Steam has no id of its own, and a game on this PC connects from this PC's own
+address; neither is ever banned, so a ban can never lock out everyone without Steam, or the host.
+
 ### Smoke test *(Host mode)*
 
 Checks, without anyone playing, that this PC's game can join the server and stay on it. **Run smoke test** starts the
@@ -600,6 +614,7 @@ Per-profile things without a tab of their own:
 | Launcher logs | `%LOCALAPPDATA%\ModderLords\logs\launch-*.log`, `app-errors.log` |
 | Support bundles you created | `%LOCALAPPDATA%\ModderLords\support\` |
 | Smoke test reports (last 20) | `%LOCALAPPDATA%\ModderLords\smoke\<date-time>\` |
+| Ban list (Characters tab) | `Documents\Mount and Blade II Bannerlord\CoopData\DedicatedServer\ModderLords\bans.json` |
 | Server data (saves, server-config.json, server logs, config backups) | `Documents\Mount and Blade II Bannerlord\CoopData\DedicatedServer\` |
 | Gameplay config | `Documents\Mount and Blade II Bannerlord\CoopData\mod-config.json` |
 | The server itself (untouched except for links under `engine\Modules`) | `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\` |

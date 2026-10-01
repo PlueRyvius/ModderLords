@@ -49,6 +49,7 @@ public partial class HostViewModel : ObservableObject
         _creationTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _creationTimer.Tick += (_, _) => RefreshCreationProgress();
         Smoke = new SmokeTestViewModel(this);
+        Characters = new CharactersViewModel(this);
     }
 
     // Passed through so the coop tabs, whose DataContext is this object, can still bind the profile and the
@@ -134,6 +135,9 @@ public partial class HostViewModel : ObservableObject
 
     /// <summary>Smoke test tab: this PC's game joins the server by itself and both sides are checked.</summary>
     public SmokeTestViewModel Smoke { get; private set; } = null!;
+
+    /// <summary>Characters tab: the server's players (list, kick) and its ban list.</summary>
+    public CharactersViewModel Characters { get; private set; } = null!;
     [ObservableProperty] private string _commandText = "";
     [ObservableProperty] private string _consoleFilter = "";
     [ObservableProperty] private bool _showEngine;

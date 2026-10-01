@@ -18,12 +18,20 @@ public static class MiniJson
     public static string Serialize(object? value)
     {
         var sb = new StringBuilder();
-        Write(sb, value, 0);
+        Write(sb, value, 0, pretty: true);
         sb.Append('\n');
         return sb.ToString();
     }
 
-    private static void Write(StringBuilder sb, object? value, int depth)
+    /// <summary>The same document on one line, with no trailing newline: for a value that has to travel as one console line.</summary>
+    public static string SerializeCompact(object? value)
+    {
+        var sb = new StringBuilder();
+        Write(sb, value, 0, pretty: false);
+        return sb.ToString();
+    }
+
+    private static void Write(StringBuilder sb, object? value, int depth, bool pretty)
     {
         switch (value)
         {
@@ -42,12 +50,12 @@ public static class MiniJson
                 {
                     if (!first) sb.Append(',');
                     first = false;
-                    Indent(sb, depth + 1);
+                    if (pretty) Indent(sb, depth + 1);
                     WriteString(sb, kv.Key);
-                    sb.Append(": ");
-                    Write(sb, kv.Value, depth + 1);
+                    sb.Append(pretty ? ": " : ":");
+                    Write(sb, kv.Value, depth + 1, pretty);
                 }
-                if (!first) Indent(sb, depth);
+                if (!first && pretty) Indent(sb, depth);
                 sb.Append('}');
                 break;
             case IEnumerable<object?> list:
@@ -57,10 +65,10 @@ public static class MiniJson
                 {
                     if (any) sb.Append(',');
                     any = true;
-                    Indent(sb, depth + 1);
-                    Write(sb, item, depth + 1);
+                    if (pretty) Indent(sb, depth + 1);
+                    Write(sb, item, depth + 1, pretty);
                 }
-                if (any) Indent(sb, depth);
+                if (any && pretty) Indent(sb, depth);
                 sb.Append(']');
                 break;
             default:
