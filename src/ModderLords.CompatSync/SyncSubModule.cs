@@ -14,8 +14,25 @@ namespace ModderLords.CompatSync;
 /// </summary>
 public sealed class SyncSubModule : MBSubModuleBase
 {
-    public const string Version = "0.1.31";
+    /// <summary>
+    /// This module's version as its SubModule.xml declares it (bin\&lt;platform&gt;\ -> module root). It used to be a
+    /// hand-kept constant, which stopped at 0.1.31 while the module moved on and made support logs misleading.
+    /// </summary>
+    public static string Version => s_version ??= ReadModuleVersion();
+    private static string? s_version;
     private const string AdapterFileName = "ModderLords.CompatSync.Coop.dll";
+
+    private static string ReadModuleVersion()
+    {
+        try
+        {
+            var bin = System.IO.Path.GetDirectoryName(typeof(SyncSubModule).Assembly.Location) ?? "";
+            var xml = System.IO.Path.Combine(bin, "..", "..", "SubModule.xml");
+            var match = System.Text.RegularExpressions.Regex.Match(System.IO.File.ReadAllText(xml), "<Version value=\"v?([^\"]+)\"");
+            return match.Success ? match.Groups[1].Value : "unknown";
+        }
+        catch { return "unknown"; }
+    }
 
     private float _sinceTick;
     private float _sinceVerify;
