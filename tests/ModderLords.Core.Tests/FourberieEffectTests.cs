@@ -154,3 +154,48 @@ public sealed class FbEffectWireTests
         Assert.Empty(net.Drain());
     }
 }
+
+// A number declared on a base type and reached through a derived one, as Fief.FoodStocks is through Town.
+internal class StandInFief
+{
+    public float FoodStocks { [MethodImpl(MethodImplOptions.NoInlining)] get; [MethodImpl(MethodImplOptions.NoInlining)] set; }
+}
+
+internal sealed class StandInTown : StandInFief { }
+
+public sealed class FbEffectsSetterTests : IDisposable
+{
+    private readonly Harmony _harmony = new("ModderLords.Tests.FbEffectsSetter");
+    private static int _seen;
+
+    public static void Seen() => _seen++;
+
+    public void Dispose() => _harmony.UnpatchAll(_harmony.Id);
+
+    [Fact]
+    public void PatchingTheSetterAsReachedThroughTheDerivedTypeFails()
+    {
+        // The bug: the setter looked up on the derived type is refused by Harmony, which took every later patch with it.
+        Assert.ThrowsAny<Exception>(() => _harmony.Patch(AccessTools.PropertySetter(typeof(StandInTown), nameof(StandInFief.FoodStocks)),
+            prefix: new HarmonyMethod(typeof(FbEffectsSetterTests), nameof(Seen))));
+    }
+
+    [Fact]
+    public void TheDeclaredSetterPatchesAndSeesWritesThroughTheDerivedType()
+    {
+        var setter = FbPatchTargets.DeclaredSetter(typeof(StandInTown), nameof(StandInFief.FoodStocks));
+        Assert.NotNull(setter);
+        Assert.Equal(typeof(StandInFief), setter!.DeclaringType);
+        _harmony.Patch(setter, prefix: new HarmonyMethod(typeof(FbEffectsSetterTests), nameof(Seen)));
+        _seen = 0;
+        new StandInTown().FoodStocks = 5f;
+        Assert.Equal(1, _seen);
+    }
+
+    [Fact]
+    public void ASetterDeclaredOnTheTypeItselfIsUnchanged()
+    {
+        Assert.Equal(typeof(StandInFief), FbPatchTargets.DeclaredSetter(typeof(StandInFief), nameof(StandInFief.FoodStocks))!.DeclaringType);
+        Assert.Null(FbPatchTargets.DeclaredSetter(typeof(StandInTown), "NoSuchNumber"));
+    }
+}

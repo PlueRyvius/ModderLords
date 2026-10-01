@@ -217,8 +217,8 @@ internal sealed class FbCrimeComponent : IFbComponent
         var h = new Harmony(Owner);
         // Above Coop's own setter prefix, which would send the number to every player.
         var prefix = new HarmonyMethod(typeof(FbCrime), nameof(FbCrime.SetterPrefix)) { priority = Priority.First + 300 };
-        h.Patch(AccessTools.PropertySetter(typeof(Kingdom), nameof(Kingdom.MainHeroCrimeRating)), prefix: prefix);
-        h.Patch(AccessTools.PropertySetter(typeof(Clan), nameof(Clan.MainHeroCrimeRating)), prefix: prefix);
+        h.Patch(FbPatchTargets.DeclaredSetter(typeof(Kingdom), nameof(Kingdom.MainHeroCrimeRating)), prefix: prefix);
+        h.Patch(FbPatchTargets.DeclaredSetter(typeof(Clan), nameof(Clan.MainHeroCrimeRating)), prefix: prefix);
         return "each player's crime ratings are their own, kept in their book, with vanilla's daily change run for each of them";
     }
 }
