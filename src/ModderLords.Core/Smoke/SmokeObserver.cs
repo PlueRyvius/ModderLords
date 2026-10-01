@@ -55,6 +55,10 @@ public sealed class SmokeObserver
     public DateTimeOffset? ReadyAt { get; private set; }
     public int? PingMs { get; private set; }
     public List<string> ClientWarnings { get; } = new();
+    /// <summary>The compat module started creating a character (the world had none for this player).</summary>
+    public bool CreatingCharacter { get; private set; }
+    /// <summary>"Smoke 4821 (Vlandia)" once it finished.</summary>
+    public string? CreatedCharacter { get; private set; }
 
     public void ServingNow() => Serving = true;
 
@@ -159,6 +163,13 @@ public sealed class SmokeObserver
             Advance(ClientStage.OnMap, at);
         }
         if (SmokeSignals.PingMs(message) is { } ms) PingMs ??= ms;
+        if (message.StartsWith(SmokeSignals.CreationStartedLine, StringComparison.Ordinal))
+        {
+            CreatingCharacter = true;
+            Advance(ClientStage.CharacterCreation, at);
+        }
+        if (message.StartsWith(SmokeSignals.CreationDoneLine, StringComparison.Ordinal))
+            CreatedCharacter ??= message[SmokeSignals.CreationDoneLine.Length..];
         if (SmokeSignals.IsWarning(message)) AddWarning(message, ClientWarnings);
     }
 
@@ -259,10 +270,14 @@ public static class SmokeEvaluator
 
         var onMap = o.Stage == ClientStage.OnMap;
         if (onMap)
-            checks.Add(new SmokeCheck("On the campaign map", SmokeVerdict.Pass, Took(o, ClientStage.OnMap)));
+            checks.Add(new SmokeCheck("On the campaign map", SmokeVerdict.Pass, Took(o, ClientStage.OnMap)
+                + (o.CreatingCharacter ? ", after creating a character automatically" : "")));
+        else if (o.CreatingCharacter)
+            checks.Add(new SmokeCheck("On the campaign map", SmokeVerdict.Fail,
+                "the world had no character for you; creating one automatically started but the game never reached the map", o.ClientWarnings));
         else if (o.Stage == ClientStage.CharacterCreation)
             checks.Add(new SmokeCheck("On the campaign map", SmokeVerdict.Warn,
-                "the game stopped at character creation: this world has no character for you yet. Join once by hand to make one, then run the test again."));
+                "the game stopped at character creation (this world has no character for you), and its ModderLords.Compat did not create one. Join once by hand, or use a profile with Settings sync."));
         else if (o.Stage >= ClientStage.Connecting)
             checks.Add(new SmokeCheck("On the campaign map", SmokeVerdict.Fail,
                 (f.TimedOutWaitingFor is { } w ? $"still {w} when the test gave up" : $"never got past {o.Stage}")
@@ -336,6 +351,9 @@ public static class SmokeEvaluator
             : new SmokeCheck("No ModderLords warnings", SmokeVerdict.Fail, $"{warnings.Count} warning(s) while joining", warnings));
 
         // Measurements.
+        if (o.CreatedCharacter is { } created)
+            checks.Add(new SmokeCheck("Character created automatically", SmokeVerdict.Info,
+                $"{created}: the world had no character for you, so one was made at random; it stays in this world"));
         if (o.ServerWarningsAtStartup.Count > 0)
             checks.Add(new SmokeCheck("Server warnings before the join", SmokeVerdict.Info, $"{o.ServerWarningsAtStartup.Count} (printed while the server loaded)", o.ServerWarningsAtStartup));
         if (o.ExpectedWarnings.Count > 0)

@@ -28,6 +28,7 @@ public static class Bridge
         Steps.Run("InventoryExchangeEvent.EnsureInstalled", () => InventoryExchangeEvent.EnsureInstalled());
         Steps.Run("SessionCheck.EnsureRegistered", () => SessionCheck.EnsureRegistered());
         Steps.Run("SessionCheck.ClientTick", () => SessionCheck.ClientTick());
+        Steps.Run("SmokeCharacterCreation.ClientTick", () => SmokeCharacterCreation.ClientTick());
         Steps.Run("Taom.TaomLayer.Tick", () => Taom.TaomLayer.Tick());
         Steps.Run("Taom.TaomStateMirror.ServerTick", () => Taom.TaomStateMirror.ServerTick());
         Steps.Run("LivingEconomy.LivingEconomyLayer.Tick", () => LivingEconomy.LivingEconomyLayer.Tick());

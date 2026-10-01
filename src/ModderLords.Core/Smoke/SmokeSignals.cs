@@ -138,6 +138,10 @@ public static partial class SmokeSignals
     public const string ReadyLine = "session check: campaign ready on this player's game";
     public const string AnsweredLine = "session check: server answered the ping in ";
     public const string ServerAnsweredLine = "session check: answered the ping of ";
+    // Mirrors ModderLords.CompatSync.Coop.SmokeCharacterCreation.
+    public const string SmokeFlag = "/modderlords-smoke";
+    public const string CreationStartedLine = "smoke test: creating a character automatically";
+    public const string CreationDoneLine = "smoke test: character created: ";
 
     /// <summary>The message part of a compat log line (<c>01:51:30.120 [ModderLords.Compat] ...</c>), or null.</summary>
     public static string? CompatMessage(string line)

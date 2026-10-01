@@ -41,8 +41,11 @@ public sealed record SmokeOptions
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Mount and Blade II Bannerlord", "crashes");
     public string EngineConfigPath { get; init; } = EngineConfigGuard.DefaultPath;
 
-    /// <summary>The arguments that make Coop join by itself: <c>/autoconnect host:port</c>.</summary>
-    public IReadOnlyList<string> AutoConnectArguments => ["/autoconnect", $"{JoinHost}:{JoinPort}"];
+    /// <summary>
+    /// The game's extra arguments: Coop's <c>/autoconnect host:port</c> joins by itself, and <c>/modderlords-smoke</c>
+    /// lets ModderLords.Compat create a character at random when the world has none for this player.
+    /// </summary>
+    public IReadOnlyList<string> LaunchArguments => ["/autoconnect", $"{JoinHost}:{JoinPort}", SmokeSignals.SmokeFlag];
 }
 
 /// <summary>
@@ -51,7 +54,7 @@ public sealed record SmokeOptions
 /// <para>
 /// The server is the caller's: it feeds the server's console lines in through <see cref="ServerLine"/> (from the Server
 /// tab's engine, or the CLI's), so the test sees exactly what the host sees. The game is started through a delegate,
-/// so it runs the same client plan the Launch client button runs, plus <see cref="SmokeOptions.AutoConnectArguments"/>.
+/// so it runs the same client plan the Launch client button runs, plus <see cref="SmokeOptions.LaunchArguments"/>.
 /// </para>
 /// </summary>
 public sealed class SmokeRunner
@@ -113,7 +116,7 @@ public sealed class SmokeRunner
         try
         {
             Say("Starting the game; Coop joins by itself…");
-            client = startClient(_options.AutoConnectArguments);
+            client = startClient(_options.LaunchArguments);
         }
         catch (Exception ex)
         {
@@ -126,7 +129,7 @@ public sealed class SmokeRunner
 
         // 3. Watch.
         ClientStage lastStage = ClientStage.Started;
-        DateTimeOffset? onMapAt = null, creationAt = null;
+        DateTimeOffset? onMapAt = null;
         while (!cancel.IsCancellationRequested)
         {
             await Delay(1000, cancel);
@@ -153,13 +156,6 @@ public sealed class SmokeRunner
                 facts = facts with { ServerExitCode = serverCode };
                 Say($"The server exited with {serverCode}.");
                 break;
-            }
-            if (stage == ClientStage.CharacterCreation)
-            {
-                // Nothing further happens without a person; give the server a moment to report it, then stop.
-                creationAt ??= now;
-                if (now - creationAt > TimeSpan.FromSeconds(5)) break;
-                continue;
             }
             if (stage == ClientStage.OnMap)
             {
@@ -293,7 +289,7 @@ public sealed class SmokeRunner
         ClientStage.ReceivingWorld => "Receiving the world from the server…",
         ClientStage.WorldReceived => "World received; loading…",
         ClientStage.Loading => "Loading the campaign…",
-        ClientStage.CharacterCreation => "Stopped at character creation (no character in this world yet).",
+        ClientStage.CharacterCreation => "No character in this world yet: ModderLords is creating one at random…",
         ClientStage.OnMap => "On the campaign map; watching the connection…",
         _ => stage.ToString(),
     };

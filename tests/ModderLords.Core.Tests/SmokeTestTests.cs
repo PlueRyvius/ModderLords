@@ -211,6 +211,36 @@ public sealed class SmokeEvaluatorTests
     }
 
     [Fact]
+    public void ACharacterCreatedAutomaticallyIsReported()
+    {
+        var o = new SmokeObserver();
+        o.ServingNow();
+        o.ClientStarted(T0);
+        o.ObserveServer("@DS@{\"ev\":\"players\",\"list\":[{\"id\":0,\"name\":\"(joining)\",\"state\":\"handshake\",\"addr\":\"\"}]}", T0);
+        o.ObserveCompatClient("05:01:02.000 [ModderLords.Compat] smoke test: creating a character automatically", T0.AddSeconds(50));
+        Assert.Equal(ClientStage.CharacterCreation, o.Stage);
+        o.ObserveCompatClient("05:01:40.000 [ModderLords.Compat] smoke test: character created: Smoke 4821 (Vlandia)", T0.AddSeconds(88));
+        o.ObserveServer("@DS@{\"ev\":\"players\",\"list\":[{\"id\":0,\"name\":\"Smoke 4821\",\"state\":\"on map\",\"addr\":\"\"}]}", T0.AddSeconds(100));
+        var checks = SmokeEvaluator.Evaluate(o, Done);
+        Assert.Contains("after creating a character automatically", checks.Single(c => c.Name == "On the campaign map").Detail);
+        Assert.StartsWith("Smoke 4821 (Vlandia)", checks.Single(c => c.Name == "Character created automatically").Detail);
+    }
+
+    [Fact]
+    public void AnAutomaticCreationThatNeverReachesTheMapFails()
+    {
+        var o = new SmokeObserver();
+        o.ServingNow();
+        o.ClientStarted(T0);
+        o.ObserveServer("@DS@{\"ev\":\"players\",\"list\":[{\"id\":0,\"name\":\"(joining)\",\"state\":\"handshake\",\"addr\":\"\"}]}", T0);
+        o.ObserveCompatClient("05:01:02.000 [ModderLords.Compat] smoke test: creating a character automatically", T0.AddSeconds(50));
+        o.ObserveCompatClient("05:02:02.000 [ModderLords.Compat] WARNING smoke test: character creation is stuck at SomeModStage", T0.AddSeconds(110));
+        var checks = SmokeEvaluator.Evaluate(o, Done with { TimedOutWaitingFor = "loading", SteadyAchieved = TimeSpan.Zero });
+        Assert.Equal(SmokeVerdict.Fail, VerdictOf(checks, "On the campaign map"));
+        Assert.Equal(SmokeVerdict.Fail, VerdictOf(checks, "No ModderLords warnings"));
+    }
+
+    [Fact]
     public void StoppingAtCharacterCreationIsAWarningNotAPass()
     {
         var o = new SmokeObserver();
