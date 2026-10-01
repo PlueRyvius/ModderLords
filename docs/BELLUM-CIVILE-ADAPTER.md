@@ -179,12 +179,42 @@ placeholder hero's clan, so with the server now authoritative, every real player
 simulation: votes are cast for them, and choices Bellum offers "the player" are made by AI or skipped. The command
 adapter already runs a player's own action as that player (`PlayerScope`), and ModderLords has a rewriter that turns
 "is this the player's?" into "is this any connected player's?" for server-run code (`PlayerComparisonRewriter`, used
-for other mods). Applying it to Bellum needs decisions first:
+for other mods).
 
-1. When a vote needs a player's choice, does the server wait for them (and for how long), or let the AI decide?
-2. If the player is offline, AI decides, or the vote waits until they return?
-3. Which Bellum prompts should reach the player's client as a question (a server-to-client request that does not
-   exist yet), and which may simply be decided on the server?
+Decided by the maintainer (2026-09-30):
+
+1. A player gets the choice, on a timer of **10 minutes**; with no answer, the AI decides as it would for a lord.
+2. An offline player simply times out (decided at once: there is nobody to wait for).
+3. Every Bellum prompt that involves a player goes to that player.
+
+The AI must keep acting on absent players (declaring war, revoking titles), even though their party cannot be
+interacted with directly.
+
+**Kingdom votes** (PR #146): Coop already gives player clans a 60 s voting round on vanilla decision types, which
+Bellum's policy, fief, expulsion and king-selection votes use; a player who does not vote is now decided for by the AI
+instead of abstaining. Bellum's own `PrivyCouncilAppointmentDecision` is a type Coop cannot send to clients
+(`KingdomDecisionDataConverter`), so players never see that vote yet.
+
+**Prompts** (`BellumPrompts`, `BellumPromptSites`, validation mode). A *site* is the Bellum method that raises a
+player prompt, a function naming the player it is for, and Bellum's own AI decision for when that player does not
+answer. The site runs as that player (`PlayerScope`), so Bellum takes its player branch with their names; the inquiry
+it opens goes to their game (FbPromptWire under feature `bellum-ui`, the shared action channel), and their answer runs
+Bellum's callback on the server as them. Where Bellum's "is this the player's?" means "players choose for
+themselves" (enlisting kin in a feud, AI revocations, AI claim fabrication) the comparison is rewritten to any player.
+Every site and rewritten method is pinned in the `bellum-civile.commands` contract.
+
+First set, claim feuds: crown judgment (AI: Bellum judges the petition as for a lord's realm), a party's answer to the
+ruling (AI: `GetRulingResponses` for that clan), the call to arms (AI: answer it, as a lord who qualifies does) and a
+title revocation demand (AI: `TryExecuteRevocation`, where the holder's defiance is Bellum's own call).
+
+Known limits: Bellum models one player per decision, so if the ruler and a party of the same feud are both players,
+the second is decided like a lord. Prompts still waiting when the server stops are not saved; Bellum re-raises its
+pending feud prompts each day, so those come back. Not yet exercised in play: the save used for headless runs has no
+title claims, and petitions resolve on the daily tick, which Coop does not run with no player connected.
+
+Still to do, in this order: the remaining choice prompts (civil war tribunal and call to arms, white peace, forced
+surrender parley, succession ultimatum, court agenda and faction leadership, asylum, mercenary departure, policy
+deviation), Bellum's notices to a specific player, and the council-appointment vote.
 
 ## Deliberately not claimed
 

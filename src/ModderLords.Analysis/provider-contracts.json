@@ -1005,7 +1005,16 @@
       "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::CompleteDismissal",
       "BellumCivile.Behaviors.PolicyDeliberationBehavior::QueuePlayerProposedVote",
       "BellumCivile.Behaviors.IdeologyBehavior::TryStartTreasonVote",
-      "BellumCivile.Behaviors.FiefDeliberationBehavior::QueueRevocationSettlementVote"
+      "BellumCivile.Behaviors.FiefDeliberationBehavior::QueueRevocationSettlementVote",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::BuildFeudSide",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::ResolveFeudCallsToArms",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::EvaluateClanForClaimedRevocation",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::TryRunAutonomousLandedAmbitionEvaluationForClan",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::ResolvePetition",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPendingPlayerRulerJudgmentInquiry",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPendingPlayerRulingInquiry",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPlayerSupportInvitation",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::ShowPlayerRevocationDemandInquiry"
     ],
     "Suppressed": false,
     "OfflineValidated": false,
@@ -1095,6 +1104,51 @@
       {
         "Method": "BellumCivile.Behaviors.FiefDeliberationBehavior::QueueRevocationSettlementVote",
         "BodyHash": "A53AD40722192C8FCD9151BFC2156421354F48519ACE97D13D4964AFFB5432E8",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::BuildFeudSide",
+        "BodyHash": "5DD8D602B30291256DEEB2AE0E738EA5992CA979DD055A25D76451E8AD1C7912",
+        "Callers": 8
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::ResolveFeudCallsToArms",
+        "BodyHash": "1F0109DF581FFFF34173974564C0FCE1B8571AF47FA76A58B486D38AA68FDB75",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::EvaluateClanForClaimedRevocation",
+        "BodyHash": "CFCF202E06BC458E7531756568F15A25DBE6D5E7081E149C2A9F87FCAD224660",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::TryRunAutonomousLandedAmbitionEvaluationForClan",
+        "BodyHash": "B25C9D217EBFA75A62401C58BC5D1FEBAAC7076A094B17E25E7C27D89FCCB60A",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::ResolvePetition",
+        "BodyHash": "5C64EDAEEE6AC9E95493BC5A3EB1C08223208AFF8C2FC03EE58A68F69F4F45C9",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPendingPlayerRulerJudgmentInquiry",
+        "BodyHash": "57BA464B3A41755150342C818BA1A6CA8619F9C9B77AE505805AABB80109A76D",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPendingPlayerRulingInquiry",
+        "BodyHash": "90A80038DC5CE1CD82457C7EFA6DE7B0410860CF2B6E4D3D00316023C47082BD",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPlayerSupportInvitation",
+        "BodyHash": "511555E16C40C5BAC1881CA20390B9A19E0C29C5E62DFAD033984CA5C96D986B",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::ShowPlayerRevocationDemandInquiry",
+        "BodyHash": "EA0DA68528EE1A50E1D5955C0AFB3A21D1FF0DB2EADCCDA44455ED5468947BD0",
         "Callers": 1
       }
     ],

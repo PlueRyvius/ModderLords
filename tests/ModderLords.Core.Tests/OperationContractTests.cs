@@ -142,7 +142,8 @@ public sealed class OperationContractTests
         Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnTick", authority.Targets);
         Assert.DoesNotContain("BellumCivile.UI.Map.WarScoreMapWidgetVM::OnTick", authority.Targets);
         var commands = Assert.Single(bellum, c => c.Id == "bellum-civile.commands");
-        Assert.Equal(17, commands.Targets.Length);
+        Assert.Equal(26, commands.Targets.Length);
+        Assert.Contains("BellumCivile.Behaviors.ClaimFeudBehavior::ResolvePetition", commands.Targets);
         Assert.Contains("BellumCivile.Behaviors.PolicyDeliberationBehavior::QueuePlayerProposedVote", commands.Targets);
         Assert.Equal(commands.Targets.Length, commands.TargetSurfaces.Length);
     }
@@ -150,16 +151,20 @@ public sealed class OperationContractTests
     // The adapters patch their own Targets arrays, and the runtime surface check only verifies what the contract lists,
     // so a method added to an adapter but not to the contract would be patched without its body being pinned.
     [Theory]
-    [InlineData("bellum-civile.authority", "BellumCivileAuthorityAdapter.cs")]
-    [InlineData("bellum-civile.commands", "BellumCivileCommandAdapter.cs")]
-    public void BellumAdapterTargetsMatchTheirContractExactly(string contractId, string adapterFile)
+    [InlineData("bellum-civile.authority", "BellumCivileAuthorityAdapter.cs", null)]
+    [InlineData("bellum-civile.commands", "BellumCivileCommandAdapter.cs", "BellumPromptSites.cs")]
+    public void BellumAdapterTargetsMatchTheirContractExactly(string contractId, string adapterFile, string? sitesFile)
     {
-        var source = File.ReadAllText(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
-            "src", "ModderLords.CompatSync.Coop", "Operations", adapterFile)));
+        static string Read(string file) => File.ReadAllText(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+            "src", "ModderLords.CompatSync.Coop", "Operations", file)));
+        static IEnumerable<string> Ids(string text) =>
+            System.Text.RegularExpressions.Regex.Matches(text, "\"(BellumCivile\\.[^\"]+::[^\"]+)\"").Select(m => m.Groups[1].Value);
+        var source = Read(adapterFile);
         var start = source.IndexOf("internal static readonly string[] Targets", StringComparison.Ordinal);
         Assert.True(start >= 0, adapterFile + " no longer declares Targets");
         var block = source[start..source.IndexOf("};", start, StringComparison.Ordinal)];
-        var adapterTargets = System.Text.RegularExpressions.Regex.Matches(block, "\"(BellumCivile\\.[^\"]+::[^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
+        // The prompt relay (BellumPrompts) patches every method its sites file names: the sites and the "any player" checks.
+        var adapterTargets = Ids(block).Concat(sitesFile == null ? Enumerable.Empty<string>() : Ids(Read(sitesFile))).Distinct().ToArray();
         var contract = Assert.Single(CompatibilityPlanner.BundledContracts(), c => c.Id == contractId);
         Assert.Equal(contract.Targets.OrderBy(x => x, StringComparer.Ordinal), adapterTargets.OrderBy(x => x, StringComparer.Ordinal));
         Assert.Equal(contract.Targets.OrderBy(x => x, StringComparer.Ordinal), contract.TargetSurfaces.Select(s => s.Method).OrderBy(x => x, StringComparer.Ordinal));
