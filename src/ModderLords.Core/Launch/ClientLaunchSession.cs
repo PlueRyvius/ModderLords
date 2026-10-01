@@ -135,7 +135,7 @@ public static class ClientLaunchSession
             // A server plan must arrive through the authenticated operation channel, not an inherited environment.
             psi.Environment.Remove("MODDERLORDS_OPERATION_PLAN");
         }
-        psi.ArgumentList.Add(plan.ModuleToken);
+        foreach (var argument in plan.Arguments) psi.ArgumentList.Add(argument);
         return System.Diagnostics.Process.Start(psi) ?? throw new InvalidOperationException("Windows did not start " + plan.Exe);
     }
 }

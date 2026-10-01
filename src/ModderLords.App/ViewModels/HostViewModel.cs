@@ -48,6 +48,7 @@ public partial class HostViewModel : ObservableObject
         _flushTimer.Start();
         _creationTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _creationTimer.Tick += (_, _) => RefreshCreationProgress();
+        Smoke = new SmokeTestViewModel(this);
     }
 
     // Passed through so the coop tabs, whose DataContext is this object, can still bind the profile and the
@@ -123,6 +124,16 @@ public partial class HostViewModel : ObservableObject
     public LiveSettingsViewModel LiveSettings { get; } = new();
 
     [ObservableProperty] private bool _isRunning;
+    /// <summary>The running server has printed SERVING (reset when it exits).</summary>
+    [ObservableProperty] private bool _isServing;
+
+    /// <summary>Any thread: every line the running server prints, for listeners such as the smoke test.</summary>
+    internal event Action<string>? ServerLineObserved;
+    /// <summary>The server's engine exited, with its code.</summary>
+    internal event Action<int>? ServerExited;
+
+    /// <summary>Smoke test tab: this PC's game joins the server by itself and both sides are checked.</summary>
+    public SmokeTestViewModel Smoke { get; private set; } = null!;
     [ObservableProperty] private string _commandText = "";
     [ObservableProperty] private string _consoleFilter = "";
     [ObservableProperty] private bool _showEngine;
@@ -600,6 +611,7 @@ public partial class HostViewModel : ObservableObject
             LiveSettings.OnLaunched(prepared.Plan.ExtraEnvironment.TryGetValue(LiveProtocol.EnvVar, out var liveDir) ? liveDir : null, launchProfile.SettingsSync, launchProfile.Name);
             _engine.LineReceived += line =>
             {
+                ServerLineObserved?.Invoke(line.Text);
                 var c = LogClassifier.Classify(line.Text);
                 c = AttributeToCommand(c);
                 _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
@@ -625,9 +637,9 @@ public partial class HostViewModel : ObservableObject
                     });
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
                     Application.Current.Dispatcher.BeginInvoke(() =>
-                        Status = _mapIdentity.ServedOn is { } s && _mapIdentity.CreatedOn is { } b && s != b
+                        (IsServing, Status) = (true, _mapIdentity.ServedOn is { } s && _mapIdentity.CreatedOn is { } b && s != b
                             ? "SERVING on the WRONG MAP — stop the server"
-                            : "SERVING, waiting for clients");
+                            : "SERVING, waiting for clients"));
                 // LineReceived runs on the stream-reader thread, so this has to hop to the dispatcher like the
                 // SERVING line above; AddLine touches an ObservableCollection a CollectionView is bound to. Fires at
                 // most once per launch, so BeginInvoke here costs nothing and does not need the batched queue.
@@ -636,6 +648,8 @@ public partial class HostViewModel : ObservableObject
             };
             var code = await _engine.Exited;
             IsRunning = false;
+            IsServing = false;
+            ServerExited?.Invoke(code);
             _resources?.Dispose(); _resources = null;
             if (Performance.WriteSessionSummary(launchProfile.Name) is { } summary)
                 AddLine(LogCategory.Tool, "[ModderLords] performance summary written to " + summary);
@@ -659,6 +673,7 @@ public partial class HostViewModel : ObservableObject
         {
             _creationEngine = null;
             IsRunning = false;
+            IsServing = false;
             Status = ex.Message;
             AddLine(LogCategory.Error, "[ModderLords] " + ex);
         }
@@ -668,53 +683,12 @@ public partial class HostViewModel : ObservableObject
 
     private bool CanLaunch() => !IsRunning;
 
-    /// <summary>
-    /// Where Coop belongs in a synthesized client list: after however many of these mods the profile places ahead of
-    /// its own Coop row. Falls back to the end only when the profile never mentions Coop, which is the best guess
-    /// available and matches what the dedicated server does.
-    /// </summary>
+    /// <summary>Where Coop belongs in a synthesized client list; see <see cref="ServerMatchedClient.CoopInsertIndex"/>.</summary>
     internal static int CoopInsertIndex(IReadOnlyList<ProfileMod> mods, IReadOnlyList<ProfileMod> profile, string coopId)
-    {
-        var coopAt = profile.ToList().FindIndex(m => m.Id.Equals(coopId, StringComparison.OrdinalIgnoreCase)
-                                                  || ClientManifest.CoopClientModuleIds.Contains(m.Id));
-        if (coopAt < 0) return mods.Count;
-        var ahead = new HashSet<string>(profile.Take(coopAt).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
-        return mods.Count(m => ahead.Contains(m.Id));
-    }
+        => ServerMatchedClient.CoopInsertIndex(mods, profile, coopId);
 
-    internal ClientLaunchSession.Prepared PrepareClientLaunch()
-    {
-        var target = ClientTarget ?? throw new InvalidOperationException("No valid server selection is available.");
-        var client = ProfileStore.Snapshot(ClientProfile);
-        client.Mods = target.Selections.Where(s => !ClientManifest.IsServerOnly(s.Module.Id)).Select(s => new ProfileMod
-        {
-            Id = s.Module.Id, Enabled = true, SourcePath = s.Module.FolderPath, LastVersion = s.Module.Version,
-        }).ToList();
-        foreach (var missing in ClientProfile.EnabledMods.Where(pm => !client.Mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
-                     !ClientManifest.IsServerOnly(pm.Id) && !ClientManifest.CoopClientModuleIds.Contains(pm.Id)))
-            client.Mods.Add(missing);
-
-        // The selections come out in the SERVER's order, which says nothing about where these mods go on a player's
-        // machine, so put them back in the profile's order first.
-        var profileAt = ClientProfile.Mods.Select((m, i) => (m.Id, i))
-            .ToDictionary(x => x.Id, x => x.i, StringComparer.OrdinalIgnoreCase);
-        client.Mods = client.Mods
-            .OrderBy(m => profileAt.TryGetValue(m.Id, out var i) ? i : int.MaxValue)
-            .ToList();
-
-        // Coop then goes where the profile's Coop row puts it, NOT on the end. Appending it here is how a host who
-        // launches the client from the Server panel handed their own game the server's arrangement -- Coop after
-        // every mod -- which is the order that crashes anything binding to Coop's assemblies as it loads.
-        var coop = target.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
-        if (coop is not null)
-            client.Mods.Insert(CoopInsertIndex(client.Mods, ClientProfile.Mods, coop.Id),
-                               new ProfileMod { Id = coop.Id, LastVersion = coop.Version });
-        var result = ClientLaunchSession.Prepare(client);
-        var mismatched = client.Mods.Where(pm => pm.LastVersion is not null && result.Mods.Any(m =>
-            m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase) && !SaveHeaderReader.VersionsEqual(m.Version, pm.LastVersion))).Select(pm => pm.Id).ToList();
-        if (mismatched.Count > 0) throw new InvalidOperationException("Client versions differ from the server: " + string.Join(", ", mismatched) + ". Update matching copies or restart the server.");
-        return result;
-    }
+    internal ClientLaunchSession.Prepared PrepareClientLaunch() =>
+        ServerMatchedClient.Prepare(ClientTarget ?? throw new InvalidOperationException("No valid server selection is available."), ClientProfile);
 
     /// <summary>
     /// Brings this PC's LauncherData.xml in line with the server before the client starts, so the join is not
@@ -752,7 +726,7 @@ public partial class HostViewModel : ObservableObject
     /// copy it out of the release zip and it cannot fall behind the launcher's build. Only when the profile actually
     /// uses it, or when an older copy is already there and would otherwise drift.
     /// </summary>
-    private void EnsureClientModule(bool serverRequiresIt = false)
+    internal void EnsureClientModule(bool serverRequiresIt = false)
     {
         var gameRoot = ClientLauncher.ResolveGameRoot(ClientProfile);
         var alreadyThere = gameRoot is not null && Directory.Exists(ClientModuleInstaller.TargetDir(gameRoot));
@@ -777,7 +751,7 @@ public partial class HostViewModel : ObservableObject
     }
 
     /// <summary>Whether the server's own mod list carries the shared sync module, which every client then needs too.</summary>
-    private static bool ServerCarriesSyncModule(LaunchSession.Prepared target) =>
+    internal static bool ServerCarriesSyncModule(LaunchSession.Prepared target) =>
         target.Selections.Any(s => s.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase));
 
     internal bool SyncLauncherData()

@@ -26,7 +26,13 @@ public sealed record ClientLaunchPlan
     /// <summary>The engine's module list argument, e.g. <c>_MODULES_*Native*SandBoxCore*_MODULES_</c>.</summary>
     public string ModuleToken => "_MODULES_*" + string.Join("*", ModuleIds) + "*_MODULES_";
 
-    public IReadOnlyList<string> Arguments => [ModuleToken];
+    /// <summary>
+    /// Arguments after the module token, for other modules to read, e.g. Coop's <c>/autoconnect host:port</c> (the smoke
+    /// test). Empty for a normal launch.
+    /// </summary>
+    public IReadOnlyList<string> ExtraArguments { get; init; } = [];
+
+    public IReadOnlyList<string> Arguments => [ModuleToken, .. ExtraArguments];
 
     public IEnumerable<string> Validate()
     {
@@ -38,5 +44,5 @@ public sealed record ClientLaunchPlan
     }
 
     /// <summary>The command line, for the console and for bug reports. Nothing secret goes on it.</summary>
-    public string Describe() => $"\"{Exe}\" {ModuleToken}";
+    public string Describe() => $"\"{Exe}\" {string.Join(" ", Arguments)}";
 }

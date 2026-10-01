@@ -731,6 +731,63 @@
             <!-- SHARE: hand your mod list to somebody, or take theirs. That half is the whole point of a mod
                  loader, so it is in both modes; the right-hand column compares this PC's launcher with the server
                  you are hosting, so that half is Host mode only. -->
+            <TabItem Header="Smoke test" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
+                               Text="Starts the server if it is not running, then starts Bannerlord on this PC so that it joins by itself. The test waits for the campaign map, keeps the game there for the seconds below, then closes it and checks both sides: the join, the world transfer, the server's view of the player, a ping over ModderLords' own channel, crashes, and ModderLords warnings. Your character must already exist in the world. Don't use the PC while it runs: the game window comes to the front." />
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Seconds on the map:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBox Text="{Binding Smoke.SteadySeconds, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,16,0" />
+                        <CheckBox Content="Close the game when done" IsChecked="{Binding Smoke.CloseGameWhenDone}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                        <CheckBox Content="Stop the server afterwards if the test started it" IsChecked="{Binding Smoke.StopServerIfStartedHere}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Run smoke test" Command="{Binding Smoke.RunCommand}" Padding="14,4" Margin="0,0,8,0" />
+                        <Button Content="Cancel" Command="{Binding Smoke.CancelCommand}" Padding="10,4" Margin="0,0,8,0" />
+                        <Button Content="Open report folder" Command="{Binding Smoke.OpenReportCommand}" Padding="10,4" Margin="0,0,8,0" />
+                        <Button Content="Copy report" Command="{Binding Smoke.CopyReportCommand}" Padding="10,4" />
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Smoke.Headline}" FontWeight="Bold" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="2*" />
+                            <RowDefinition Height="5" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Smoke.Checks}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{DynamicResource ButtonBorder}" BorderThickness="0,0,0,1" Padding="4,4">
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding Verdict}" Width="48" FontFamily="Consolas" FontWeight="Bold">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{DynamicResource MutedForeground}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Verdict}" Value="OK"><Setter Property="Foreground" Value="{DynamicResource SuccessForeground}" /></DataTrigger>
+                                                                <DataTrigger Binding="{Binding Verdict}" Value="WARN"><Setter Property="Foreground" Value="{DynamicResource WarningForeground}" /></DataTrigger>
+                                                                <DataTrigger Binding="{Binding Verdict}" Value="FAIL"><Setter Property="Foreground" Value="{DynamicResource DangerForeground}" /></DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <StackPanel>
+                                                    <TextBlock TextWrapping="Wrap"><Run Text="{Binding Name, Mode=OneWay}" FontWeight="Bold" /><Run Text=": " /><Run Text="{Binding Detail, Mode=OneWay}" /></TextBlock>
+                                                    <TextBlock Text="{Binding Evidence}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}"
+                                                               Visibility="{Binding HasEvidence, Converter={StaticResource BoolToVis}}" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" Background="{DynamicResource SplitterBrush}" />
+                        <ListBox Grid.Row="2" ItemsSource="{Binding Smoke.Progress}" FontFamily="Consolas" FontSize="11" />
+                    </Grid>
+                </DockPanel>
+            </TabItem>
             <TabItem Header="Share">
                 <Grid>
                     <Grid.ColumnDefinitions>
