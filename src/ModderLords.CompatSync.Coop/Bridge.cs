@@ -18,6 +18,7 @@ public static class Bridge
         BattleScenePick.EnsureInstalled();
         BellumThreadSafety.EnsureInstalled();
         KingdomVoteTimeoutAi.EnsureInstalled();
+        InventoryExchangeEvent.EnsureInstalled();
         Taom.TaomLayer.Tick();
         Taom.TaomStateMirror.ServerTick();
         LivingEconomy.LivingEconomyLayer.Tick();
@@ -47,7 +48,7 @@ public static class Bridge
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
     public static string VerificationSummary() => BehaviorGate.VerificationSummary() + "; " + Operations.OperationRuntime.Report()
-        + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary();
+        + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary() + "; " + InventoryExchangeEvent.Summary();
 
     /// <summary>Both sides, every 30 s and at unload: writes the ground-truth trace counters. Returns how many methods were written (0 when not tracing).</summary>
     public static int TraceFlush() => BehaviorGate.TraceFlush();
