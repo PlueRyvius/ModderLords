@@ -3,7 +3,7 @@
 Fourberie (module id `Fourberie`, Workshop 2875710877, Nexus 2969) under Bannerlord Coop. Reviewed at **v1.4.8.2**
 (`Fourberie.dll` SHA-256 `6c73723c6129933a170e63e6d7aaabe4e37bb4ca847206b1878041197e7cce89`, built 2026-09-29),
 against ModderLords `ba821db` (1.2.1), Coop source `97420dc` (2026-10-01) and the installed Coop **0.1.5** Workshop
-build. Status: **phases 0–2 done (offline-tested, not run live); phases 3–7 to do.**
+build. Status: **phases 0–3 done (offline-tested, not run live); phases 4–7 to do.**
 
 The per-line analysis (entry-point matrices with line numbers, `_crimeValue` key legend, mutation catalogue) is kept
 outside the repository, because it is derived from a decompile: `D:\Work\Claude\Tech Support\_fourberie-analysis\`
@@ -179,7 +179,21 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
    Offline: under real Harmony against a stand-in mod, Cecil checks against the installed DLL (the saved-field set and
    every registered handler are accounted for), and negative runs proving the tests catch the bugs they guard against.
    **Not run live.**
-3. **Prompts and notices** (`fourb-prompts`), because ticks in phase 2 start raising inquiries.
+3. **Prompts and notices** (`fourb-prompts`), because ticks in phase 2 start raising inquiries. Built (`FbPrompts`,
+   `FbPromptWire`). A Cecil call-graph over the 47 server-run handlers found what they can raise:
+   - **Yes/no inquiries:** 9 call sites.
+   - **List inquiries:** 2, both inside blackmail/murder consequences.
+   - **Map notices:** 2, informant reports.
+   - **Map conversation:** 1, the contract offer, which needs the text variables its dialog lines read.
+   - **Messages:** plain messages and quick information.
+
+   Inside a player's run on the server, each of these goes to that player's game, after the book rows that run
+   changed. Callbacks wait on the server and run as the player when the answer comes back. Offline, disconnected or
+   10 minutes without an answer means the default: "no" where there is one, else the only option; for a must-pick
+   list, the fewest allowed. Prompts never reach the headless guard's auto-yes (patched at a higher priority; Harmony
+   2.4.2 checked to skip later prefixes). Messages use the TAOM layer's notice forwarder, now shared:
+   `NoticeComponent.EnsureInstalled`, and Living Economy's copy stands aside whenever it is on. Prompts still waiting
+   when the server stops are lost; they are not saved.
 4. **T1 commands**: the Gauntlet screens and menu consequences, all party creation, and `fourb-phantom-guard`.
 5. **Models** (`fourb-models`).
 6. **T2 transactions**: mission and dialog flows, crime-rating mirroring, `fourb-locations`.

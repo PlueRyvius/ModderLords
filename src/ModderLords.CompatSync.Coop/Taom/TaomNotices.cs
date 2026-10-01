@@ -17,7 +17,8 @@ namespace ModderLords.CompatSync.Coop.Taom;
 /// player runs under PlayerScope on the dedicated server: founding a refuge, a caravan arriving or being lost, a
 /// refuge raised, desertion. TAOM reports those with InformationManager / MBInformationManager, which on a server go
 /// nowhere. Server: a message shown inside a PlayerScope is also sent to that player's client, which shows it the same
-/// way. Messages outside any scope (the server's own idle hero) are not sent.
+/// way. Messages outside any scope (the server's own idle hero) are not sent. Shared: the Fourberie layer installs it
+/// too (EnsureInstalled), and the Living Economy layer stands aside while it is installed.
 /// </summary>
 internal sealed class NoticeComponent : ITaomComponent
 {
@@ -38,11 +39,26 @@ internal sealed class NoticeComponent : ITaomComponent
         return _display == null || _quick == null ? "InformationManager.DisplayMessage / MBInformationManager.AddQuickInformation not found" : null;
     }
 
-    public string Install(TaomContext context)
+    public string Install(TaomContext context) => EnsureInstalled();
+
+    /// <summary>True once the forwarder is patched in; the Living Economy layer's own forwarding then stands aside.</summary>
+    internal static bool Installed { get; private set; }
+
+    /// <summary>
+    /// Server: patches the forwarder in once, for whichever layer asks first (TAOM, Fourberie). It forwards anything shown
+    /// inside a PlayerScope, so it serves every layer that runs mod code as a player.
+    /// </summary>
+    internal static string EnsureInstalled()
     {
+        if (Installed) return "server forwards messages shown for a player to that player (already on)";
+        _display ??= typeof(InformationManager).GetMethod("DisplayMessage", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(InformationMessage) }, null);
+        _quick ??= typeof(MBInformationManager).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .FirstOrDefault(m => m.Name == "AddQuickInformation" && m.GetParameters().FirstOrDefault()?.ParameterType == typeof(TextObject));
+        if (_display == null || _quick == null) return "InformationManager.DisplayMessage / MBInformationManager.AddQuickInformation not found";
         var h = new Harmony("ModderLords.Taom.Notices");
-        h.Patch(_display!, prefix: new HarmonyMethod(typeof(NoticeComponent), nameof(DisplayPrefix)));
-        h.Patch(_quick!, prefix: new HarmonyMethod(typeof(NoticeComponent), nameof(QuickPrefix)));
+        h.Patch(_display, prefix: new HarmonyMethod(typeof(NoticeComponent), nameof(DisplayPrefix)));
+        h.Patch(_quick, prefix: new HarmonyMethod(typeof(NoticeComponent), nameof(QuickPrefix)));
+        Installed = true;
         return "server forwards messages shown for a player to that player";
     }
 

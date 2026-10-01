@@ -76,6 +76,7 @@ internal static class FbBooks
         if (hero == null || !EnsureSchema()) return null;
         var key = hero.StringId;
         var entry = EntryFor(key);
+        if (!string.Equals(_switch!.Current, key, StringComparison.Ordinal)) FbPrompts.BookEntered(key);
         var player = new ServerRelay.PlayerScope(hero, party ?? hero.PartyBelongedTo);
         IDisposable book;
         try
@@ -249,26 +250,38 @@ internal static class FbBooks
                 _reports++;
                 return new TaomActionOutcome(true, "");
             }
+            case "answer":
+                return FbPrompts.Answer(hero, party, args);
             default:
                 return TaomActionOutcome.Fail("");
         }
     }
 
+    /// <summary>Something is waiting to go to a player (a prompt): send on the next frame instead of the next round.</summary>
+    internal static void SendSoon() => _nextSend = DateTime.MinValue;
+
     /// <summary>Server, every frame: sends each connected player the rows the server changed in their book.</summary>
     internal static void ServerTick()
     {
+        FbPrompts.ServerTick();
         if (!FourberieLayer.IsServer || _schema == null || TaomActions.Push == null || DateTime.UtcNow < _nextSend) return;
         _nextSend = DateTime.UtcNow.AddSeconds(SendEverySeconds);
         try
         {
             foreach (var (hero, _) in Connected())
             {
-                if (!Entries.TryGetValue(hero.StringId, out var entry) || !entry.Dirty) continue;
-                entry.Dirty = false;
-                var payload = entry.Ledger.DeltaIfChanged(Encode(hero.StringId, entry));
-                if (payload == null) continue;
-                TaomActions.Push(hero, FourberieLayer.Feature, new[] { payload });
-                _pushed++;
+                if (Entries.TryGetValue(hero.StringId, out var entry) && entry.Dirty)
+                {
+                    entry.Dirty = false;
+                    var payload = entry.Ledger.DeltaIfChanged(Encode(hero.StringId, entry));
+                    if (payload != null)
+                    {
+                        TaomActions.Push(hero, FourberieLayer.Feature, new[] { payload });
+                        _pushed++;
+                    }
+                }
+                // After the book rows, so a prompt or a conversation finds the state it is about.
+                FbPrompts.Flush(hero);
             }
         }
         catch (Exception ex)

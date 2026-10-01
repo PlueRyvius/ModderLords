@@ -19,7 +19,8 @@ namespace ModderLords.CompatSync.Coop.LivingEconomy;
 ///   collected and sent back with the answer, so the player reads exactly what the mod would have told them alone;
 /// - while a player-owned settlement's tick runs as that player (<see cref="LeOwnerScopeComponent"/>), the mod's
 ///   notifications about it (treasury payouts, caravan deliveries, projects finishing) are forwarded to that player.
-/// When the TAOM layer is also loaded its own forwarder already does the second job, so this one stands aside there.
+/// When the shared forwarder (TaomNotices.NoticeComponent, installed by the TAOM or Fourberie layer) is on, it already
+/// does the second job, so this one stands aside there.
 /// </summary>
 internal sealed class LeNoticeComponent : ILeComponent
 {
@@ -66,7 +67,7 @@ internal sealed class LeNoticeComponent : ILeComponent
             _capture.Add(LeActionCodec.Line(message.Color.ToUnsignedInteger(), message.Information));
             return;
         }
-        if (_forwarding || TaomActions.Running || TaomLayer.Loaded("TAOM") != null) return;
+        if (_forwarding || TaomActions.Running || NoticeComponent.Installed) return;
         if (ServerRelay.PlayerScope.CurrentHero is not { } hero || NoticeComponent.Send == null) return;
         _forwarding = true;
         try
