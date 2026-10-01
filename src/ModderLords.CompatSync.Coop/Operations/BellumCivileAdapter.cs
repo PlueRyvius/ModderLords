@@ -508,8 +508,11 @@ internal static class BellumStateReader
         { PairKey = entry.Key, LastRecordedValue = I(entry.Value, "LastRecordedValue"), LastUpdateDay = D(entry.Value, "LastUpdateDay") });
         state.RelationMemorySchemaVersion = Convert.ToInt32(Field(relations, "_memorySchemaVersion"), CultureInfo.InvariantCulture);
         state.RelationMemoryDurationMultiplier = Convert.ToDouble(Field(relations, "_appliedMemoryDurationMultiplier"), CultureInfo.InvariantCulture);
-        foreach (var entry in Map(Field(relations, "_materializedPairValues"))) state.RelationMaterializedValues.Add(new BellumRelationMaterializedValueState
-        { PairKey = entry.Key, Value = Convert.ToInt32(entry.Value, CultureInfo.InvariantCulture) });
+        // _materializedPairValues is not sent. It is Bellum's cache of the relation it last wrote for every hero pair it has
+        // read: it grows towards every pair in the world (past 10,000 within a few days, so every snapshot failed its bounds
+        // check and players saw no Bellum updates at all), and a player's game does not need it. The server writes each
+        // computed relation into the game's own relation (SetHeroRelation), which Coop sends to every player, and on a
+        // player's game Bellum's relation read returns that synced value (BellumCivileAuthorityAdapter.RelationReadPrefix).
         var memorySequence = 0;
         foreach (var item in Items(Field(relations, "_relationMemories"))) state.RelationMemories.Add(new BellumRelationMemoryState
         {

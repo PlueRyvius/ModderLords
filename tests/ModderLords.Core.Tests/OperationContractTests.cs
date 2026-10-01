@@ -133,7 +133,7 @@ public sealed class OperationContractTests
             Assert.All(c.Requires.Where(r => r.Module == "CoopNightly"), r => Assert.False(r.Strict));
         });
         var authority = Assert.Single(bellum, c => c.Id == "bellum-civile.authority");
-        Assert.Equal(77, authority.Targets.Length);
+        Assert.Equal(78, authority.Targets.Length);
         Assert.Contains("BellumCivile.Behaviors.PolicyDeliberationBehavior::OnDailyTick", authority.Targets);
         Assert.Equal(authority.Targets.Length, authority.TargetSurfaces.Length);
         Assert.DoesNotContain("BellumCivile.Behaviors.CouncilIncidentBehavior::OnTick", authority.Targets);

@@ -29,6 +29,8 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
     // The player's own proposals now reach the server through BellumCivileCommandAdapter instead.
     internal static readonly string[] Targets =
     {
+        // A relation read, not a handler (RelationRead): patched with RelationReadPrefix instead of the server-only gate.
+        "BellumCivile.Behaviors.DynamicRelationBehavior::GetRelationForRead",
         "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnDailyTick",
         "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnHeroKilled",
         "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnHourlyTick",
@@ -119,6 +121,9 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
         "BellumCivile.UI.Map.WarScoreMapWidgetVM::OnTick",
     };
 
+    private const string RelationRead = "BellumCivile.Behaviors.DynamicRelationBehavior::GetRelationForRead";
+    private static long _relationReadsServed;
+
     private static readonly Dictionary<string, long[]> Counts = new Dictionary<string, long[]>(StringComparer.Ordinal);
 
     public string Id => "bellum-civile.authority.v1";
@@ -159,10 +164,11 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
         {
             var prefix = new HarmonyMethod(typeof(BellumCivileAuthorityAdapter), nameof(ServerAuthorityPrefix));
             var postfix = new HarmonyMethod(typeof(BellumCivileAuthorityAdapter), nameof(ServerMutationPostfix));
-            foreach (var target in Targets) harmony.Patch(Resolve(target).Single(), prefix: prefix, postfix: postfix);
+            foreach (var target in Targets.Where(t => t != RelationRead)) harmony.Patch(Resolve(target).Single(), prefix: prefix, postfix: postfix);
+            harmony.Patch(Resolve(RelationRead).Single(), prefix: new HarmonyMethod(typeof(BellumCivileAuthorityAdapter), nameof(RelationReadPrefix)));
             installed = true;
             Readiness = AdapterReadiness.Ready;
-            Detail = Targets.Length + " pinned mutation handler(s) are server-authoritative";
+            Detail = (Targets.Length - 1) + " pinned mutation handler(s) are server-authoritative; players' relation reads return the synced relation";
         }
         catch
         {
@@ -193,6 +199,20 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
         return !client;
     }
 
+    /// <summary>
+    /// A player's game: Bellum's relation read returns the relation as synced. The server works out Bellum's relation (its
+    /// drift, memories and politics) and writes it into the game's own relation, which Coop sends to every player; run on
+    /// a player's game, the read redid that from a partial copy of Bellum's state, added "prior history" memories of its
+    /// own and wrote the relation locally. It also made the server send its relation cache, which outgrew the snapshot.
+    /// </summary>
+    public static bool RelationReadPrefix(int vanillaStoredValue, ref int __result)
+    {
+        if (OperationProcessSide.IsServer) return true;
+        _relationReadsServed++;
+        __result = vanillaStoredValue;
+        return false;
+    }
+
     public static void ServerMutationPostfix()
     {
         BellumSnapshotBroadcast.MarkDirty();
@@ -205,7 +225,7 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
             if (Counts.Count == 0) return "Bellum authority gates: none has fired yet";
             var ran = Counts.Values.Sum(c => c[0]);
             var skipped = Counts.Values.Sum(c => c[1]);
-            return $"Bellum authority gates: {Counts.Count} handler(s), {ran} server run(s), {skipped} client skip(s)";
+            return $"Bellum authority gates: {Counts.Count} handler(s), {ran} server run(s), {skipped} client skip(s), {_relationReadsServed} relation read(s) answered from the synced relation";
         }
     }
 
