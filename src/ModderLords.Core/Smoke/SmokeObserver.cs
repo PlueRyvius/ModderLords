@@ -35,7 +35,42 @@ public sealed class SmokeObserver
     /// <summary>The server's answer to the time command, if it printed one.</summary>
     public string? TimeCommandReply { get; private set; }
 
-    public void TimeRequested(string mode) => TimeRequestedAs = mode;
+    public int TimeAsks { get; private set; }
+    public DateTimeOffset? TimeAskedAt { get; private set; }
+    /// <summary>The Coop policy that held time back, from "Time control request ... limited to Pause by X".</summary>
+    public string? TimeLimitedBy { get; private set; }
+
+    /// <summary>How long to wait for the date to move before asking again, and how many times to ask at most.</summary>
+    public static readonly TimeSpan TimeAskRetry = TimeSpan.FromSeconds(15);
+    public const int MaxTimeAsks = 8;
+
+    private static readonly System.Text.RegularExpressions.Regex TimeLimitedRx =
+        new(@"Time control request \S+ limited to \S+ by ""(?<by>[^""]+)""", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static System.Text.RegularExpressions.Regex TimeLimitedByRx() => TimeLimitedRx;
+
+    public void TimeRequested(string mode) => TimeRequested(mode, DateTimeOffset.Now);
+
+    public void TimeRequested(string mode, DateTimeOffset at)
+    {
+        TimeRequestedAs = mode;
+        TimeAskedAt = at;
+        TimeAsks++;
+    }
+
+    /// <summary>
+    /// Whether to ask the server (again) to run time. Coop holds time back while it does not yet count a just-arrived player
+    /// as connected (DisconnectedPlayersServerHandler.PlayersConnectedPolicy): live, a character created on the spot
+    /// reached the map, the one request was "limited to Pause", and the date never moved; asking again 40 s later ran it.
+    /// So: not asked yet, or the date has not moved, the server still reports Stop, and the last ask is old enough.
+    /// </summary>
+    public bool TimeAskDue(DateTimeOffset now)
+    {
+        if (TimeAskedAt is not { } asked) return true;
+        if (TimeAsks >= MaxTimeAsks || TimeRan) return false;
+        return string.Equals(LastTimeMode, "Stop", StringComparison.Ordinal) && now - asked >= TimeAskRetry;
+    }
+
+    public bool TimeRan => FirstDateOnMap is { } first && LastDate is { } last && last.Day > first.Day;
     public List<string> ServerErrorSamples { get; } = new();
 
     // ---- the player's game: Coop's log ----
@@ -87,6 +122,8 @@ public sealed class SmokeObserver
         }
         if (TimeRequestedAs is not null && TimeCommandReply is null && line.Contains("Time control set to", StringComparison.Ordinal))
             TimeCommandReply = line.Trim();
+        if (TimeRequestedAs is not null && TimeLimitedByRx().Match(line) is { Success: true } limited)
+            TimeLimitedBy = limited.Groups["by"].Value;
 
         if (SmokeSignals.ParsePlayers(line) is { } players)
         {
@@ -326,11 +363,13 @@ public static class SmokeEvaluator
                 "the test had no server console to ask (attach mode without --server-commands), so the map stayed paused"));
         else if (o.FirstDateOnMap is { } first && o.LastDate is { } last && last.Day > first.Day)
             checks.Add(new SmokeCheck("Campaign time ran", SmokeVerdict.Pass,
-                $"{last.Day - first.Day} in-game day(s) passed at {o.TimeRequestedAs} ({first.Date} to {last.Date})"));
+                $"{last.Day - first.Day} in-game day(s) passed at {o.TimeRequestedAs} ({first.Date} to {last.Date})"
+                + (o.TimeAsks > 1 ? $"; asked {o.TimeAsks} times" + (o.TimeLimitedBy is { } by ? $", Coop held it back at first ({by})" : "") : "")));
         else
             checks.Add(new SmokeCheck("Campaign time ran", SmokeVerdict.Fail,
-                $"asked the server to run time at {o.TimeRequestedAs}, but the campaign date did not move"
-                + (o.LastDate is { } d ? $" (still {d.Date}, mode {o.LastTimeMode})" : " (no server pulse seen)"),
+                $"asked the server {o.TimeAsks} time(s) to run time at {o.TimeRequestedAs}, but the campaign date did not move"
+                + (o.LastDate is { } d ? $" (still {d.Date}, mode {o.LastTimeMode})" : " (no server pulse seen)")
+                + (o.TimeLimitedBy is { } held ? $"; Coop limited it to Pause ({held})" : ""),
                 o.TimeCommandReply is { } reply ? [reply] : []));
 
         // Crashes.

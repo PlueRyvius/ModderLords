@@ -164,6 +164,40 @@ public sealed class SmokeEvaluatorTests
     }
 
     [Fact]
+    public void TimeHeldBackForANewPlayerIsAskedForAgainAndThenPasses()
+    {
+        // The live run on a fresh world: the character was created on the spot, the one request was limited to Pause by
+        // Coop's connected-players policy, and asking again later ran it.
+        var o = HealthyJoin();
+        Assert.True(o.TimeAskDue(T0.AddSeconds(80)));
+        o.TimeRequested("Play_2x", T0.AddSeconds(80));
+        o.ObserveServer("Engine     [Coop] Time control request Play_2x limited to Pause by \"DisconnectedPlayersServerHandler.PlayersConnectedPolicy\"", T0.AddSeconds(80));
+        o.ObserveServer("Server     [DedicatedServer] pulse: time=Summer 1, 1084 timeMode=Stop players=1", T0.AddSeconds(85));
+        Assert.False(o.TimeAskDue(T0.AddSeconds(90)));          // too soon after the last ask
+        Assert.True(o.TimeAskDue(T0.AddSeconds(96)));           // still Stop, 16 s later
+        o.TimeRequested("Play_2x", T0.AddSeconds(96));
+        o.ObserveServer("Server     [DedicatedServer] pulse: time=Summer 3, 1084 timeMode=StoppableFastForward players=1", T0.AddSeconds(140));
+        Assert.False(o.TimeAskDue(T0.AddSeconds(200)));         // the date moved: no more asks
+        var check = SmokeEvaluator.Evaluate(o, Done).Single(c => c.Name == "Campaign time ran");
+        Assert.Equal(SmokeVerdict.Pass, check.Verdict);
+        Assert.Contains("asked 2 times", check.Detail);
+        Assert.Contains("PlayersConnectedPolicy", check.Detail);
+    }
+
+    [Fact]
+    public void TimeAsksStopAtTheCap()
+    {
+        var o = HealthyJoin();
+        for (var i = 0; i < SmokeObserver.MaxTimeAsks; i++)
+        {
+            o.TimeRequested("Play_2x", T0.AddSeconds(80 + i * 20));
+            o.ObserveServer("Server     [DedicatedServer] pulse: time=Summer 1, 1084 timeMode=Stop players=1", T0.AddSeconds(85 + i * 20));
+        }
+        Assert.False(o.TimeAskDue(T0.AddSeconds(1000)));
+        Assert.Contains($"asked the server {SmokeObserver.MaxTimeAsks} time(s)", SmokeEvaluator.Evaluate(o, Done).Single(c => c.Name == "Campaign time ran").Detail);
+    }
+
+    [Fact]
     public void WithoutAServerConsoleTheTimeCheckIsSkipped() =>
         Assert.Equal(SmokeVerdict.Skipped, VerdictOf(SmokeEvaluator.Evaluate(HealthyJoin(), Done), "Campaign time ran"));
 

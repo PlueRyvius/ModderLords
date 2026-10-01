@@ -159,13 +159,16 @@ public sealed class SmokeRunner
             }
             if (stage == ClientStage.OnMap)
             {
-                if (onMapAt is null && _options.SendServerCommand is { } send)
+                // Asked again while the date has not moved: Coop holds time back until it counts a just-arrived player
+                // (a character created on the spot) as connected, and a single early request was simply refused.
+                if (_options.SendServerCommand is { } send && Locked(() => _observer.TimeAskDue(now)))
                 {
-                    Say($"Running campaign time ({_options.TimeMode})…");
+                    var again = Locked(() => _observer.TimeAsks) > 0;
+                    Say(again ? $"Campaign time has not started; asking again ({_options.TimeMode})…" : $"Running campaign time ({_options.TimeMode})…");
                     try
                     {
                         await send($"{SmokeSignals.RunTimeCommand} {_options.TimeMode}");
-                        Locked(() => _observer.TimeRequested(_options.TimeMode));
+                        Locked(() => _observer.TimeRequested(_options.TimeMode, now));
                     }
                     catch (Exception ex) { Say("Could not send the time command: " + ex.Message); }
                 }
