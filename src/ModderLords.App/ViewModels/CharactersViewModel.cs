@@ -51,6 +51,7 @@ public partial class CharactersViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(KickCommand))]
     [NotifyCanExecuteChangedFor(nameof(BanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(EditCommand))]
     private PlayerRow? _selectedPlayer;
 
     [ObservableProperty]
@@ -102,6 +103,19 @@ public partial class CharactersViewModel : ObservableObject
         catch (Exception ex) { Headline = ex.Message; }
         finally { IsBusy = false; }
         await RefreshIfServing();
+    }
+
+    private bool CanEdit() => Serving && SelectedPlayer is not null;
+
+    /// <summary>Opens the editor for the selected player's hero. Not modal, so the list stays usable; it refreshes on close.</summary>
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private void Edit()
+    {
+        if (SelectedPlayer is not { } row) return;
+        var editor = new CharacterEditorViewModel(_admin, row.SteamId, row.Name, () => Serving);
+        var window = new CharacterEditorWindow(editor) { Owner = Application.Current.MainWindow };
+        window.Closed += async (_, _) => await RefreshIfServing();
+        window.Show();
     }
 
     private bool CanBan() => SelectedPlayer is not null;
@@ -216,6 +230,7 @@ public partial class CharactersViewModel : ObservableObject
         if (e.PropertyName != nameof(HostViewModel.IsServing)) return;
         RefreshCommand.NotifyCanExecuteChanged();
         KickCommand.NotifyCanExecuteChanged();
+        EditCommand.NotifyCanExecuteChanged();
         if (Serving) _ = Refresh();
     }
 
