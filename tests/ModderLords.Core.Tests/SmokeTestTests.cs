@@ -107,6 +107,28 @@ public sealed class SmokeEvaluatorTests
     }
 
     [Fact]
+    public void AJoinPassesWithoutCoopsClientLog()
+    {
+        // The first live run: Coop buffers its client log until a normal exit, so it stayed empty. The server's player
+        // states and ModderLords' own lines carry the stages (lines from that run, 2026-10-01 03:44).
+        var o = new SmokeObserver();
+        o.ObserveServer("Milestone  [DedicatedServer] SERVING — coop server up, waiting for clients", T0);
+        o.ObserveServer("Engine     @DS@{\"ev\":\"players\",\"list\":[]}", T0);
+        o.ClientStarted(T0);
+        o.ObserveServer("Engine     @DS@{\"ev\":\"players\",\"list\":[{\"id\":0,\"name\":\"(joining)\",\"state\":\"handshake\",\"addr\":\"127.0.0.1:61022\"}]}", T0.AddSeconds(40));
+        o.ObserveServer("Engine     @DS@{\"ev\":\"players\",\"list\":[{\"id\":0,\"name\":\"Phorys\",\"state\":\"loading\",\"addr\":\"127.0.0.1:61022\"}]}", T0.AddSeconds(60));
+        o.ObserveServer("Engine     @DS@{\"ev\":\"players\",\"list\":[{\"id\":0,\"name\":\"Phorys\",\"state\":\"on map\",\"addr\":\"127.0.0.1:61022\"}]}", T0.AddSeconds(75));
+        o.ObserveCompatClient("03:44:24.108 [ModderLords.Compat] session check: campaign ready on this player's game", T0.AddSeconds(76));
+        o.ObserveServer("03:44:29.217 Tool       [ModderLords.Compat] session check: answered the ping of Lord Phorys", T0.AddSeconds(81));
+        o.ObserveCompatClient("03:44:28.980 [ModderLords.Compat] session check: server answered the ping in 139 ms (as Lord Phorys)", T0.AddSeconds(81));
+        var checks = SmokeEvaluator.Evaluate(o, Done);
+        Assert.Equal(SmokeVerdict.Pass, SmokeReport.OverallOf(checks));
+        Assert.Equal(SmokeVerdict.Pass, VerdictOf(checks, "Joined the server"));
+        Assert.Equal(SmokeVerdict.Pass, VerdictOf(checks, "On the campaign map"));
+        Assert.Equal(SmokeVerdict.Info, VerdictOf(checks, "Coop's client log"));
+    }
+
+    [Fact]
     public void AModderLordsWarningInTheGameFails()
     {
         // The #151 failure: a layer could not install on the player's game, and only the game's log said so.

@@ -37,6 +37,8 @@ public sealed class SmokeObserver
     public List<string> CoopFatal { get; } = new();
     /// <summary>Coop's own connection-side warnings and errors (not its auto-sync noise), first few.</summary>
     public List<string> CoopConnectionNotes { get; } = new();
+    /// <summary>Coop wrote its client log at all (it does only when the game exits normally).</summary>
+    public bool CoopLogSeen { get; private set; }
 
     // ---- the player's game: ModderLords.Compat's log ----
     public bool CompatSeen { get; private set; }
@@ -69,6 +71,14 @@ public sealed class SmokeObserver
                 TestPlayer = mine;
                 if (Rank(mine.State) > Rank(BestServerState)) BestServerState = mine.State;
                 if (mine.State == SmokeSignals.OnMapState) ServerOnMapAt ??= at;
+                // The server's view is live; Coop's client log is not (see ObserveCoopClient).
+                Advance(mine.State switch
+                {
+                    "handshake" => ClientStage.Connecting,
+                    "loading" => ClientStage.Loading,
+                    SmokeSignals.OnMapState => ClientStage.OnMap,
+                    _ => ClientStage.Connecting,
+                }, at);
             }
             else if (ServerOnMapAt is not null && TestPlayer is not null && players.All(p => p.Id != TestPlayer.Id))
                 PlayerDropped = true;
@@ -95,14 +105,17 @@ public sealed class SmokeObserver
         }
     }
 
+    /// <summary>
+    /// Coop's own client log. It is buffered in memory until the game exits normally (0 bytes on disk while it runs, and
+    /// still 0 after the game is killed), so it is a bonus for the report when it exists, never the only signal.
+    /// </summary>
     public void ObserveCoopClient(string raw, DateTimeOffset at)
     {
         if (SmokeSignals.ParseCoopLine(raw) is not { } line) return;
+        CoopLogSeen = true;
         if (SmokeSignals.StageOf(line) is { } stage)
         {
-            StageAt.TryAdd(stage, at);
-            // CharacterCreation is a dead end for the test, not a step towards the map; never let it hide OnMap.
-            if (stage > Stage) Stage = stage;
+            Advance(stage, at);
             if (stage == ClientStage.WorldReceived) WorldTransfer ??= line.Message;
         }
         if (Stage == ClientStage.OnMap && SmokeSignals.FpsAverage(line) is { } fps) FpsOnMap.Add(fps);
@@ -117,9 +130,22 @@ public sealed class SmokeObserver
     {
         if (SmokeSignals.CompatMessage(raw) is not { } message) return;
         CompatSeen = true;
-        if (message.StartsWith(SmokeSignals.ReadyLine, StringComparison.Ordinal)) ReadyAt ??= at;
+        if (message.StartsWith(SmokeSignals.ReadyLine, StringComparison.Ordinal))
+        {
+            ReadyAt ??= at;
+            Advance(ClientStage.OnMap, at);
+        }
         if (SmokeSignals.PingMs(message) is { } ms) PingMs ??= ms;
         if (SmokeSignals.IsWarning(message)) AddWarning(message, ClientWarnings);
+    }
+
+    /// <summary>Records a stage; the furthest one wins. CharacterCreation is a dead end, so OnMap always outranks it.</summary>
+    private void Advance(ClientStage stage, DateTimeOffset at)
+    {
+        StageAt.TryAdd(stage, at);
+        // Anything from here on means the connection happened; the load timeout counts from the first sign of it.
+        if (stage >= ClientStage.Connecting) StageAt.TryAdd(ClientStage.Connecting, at);
+        if (stage > Stage) Stage = stage;
     }
 
     private void AddWarning(string message, List<string> into)
@@ -202,7 +228,7 @@ public static class SmokeEvaluator
                 : "the game never tried to connect: Coop did not start its automatic join (is Coop in the client's mod list?)", o.CoopConnectionNotes));
 
         if (o.Stage >= ClientStage.WorldReceived)
-            checks.Add(new SmokeCheck("World received", SmokeVerdict.Pass, o.WorldTransfer ?? "the server's save arrived"));
+            checks.Add(new SmokeCheck("World received", SmokeVerdict.Pass, o.WorldTransfer ?? "the server sent the world and the game loaded it"));
         else
             checks.Add(o.Stage >= ClientStage.Connecting
                 ? new SmokeCheck("World received", SmokeVerdict.Fail, "the server's save never arrived", o.CoopConnectionNotes)
@@ -214,9 +240,10 @@ public static class SmokeEvaluator
         else if (o.Stage == ClientStage.CharacterCreation)
             checks.Add(new SmokeCheck("On the campaign map", SmokeVerdict.Warn,
                 "the game stopped at character creation: this world has no character for you yet. Join once by hand to make one, then run the test again."));
-        else if (o.Stage >= ClientStage.WorldReceived)
+        else if (o.Stage >= ClientStage.Connecting)
             checks.Add(new SmokeCheck("On the campaign map", SmokeVerdict.Fail,
-                f.TimedOutWaitingFor is { } w ? $"still {w} when the test gave up (furthest stage: {o.Stage})" : $"never got past {o.Stage}"));
+                (f.TimedOutWaitingFor is { } w ? $"still {w} when the test gave up" : $"never got past {o.Stage}")
+                + (o.BestServerState.Length > 0 ? $"; the server's furthest state for the player: \"{o.BestServerState}\"" : "")));
         else checks.Add(skip("On the campaign map"));
 
         checks.Add(o.BestServerState == SmokeSignals.OnMapState
@@ -276,6 +303,9 @@ public static class SmokeEvaluator
             checks.Add(new SmokeCheck("Server warnings before the join", SmokeVerdict.Info, $"{o.ServerWarningsAtStartup.Count} (printed while the server loaded)", o.ServerWarningsAtStartup));
         if (o.ExpectedWarnings.Count > 0)
             checks.Add(new SmokeCheck("Expected warnings", SmokeVerdict.Info, "true by design in this run, not counted", o.ExpectedWarnings));
+        if (!o.CoopLogSeen)
+            checks.Add(new SmokeCheck("Coop's client log", SmokeVerdict.Info,
+                "empty: Coop writes it only when the game exits normally, and the test closes the game; the stages above come from the server and ModderLords"));
         var coopErrors = o.CoopErrorsBySource.Values.Sum();
         if (coopErrors > 0)
             checks.Add(new SmokeCheck("Coop errors in the game's log", SmokeVerdict.Info,
