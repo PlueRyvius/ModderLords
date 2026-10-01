@@ -1,6 +1,7 @@
 using ModderLords.CompatSync;
 using ModderLords.Core.Compat;
 using ModderLords.Core.Overlay;
+using ModderLords.Coop.Launch;
 
 namespace ModderLords.Core.Tests;
 
@@ -52,5 +53,27 @@ public sealed class FourberieCompatRecordTests
         foreach (var member in new[] { "BaseMenuOneButton", "HordeMenuOneButton", "TacticsMenuOneButton", "LootCorpsesOneButton" })
             Assert.Contains("Fourberie.Settings::" + member, record.IgnoreSettingsTypes);
         Assert.DoesNotContain("Fourberie.Settings", record.IgnoreSettingsTypes);
+    }
+}
+
+public sealed class FourberieLaunchPolicyTests
+{
+    [Fact]
+    public void FourberieWithoutSettingsSyncIsRefused() =>
+        Assert.Contains("Settings sync", FourberieLaunchPolicy.SyncProblem(["Native", "Fourberie"], settingsSync: false));
+
+    [Fact]
+    public void FourberieWithSettingsSyncIsAllowed() =>
+        Assert.Null(FourberieLaunchPolicy.SyncProblem(["Native", "fourberie"], settingsSync: true));
+
+    [Fact]
+    public void OtherProfilesAreUnchanged() =>
+        Assert.Null(FourberieLaunchPolicy.SyncProblem(["Native", "ImprovedGarrisons"], settingsSync: false));
+
+    [Fact]
+    public void ServerOnlyLogicOnFourberieIsWarnedAbout()
+    {
+        Assert.NotNull(FourberieLaunchPolicy.ServerOnlyLogicProblem(["Fourberie"]));
+        Assert.Null(FourberieLaunchPolicy.ServerOnlyLogicProblem(["ImprovedGarrisons"]));
     }
 }

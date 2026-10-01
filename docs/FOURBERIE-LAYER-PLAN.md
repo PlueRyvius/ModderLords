@@ -3,7 +3,7 @@
 Fourberie (module id `Fourberie`, Workshop 2875710877, Nexus 2969) under Bannerlord Coop. Reviewed at **v1.4.8.2**
 (`Fourberie.dll` SHA-256 `6c73723c6129933a170e63e6d7aaabe4e37bb4ca847206b1878041197e7cce89`, built 2026-09-29),
 against ModderLords `ba821db` (1.2.1), Coop source `97420dc` (2026-10-01) and the installed Coop **0.1.5** Workshop
-build. Status: **plan only, nothing built.**
+build. Status: **phases 0–2 done (offline-tested, not run live); phases 3–7 to do.**
 
 The per-line analysis (entry-point matrices with line numbers, `_crimeValue` key legend, mutation catalogue) is kept
 outside the repository, because it is derived from a decompile: `D:\Work\Claude\Tech Support\_fourberie-analysis\`
@@ -103,7 +103,7 @@ It is built generically (`PlayerBooks`: a list of static fields plus a codec) so
 |---|---|---|
 | `fourb-book` | server | `PlayerBooks` store keyed by player hero id. It covers every static field on the Fourberie types except UI (`GauntletLayer`, movies, VMs) and constant `Location` definitions. `FourbScope(hero)` = `PlayerScope(hero)` + swap-in/read-back; outside a scope the placeholder's (empty) book is active. Books are **persisted in the server save** by a new ModderLords campaign behaviour (`SyncData` of `Dictionary<string,string>`, hero id to book JSON). The **explicit codec** stores `Hero`/`MobileParty`/`Settlement`/`Village` by `StringId`, `CampaignTime` as ticks, and `TroopRosterElement` as (character id, count, wounded, xp). It is bounded, and malformed books are rejected whole. |
 | `fourb-ticks` | server | Prefix on every per-player handler: `FourberieBehavior` Hourly/Daily/Weekly/DailyTickSet/DailyTickHero; bandit Hourly/Daily/Weekly; safe house Hourly/Daily; pit Weekly/DailyTickHero; contract HourlyTick/DailyTickClan. Instead of one placeholder run, the original runs **once per player book** inside `FourbScope`. World-wide handlers (`FOnDailyTickParty`, `FOnDailyTickSettlement`) are reviewed one by one: run once, or once per player where they read the player's bandit standing. World events (`HeroKilled`, `ClanDestroyed`, `KingdomDestroyed`, `HideoutDeactivated`, `CompanionRemoved`, `HeroPrisonerTaken`, `MobilePartyDestroyed`, `MapEventEnded`) are fanned out to every book. Where a single player is responsible (the destroyer's or prisoner's owner), only that player's book receives it. This is where insurance-scam and bounty resolution start working, because `MapEventEnded` exists only on the server. |
-| `fourb-mirror` | both | Server sends each connected player **only their own book**: at join, after any tick or action that changed it (row deltas + gzip, `LeMirrorDelta`), sequence-numbered with full resync on a gap. The client applies it by setting its statics; there the statics *are* that player's book. The push also carries the player hero's crime rating per kingdom, because Coop does not sync crime (#3234). Targeted per player through the existing `TaomActions.Push` path. |
+| `fourb-mirror` | both | Each player's book is kept in step **in both directions**, row by row (`FbBookSync`, `LeMirrorDelta` deltas + gzip, sequence-numbered with a full resync on a gap). The server sends the rows its ticks changed, and the player's game reports the rows its own menus, screens and missions changed. Each side's rows overwrite only those rows, so a player's local progress is kept on the server before any per-command relay exists. On the player's game the statics *are* that player's book. Sent per player through `TaomActions.Push`; reports go back on the shared action channel. |
 | `fourb-commands` | both | Each Fourberie command is put in one of three tiers, listed in a reviewed table (below). |
 | `fourb-prompts` | server | Inside `FourbScope`, Fourberie's `InformationManager.ShowInquiry` / `MBInformationManager.ShowMultiSelectionInquiry` are sent to **that player** as a remote prompt, with the callbacks held server-side under a request id. The answer runs the chosen callback in scope; on timeout or when the player is offline, the negative/default option runs. Map notices (`MapNotifGrudgeData`) and `DisplayMessage` lines are forwarded the same way (`LeNotices`/`TaomNotices`). This **must** replace ModderLords' bundled headless guard, which answers every inquiry affirmatively: inside Fourberie that would auto-accept blackmail demands and war declarations on the player's behalf. Built generically so TAOM and Living Economy can use it too. |
 | `fourb-models` | server | Owner-scoped model calls. `FModelClanFinance` (its expense helper also mutates `_crimeValue`!) runs in scope when the clan belongs to a player. `FModelPower`/`FModelMobileFood`/`FModelMapSpeed`/`FModelPartyTransition` run in scope when the party is a player's main party. `FModelDeath` runs in scope for a player hero, and `FModelDiplo` gets its faction-leader checks the same way. Clients compute models from their own mirrored book (correct for themselves). Other players' numbers on screen are an accepted display-only gap, as in TAOM. |
@@ -138,6 +138,21 @@ commands, the menu consequences, the dialog consequences and the mission afterma
   (`OnDoneEnslaved` is the only feed of the slave/mine economy), the leave-kingdom consequence chains, and contract
   offers that pop a conversation from a tick.
 
+## Phase 0 results: installed Coop 0.1.5 (2026-09-30)
+
+Every fact above holds in 0.1.5; detail with file and line references in `_fourberie-analysis\P0-coop015-verification.md`.
+
+- **Party ids:** server-created parties get the **same StringId** on clients, so books can refer to parties by id.
+- **Fourberie's own locations** (safe house, pit fight): not registered with Coop. Coop logs a warning, skips the
+  location sync and plays the mission on that player's game only. Nothing throws.
+- **`PlayerEncounter.StartBattleInternal`** asks the server and silently refuses a battle against a party the server
+  does not know. Fourberie's ambushes need **server-created parties** (phase 4).
+- **Crime:** only `Kingdom.MainHeroCrimeRating` is synced, and it is one value per kingdom shared by every player.
+  Per-player crime still needs carrying (phase 6).
+- **Unguarded on clients:** `ChangeKingdomAction` and `GainRenownAction`/`Clan.Renown` are not blocked; they change the
+  local game silently. Item and troop rosters made on a client are local only.
+- **`TimeControlMode`:** sets outside Coop's own controls are refused everywhere, so Fourberie's time stops do nothing.
+
 ## Phases (one PR each, merged as they go green)
 
 0. **Ground truth against the installed Coop 0.1.5.** Source `HEAD` is 1,047 commits past 0.1.5. Decompile the
@@ -151,8 +166,19 @@ commands, the menu consequences, the dialog consequences and the mission afterma
    - `FourberieLaunchPolicy`: refuse without Settings sync; warn if the experimental server-only logic is ticked for
      it; warn on a save made without Fourberie.
    - `fourb-settings`.
-2. **Player books + ticks + mirror** (`fourb-book`, `fourb-ticks`, `fourb-mirror`, the saved store, the codec). This is
-   the **spike**: it proves Fourberie's own code runs correctly as each player.
+2. **Player books + ticks + two-way book sync** (`fourb-book`, `fourb-ticks`, `fourb-mirror`, the saved store, the codec,
+   the launch policy). Built:
+   - `StaticBook` swaps a player's book in and out around a call.
+   - `FbBookCodec` writes a book as JSON by object id.
+   - `FbBookSync` merges rows in both directions.
+   - `FbBooks` stores books in FourberieBehavior's own save data under `modderlords_fourberie_books`.
+   - `FbTicks` fans out 47 handlers: periodic ticks to connected players, world events to every book. This includes an
+     event fired inside another player's run, while skipping books suspended further up the stack.
+   - `FbMirrorClient` is the client side.
+
+   Offline: under real Harmony against a stand-in mod, Cecil checks against the installed DLL (the saved-field set and
+   every registered handler are accounted for), and negative runs proving the tests catch the bugs they guard against.
+   **Not run live.**
 3. **Prompts and notices** (`fourb-prompts`), because ticks in phase 2 start raising inquiries.
 4. **T1 commands**: the Gauntlet screens and menu consequences, all party creation, and `fourb-phantom-guard`.
 5. **Models** (`fourb-models`).
@@ -194,9 +220,10 @@ commands, the menu consequences, the dialog consequences and the mission afterma
 ## Decisions (maintainer, 2026-09-30)
 
 1. **T2 outcomes are trusted.** Client-played, server-applied, as with TAOM special resources.
-2. **Offline players freeze.** `fourb-ticks` runs only the books of connected players. World events still clean up
-   references in every book (a dead victim is removed from an offline player's schemes), but they apply no gains or
-   losses to an offline player.
+2. **Offline players freeze.** `fourb-ticks` runs periodic ticks and movement events only for connected players.
+   World events (deaths, wars, clans and kingdoms ending) still reach every book, so a dead victim leaves an offline
+   player's schemes. Where Fourberie pays out on such an event (a contract target dying), the offline player is paid
+   as single player would.
 3. **T3 is acceptable** for flows that phase 2 shows cannot be made coherent.
 4. **Fourberie's author is not contacted.** Nothing of Fourberie's is copied or shipped; everything binds by reflection.
 

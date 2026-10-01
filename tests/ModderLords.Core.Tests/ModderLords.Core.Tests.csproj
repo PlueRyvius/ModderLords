@@ -55,6 +55,12 @@
     <!-- The Living Economy layer's wire forms (state mirror deltas, action arguments), game- and Coop-free. -->
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\LivingEconomy\LeMirrorDelta.cs" Link="Module\LeMirrorDelta.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\LivingEconomy\LeActionCodec.cs" Link="Module\LeActionCodec.cs" />
+    <!-- The Fourberie layer's per-player books (static swap, JSON form), game- and Coop-free. -->
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\StaticBook.cs" Link="Module\StaticBook.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbBookCodec.cs" Link="Module\FbBookCodec.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbBookSync.cs" Link="Module\FbBookSync.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbFields.cs" Link="Module\FbFields.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbTicks.cs" Link="Module\FbTicks.cs" />
   </ItemGroup>
 
 </Project>
