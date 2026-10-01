@@ -16,6 +16,7 @@ public static class Bridge
         EncounterOptionGate.EnsureInstalled();
         EncounterOptionGate.Tick();
         BattleScenePick.EnsureInstalled();
+        BellumThreadSafety.EnsureInstalled();
         Taom.TaomLayer.Tick();
         Taom.TaomStateMirror.ServerTick();
         LivingEconomy.LivingEconomyLayer.Tick();

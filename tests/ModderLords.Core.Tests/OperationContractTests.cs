@@ -133,7 +133,8 @@ public sealed class OperationContractTests
             Assert.All(c.Requires.Where(r => r.Module == "CoopNightly"), r => Assert.False(r.Strict));
         });
         var authority = Assert.Single(bellum, c => c.Id == "bellum-civile.authority");
-        Assert.Equal(71, authority.Targets.Length);
+        Assert.Equal(77, authority.Targets.Length);
+        Assert.Contains("BellumCivile.Behaviors.PolicyDeliberationBehavior::OnDailyTick", authority.Targets);
         Assert.Equal(authority.Targets.Length, authority.TargetSurfaces.Length);
         Assert.DoesNotContain("BellumCivile.Behaviors.CouncilIncidentBehavior::OnTick", authority.Targets);
         Assert.DoesNotContain("BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnTick", authority.Targets);
@@ -141,8 +142,27 @@ public sealed class OperationContractTests
         Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnTick", authority.Targets);
         Assert.DoesNotContain("BellumCivile.UI.Map.WarScoreMapWidgetVM::OnTick", authority.Targets);
         var commands = Assert.Single(bellum, c => c.Id == "bellum-civile.commands");
-        Assert.Equal(14, commands.Targets.Length);
+        Assert.Equal(17, commands.Targets.Length);
+        Assert.Contains("BellumCivile.Behaviors.PolicyDeliberationBehavior::QueuePlayerProposedVote", commands.Targets);
         Assert.Equal(commands.Targets.Length, commands.TargetSurfaces.Length);
+    }
+
+    // The adapters patch their own Targets arrays, and the runtime surface check only verifies what the contract lists,
+    // so a method added to an adapter but not to the contract would be patched without its body being pinned.
+    [Theory]
+    [InlineData("bellum-civile.authority", "BellumCivileAuthorityAdapter.cs")]
+    [InlineData("bellum-civile.commands", "BellumCivileCommandAdapter.cs")]
+    public void BellumAdapterTargetsMatchTheirContractExactly(string contractId, string adapterFile)
+    {
+        var source = File.ReadAllText(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+            "src", "ModderLords.CompatSync.Coop", "Operations", adapterFile)));
+        var start = source.IndexOf("internal static readonly string[] Targets", StringComparison.Ordinal);
+        Assert.True(start >= 0, adapterFile + " no longer declares Targets");
+        var block = source[start..source.IndexOf("};", start, StringComparison.Ordinal)];
+        var adapterTargets = System.Text.RegularExpressions.Regex.Matches(block, "\"(BellumCivile\\.[^\"]+::[^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
+        var contract = Assert.Single(CompatibilityPlanner.BundledContracts(), c => c.Id == contractId);
+        Assert.Equal(contract.Targets.OrderBy(x => x, StringComparer.Ordinal), adapterTargets.OrderBy(x => x, StringComparer.Ordinal));
+        Assert.Equal(contract.Targets.OrderBy(x => x, StringComparer.Ordinal), contract.TargetSurfaces.Select(s => s.Method).OrderBy(x => x, StringComparer.Ordinal));
     }
 
     [Fact] public void StagingAnotherPlanCannotModifyExistingSessionFile()
