@@ -29,10 +29,15 @@ public static class SnapshotDelta
     /// <summary>Largest snapshot or diff accepted once decompressed: well above any real state, far below a zip bomb.</summary>
     public const int MaxInflatedBytes = 64 * 1024 * 1024;
 
-    /// <summary>Parses a snapshot or diff the way every side must: no date conversion, so values survive a round trip as text.</summary>
+    /// <summary>
+    /// Parses a snapshot or diff the way every side must, so that writing it back gives the same text on all of them: no
+    /// date conversion, and numbers as decimal. The dedicated server runs on .NET Core and players' games on .NET
+    /// Framework, which write the same double differently ("R" is not shortest round-trip on Framework), so with doubles
+    /// a full copy's fingerprint never matched on a player's game; a decimal keeps exactly the digits it was read from.
+    /// </summary>
     public static JObject Parse(string json)
     {
-        using var reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None, MaxDepth = 64 };
+        using var reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None, FloatParseHandling = FloatParseHandling.Decimal, MaxDepth = 64 };
         var token = JToken.ReadFrom(reader);
         if (reader.Read()) throw new InvalidDataException("Trailing content after the snapshot");
         return token as JObject ?? throw new InvalidDataException("A snapshot must be a JSON object");

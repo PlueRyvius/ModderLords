@@ -84,6 +84,19 @@ public sealed class SnapshotDeltaTests
         Assert.Throws<InvalidDataException>(() => SnapshotDelta.Unpack(Convert.ToBase64String(output.ToArray())));
     }
 
+    // The server (.NET Core) and players' games (.NET Framework) write doubles differently; numbers must come back out
+    // exactly as they were read, whatever the runtime.
+    [Theory]
+    [InlineData("{\"a\":91077.375,\"b\":0.30000000000000004,\"c\":91840.37500000001,\"d\":1.5E-05,\"e\":-0.0,\"f\":12,\"g\":0.1}")]
+    public void NumbersKeepTheDigitsTheyWereReadFrom(string json)
+    {
+        var once = SnapshotDelta.Canonical(SnapshotDelta.Parse(json));
+        Assert.Equal(once, SnapshotDelta.Canonical(SnapshotDelta.Parse(once)));
+        Assert.Contains("0.30000000000000004", once);
+        Assert.Contains("91840.37500000001", once);
+        Assert.All(SnapshotDelta.Parse(json).Properties(), p => Assert.IsNotType<double>(((JValue)p.Value).Value));
+    }
+
     [Fact]
     public void AnUnusableRevisionCanBeReceivedAgainAfterRewinding()
     {
