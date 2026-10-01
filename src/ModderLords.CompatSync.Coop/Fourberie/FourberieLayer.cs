@@ -72,6 +72,7 @@ public static class FourberieLayer
         new FbBooksComponent(),
         new FbTicksComponent(),
         new FbMirrorComponent(),
+        new FbPromptsComponent(),
     };
 
     private static bool _done;
@@ -146,5 +147,5 @@ public static class FourberieLayer
     }
 
     /// <summary>"; Fourberie: ..." for the 30 s verification line, or empty when the layer is not running.</summary>
-    public static string Summary() => Active ? "; Fourberie: " + (IsServer ? FbBooks.Summary() + ", " + FbTicks.Summary() : FbMirrorClient.Summary()) : "";
+    public static string Summary() => Active ? "; Fourberie: " + (IsServer ? FbBooks.Summary() + ", " + FbTicks.Summary() + ", " + FbPrompts.Summary() : FbMirrorClient.Summary()) : "";
 }

@@ -61,6 +61,7 @@
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbBookSync.cs" Link="Module\FbBookSync.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbFields.cs" Link="Module\FbFields.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbTicks.cs" Link="Module\FbTicks.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbPromptWire.cs" Link="Module\FbPromptWire.cs" />
   </ItemGroup>
 
 </Project>
