@@ -21,8 +21,8 @@ using ModderLords.Coop.Config;
 //            [--data-dir PATH] [--coop-data-dir PATH] [--world-log PATH] [--bundle-root PATH]
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
-//   smoke    --profile NAME [--save NAME] [--steady SECONDS] [--keep-client] [--keep-server]
-//   smoke    --attach --server-log PATH (--profile-file PATH | --profile NAME) [--join-host H] [--join-port N] [--steady SECONDS] [--keep-client]
+//   smoke    --profile NAME [--save NAME] [--steady SECONDS] [--no-time] [--keep-client] [--keep-server]
+//   smoke    --attach --server-log PATH [--server-commands PATH] (--profile-file PATH | --profile NAME) [--join-host H] [--join-port N] [--steady SECONDS] [--no-time] [--keep-client]
 //   authority --mod ID [--all] [--json] [--out PATH]
 //   trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]
 
@@ -355,6 +355,9 @@ switch (cmd)
             SteadyFor = TimeSpan.FromSeconds(int.TryParse(opts.GetValueOrDefault("steady"), out var attachSteady) ? attachSteady : 60),
             CloseClientWhenDone = !opts.ContainsKey("keep-client"),
             ReportRoot = Path.Combine(ProfileStore.RootDir, "smoke"),
+            // A scripted server reads its console input from a file: one line appended is one command sent.
+            SendServerCommand = opts.TryGetValue("server-commands", out var commandFile) && !opts.ContainsKey("no-time")
+                ? command => File.AppendAllTextAsync(commandFile, command + Environment.NewLine) : null,
         });
         attachRunner.Progress += line => Console.WriteLine("[smoke] " + line);
         using var attachCancel = new CancellationTokenSource();
@@ -397,6 +400,7 @@ switch (cmd)
             Console.WriteLine("[ModderLords] " + ClientModuleInstaller.Ensure(client.GameRoot).Message);
 
         var steady = int.TryParse(opts.GetValueOrDefault("steady"), out var steadySeconds) ? steadySeconds : 60;
+        EngineProcess? engineRef = null;
         var runner = new ModderLords.Core.Smoke.SmokeRunner(new ModderLords.Core.Smoke.SmokeOptions
         {
             GameRoot = client.GameRoot,
@@ -404,6 +408,7 @@ switch (cmd)
             SteadyFor = TimeSpan.FromSeconds(steady),
             CloseClientWhenDone = !opts.ContainsKey("keep-client"),
             ReportRoot = Path.Combine(ProfileStore.RootDir, "smoke"),
+            SendServerCommand = opts.ContainsKey("no-time") ? null : command => engineRef!.SendCommandAsync(command),
         });
         runner.Progress += line => Console.WriteLine("[smoke] " + line);
 
@@ -411,6 +416,7 @@ switch (cmd)
         using var smokeLogWriter = new StreamWriter(smokeLog) { AutoFlush = true };
         Console.WriteLine($"[ModderLords] server output -> {smokeLog}");
         using var engine = EngineProcess.Start(prepared.Plan);
+        engineRef = engine;
         engine.LineReceived += line =>
         {
             runner.ServerLine(line.Text);

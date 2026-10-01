@@ -20,6 +20,14 @@ public sealed record SmokeOptions
     public TimeSpan SteadyFor { get; init; } = TimeSpan.FromSeconds(60);
     public bool CloseClientWhenDone { get; init; } = true;
 
+    /// <summary>
+    /// Sends one command to the server's console. When set, the test runs campaign time once the game is on the map
+    /// (<see cref="TimeMode"/>), so the daily ticks, AI and mods actually run while it watches.
+    /// </summary>
+    public Func<string, Task>? SendServerCommand { get; init; }
+    /// <summary>Coop's time mode for the watch: Play_1x or Play_2x.</summary>
+    public string TimeMode { get; init; } = "Play_2x";
+
     /// <summary>Folder that gets one sub-folder per run (report + log slices).</summary>
     public required string ReportRoot { get; init; }
     public int KeepReports { get; init; } = 20;
@@ -155,6 +163,16 @@ public sealed class SmokeRunner
             }
             if (stage == ClientStage.OnMap)
             {
+                if (onMapAt is null && _options.SendServerCommand is { } send)
+                {
+                    Say($"Running campaign time ({_options.TimeMode})…");
+                    try
+                    {
+                        await send($"{SmokeSignals.RunTimeCommand} {_options.TimeMode}");
+                        Locked(() => _observer.TimeRequested(_options.TimeMode));
+                    }
+                    catch (Exception ex) { Say("Could not send the time command: " + ex.Message); }
+                }
                 onMapAt ??= now;
                 facts = facts with { SteadyAchieved = now - onMapAt.Value };
                 if (Locked(() => _observer.PlayerDropped)) { Say("The server dropped the player."); break; }

@@ -54,6 +54,18 @@ public sealed class SmokeSignalsTests
     }
 
     [Fact]
+    public void ReadsTheServersPulse()
+    {
+        var pulse = SmokeSignals.ParsePulse("Server     [DedicatedServer] pulse: time=Autumn 1, 1084 timeMode=Stop players=1 parties=1439 mapEvents=7 mainParty=657.95,279.08");
+        Assert.Equal(("Autumn 1, 1084", "Stop"), (pulse!.Value.Date, pulse.Value.TimeMode));
+        // Winter 21 is the year's last day; Spring 1 of the next year is the day after.
+        var last = SmokeSignals.ParsePulse("pulse: time=Winter 21, 1084 timeMode=Play_2x")!.Value.Day;
+        var next = SmokeSignals.ParsePulse("pulse: time=Spring 1, 1085 timeMode=Play_2x")!.Value.Day;
+        Assert.Equal(1, next - last);
+        Assert.Null(SmokeSignals.ParsePulse("Server [DedicatedServer] autosave armed"));
+    }
+
+    [Fact]
     public void ReadsTheCompatModulesLines()
     {
         var message = SmokeSignals.CompatMessage("01:52:16.120 [ModderLords.Compat] session check: server answered the ping in 42 ms (as Phorys)");
@@ -127,6 +139,33 @@ public sealed class SmokeEvaluatorTests
         Assert.Equal(SmokeVerdict.Pass, VerdictOf(checks, "On the campaign map"));
         Assert.Equal(SmokeVerdict.Info, VerdictOf(checks, "Coop's client log"));
     }
+
+    [Fact]
+    public void CampaignTimeThatRanPasses()
+    {
+        var o = HealthyJoin();
+        o.TimeRequested("Play_2x");
+        o.ObserveServer("Server     [DedicatedServer] pulse: time=Autumn 1, 1084 timeMode=Play_2x players=1", T0.AddSeconds(80));
+        o.ObserveServer("Server     [DedicatedServer] pulse: time=Autumn 6, 1084 timeMode=Play_2x players=1", T0.AddSeconds(130));
+        var check = SmokeEvaluator.Evaluate(o, Done).Single(c => c.Name == "Campaign time ran");
+        Assert.Equal(SmokeVerdict.Pass, check.Verdict);
+        Assert.StartsWith("5 in-game day(s)", check.Detail);
+    }
+
+    [Fact]
+    public void CampaignTimeThatStayedStoppedFails()
+    {
+        // The second live run: the date never moved because nothing asked the server to run time.
+        var o = HealthyJoin();
+        o.TimeRequested("Play_2x");
+        o.ObserveServer("04:11:23.877 Server     [DedicatedServer] pulse: time=Autumn 1, 1084 timeMode=Stop players=1", T0.AddSeconds(80));
+        o.ObserveServer("04:12:38.937 Server     [DedicatedServer] pulse: time=Autumn 1, 1084 timeMode=Stop players=1", T0.AddSeconds(140));
+        Assert.Equal(SmokeVerdict.Fail, VerdictOf(SmokeEvaluator.Evaluate(o, Done), "Campaign time ran"));
+    }
+
+    [Fact]
+    public void WithoutAServerConsoleTheTimeCheckIsSkipped() =>
+        Assert.Equal(SmokeVerdict.Skipped, VerdictOf(SmokeEvaluator.Evaluate(HealthyJoin(), Done), "Campaign time ran"));
 
     [Fact]
     public void AModderLordsWarningInTheGameFails()

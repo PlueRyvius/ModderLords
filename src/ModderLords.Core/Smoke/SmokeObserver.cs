@@ -26,6 +26,16 @@ public sealed class SmokeObserver
     public List<string> ServerWarningsDuringJoin { get; } = new();
     public List<string> ExpectedWarnings { get; } = new();
     public int ServerErrorsDuringJoin { get; private set; }
+
+    // ---- campaign time, from the server's pulse line once the game is on the map ----
+    public string? TimeRequestedAs { get; private set; }
+    public (string Date, int Day)? FirstDateOnMap { get; private set; }
+    public (string Date, int Day)? LastDate { get; private set; }
+    public string? LastTimeMode { get; private set; }
+    /// <summary>The server's answer to the time command, if it printed one.</summary>
+    public string? TimeCommandReply { get; private set; }
+
+    public void TimeRequested(string mode) => TimeRequestedAs = mode;
     public List<string> ServerErrorSamples { get; } = new();
 
     // ---- the player's game: Coop's log ----
@@ -60,6 +70,19 @@ public sealed class SmokeObserver
     {
         if (!Serving && SmokeSignals.IsServing(line)) Serving = true;
         var joining = ClientStartedAt is not null;
+
+        if (SmokeSignals.ParsePulse(line) is { } pulse)
+        {
+            LastTimeMode = pulse.TimeMode;
+            if (Stage == ClientStage.OnMap)
+            {
+                FirstDateOnMap ??= (pulse.Date, pulse.Day);
+                LastDate = (pulse.Date, pulse.Day);
+            }
+            return;
+        }
+        if (TimeRequestedAs is not null && TimeCommandReply is null && line.Contains("Time control set to", StringComparison.Ordinal))
+            TimeCommandReply = line.Trim();
 
         if (SmokeSignals.ParsePlayers(line) is { } players)
         {
@@ -280,6 +303,20 @@ public static class SmokeEvaluator
         else
             checks.Add(new SmokeCheck("Stayed connected", f.Cancelled ? SmokeVerdict.Skipped : SmokeVerdict.Pass,
                 f.Cancelled ? "cancelled" : $"{f.SteadyAchieved.TotalSeconds:0} s on the map without a drop"));
+
+        // Campaign time: a paused map runs no daily ticks, AI or battles, which is where most errors come from.
+        if (!onMap) checks.Add(skip("Campaign time ran"));
+        else if (o.TimeRequestedAs is null)
+            checks.Add(new SmokeCheck("Campaign time ran", SmokeVerdict.Skipped,
+                "the test had no server console to ask (attach mode without --server-commands), so the map stayed paused"));
+        else if (o.FirstDateOnMap is { } first && o.LastDate is { } last && last.Day > first.Day)
+            checks.Add(new SmokeCheck("Campaign time ran", SmokeVerdict.Pass,
+                $"{last.Day - first.Day} in-game day(s) passed at {o.TimeRequestedAs} ({first.Date} to {last.Date})"));
+        else
+            checks.Add(new SmokeCheck("Campaign time ran", SmokeVerdict.Fail,
+                $"asked the server to run time at {o.TimeRequestedAs}, but the campaign date did not move"
+                + (o.LastDate is { } d ? $" (still {d.Date}, mode {o.LastTimeMode})" : " (no server pulse seen)"),
+                o.TimeCommandReply is { } reply ? [reply] : []));
 
         // Crashes.
         var crash = new List<string>();

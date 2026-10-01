@@ -108,6 +108,28 @@ public static partial class SmokeSignals
 
     public static bool IsServing(string line) => line.Contains("SERVING", StringComparison.Ordinal);
 
+    [GeneratedRegex(@"pulse: time=(Spring|Summer|Autumn|Winter) (\d+), (\d+) timeMode=(\S+)")]
+    private static partial Regex PulseRx();
+
+    /// <summary>
+    /// The server's periodic status line, <c>[DedicatedServer] pulse: time=Autumn 1, 1084 timeMode=Stop players=1 ...</c>
+    /// (about every 14 s): the campaign date as a day number (84-day years, 21-day seasons) and the time mode.
+    /// </summary>
+    public static (string Date, int Day, string TimeMode)? ParsePulse(string line)
+    {
+        var m = PulseRx().Match(line);
+        if (!m.Success) return null;
+        var season = Array.IndexOf(Seasons, m.Groups[1].Value);
+        var day = int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+        var year = int.Parse(m.Groups[3].Value, CultureInfo.InvariantCulture);
+        return ($"{m.Groups[1].Value} {day}, {year}", year * 84 + season * 21 + day - 1, m.Groups[4].Value);
+    }
+
+    private static readonly string[] Seasons = ["Spring", "Summer", "Autumn", "Winter"];
+
+    /// <summary>Coop's server command that runs campaign time; the smoke test sends it once the game is on the map.</summary>
+    public const string RunTimeCommand = "coop.debug.set_time_mode";
+
     // ---- ModderLords' own lines (compat module, both sides) -----------------------------------------------------
 
     public const string CompatTag = "[ModderLords.Compat] ";

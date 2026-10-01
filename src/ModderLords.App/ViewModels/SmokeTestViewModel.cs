@@ -39,6 +39,8 @@ public partial class SmokeTestViewModel : ObservableObject
 
     [ObservableProperty] private string _steadySeconds = "60";
     [ObservableProperty] private bool _closeGameWhenDone = true;
+    /// <summary>Run campaign time (Play_2x) while the game is on the map, so daily ticks, AI and mods actually run.</summary>
+    [ObservableProperty] private bool _runCampaignTime = true;
     [ObservableProperty] private bool _stopServerIfStartedHere = true;
     [ObservableProperty] private string _headline = "Not run yet.";
     [ObservableProperty] private SmokeVerdict? _overall;
@@ -71,6 +73,7 @@ public partial class SmokeTestViewModel : ObservableObject
             JoinPort = _host.ClientProfile.Server.JoinPort,
             SteadyFor = TimeSpan.FromSeconds(steady),
             CloseClientWhenDone = CloseGameWhenDone,
+            SendServerCommand = RunCampaignTime ? command => dispatcher.Invoke(() => _host.SendServerCommandAsync(command)) : null,
             ReportRoot = Path.Combine(ProfileStore.RootDir, "smoke"),
         });
         runner.Progress += line => dispatcher.BeginInvoke(() => Progress.Add($"{DateTime.Now:HH:mm:ss}  {line}"));

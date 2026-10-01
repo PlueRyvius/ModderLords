@@ -812,6 +812,14 @@ public partial class HostViewModel : ObservableObject
         await process.StopAsync(TimeSpan.FromSeconds(30));
     }
 
+    /// <summary>Sends one command to the running server, echoed in the Console like a typed one (the smoke test uses it).</summary>
+    internal async Task SendServerCommandAsync(string command)
+    {
+        if (_engine is null) throw new InvalidOperationException("The server is not running.");
+        await _engine.SendCommandAsync(command);
+        AddLine(LogCategory.Command, "> " + command);
+    }
+
     [RelayCommand]
     private async Task SendCommand()
     {
