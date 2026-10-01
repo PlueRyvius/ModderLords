@@ -50,11 +50,11 @@ Coop is not. This adapter does not modify or redistribute Bellum files.
   meet their political eligibility requirements, not because navigation or the adapter failed.
 - The first actor-aware command slice is implemented behind a third disabled contract, `bellum-civile.commands`.
   It covers title fabrication, usurpation, formation, dissolution, rename, service-level change, grant and revocation, plus
-  gender and house succession-law changes, claim-feud petitions, crown-enforced feud peace, and privy-council appointments and dismissals. Bellum's native confirmation UI remains local; only the final mutation callback is
+  gender and house succession-law changes, claim-feud petitions, crown-enforced feud peace, privy-council appointments and dismissals, and (since the offline follow-up) policy, expulsion and fief-revocation proposals. Bellum's native confirmation UI remains local; only the final mutation callback is
   intercepted. Requests contain stable IDs, never Bellum objects, and the server replaces any claimed actor with
-  the authenticated Coop hero/clan before rerunning Bellum's own eligibility checks. An expected snapshot revision
-  rejects stale confirmations. The client reports completion only after the correlated server result and then asks
-  for a fresh authoritative snapshot. All fourteen patched Bellum 1.3.1 methods have pinned IL surfaces.
+  the authenticated Coop hero/clan before rerunning Bellum's own eligibility checks. A client that has never received Bellum state is refused;
+  Bellum's own checks decide the rest (see the live validation below). The client reports completion only after the correlated server result and then asks
+  for a fresh authoritative snapshot. All seventeen patched Bellum 1.3.1 methods have pinned IL surfaces.
 
 ## Live snapshot evidence
 
@@ -110,24 +110,87 @@ An A/B run without Bellum did not show it. `KingdomDecisionTrace` (validation on
 add and remove on both sides, `ApplyResolved`, the election steps with a finalizer, and the runtime list of methods
 patched by both Bellum and Coop, so a recurrence is diagnosable from logs.
 
-Known gaps found:
+Known gaps found, and where each stands after the offline follow-up below:
 
-- The authority gate covers campaign event handlers only. Bellum's 124 Harmony patch classes run on both sides; 35
-  vanilla methods are patched by both Bellum and Coop (runtime dump). Player-input patches (policy/fief/expulsion
-  proposal interception) create client-local Bellum state.
-- Bellum refers to `Clan.PlayerClan`/`Hero.MainHero` about 900 times. On a dedicated server that is the host's
-  placeholder hero, so player-specific Bellum branches never run for real players there. The deliberation systems
-  (policy, fief, expulsion votes) are the largest users and are untested with more than one clan.
-- The authority analyzer rated the deliberation daily ticks "Local — display only" although they call
-  `Kingdom.RemoveDecision`: it only treats what Coop intercepts as a world change. Its "Local" verdicts need review.
-- `PrivyCouncilBehavior.EnsureRecordIndexes` throws "same key already added" when Coop's parallel party tick calls
-  into it (thread safety).
+- `PrivyCouncilBehavior.EnsureRecordIndexes` threw "same key already added" from Coop's parallel moving-party tick.
+  **Fixed for every Bellum user** (`BellumThreadSafety`), see below.
+- The deliberation ticks were rated "Local" by the authority analyzer and ran on every client. **Gated server-side**
+  (validation mode), and the analyzer blind spot is fixed in a separate change (see below).
+- Bellum's player-input patches created client-local Bellum state. **Policy, expulsion and fief-revocation
+  proposals now go to the server**; the remaining patches are listed in the patch audit below.
+- Bellum refers to `Clan.PlayerClan`/`Hero.MainHero` about 900 times; on a dedicated server that is the placeholder
+  hero. **Open**: needs design decisions (see below) and a two-player run.
+
+## Offline follow-up, 2026-09-30
+
+Done without a game session; installation verified on a headless validation server (Coop will not run campaign time
+with no player connected, so nothing below has been exercised in play yet).
+
+**Thread safety.** Bellum's party-size and army-food model postfixes (`CouncilAssignmentRuntimePatches`) read the
+privy-council and council-incident indexes for every moving party, and Bannerlord ticks moving parties on several
+threads (vanilla does too, so this is Bellum's own bug that Coop makes likelier). Both indexes rebuild lazily behind a
+dirty flag; `CouncilIncidentBehavior.EnsureAspectIndex` also rebuilds whenever an aspect expires and invalidates the
+council cache. `SerializedState` runs every method that touches those fields under one re-entrant lock (12 + 10 methods
+on Bellum 1.3.1). It is installed whenever Bellum is loaded, not only in validation mode: it changes when a thread may
+run, never a result. A race test reproduces the crash without the lock and never throws with it.
+
+**Deliberation.** The policy, fief, expulsion and council-appointment deliberation ticks fire queued votes into
+`Kingdom.AddDecision`. Clients load the server's vote queue with the save and ran those ticks too; Coop turns a
+client's `AddDecision` into a request, so the same AI vote could be added once by the server and once per client,
+and the clean-up (`RemoveDecision`) is refused on clients. That fits the stale-decision loop seen in the original
+save. The six handlers are now server-only (77 authority gates). Because Bellum's `AddDecision` prefixes run before
+Coop's and stop it, a player's own proposal had only ever reached the server through that client's tick, so the three
+proposal entry points (`QueuePlayerProposedVote`, `TryStartTreasonVote`, `QueueRevocationSettlementVote`) are now
+commands executed on the server as that player, with the actor's clan as proposer (17 commands). Known loss: Bellum's
+own deliberation notifications are now raised on the server, so players see the resulting vote but not the
+"the court will deliberate" message.
+
+**Needs a session to confirm:** a non-solo player proposing a policy, an expulsion and a fief revocation; the vote
+firing after the deliberation days; no duplicate decisions with two clients connected.
+
+## Patch audit (Bellum 1.3.1)
+
+The improved authority analyzer sees 95 attribute-declared patch classes (116 patch methods); the rest of the 124
+are attached at runtime (`CouncilAssignmentRuntimePatches`, compatibility patches for Diplomacy/CustomSpawns chosen in
+`TargetMethods`). By most severe verdict per class: 33 Local (display), 23 Both (deterministic, needs identical data),
+5 already handled by Coop, 1 leaking postfix, 33 to review. The ones that matter:
+
+- `Kingdom.AddDecision` prefixes (policy, fief, expulsion, foreign-policy, NPC budget, temporary feud): run before
+  Coop's prefix and return false, so Coop never sees the call. Player paths for the first three are now routed; the
+  foreign-policy and feud ones still queue client-locally if a player triggers them.
+- `KingdomPeaceDecisionAddedParleyCleanupPatch` (postfix on `Kingdom.AddDecision`): runs on clients although Coop
+  skips the original there.
+- Decision outcomes (`PolicyVoteResolutionPatch`, `FiefVoteResolutionPatch`, `KingSelectionAIPatch`,
+  `ExpelClanDecisionPatch`): change relations, settlements and decisions; they run where the decision resolves, which
+  is the server, but nothing stops a client from running them if it ever resolves one locally.
+- `NpcKingdomDecisionPaymentBudgetPatch`, `WarDeclarationInfluencePaymentPatch` (`KingdomElection.HandleInfluenceCosts`):
+  change influence, which Coop does not intercept.
+- `DynamicRelationPatch`: a postfix on `CharacterRelationManager.GetHeroRelation` that, on a read, can write the
+  relation (`SetHeroRelation`) and record relation memories. Every peer does this whenever its UI or AI reads a
+  relation, so relations can drift apart between peers. No crash has been seen; not locked, because it is the
+  hottest path Bellum patches and there is no evidence of a race yet.
+- `Guard*ScorePatch` (diplomacy model queries): set `Kingdom.RulingClan` inside a query.
+- Ten `TargetMethods` patches: targets chosen at runtime, so only the runtime shared-patch dump shows them.
+
+## The "player" on a dedicated server
+
+Bellum asks "is this the player's clan?" in about 900 places. On a dedicated server `Clan.PlayerClan` is the
+placeholder hero's clan, so with the server now authoritative, every real player is treated like an AI lord in the
+simulation: votes are cast for them, and choices Bellum offers "the player" are made by AI or skipped. The command
+adapter already runs a player's own action as that player (`PlayerScope`), and ModderLords has a rewriter that turns
+"is this the player's?" into "is this any connected player's?" for server-run code (`PlayerComparisonRewriter`, used
+for other mods). Applying it to Bellum needs decisions first:
+
+1. When a vote needs a player's choice, does the server wait for them (and for how long), or let the AI decide?
+2. If the player is offline, AI decides, or the vote waits until they return?
+3. Which Bellum prompts should reach the player's client as a question (a server-to-client request that does not
+   exist yet), and which may simply be decided on the server?
 
 ## Deliberately not claimed
 
 The adapter is not full playable compatibility yet. The first simulation-authority and full read-model tiers are
 implemented and have passed one native client admission/reconnect run, but remain deliberately isolated pending
-UI/action work. Fourteen initial player actions now have an actor-aware command path, but the remaining faction,
+UI/action work. Seventeen player actions now have an actor-aware command path, but the remaining faction,
 treaty and player-targeted decisions do not. The five mixed callbacks remain outside
 the authority gate. No political command has passed native validation; no two-simultaneous-player run,
 dynamic-object replication stress case, save/restart verification after political changes, or long soak is claimed.

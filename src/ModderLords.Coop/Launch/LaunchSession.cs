@@ -207,6 +207,8 @@ public sealed class LaunchSession
         if (TaomLaunchPolicy.SyncProblem(selections.Select(s => s.Module.Id), profile.SettingsSync) is { } taomSync) taomProblems.Add(taomSync);
         // Same for Living Economy: its co-op layer is in that module too (docs/LIVING-ECONOMY-LAYER.md).
         if (LivingEconomyLaunchPolicy.SyncProblem(selections.Select(s => s.Module.Id), profile.SettingsSync) is { } leSync) taomProblems.Add(leSync);
+        // And Fourberie (docs/FOURBERIE-LAYER-PLAN.md).
+        if (FourberieLaunchPolicy.SyncProblem(selections.Select(s => s.Module.Id), profile.SettingsSync) is { } fbSync) taomProblems.Add(fbSync);
         foreach (var problem in taomProblems)
         {
             if (applySideEffects) throw new InvalidOperationException(problem);
@@ -214,6 +216,8 @@ public sealed class LaunchSession
         }
         if (LivingEconomyLaunchPolicy.ServerOnlyLogicProblem(ServerOnlyMods(profile, experimentalCompat)) is { } leServerOnly)
             messages.Add("WARNING " + leServerOnly);
+        if (FourberieLaunchPolicy.ServerOnlyLogicProblem(ServerOnlyMods(profile, experimentalCompat)) is { } fbServerOnly)
+            messages.Add("WARNING " + fbServerOnly);
 
         // The one decision both halves of world creation read: this block's messages, and the EnsureExists guard
         // further down. Computing it once is what keeps them from disagreeing about whether a world is being made.

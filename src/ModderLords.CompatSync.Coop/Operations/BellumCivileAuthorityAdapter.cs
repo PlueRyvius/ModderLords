@@ -22,6 +22,11 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
     // Bellum 1.3.1 / Bannerlord 1.4.8. Every entry is also a target surface in the authority contract. Do not add a
     // method merely because a static scan labels it: mixed presentation handlers belong in MixedHandlerExclusions
     // until their mutation-only callees and the state needed by their UI have both been reviewed.
+    //
+    // The deliberation ticks fire queued votes into Kingdom.AddDecision. Clients load the server's queue with the save,
+    // so every client fired the same AI votes as the server, and Coop turns a client's AddDecision into a request:
+    // duplicate decisions in one kingdom. Their RemoveDecision clean-up is refused on clients, so duplicates stayed.
+    // The player's own proposals now reach the server through BellumCivileCommandAdapter instead.
     internal static readonly string[] Targets =
     {
         "BellumCivile.Behaviors.CivilWarResolutionBehavior::OnDailyTick",
@@ -37,6 +42,7 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
         "BellumCivile.Behaviors.ComradesInArmsBehavior::OnDailyTickHero",
         "BellumCivile.Behaviors.ComradesInArmsBehavior::OnMapEventEnded",
         "BellumCivile.Behaviors.ComradesInArmsBehavior::OnSettlementOwnerChanged",
+        "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior::OnDailyTick",
         "BellumCivile.Behaviors.CouncilIncidentBehavior::OnDailyTick",
         "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnClanDestroyed",
         "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnDailyTick",
@@ -49,6 +55,7 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
         "BellumCivile.Behaviors.DynasticHeirBehavior::OnHourlyTick",
         "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnDailyTick",
         "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnWeeklyTick",
+        "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::OnDailyTick",
         "BellumCivile.Behaviors.FactionManagerBehavior::OnClanChangedKingdom",
         "BellumCivile.Behaviors.FactionManagerBehavior::OnDailyTick",
         "BellumCivile.Behaviors.FactionManagerBehavior::OnKingdomDestroyed",
@@ -64,12 +71,16 @@ public sealed class BellumCivileAuthorityAdapter : ICompatibilityAdapter
         "BellumCivile.Behaviors.FeudalTitleBehavior::OnBeforeHeroesMarried",
         "BellumCivile.Behaviors.FeudalTitleBehavior::OnHeroKilled",
         "BellumCivile.Behaviors.FeudalTitleBehavior::OnWeeklyTick",
+        "BellumCivile.Behaviors.FiefDeliberationBehavior::OnDailyTick",
+        "BellumCivile.Behaviors.FiefDeliberationBehavior::OnHourlyTick",
+        "BellumCivile.Behaviors.FiefDeliberationBehavior::OnSettlementOwnerChanged",
         "BellumCivile.Behaviors.ForeignPolicyBehavior::OnWarDeclared",
         "BellumCivile.Behaviors.ForeignTreatyBehavior::OnHourlyTick",
         "BellumCivile.Behaviors.IdeologyBehavior::OnDailyTick",
         "BellumCivile.Behaviors.MercenaryRelationMemoryBehavior::OnClanChangedKingdom",
         "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnDailyTick",
         "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnHourlyTick",
+        "BellumCivile.Behaviors.PolicyDeliberationBehavior::OnDailyTick",
         "BellumCivile.Behaviors.PrivyCouncilBehavior::OnDailyTick",
         "BellumCivile.Behaviors.PrivyCouncilBehavior::OnSettlementEntered",
         "BellumCivile.Behaviors.PrivyCouncilBehavior::OnWeeklyTick",
