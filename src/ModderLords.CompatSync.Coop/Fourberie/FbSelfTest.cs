@@ -162,6 +162,7 @@ internal static class FbSelfTest
         Expect(BookOf(b)?["_stringHeroIdDico"]?["paymaster"] == null, "an offline player's book heard their paymaster died and dropped them");
 
         Effects(a);
+        Crime(a, b);
 
         var json = BookOf(a)?.ToString(Formatting.None) ?? "";
         Log.Info($"{FourberieLayer.Tag}self-test: first player's book is {json.Length} characters");
@@ -190,6 +191,25 @@ internal static class FbSelfTest
         }
         Expect(FbTicks.Summary().Contains("failures 0"), "no tick handler threw after loading (" + FbTicks.Summary() + ")");
         Models(a, b, seed: false);
+        var kingdom = Kingdom.All.First(k => !k.IsEliminated);
+        Expect(FbCrime.Of(a.StringId, kingdom.StringId) > 0, $"the first player's crime with {kingdom.StringId} came back with the save ({FbCrime.Of(a.StringId, kingdom.StringId)})");
+        Expect(FbCrime.Of(b.StringId, kingdom.StringId) == 0, "the second player's crime is still clean");
+    }
+
+    // ---- crime (phase 6b) ----------------------------------------------------------------------------------------
+
+    /// <summary>A crime in one player's run is that player's: not the other player's, not the shared number Coop sends to all.</summary>
+    private static void Crime(Hero a, Hero b)
+    {
+        var kingdom = Kingdom.All.First(k => !k.IsEliminated);
+        var shared = kingdom.MainHeroCrimeRating;
+        using (FbBooks.Enter(a, a.PartyBelongedTo)) TaleWorlds.CampaignSystem.Actions.ChangeCrimeRatingAction.Apply(kingdom, 40f, false);
+        Expect(Math.Abs(FbCrime.Of(a.StringId, kingdom.StringId) - 40f) < 0.01f, $"a crime in the first player's run is theirs ({FbCrime.Of(a.StringId, kingdom.StringId)})");
+        Expect(FbCrime.Of(b.StringId, kingdom.StringId) == 0, "the second player's crime did not change");
+        Expect(Math.Abs(kingdom.MainHeroCrimeRating - shared) < 0.01f, $"the shared number every player's game gets did not change ({shared} -> {kingdom.MainHeroCrimeRating})");
+        Expect(BookOf(a)?[FbCrime.Section]?[kingdom.StringId] != null, "the crime rating is in the first player's book");
+        FbCrime.Daily();
+        Expect(FbCrime.Of(a.StringId, kingdom.StringId) < 40f, $"vanilla's daily crime change ran for the player (40 -> {FbCrime.Of(a.StringId, kingdom.StringId)})");
     }
 
     // ---- effects (phase 6) ---------------------------------------------------------------------------------------

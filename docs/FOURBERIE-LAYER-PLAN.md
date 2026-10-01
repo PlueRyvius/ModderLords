@@ -3,7 +3,7 @@
 Fourberie (module id `Fourberie`, Workshop 2875710877, Nexus 2969) under Bannerlord Coop. Reviewed at **v1.4.8.2**
 (`Fourberie.dll` SHA-256 `6c73723c6129933a170e63e6d7aaabe4e37bb4ca847206b1878041197e7cce89`, built 2026-09-29),
 against ModderLords `ba821db` (1.2.1), Coop source `97420dc` (2026-10-01) and the installed Coop **0.1.5** Workshop
-build. Status: **phases 0–5 and 6a done; the server side passes a live self-test on the real dedicated server (no client yet); 6b (per-player crime), 6c (fights) and 7 to do.**
+build. Status: **phases 0–5, 6a and 6b done; the server side passes a live self-test on the real dedicated server (no client yet); 6c (fights) and 7 to do.**
 
 The per-line analysis (entry-point matrices with line numbers, `_crimeValue` key legend, mutation catalogue) is kept
 outside the repository, because it is derived from a decompile: `D:\Work\Claude\Tech Support\_fourberie-analysis\`
@@ -246,7 +246,19 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
      the batch still applies.
    - **Tests:** the gate under real Harmony with a stand-in mod, plus the live self-test of the replay.
 
-   **6b, to do:** per-player crime rating (Coop shares one value per kingdom).
+   **6b, done (`FbCrime`): each player's own crime rating.** Coop switches vanilla's daily crime behaviour off and
+   shares one crime number per kingdom; upstream #3234 says crime is missing in co-op. Now:
+   - **Server scope swap:** entering a player's scope swaps every faction's rating to theirs, through the backing field,
+     so Coop broadcasts nothing.
+   - **Crimes stay with the player:** a crime write inside their run stays theirs. ChangeCrimeRatingAction runs whole:
+     its notice, and its war past the threshold.
+   - **Daily change restored:** once a day each connected player gets vanilla's daily change as them (decay, owned
+     alleys, Fourberie's territories and base).
+   - **Book:** ratings travel and save in the book (`ml_crime`); a player's game shows their own and reports its own
+     crimes back.
+   - **Known limit:** a crime write the server makes outside any player's run still goes to Coop's shared number.
+   - **Live:** a 40-point crime stays the player's; the other player and the shared number are untouched; the daily
+     change took it to 39; it survives save and reload.
    **6c, to do:** revisit the fights against on-the-spot parties (`FbGaps`).
 7. **T3 notices + docs**: `docs/FOURBERIE-LAYER.md` as the user-facing layer doc, the README mod list and a live test
    script.
@@ -274,7 +286,7 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
     troops, and runs every per-player tick handler through the real prefix. It then relays the insurance scam and
     raises a yes/no and a must-pick prompt for the (offline) player. Last, it saves.
   - **"check"** loads that save and verifies books, base, territory, ledger troops and the caravan, then ticks again.
-  - **Result:** run 44/44 and check 11/11 on 2026-10-01, with the phase 5 model checks, the AI deciding unanswered prompts, an offline book hearing a death, and the phase 6a replay included.
+  - **Result:** run 49/49 and check 13/13 on 2026-10-01, with the phase 5 model checks, the AI deciding unanswered prompts, an offline book hearing a death, the phase 6a replay and 6b crime included.
   - **Bugs it found:**
     - The engine's save loader hands back `MBList<T>` for `List<T>` fields, which the codec skipped, so territory and
       partnership lists were silently left out of the book. The codec now accepts collection subclasses, with a unit

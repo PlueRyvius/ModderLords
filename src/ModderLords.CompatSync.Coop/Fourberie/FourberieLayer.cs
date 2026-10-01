@@ -78,6 +78,7 @@ public static class FourberieLayer
         new FbGapsComponent(),
         new FbModelsComponent(),
         new FbEffectsComponent(),
+        new FbCrimeComponent(),
     };
 
     private static bool _done;
