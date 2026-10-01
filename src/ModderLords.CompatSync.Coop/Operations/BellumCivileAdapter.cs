@@ -7,6 +7,8 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+using GameInterface;
+using GameInterface.Services.Players;
 using HarmonyLib;
 using ModderLords.Operations;
 using TaleWorlds.CampaignSystem;
@@ -309,6 +311,35 @@ internal static class BellumStateReader
         reason = ""; return true;
     }
 
+    /// <summary>Hero and clan ids of every registered player (connected or not), from Coop's player registry.</summary>
+    private static (HashSet<string> Heroes, HashSet<string> Clans) PlayerIds()
+    {
+        var heroes = new HashSet<string>(StringComparer.Ordinal);
+        var clans = new HashSet<string>(StringComparer.Ordinal);
+        if (ContainerProvider.TryResolve<IPlayerManager>(out var players))
+            foreach (var player in players.Players)
+            {
+                var hero = PlayerHeroes.HeroFor(player.HeroId);
+                if (hero == null) continue;
+                heroes.Add(hero.StringId);
+                if (hero.Clan != null) clans.Add(hero.Clan.StringId);
+            }
+        return (heroes, clans);
+    }
+
+    /// <summary>A key from the memory itself: its start day (so key order is the order memories began), then a content hash.</summary>
+    internal static string MemoryKey(BellumRelationMemoryState m, HashSet<string> taken)
+    {
+        var content = string.Join("\u001f", m.Scope.ToString(CultureInfo.InvariantCulture), m.FirstId, m.SecondId, m.SourceId, m.ContextText,
+            m.Value.ToString(CultureInfo.InvariantCulture), m.StartDay.ToString("R", CultureInfo.InvariantCulture),
+            m.ExpiryDay.ToString("R", CultureInfo.InvariantCulture), m.LegacyWeeklyDecay.ToString("R", CultureInfo.InvariantCulture));
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(content)), 0, 6).Replace("-", "");
+        var key = Math.Max(0, m.StartDay).ToString("000000000.000", CultureInfo.InvariantCulture) + "-" + hash;
+        for (var n = 2; !taken.Add(key); n++) key = key.Split('#')[0] + "#" + n.ToString(CultureInfo.InvariantCulture);
+        return key;
+    }
+
     public static BellumStateSnapshot Capture(long revision)
     {
         if (Campaign.Current == null) throw new InvalidOperationException("Campaign is unavailable");
@@ -513,12 +544,28 @@ internal static class BellumStateReader
         // check and players saw no Bellum updates at all), and a player's game does not need it. The server writes each
         // computed relation into the game's own relation (SetHeroRelation), which Coop sends to every player, and on a
         // player's game Bellum's relation read returns that synced value (BellumCivileAuthorityAdapter.RelationReadPrefix).
-        var memorySequence = 0;
-        foreach (var item in Items(Field(relations, "_relationMemories"))) state.RelationMemories.Add(new BellumRelationMemoryState
+        // Only memories that involve a player go to players' games. A player's game reads Bellum's memories for one thing:
+        // the encyclopedia relation tooltip between its own hero and the hero shown (its relation reads return the synced
+        // relation). Every lord-to-lord grudge went too: 26,527 of them (5.4 MB, 96% of the snapshot) six days into a new
+        // campaign, each lasting years, so the snapshot would soon outgrow its bounds again. Registered players count
+        // whether or not they are connected, so an offline player's history is there when they return.
+        // Keys come from the memory itself (start day, then a hash of its content), not its position: one memory
+        // expiring no longer renames every later one, which would make each snapshot diff resend them all. Sorting by key
+        // (BellumStateCodec) keeps them in the order they began.
+        var (playerHeroes, playerClans) = PlayerIds();
+        var memoryKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in Items(Field(relations, "_relationMemories")))
         {
-            MemoryKey = (++memorySequence).ToString("D8", CultureInfo.InvariantCulture), Scope = I(item, "Scope"), FirstId = S(item, "FirstId"), SecondId = S(item, "SecondId"),
-            SourceId = S(item, "SourceId"), ContextText = S(item, "ContextText"), Value = I(item, "Value"), StartDay = D(item, "StartDay"), ExpiryDay = D(item, "ExpiryDay"), LegacyWeeklyDecay = D(item, "LegacyWeeklyDecay"),
-        });
+            var memory = new BellumRelationMemoryState
+            {
+                Scope = I(item, "Scope"), FirstId = S(item, "FirstId"), SecondId = S(item, "SecondId"),
+                SourceId = S(item, "SourceId"), ContextText = S(item, "ContextText"), Value = I(item, "Value"), StartDay = D(item, "StartDay"), ExpiryDay = D(item, "ExpiryDay"), LegacyWeeklyDecay = D(item, "LegacyWeeklyDecay"),
+            };
+            var ids = memory.Scope == 1 ? playerClans : playerHeroes;
+            if (!ids.Contains(memory.FirstId) && !ids.Contains(memory.SecondId)) continue;
+            memory.MemoryKey = MemoryKey(memory, memoryKeys);
+            state.RelationMemories.Add(memory);
+        }
 
         var dynastic = Behavior("BellumCivile.Behaviors.DynasticHeirBehavior");
         foreach (var entry in Map(Field(dynastic, "_dynasticStates"))) state.DynasticSuccessions.Add(new BellumDynasticSuccessionState
