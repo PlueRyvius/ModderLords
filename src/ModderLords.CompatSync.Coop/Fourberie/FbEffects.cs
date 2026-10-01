@@ -326,7 +326,7 @@ internal sealed class FbEffectsComponent : IFbComponent
         if (context.Method("Fourberie.VanillaHelperFourb", "AddPlayerTraitXPAndLogEntry", 4) is { } trait) _calls.Add((trait, false));
         else missing.Add("VanillaHelperFourb.AddPlayerTraitXPAndLogEntry");
         foreach (var (type, property, _) in FbEffects.Deltas)
-            if (AccessTools.PropertySetter(type, property) is { } setter) _setters.Add(setter); else missing.Add(type.Name + "." + property);
+            if (FbPatchTargets.DeclaredSetter(type, property) is { } setter) _setters.Add(setter); else missing.Add(type.Name + "." + property);
         foreach (var (type, method, count, _) in FbFields.Handlers)
             if (context.Method(type, method, count) is { } h) _serverRun.Add(h);
         if (missing.Count > 0) Log.Warn(FourberieLayer.Tag + "effects: not found, not carried: " + FourberieLayer.Some(missing));
@@ -344,15 +344,31 @@ internal sealed class FbEffectsComponent : IFbComponent
         // Above Coop's own prefixes, which refuse most of these on a player's game and would stop later prefixes.
         var first = Priority.First + 300;
         var leave = new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.Leave));
-        foreach (var (m, _) in _calls) h.Patch(m, prefix: new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.CallPrefix)) { priority = first }, finalizer: leave);
-        foreach (var s in _setters) h.Patch(s, prefix: new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.DeltaPrefix)) { priority = first });
-        h.Patch(AccessTools.Method(typeof(TroopRoster), nameof(TroopRoster.AddToCountsAtIndex)), prefix: new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.TroopsPrefix)) { priority = first });
-        h.Patch(AccessTools.Method(typeof(ItemRoster), nameof(ItemRoster.AddToCounts), new[] { typeof(EquipmentElement), typeof(int) }),
-            prefix: new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.ItemsPrefix)) { priority = first });
+        // One patch that fails is named and skipped; the rest still go on (a throw here used to leave every later patch out).
+        var failed = new List<string>();
+        void Patch(MethodBase? m, string what, HarmonyMethod? prefix, HarmonyMethod? finalizer = null)
+        {
+            try
+            {
+                if (m == null) throw new MissingMethodException(what);
+                h.Patch(m, prefix: prefix, finalizer: finalizer);
+            }
+            catch (Exception ex) { failed.Add(what + " (" + ex.GetBaseException().Message + ")"); }
+        }
+        foreach (var (m, _) in _calls)
+            Patch(m, m.DeclaringType?.Name + "." + m.Name, new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.CallPrefix)) { priority = first }, leave);
+        foreach (var s in _setters)
+            Patch(s, s.DeclaringType?.Name + "." + s.Name, new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.DeltaPrefix)) { priority = first });
+        Patch(AccessTools.Method(typeof(TroopRoster), nameof(TroopRoster.AddToCountsAtIndex)), "TroopRoster.AddToCountsAtIndex",
+            new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.TroopsPrefix)) { priority = first });
+        Patch(AccessTools.Method(typeof(ItemRoster), nameof(ItemRoster.AddToCounts), new[] { typeof(EquipmentElement), typeof(int) }), "ItemRoster.AddToCounts",
+            new HarmonyMethod(typeof(FbEffects), nameof(FbEffects.ItemsPrefix)) { priority = first });
         // Handlers the server runs for the player also fire here (a settlement entered): what they change is not sent again.
         foreach (var m in _serverRun)
-            h.Patch(m, prefix: new HarmonyMethod(typeof(FbRecordGate), nameof(FbRecordGate.ServerRunPrefix)) { priority = Priority.First },
-                finalizer: new HarmonyMethod(typeof(FbRecordGate), nameof(FbRecordGate.ServerRunFinalizer)));
-        return $"{_calls.Count} kinds of world change, {_setters.Count} settlement and clan numbers and this player's party are sent to the server when Fourberie makes them";
+            Patch(m, m.DeclaringType?.Name + "." + m.Name, new HarmonyMethod(typeof(FbRecordGate), nameof(FbRecordGate.ServerRunPrefix)) { priority = Priority.First },
+                new HarmonyMethod(typeof(FbRecordGate), nameof(FbRecordGate.ServerRunFinalizer)));
+        if (failed.Count > 0) Log.Warn(FourberieLayer.Tag + "effects: " + failed.Count + " patch(es) failed, those changes are not carried: " + FourberieLayer.Some(failed));
+        return $"{_calls.Count} kinds of world change, {_setters.Count} settlement and clan numbers and this player's party are sent to the server when Fourberie makes them"
+            + (failed.Count > 0 ? $" ({failed.Count} not carried, see warning)" : "");
     }
 }
