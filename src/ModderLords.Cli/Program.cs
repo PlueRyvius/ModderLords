@@ -321,7 +321,8 @@ switch (cmd)
         foreach (var issue in prepared.Order.Issues) Console.WriteLine("order issue   : " + issue);
         Console.WriteLine("server mods   : " + string.Join(", ", ClientManifest.From(prepared.Modules).Select(e => $"{e.Id} {e.Version}")));
         Console.WriteLine("client-visible: " + string.Join(", ", installed.OrderBy(x => x)));
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(prepared.Modules), prepared.Order, launcherData, installed);
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(prepared.Modules), prepared.Order, launcherData, installed,
+            installedVersions: LauncherDataSync.ClientSideVersions(prepared.Catalog.Modules));
         Console.WriteLine("target order  : " + string.Join(", ", plan.TargetOrder));
         Console.WriteLine(plan.Changes.Count == 0 ? "no changes" : "changes:");
         foreach (var ch in plan.Changes) Console.WriteLine("  " + ch);
@@ -393,11 +394,13 @@ switch (cmd)
 
         var prepared = LaunchSession.Prepare(profile);
         foreach (var m in prepared.Messages) Console.WriteLine("[ModderLords] " + m);
+        // Installed before the client plan, as the app does: the plan compares the client's copy with the server's, so a
+        // copy one release behind would refuse the very run that was about to update it.
+        if (prepared.Selections.Any(sel => sel.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase)))
+            Console.WriteLine("[ModderLords] " + ClientModuleInstaller.Ensure(ModderLords.Core.Launch.ClientLauncher.ResolveGameRoot(profile)).Message);
         ClientLaunchSession.Prepared client;
         try { client = ServerMatchedClient.Prepare(prepared, profile); }
         catch (Exception ex) { Console.Error.WriteLine("[ModderLords] client plan: " + ex.Message); return 2; }
-        if (prepared.Selections.Any(sel => sel.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase)))
-            Console.WriteLine("[ModderLords] " + ClientModuleInstaller.Ensure(client.GameRoot).Message);
 
         var steady = int.TryParse(opts.GetValueOrDefault("steady"), out var steadySeconds) ? steadySeconds : 60;
         EngineProcess? engineRef = null;

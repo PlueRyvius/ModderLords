@@ -582,6 +582,10 @@ public partial class MainViewModel : ObservableObject
                 .Select(m => m.Id)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The on-disk version of each module in <see cref="InstalledClientSide"/>, for the mod-list sync's version check.</summary>
+    internal IReadOnlyDictionary<string, IReadOnlyList<string>> InstalledClientVersions() =>
+        LauncherDataSync.ClientSideVersions(_preview?.Catalog.Modules ?? []);
+
     internal IReadOnlySet<string> OfficialSelection()
     {
         CollectProfileFromRows();
@@ -1661,7 +1665,7 @@ public partial class MainViewModel : ObservableObject
         // A format 2 list knows where Coop loads on a player, so the sync may place it. Format 1 does not.
         var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide(),
             file.ClientOfficialModules?.ToHashSet(StringComparer.OrdinalIgnoreCase),
-            orderIncludesCoopPosition: file.FormatVersion >= 2);
+            orderIncludesCoopPosition: file.FormatVersion >= 2, installedVersions: InstalledClientVersions());
         if (file.CoopPositionUnknown)
             Log(LogCategory.Warning, "[ModderLords] shared list: written by an older ModderLords and does not record where Coop loads. "
                                    + "Coop has been left where it is; if you use mods that patch Coop, drag it above them.");

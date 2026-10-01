@@ -389,7 +389,8 @@ public partial class HostViewModel : ObservableObject
     {
         Main.RefreshPreview();
         if (ClientTarget is not { } target) return;
-        var checks = ClientManifest.CompareWithLauncherData(ClientManifest.From(target.Modules), ClientManifest.DefaultLauncherDataPath());
+        var checks = ClientManifest.CompareWithLauncherData(ClientManifest.From(target.Modules), ClientManifest.DefaultLauncherDataPath(),
+            Main.InstalledClientVersions());
         ClientCheckText = checks.Count == 0 ? "No community modules to compare." :
             string.Join("\n", checks.Select(c => $"{(c.Verdict == "ok" ? "  ok " : "  !! ")}{c.Id,-30} server {c.ServerVersion ?? "-",-12} client {c.ClientVersion ?? "-",-12} {c.Verdict}"));
     }
@@ -707,7 +708,8 @@ public partial class HostViewModel : ObservableObject
         EnsureClientModule(ServerCarriesSyncModule(target));
         Main.RefreshPreview();
         var path = ClientManifest.DefaultLauncherDataPath();
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase),
+            installedVersions: Main.InstalledClientVersions());
         var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot(), launching: false) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         try
@@ -768,7 +770,8 @@ public partial class HostViewModel : ObservableObject
         EnsureClientModule(ServerCarriesSyncModule(target));
         Main.RefreshPreview();
 
-        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase),
+            installedVersions: Main.InstalledClientVersions());
         foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModderLords] mod list: {b.Id} — {b.Detail}");
         if (!plan.HasChanges)
         {
