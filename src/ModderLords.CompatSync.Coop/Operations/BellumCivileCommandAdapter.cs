@@ -9,6 +9,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Library;
+using TaleWorlds.Localization;
 using TaleWorlds.ObjectSystem;
 
 namespace ModderLords.CompatSync.Coop.Operations;
@@ -44,7 +45,15 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
         "BellumCivile.UI.ClaimFeudItemVM::CompleteEnforcePeace",
         "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::ExecutePropose",
         "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::CompleteDismissal",
+        // Proposals Bellum intercepts in its Kingdom.AddDecision prefixes and queues as delayed votes. Queued on a client,
+        // the vote lived only there and reached the server only when that client's own deliberation tick fired it.
+        "BellumCivile.Behaviors.PolicyDeliberationBehavior::QueuePlayerProposedVote",
+        "BellumCivile.Behaviors.IdeologyBehavior::TryStartTreasonVote",
+        "BellumCivile.Behaviors.FiefDeliberationBehavior::QueueRevocationSettlementVote",
     };
+
+    // Behaviour services answer bool (and report why through an out parameter); view-model actions are void.
+    private static bool IsBoolTarget(string target) => target.IndexOf(".Behaviors.", StringComparison.Ordinal) >= 0;
 
     public string Id => "bellum-civile.commands.v1";
     public AdapterReadiness Readiness { get; private set; } = AdapterReadiness.Waiting;
@@ -62,7 +71,7 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 return false;
             }
             if (methods[0] is not MethodInfo method || method.GetMethodBody() == null
-                || method.ReturnType != (target.IndexOf("SuccessionLawBehavior", StringComparison.Ordinal) >= 0 ? typeof(bool) : typeof(void)))
+                || method.ReturnType != (IsBoolTarget(target) ? typeof(bool) : typeof(void)))
             {
                 reason = "Pinned Bellum command target does not have the reviewed bool shape: " + target;
                 return false;
@@ -95,7 +104,7 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 BellumStateMirror.Changed += OnStateChanged;
                 foreach (var target in Targets)
                 {
-                    var prefix = target.IndexOf("SuccessionLawBehavior", StringComparison.Ordinal) >= 0
+                    var prefix = IsBoolTarget(target)
                         ? new HarmonyMethod(typeof(BellumCivileCommandAdapter), nameof(ClientBoolCommandPrefix))
                         : new HarmonyMethod(typeof(BellumCivileCommandAdapter), nameof(ClientVoidCommandPrefix));
                     harmony.Patch(Resolve(target).Single(), prefix: prefix);
@@ -221,6 +230,21 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 command.Arguments["kingdomId"] = ExtractId(AccessTools.Field(instance?.GetType(), "_kingdom")?.GetValue(instance), "StringId");
                 command.Arguments["office"] = Number(args[1]);
                 break;
+            case "QueuePlayerProposedVote":
+                command.Kind = "policy.propose";
+                command.Arguments["kingdomId"] = ExtractId(args[0], "StringId");
+                command.Arguments["policyId"] = ExtractId(args[1], "StringId");
+                command.Arguments["abolish"] = Flag(args[2]);
+                command.Arguments["confirmed"] = Flag(args[3]);
+                break;
+            case "TryStartTreasonVote":
+                // The proposer is always the acting player's clan on the server, whatever the client passed.
+                command.Kind = "expulsion.propose";
+                command.Arguments["kingdomId"] = ExtractId(args[0], "StringId");
+                command.Arguments["clanId"] = ExtractId(args[1], "StringId");
+                break;
+            case "QueueRevocationSettlementVote":
+                command.Kind = "fief.revoke"; command.Arguments["settlementId"] = ExtractId(args[0], "StringId"); break;
             default: throw new InvalidOperationException("Unsupported Bellum command target");
         }
         return command;
@@ -233,7 +257,9 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
         {
             if (!parameters[i].ParameterType.IsByRef) continue;
             var type = parameters[i].ParameterType.GetElementType()!;
-            args[i] = (type == typeof(string) ? reason : type.IsValueType ? Activator.CreateInstance(type) : null)!;
+            // Bellum's callers read an out TextObject explanation without a null check.
+            args[i] = (type == typeof(string) ? reason : type == typeof(TextObject) ? new TextObject(reason)
+                : type.IsValueType ? Activator.CreateInstance(type) : null)!;
         }
     }
 
@@ -259,6 +285,7 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
         return JArray.FromObject(ids).ToString(Formatting.None);
     }
     private static string Number(object? value) => Convert.ToInt32(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+    private static string Flag(object? value) => value is bool b ? (b ? "1" : "0") : throw new InvalidOperationException("Bellum action is missing a flag");
 
     private sealed class BellumCommandOperation : IServerOperation
     {
@@ -266,6 +293,7 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
         {
             "title.fabricate", "title.usurp", "title.form", "title.dissolve", "title.rename", "title.service", "title.grant", "title.revoke",
             "succession.gender", "succession.house", "feud.petition", "feud.enforce_peace", "council.propose", "council.dismiss",
+            "policy.propose", "expulsion.propose", "fief.revoke",
         }, StringComparer.Ordinal);
 
         public string Id => OperationId;
@@ -316,6 +344,9 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                     case "feud.enforce_peace": RunFeudPeace(clan, command); break;
                     case "council.propose": RunCouncilProposal(clan, command); break;
                     case "council.dismiss": RunCouncilDismissal(clan, command); break;
+                    case "policy.propose": RunPolicyProposal(clan, command); break;
+                    case "expulsion.propose": RunExpulsionProposal(clan, command); break;
+                    case "fief.revoke": RunFiefRevocation(clan, command); break;
                     default: throw new OperationRejectedException("Unsupported Bellum action");
                 }
             }
@@ -336,6 +367,9 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 case "succession.gender": case "succession.house": required = new[] { "kingdomId", "law" }; break;
                 case "feud.petition": case "feud.enforce_peace": required = new[] { "recordId" }; break;
                 case "council.propose": case "council.dismiss": required = new[] { "kingdomId", "office" }; break;
+                case "policy.propose": required = new[] { "kingdomId", "policyId", "abolish", "confirmed" }; break;
+                case "expulsion.propose": required = new[] { "kingdomId", "clanId" }; break;
+                case "fief.revoke": required = new[] { "settlementId" }; break;
                 default: required = new[] { "titleId" }; break;
             }
             if (command.Arguments.Count != required.Length || required.Any(k => !command.Arguments.TryGetValue(k, out var value) || string.IsNullOrWhiteSpace(value)))
@@ -366,6 +400,51 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
             }
             if (command.Kind == "succession.gender") EnumValue("BellumCivile.GenderSuccessionLaw", command.Arguments["law"]);
             if (command.Kind == "succession.house") EnumValue("BellumCivile.HouseSuccessionLaw", command.Arguments["law"]);
+            if (command.Kind == "policy.propose")
+            {
+                ResolveKingdom(command.Arguments["kingdomId"]);
+                ResolvePolicy(command.Arguments["policyId"]);
+                ParseFlag(command.Arguments["abolish"]);
+                ParseFlag(command.Arguments["confirmed"]);
+            }
+            if (command.Kind == "expulsion.propose")
+            {
+                ResolveKingdom(command.Arguments["kingdomId"]);
+                ResolveClan(command.Arguments["clanId"]);
+            }
+            if (command.Kind == "fief.revoke") ResolveSettlement(command.Arguments["settlementId"]);
+        }
+
+        private static void RunPolicyProposal(Clan clan, BellumCommand command)
+        {
+            var kingdom = MemberKingdom(clan, command.Arguments["kingdomId"]);
+            InvokeBool(Behavior("BellumCivile.Behaviors.PolicyDeliberationBehavior"), "QueuePlayerProposedVote", new object?[]
+            {
+                kingdom, ResolvePolicy(command.Arguments["policyId"]), ParseFlag(command.Arguments["abolish"]), ParseFlag(command.Arguments["confirmed"]),
+            });
+        }
+
+        private static void RunExpulsionProposal(Clan clan, BellumCommand command)
+        {
+            var kingdom = MemberKingdom(clan, command.Arguments["kingdomId"]);
+            var target = ResolveClan(command.Arguments["clanId"]);
+            if (target.Kingdom != kingdom) throw new OperationRejectedException("That clan is no longer in your kingdom");
+            InvokeBool(Behavior("BellumCivile.Behaviors.IdeologyBehavior"), "TryStartTreasonVote", new object?[] { kingdom, target, clan, null });
+        }
+
+        private static void RunFiefRevocation(Clan clan, BellumCommand command)
+        {
+            var settlement = ResolveSettlement(command.Arguments["settlementId"]);
+            if (settlement.OwnerClan?.Kingdom == null || settlement.OwnerClan.Kingdom != clan.Kingdom)
+                throw new OperationRejectedException("That settlement is not held in your kingdom");
+            InvokeBool(Behavior("BellumCivile.Behaviors.FiefDeliberationBehavior"), "QueueRevocationSettlementVote", new object?[] { settlement, clan });
+        }
+
+        private static Kingdom MemberKingdom(Clan clan, string kingdomId)
+        {
+            var kingdom = ResolveKingdom(kingdomId);
+            if (clan.Kingdom != kingdom) throw new OperationRejectedException("You are not a member of that kingdom");
+            return kingdom;
         }
 
         private static void RunFabrication(Clan clan, BellumCommand command)
@@ -490,6 +569,12 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
             ?? throw new OperationRejectedException("The selected clan no longer exists");
         private static Kingdom ResolveKingdom(string id) => Kingdom.All.FirstOrDefault(x => x.StringId == id)
             ?? throw new OperationRejectedException("The selected kingdom no longer exists");
+        private static PolicyObject ResolvePolicy(string id) => PolicyObject.All.FirstOrDefault(x => x.StringId == id)
+            ?? throw new OperationRejectedException("The selected policy does not exist");
+        private static TaleWorlds.CampaignSystem.Settlements.Settlement ResolveSettlement(string id)
+            => TaleWorlds.CampaignSystem.Settlements.Settlement.All.FirstOrDefault(x => x.StringId == id)
+                ?? throw new OperationRejectedException("The selected settlement no longer exists");
+        private static bool ParseFlag(string value) => value == "1" || (value == "0" ? false : throw new OperationRejectedException("Invalid Bellum action flag"));
 
         private static object ResolveFeud(string id)
         {

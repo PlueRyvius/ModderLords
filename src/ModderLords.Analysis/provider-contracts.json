@@ -501,6 +501,7 @@
       "BellumCivile.Behaviors.ComradesInArmsBehavior::OnDailyTickHero",
       "BellumCivile.Behaviors.ComradesInArmsBehavior::OnMapEventEnded",
       "BellumCivile.Behaviors.ComradesInArmsBehavior::OnSettlementOwnerChanged",
+      "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior::OnDailyTick",
       "BellumCivile.Behaviors.CouncilIncidentBehavior::OnDailyTick",
       "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnClanDestroyed",
       "BellumCivile.Behaviors.DynamicMercenaryBandBehavior::OnDailyTick",
@@ -513,6 +514,7 @@
       "BellumCivile.Behaviors.DynasticHeirBehavior::OnHourlyTick",
       "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnDailyTick",
       "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnWeeklyTick",
+      "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::OnDailyTick",
       "BellumCivile.Behaviors.FactionManagerBehavior::OnClanChangedKingdom",
       "BellumCivile.Behaviors.FactionManagerBehavior::OnDailyTick",
       "BellumCivile.Behaviors.FactionManagerBehavior::OnKingdomDestroyed",
@@ -528,12 +530,16 @@
       "BellumCivile.Behaviors.FeudalTitleBehavior::OnBeforeHeroesMarried",
       "BellumCivile.Behaviors.FeudalTitleBehavior::OnHeroKilled",
       "BellumCivile.Behaviors.FeudalTitleBehavior::OnWeeklyTick",
+      "BellumCivile.Behaviors.FiefDeliberationBehavior::OnDailyTick",
+      "BellumCivile.Behaviors.FiefDeliberationBehavior::OnHourlyTick",
+      "BellumCivile.Behaviors.FiefDeliberationBehavior::OnSettlementOwnerChanged",
       "BellumCivile.Behaviors.ForeignPolicyBehavior::OnWarDeclared",
       "BellumCivile.Behaviors.ForeignTreatyBehavior::OnHourlyTick",
       "BellumCivile.Behaviors.IdeologyBehavior::OnDailyTick",
       "BellumCivile.Behaviors.MercenaryRelationMemoryBehavior::OnClanChangedKingdom",
       "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnDailyTick",
       "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnHourlyTick",
+      "BellumCivile.Behaviors.PolicyDeliberationBehavior::OnDailyTick",
       "BellumCivile.Behaviors.PrivyCouncilBehavior::OnDailyTick",
       "BellumCivile.Behaviors.PrivyCouncilBehavior::OnSettlementEntered",
       "BellumCivile.Behaviors.PrivyCouncilBehavior::OnWeeklyTick",
@@ -631,6 +637,11 @@
         "Callers": 1
       },
       {
+        "Method": "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior::OnDailyTick",
+        "BodyHash": "A6EA8F3FD3B0F7A4B25CFD0B37AA05831156C2D23CDB58C1A5401BBC37C44EB5",
+        "Callers": 1
+      },
+      {
         "Method": "BellumCivile.Behaviors.CouncilIncidentBehavior::OnDailyTick",
         "BodyHash": "031B89DE6C25D5FDAAFCE60230C46067E9988C7A2BDE2E1652BE5DF776FB7AE8",
         "Callers": 1
@@ -688,6 +699,11 @@
       {
         "Method": "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::OnWeeklyTick",
         "BodyHash": "02A0B7102871C0A19459E1B167B8664F4A5260D509959C92FA9AEAB7269B4739",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::OnDailyTick",
+        "BodyHash": "1A1B543EAAA71755CE794B6CE2BA61F47C5D3A66A49E97770674666935C7429D",
         "Callers": 1
       },
       {
@@ -766,6 +782,21 @@
         "Callers": 1
       },
       {
+        "Method": "BellumCivile.Behaviors.FiefDeliberationBehavior::OnDailyTick",
+        "BodyHash": "6DC75B8A850BD7FD3572720AD0D7BD926B86E5A760809D758521F5A34DB7D72F",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FiefDeliberationBehavior::OnHourlyTick",
+        "BodyHash": "9239ACD1A518F1F3AB4F76B33FFBF3075FCC7EBEC4593E787F6152E22ADA9D0F",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FiefDeliberationBehavior::OnSettlementOwnerChanged",
+        "BodyHash": "F304F714D6AD1BA76EF8D4599A6888D6579A8E4D4842F05691DAB70AC599F7E4",
+        "Callers": 1
+      },
+      {
         "Method": "BellumCivile.Behaviors.ForeignPolicyBehavior::OnWarDeclared",
         "BodyHash": "48BCF22BF736333D8B97C6234CBB741A167A4461819889E580675262FC85E9BC",
         "Callers": 1
@@ -793,6 +824,11 @@
       {
         "Method": "BellumCivile.Behaviors.PartitionSuccessionBehavior::OnHourlyTick",
         "BodyHash": "4DCF007ED84C14CA6817E535A4804D0A6099B8867D51F5B4B4D46BB65C2CE9DB",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.PolicyDeliberationBehavior::OnDailyTick",
+        "BodyHash": "10D647633306F1277FBF984B95199331FBA1D926A9FBE7F1BA446D6F89D8E85B",
         "Callers": 1
       },
       {
@@ -966,7 +1002,10 @@
       "BellumCivile.UI.ClaimFeudItemVM::ExecutePetition",
       "BellumCivile.UI.ClaimFeudItemVM::CompleteEnforcePeace",
       "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::ExecutePropose",
-      "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::CompleteDismissal"
+      "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::CompleteDismissal",
+      "BellumCivile.Behaviors.PolicyDeliberationBehavior::QueuePlayerProposedVote",
+      "BellumCivile.Behaviors.IdeologyBehavior::TryStartTreasonVote",
+      "BellumCivile.Behaviors.FiefDeliberationBehavior::QueueRevocationSettlementVote"
     ],
     "Suppressed": false,
     "OfflineValidated": false,
@@ -1041,6 +1080,21 @@
       {
         "Method": "BellumCivile.UI.VanillaTabs.Kingdoms.Factions.PrivyCouncilVM::CompleteDismissal",
         "BodyHash": "405A85DDD8773FE7A0FBCD540E4FB46A554B7AB5C005D1608AAC4A0DFA81C00E",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.PolicyDeliberationBehavior::QueuePlayerProposedVote",
+        "BodyHash": "64FF8272AC31A9189B32C9383D458858E37C27A03B2A86B92D5F3EDA96C21B84",
+        "Callers": 3
+      },
+      {
+        "Method": "BellumCivile.Behaviors.IdeologyBehavior::TryStartTreasonVote",
+        "BodyHash": "4E1C4EE3A2FDB2E5262A52C32E0298F7D236A4D0728FB92C322A06AD72C1648B",
+        "Callers": 4
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FiefDeliberationBehavior::QueueRevocationSettlementVote",
+        "BodyHash": "A53AD40722192C8FCD9151BFC2156421354F48519ACE97D13D4964AFFB5432E8",
         "Callers": 1
       }
     ],
