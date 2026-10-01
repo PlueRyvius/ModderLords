@@ -41,6 +41,14 @@ namespace TaleWorlds.CampaignSystem
     public static class PlayerEncounter { public static bool LeaveEncounter { get => false; set { } } }
     public static class AuthLeaveAction { public static void ApplyForParty(object? party) { } }
     public static class AuthCheats { public static bool CheckCheatUsage() => true; }
+    // Ungated by Coop (no catalogue entry): a world mutator and a read on a core world object.
+    public class Kingdom { public void RemoveDecision(object? decision) { } public float GetInfluenceCost() => 0f; }
+}
+
+namespace TaleWorlds.CampaignSystem.Actions
+{
+    // An action class Coop does not prefix; the game's own mutation API all the same.
+    public static class AuthChangeKingdomAction { public static void ApplyByJoinToKingdom(object? clan, object? kingdom) { } }
 }
 
 namespace ModderLords.Core.Tests.AuthFakes
@@ -51,6 +59,22 @@ namespace ModderLords.Core.Tests.AuthFakes
     using ModderLords.Core.Tests.ModFakes;
 
     public static class AuthLog { public static int Dropped; }
+
+    // Bellum's deliberation shape: daily ticks that change the world only through vanilla calls Coop does not intercept.
+    public sealed class AuthDeliberationBehavior : CampaignBehaviorBase
+    {
+        private readonly Kingdom _kingdom = new();
+        public override void RegisterEvents()
+        {
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickCleanup);
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickJoin);
+            CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, TickCost);
+        }
+        public override void SyncData(object store) { }
+        private void TickCleanup(object? party) => _kingdom.RemoveDecision(null);
+        private void TickJoin(object? party) => TaleWorlds.CampaignSystem.Actions.AuthChangeKingdomAction.ApplyByJoinToKingdom(null, _kingdom);
+        private void TickCost(object? party) => _ = _kingdom.GetInfluenceCost();
+    }
 
     public interface ISession { bool IsAuthority { get; } }
     public sealed class Session : ISession { public bool IsAuthority => true; }

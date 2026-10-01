@@ -130,6 +130,55 @@ namespace ModderLords.Core.Tests.CoopFakes
         private static void Log(string s) { }
     }
 
+    public class VanillaKingdom { public void RemoveDecision(object d) { } public void AddDecision(object d) { } public void Rename(string n) { } }
+
+    // Delegation (KingdomPatches' form): the prefix only forwards to an interface; the implementation decides.
+    internal interface IKingdomFake
+    {
+        bool RemoveDecisionPrefix(VanillaKingdom k, object d);
+        bool AddDecisionPrefix(VanillaKingdom k, object d);
+        bool RenamePrefix(VanillaKingdom k);
+    }
+
+    internal sealed class KingdomFake : IKingdomFake
+    {
+        public bool RemoveDecisionPrefix(VanillaKingdom k, object d)
+        {
+            if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+            if (ModInformation.IsClient) return false;
+            MessageBroker.Instance.Publish(k, "removed");
+            return true;
+        }
+
+        public bool AddDecisionPrefix(VanillaKingdom k, object d)
+        {
+            if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+            MessageBroker.Instance.Publish(k, "added");
+            return false;
+        }
+
+        // Delegates too, but its implementation never consults authority: still not a gate.
+        public bool RenamePrefix(VanillaKingdom k) => k != null;
+    }
+
+    [HarmonyPatch(typeof(VanillaKingdom))]
+    internal class DelegatingKingdomPatches
+    {
+        private static readonly IKingdomFake Impl = new KingdomFake();
+
+        [HarmonyPatch("RemoveDecision")]
+        [HarmonyPrefix]
+        private static bool RemoveDecisionPrefix(VanillaKingdom __instance, object d) => Impl.RemoveDecisionPrefix(__instance, d);
+
+        [HarmonyPatch("AddDecision")]
+        [HarmonyPrefix]
+        private static bool AddDecisionPrefix(VanillaKingdom __instance, object d) => Impl.AddDecisionPrefix(__instance, d);
+
+        [HarmonyPatch("Rename")]
+        [HarmonyPrefix]
+        private static bool RenamePrefix(VanillaKingdom __instance) => Impl.RenamePrefix(__instance);
+    }
+
     internal class SyncDeclarations
     {
         public void Register(AutoSyncRegistry registry)

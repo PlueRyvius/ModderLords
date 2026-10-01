@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 
 namespace ModderLords.Core.Compat.Authority;
@@ -122,7 +123,24 @@ public static class AuthorityScan
         "PlayerEncounter::set_LeaveEncounter", "PlayerEncounter::Finish",
     };
 
-    private enum Sink { Blocked, SyncedWrite, WorldWrite, Random, Presentation, RegistersUI, ShowsPopup, HostPlayer, HiddenByCoop }
+    /// <summary>Game objects whose mutating methods change the shared world (as opposed to values, UI and setup objects).</summary>
+    private static readonly HashSet<string> WorldEntities = new(StringComparer.Ordinal)
+    {
+        "Hero", "Clan", "Kingdom", "Settlement", "Town", "Village", "Fief", "MobileParty", "PartyBase", "Army", "TroopRoster",
+        "ItemRoster", "CharacterRelationManager", "HeroDeveloper", "MapEvent", "SiegeEvent", "Workshop",
+    };
+    private static readonly Regex MutatingVerb = new(
+        "^(Add|Remove|Set|Change|Clear|Kill|Declare|Make|Create|Destroy|Transfer|Give|Take|Join|Leave|Start|End|Increase|Decrease|Disband|Dissolve|Initialize|Update)(?=[A-Z_]|$)",
+        RegexOptions.CultureInvariant);
+    /// <summary>Mutating-looking names on world entities that only touch caches or visuals.</summary>
+    private static readonly HashSet<string> NotWorldChanges = new(StringComparer.Ordinal)
+    {
+        "PartyBase::SetVisualAsDirty", "TroopRoster::UpdateVersion", "MobileParty::SetPartyComponentAsDirty",
+        "MobileParty::StartFindingLocatablesAroundPosition",
+    };
+
+    /// <summary>VanillaChange: a call to a game mutator Coop does not intercept (see IsVanillaMutator).</summary>
+    private enum Sink { Blocked, SyncedWrite, WorldWrite, VanillaChange, Random, Presentation, RegistersUI, ShowsPopup, HostPlayer, HiddenByCoop }
 
     /// <param name="plumbingWriters">
     /// A mod field written by more entry points than this is plumbing (a logger's fault flag, a shared cache), not state
@@ -278,7 +296,7 @@ public static class AuthorityScan
             if (fx.Has(Sink.ShowsPopup) || fx.Has(Sink.RegistersUI)) return false;
             if (verdict == AuthorityVerdict.PlayerStateUnsynced) return fx.ModWrites.Any(serverReads.Contains);
             return fx.Blocked.Keys.Any(k => k is not (CoopGateKind.Publishes or CoopGateKind.ClientDeny))
-                || fx.Has(Sink.SyncedWrite) || fx.Has(Sink.WorldWrite);
+                || fx.Has(Sink.SyncedWrite) || fx.Has(Sink.WorldWrite) || fx.Has(Sink.VanillaChange);
         }
     }
 
@@ -317,6 +335,8 @@ public static class AuthorityScan
             return null;
         }
 
+        // VanillaChange is left out on purpose: counting it here makes a UI handler unsplittable whenever a UI-shared
+        // callee calls a game action, and an unsplittable handler is not gated at all, which would gate less than before.
         private static string? ServerWork(Effects fx) =>
             fx.Sinks.TryGetValue(Sink.Blocked, out var b) ? b.text
             : fx.Sinks.TryGetValue(Sink.SyncedWrite, out var s) ? s.text
@@ -356,7 +376,8 @@ public static class AuthorityScan
             return new RootVerdict(root, verdict, reason, evidence, fx.Opaque);
         }
 
-        Sink? change = fx.Has(Sink.Blocked) ? Sink.Blocked : fx.Has(Sink.SyncedWrite) ? Sink.SyncedWrite : fx.Has(Sink.WorldWrite) ? Sink.WorldWrite : null;
+        Sink? change = fx.Has(Sink.Blocked) ? Sink.Blocked : fx.Has(Sink.SyncedWrite) ? Sink.SyncedWrite : fx.Has(Sink.WorldWrite) ? Sink.WorldWrite
+            : fx.Has(Sink.VanillaChange) ? Sink.VanillaChange : null;
 
         if (root.Patch is { } p)
         {
@@ -413,7 +434,8 @@ public static class AuthorityScan
                 if (unsynced.Count > 0)
                     return V(AuthorityVerdict.PlayerStateUnsynced,
                         "player changes " + string.Join(", ", unsynced) + ", which server-side simulation reads; done on a client, the server never sees it") with { SharedState = unsyncedFull };
-                Sink? world = fx.Has(Sink.SyncedWrite) ? Sink.SyncedWrite : fx.Has(Sink.WorldWrite) ? Sink.WorldWrite : null;
+                Sink? world = fx.Has(Sink.SyncedWrite) ? Sink.SyncedWrite : fx.Has(Sink.WorldWrite) ? Sink.WorldWrite
+                    : fx.Has(Sink.VanillaChange) ? Sink.VanillaChange : null;
                 if (world is { } pc)
                     return V(AuthorityVerdict.NeedsRelay, "player action " + fx.Sinks[pc].text + "; done on a client, the server never hears of it", pc);
                 if (fx.Sinks.TryGetValue(Sink.HiddenByCoop, out var hidden))
@@ -574,6 +596,8 @@ public static class AuthorityScan
                         fx.Hit(Sink.SyncedWrite, "sets " + Short(type + "." + name[4..]) + ", which Coop syncs", id);
                     else if (name.StartsWith("set_", StringComparison.Ordinal) && IsWorldType(type))
                         fx.Hit(Sink.WorldWrite, "sets " + Short(type + "." + name[4..]), id);
+                    else if (IsVanillaMutator(type, name))
+                        fx.Hit(Sink.VanillaChange, "calls " + Short(callee) + ", a game change Coop does not intercept", id);
                     else if (type.EndsWith(".MBRandom", StringComparison.Ordinal)) fx.Hit(Sink.Random, "uses MBRandom", id);
                     else if (IsPresentationType(type)) fx.Hit(Sink.Presentation, "shows " + Short(callee), id);
                 }
@@ -629,6 +653,20 @@ public static class AuthorityScan
             return IsPresentationType(t) || s.EndsWith("VM", StringComparison.Ordinal) || s.EndsWith("ViewModel", StringComparison.Ordinal)
                 || s.Contains("Gauntlet", StringComparison.Ordinal) || s.EndsWith("Screen", StringComparison.Ordinal) || s.EndsWith("Layer", StringComparison.Ordinal);
         });
+    }
+
+    /// <summary>
+    /// A vanilla call that changes the world, although Coop has no prefix on it (so it is not in the catalogue) and the
+    /// field it writes is inside TaleWorlds (so no mod field write shows it): an action class (the game's own mutation
+    /// API, e.g. ChangeKingdomAction), or a mutating method on a core world object (Clan.SetLeader, Kingdom.CreateKingdom).
+    /// Coop syncs some results of these from the server, which is exactly why one run on a client is wrong there.
+    /// </summary>
+    private static bool IsVanillaMutator(string type, string name)
+    {
+        if (name.StartsWith("get_", StringComparison.Ordinal) || name.StartsWith('.')) return false;
+        if (type.StartsWith("TaleWorlds.CampaignSystem.Actions.", StringComparison.Ordinal)) return true;
+        var simple = Simple(type);
+        return IsWorldType(type) && WorldEntities.Contains(simple) && MutatingVerb.IsMatch(name) && !NotWorldChanges.Contains(simple + "::" + name);
     }
 
     private static bool IsWorldType(string type) =>

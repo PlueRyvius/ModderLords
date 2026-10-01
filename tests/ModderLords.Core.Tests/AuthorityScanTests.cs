@@ -42,6 +42,18 @@ public sealed class AuthorityScanTests
 
     private static RootVerdict For(string method) => Self.Value.report.Roots.Single(r => r.Root.Method == P + method);
 
+    [Fact]
+    public void UninterceptedVanillaMutators_AreWorldChanges()
+    {
+        // Bellum's deliberation ticks were rated Local: Kingdom.RemoveDecision and action classes write TaleWorlds fields
+        // the walker never sees, and nothing in the catalogue named them. A world change run on every client is not local.
+        var cleanup = For("AuthDeliberationBehavior::TickCleanup");
+        Assert.Equal(AuthorityVerdict.ServerOnly, cleanup.Verdict);
+        Assert.Contains("Kingdom.RemoveDecision, a game change Coop does not intercept", cleanup.Reason);
+        Assert.Equal(AuthorityVerdict.ServerOnly, For("AuthDeliberationBehavior::TickJoin").Verdict);
+        Assert.Equal(AuthorityVerdict.Local, For("AuthDeliberationBehavior::TickCost").Verdict); // a read, not a change
+    }
+
     /// <summary>The fixture analysis, for other test classes (StateSyncTests).</summary>
     internal static (ModCodeModel model, AuthorityReport report) Analysed => Self.Value;
 

@@ -51,6 +51,21 @@ public sealed class CoopSinksTests
     }
 
     [Fact]
+    public void PrefixThatDelegates_IsClassifiedByItsImplementation()
+    {
+        // Coop's Kingdom.AddDecision/RemoveDecision/AddPolicy/RemovePolicy prefixes only forward to IKingdomInterface;
+        // reading the prefix alone found no authority check and left them out, so the authority scan rated Bellum's
+        // deliberation ticks "Local" although they add and remove kingdom decisions.
+        var c = Self.Value;
+        var remove = c.GateFor(P + "VanillaKingdom", "RemoveDecision");
+        Assert.NotNull(remove);
+        Assert.Equal(CoopGateKind.ClientDeny, remove!.Kind);
+        Assert.Equal(P + "DelegatingKingdomPatches.RemoveDecisionPrefix -> " + P + "KingdomFake.RemoveDecisionPrefix", remove.PatchMethod);
+        Assert.Equal(CoopGateKind.Publishes, c.GateFor(P + "VanillaKingdom", "AddDecision")!.Kind);
+        Assert.False(c.IsBlocked(P + "VanillaKingdom", "Rename"));
+    }
+
+    [Fact]
     public void SyncedAndInterceptedMembers_AndTargetMethods()
     {
         var c = Self.Value;
