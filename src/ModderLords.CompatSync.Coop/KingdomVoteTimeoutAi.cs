@@ -84,8 +84,6 @@ public static class KingdomVoteTimeoutAi
         catch (Exception ex) { Log.Warn("kingdom vote timeout: could not let the AI decide: " + ex.GetBaseException().Message); }
     }
 
-    private static bool IsServer()
-    {
-        try { return Common.ModInformation.IsServer; } catch { return false; }
-    }
+    // Not ModInformation.IsServer: the first ticks run before Coop sets it, and the install is only tried once.
+    private static bool IsServer() => Operations.OperationProcessSide.IsServer;
 }
