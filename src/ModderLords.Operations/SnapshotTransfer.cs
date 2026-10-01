@@ -12,6 +12,9 @@ public static class SnapshotTransfer
     public const int MaxChunks = 32;
     public const int MaxSnapshotBytes = MaxChunkBytes * MaxChunks;
 
+    /// <summary>How a reassembled payload is spelled (OperationSnapshotV1.Encoding). Zero is the original plain JSON.</summary>
+    public const int PlainJson = 0, GzipFull = 1, GzipDelta = 2;
+
     public static IReadOnlyList<string> Split(string payload)
     {
         if (payload == null) throw new ArgumentNullException(nameof(payload));
@@ -68,6 +71,15 @@ public sealed class SnapshotReassembler
         revision = -1;
         chunks = Array.Empty<string?>();
         bytes = 0;
+    }
+
+    /// <summary>
+    /// Forgets that revisions after <paramref name="lastGood"/> completed, after a completed payload turned out unusable (a
+    /// diff whose base this player does not have): the full copy asked for instead may carry the same revision.
+    /// </summary>
+    public void RewindTo(long lastGood)
+    {
+        if (completedRevision > lastGood) completedRevision = lastGood;
     }
 
     public bool Offer(string authenticatedEpoch, long incomingRevision, int index, int count, string payload, out string complete)

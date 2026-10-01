@@ -57,4 +57,9 @@ public sealed class OperationSnapshotV1 : IEvent
     // Appended fields preserve the original wire members. Zero ChunkCount is accepted as one legacy chunk.
     [ProtoMember(5)] public int ChunkIndex { get; set; }
     [ProtoMember(6)] public int ChunkCount { get; set; }
+    // SnapshotTransfer.PlainJson / GzipFull / GzipDelta; zero (the default) keeps the original plain JSON meaning.
+    [ProtoMember(7)] public int Encoding { get; set; }
+    // GzipDelta: the revision the diff applies to, and the fingerprint of the snapshot it must rebuild.
+    [ProtoMember(8)] public long BaseRevision { get; set; }
+    [ProtoMember(9)] public string Fingerprint { get; set; } = "";
 }

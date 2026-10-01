@@ -7,6 +7,7 @@ using Common.Network;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Players;
 using LiteNetLib;
+using Newtonsoft.Json.Linq;
 using ModderLords.Operations;
 using ModderLords.CompatSync.Coop.Operations;
 
@@ -21,6 +22,11 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
         private readonly object admissionGate = new object();
         private readonly Dictionary<NetPeer, string> admitted = new Dictionary<NetPeer, string>();
         private readonly Dictionary<string, long> broadcastRevisions = new Dictionary<string, long>(StringComparer.Ordinal);
+        // Shared snapshots are sent as a diff from what each player already has (SnapshotDelta). Per operation: the
+        // revision each admitted player was last sent, and a parsed copy of every revision some player still holds.
+        private readonly object deltaGate = new object();
+        private readonly Dictionary<string, Dictionary<NetPeer, long>> sentRevision = new Dictionary<string, Dictionary<NetPeer, long>>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Dictionary<long, JObject>> sentCopies = new Dictionary<string, Dictionary<long, JObject>>(StringComparer.Ordinal);
         private readonly string epoch = Guid.NewGuid().ToString("N");
         private CommandDispatcher? dispatcher;
         // A compiled adapter may register its domain operations before the session dispatcher is frozen.
@@ -46,7 +52,19 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
         private bool IsAdmitted(NetPeer peer) { lock (admissionGate) return peer.ConnectionState == ConnectionState.Connected && admitted.ContainsKey(peer); }
         public void RemoveDisconnectedPeers()
         {
-            lock (admissionGate) foreach (var peer in admitted.Keys.Where(p => p.ConnectionState != ConnectionState.Connected).ToArray()) admitted.Remove(peer);
+            NetPeer[] gone;
+            lock (admissionGate)
+            {
+                gone = admitted.Keys.Where(p => p.ConnectionState != ConnectionState.Connected).ToArray();
+                foreach (var peer in gone) admitted.Remove(peer);
+            }
+            if (gone.Length == 0) return;
+            lock (deltaGate)
+                foreach (var operationId in sentRevision.Keys.ToArray())
+                {
+                    foreach (var peer in gone) sentRevision[operationId].Remove(peer);
+                    PruneCopies(operationId);
+                }
         }
         private void SendPlan(NetPeer peer)
         {
@@ -111,16 +129,38 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             if (operation == null || !operation.CanReadSnapshot(actor)) return;
             var snapshot = operation.CaptureSnapshot(actor);
             if (snapshot == null) return;
-            SendSnapshotPayload(peer, operationId, operation.SnapshotRevision, snapshot);
+            var revision = operation.SnapshotRevision;
+            JObject parsed;
+            try { parsed = SnapshotDelta.Parse(snapshot); }
+            catch (Exception ex) { ModderLords.CompatSync.Log.Warn("operation snapshot refused: " + ex.GetBaseException().Message); return; }
+            if (!SendSnapshotPayload(peer, operationId, revision, SnapshotDelta.Pack(snapshot), SnapshotTransfer.GzipFull, 0, SnapshotDelta.Fingerprint(parsed))) return;
+            // A full copy is where this player's diffs start from. Every shared revision is sent as a diff from it.
+            if (operation is ISharedSnapshotOperation)
+                lock (deltaGate) Remember(operationId, peer, revision, parsed);
         }
-        private void SendSnapshotPayload(NetPeer peer, string operationId, long revision, string snapshot)
+        private bool SendSnapshotPayload(NetPeer peer, string operationId, long revision, string payload, int encoding, long baseRevision, string fingerprint)
         {
             IReadOnlyList<string> chunks;
-            try { chunks = SnapshotTransfer.Split(snapshot); }
-            catch (ArgumentException ex) { ModderLords.CompatSync.Log.Warn("operation snapshot refused: " + ex.Message); return; }
+            try { chunks = SnapshotTransfer.Split(payload); }
+            catch (ArgumentException ex) { ModderLords.CompatSync.Log.Warn("operation snapshot refused: " + ex.Message); return false; }
             for (var i = 0; i < chunks.Count; i++)
                 network.Send(peer, new OperationSnapshotV1 { Epoch = epoch, OperationId = operationId, Revision = revision,
-                    Payload = chunks[i], ChunkIndex = i, ChunkCount = chunks.Count });
+                    Payload = chunks[i], ChunkIndex = i, ChunkCount = chunks.Count, Encoding = encoding, BaseRevision = baseRevision, Fingerprint = fingerprint });
+            return true;
+        }
+        private void Remember(string operationId, NetPeer peer, long revision, JObject copy)
+        {
+            if (!sentRevision.TryGetValue(operationId, out var peers)) sentRevision[operationId] = peers = new Dictionary<NetPeer, long>();
+            if (!sentCopies.TryGetValue(operationId, out var copies)) sentCopies[operationId] = copies = new Dictionary<long, JObject>();
+            peers[peer] = revision;
+            copies[revision] = copy;
+            PruneCopies(operationId);
+        }
+        private void PruneCopies(string operationId)
+        {
+            if (!sentCopies.TryGetValue(operationId, out var copies)) return;
+            var held = sentRevision.TryGetValue(operationId, out var peers) ? new HashSet<long>(peers.Values) : new HashSet<long>();
+            foreach (var revision in copies.Keys.Where(r => !held.Contains(r)).ToArray()) copies.Remove(revision);
         }
         /// <summary>
         /// Captures one actor-independent snapshot and broadcasts it to every currently admitted actor. Calls are
@@ -139,16 +179,44 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             var snapshot = operation.CaptureSharedSnapshot();
             var revision = operation.SnapshotRevision;
             if (broadcastRevisions.TryGetValue(operationId, out var sent) && revision <= sent) return true;
-            IReadOnlyList<string> chunks;
-            try { chunks = SnapshotTransfer.Split(snapshot); }
-            catch (ArgumentException ex) { ModderLords.CompatSync.Log.Warn("shared operation snapshot refused: " + ex.Message); return false; }
-            foreach (var target in authorized)
-                for (var i = 0; i < chunks.Count; i++)
-                    network.Send(target.Peer, new OperationSnapshotV1 { Epoch = epoch, OperationId = operationId,
-                        Revision = revision, Payload = chunks[i], ChunkIndex = i, ChunkCount = chunks.Count });
+            JObject next;
+            try { next = SnapshotDelta.Parse(snapshot); }
+            catch (Exception ex) { ModderLords.CompatSync.Log.Warn("shared operation snapshot refused: " + ex.GetBaseException().Message); return false; }
+            var fingerprint = SnapshotDelta.Fingerprint(next);
+            string? full = null;
+            var diffs = new Dictionary<long, string>();
+            int fulls = 0, deltas = 0; long wireBytes = 0;
+            lock (deltaGate)
+            {
+                sentRevision.TryGetValue(operationId, out var held);
+                sentCopies.TryGetValue(operationId, out var copies);
+                foreach (var target in authorized)
+                {
+                    bool ok;
+                    string payload;
+                    if (held != null && copies != null && held.TryGetValue(target.Peer, out var baseRevision) && copies.TryGetValue(baseRevision, out var from))
+                    {
+                        if (!diffs.TryGetValue(baseRevision, out payload!))
+                            diffs[baseRevision] = payload = SnapshotDelta.Pack(SnapshotDelta.Canonical(SnapshotDelta.Create(from, next)));
+                        ok = SendSnapshotPayload(target.Peer, operationId, revision, payload, SnapshotTransfer.GzipDelta, baseRevision, fingerprint);
+                        if (ok) deltas++;
+                    }
+                    else
+                    {
+                        payload = full ??= SnapshotDelta.Pack(snapshot);
+                        ok = SendSnapshotPayload(target.Peer, operationId, revision, payload, SnapshotTransfer.GzipFull, 0, fingerprint);
+                        if (ok) fulls++;
+                    }
+                    if (!ok) continue;
+                    wireBytes += payload.Length;
+                    Remember(operationId, target.Peer, revision, next);
+                }
+            }
+            if (fulls + deltas == 0) return false;
             broadcastRevisions[operationId] = revision;
             ModderLords.CompatSync.Log.Info("operation snapshot broadcast: " + operationId + " revision=" + revision
-                + " bytes=" + System.Text.Encoding.UTF8.GetByteCount(snapshot) + " peers=" + authorized.Length);
+                + " bytes=" + System.Text.Encoding.UTF8.GetByteCount(snapshot) + " peers=" + authorized.Length
+                + " sent=" + wireBytes + " (" + deltas + " diff(s), " + fulls + " full)");
             return true;
         }
         private Actor? ResolveActor(NetPeer peer)
@@ -165,6 +233,7 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Unsubscribe<OperationHelloV1>(Hello); broker.Unsubscribe<OperationPlanAckV1>(Ack); broker.Unsubscribe<OperationCommandV1>(Command);
             broker.Unsubscribe<OperationSnapshotRequestV1>(SnapshotRequest);
             lock (admissionGate) admitted.Clear(); broadcastRevisions.Clear(); registered.Clear(); Current = null; OperationRuntime.EndSession();
+            lock (deltaGate) { sentRevision.Clear(); sentCopies.Clear(); }
         }
     }
 }
@@ -184,6 +253,12 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
             public Func<bool> Ready = null!;
             public Action<string> Apply = null!;
             public Action Refresh = null!;
+            // The last snapshot decoded (full or rebuilt from a diff), which the server's next diff applies to.
+            public long LastRevision = -1;
+            public JObject? Last;
+            public string Wire = "";
+            public DateTime FullAskedAt = DateTime.MinValue;
+            public void Forget() { LastRevision = -1; Last = null; FullAskedAt = DateTime.MinValue; }
         }
         private readonly Dictionary<string, SnapshotSink> snapshots = new Dictionary<string, SnapshotSink>();
         public ClientOperationState State { get; } = new ClientOperationState();
@@ -205,7 +280,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         {
             State.Disconnect();
             if (OperationRuntime.JoinBarrier != null) OperationRuntime.JoinBarrier.ClientAgreed = false;
-            foreach (var sink in snapshots.Values) { sink.State.Disconnect(); sink.Reassembler.Disconnect(); }
+            foreach (var sink in snapshots.Values) { sink.State.Disconnect(); sink.Reassembler.Disconnect(); sink.Forget(); }
             server = null; epoch = "";
             // Preserve the frozen campaign plan. A reconnect may agree with it, never replace it.
         }
@@ -223,7 +298,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
                     if (!OperationRuntime.TryActivate(json, out _)) { peer.Disconnect(); return; }
                     server = peer;
                     OperationRuntime.JoinBarrier!.ClientAgreed = true;
-                    if (epoch != incomingEpoch) { epoch = incomingEpoch; State.BeginSession(epoch); foreach (var sink in snapshots.Values) { sink.State.BeginSession(epoch); sink.Reassembler.BeginSession(epoch); } }
+                    if (epoch != incomingEpoch) { epoch = incomingEpoch; State.BeginSession(epoch); foreach (var sink in snapshots.Values) { sink.State.BeginSession(epoch); sink.Reassembler.BeginSession(epoch); sink.Forget(); } }
                     // Keep the acknowledgement on Coop's connection-level path as well.  It is the
                     // reliable-ordered barrier that permits the server to resume character validation.
                     network.SendImmediate(peer, new OperationPlanAckV1 { Digest = OperationRuntime.Activation.Digest!, Epoch = epoch });
@@ -254,16 +329,12 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         }
         public void BindSnapshot(string operationId, Func<bool> ready, Action<string> apply, Action refresh)
         {
-            var sink = new SnapshotSink
+            var sink = new SnapshotSink { Ready = ready, Refresh = refresh };
+            sink.Apply = payload =>
             {
-                Ready = ready,
-                Apply = payload =>
-                {
-                    apply(payload);
-                    ModderLords.CompatSync.Log.Info("operation snapshot applied: " + operationId
-                        + " bytes=" + System.Text.Encoding.UTF8.GetByteCount(payload));
-                },
-                Refresh = refresh
+                apply(payload);
+                ModderLords.CompatSync.Log.Info("operation snapshot applied: " + operationId
+                    + " bytes=" + System.Text.Encoding.UTF8.GetByteCount(payload) + sink.Wire);
             };
             if (epoch.Length > 0) { sink.State.BeginSession(epoch); sink.Reassembler.BeginSession(epoch); }
             snapshots.Add(operationId, sink); RequestSnapshot(operationId);
@@ -283,10 +354,50 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
                 if (snapshots.TryGetValue(message.OperationId, out var sink))
                 {
                     var count = message.ChunkCount == 0 ? 1 : message.ChunkCount;
-                    if (sink.Reassembler.Offer(message.Epoch, message.Revision, message.ChunkIndex, count, message.Payload, out var complete))
-                        sink.State.OfferSnapshot(message.Epoch, message.Revision, complete, sink.Ready, sink.Apply, sink.Refresh);
+                    if (!sink.Reassembler.Offer(message.Epoch, message.Revision, message.ChunkIndex, count, message.Payload, out var complete)) return;
+                    if (!Decode(sink, message, complete, out var json, out var problem))
+                    {
+                        // Not usable here (a diff from a copy this game does not have, or a rebuild that does not match):
+                        // allow the same revision again and ask for a full copy, at most every ten seconds.
+                        sink.Reassembler.RewindTo(sink.LastRevision);
+                        if (DateTime.UtcNow - sink.FullAskedAt > TimeSpan.FromSeconds(10))
+                        {
+                            sink.FullAskedAt = DateTime.UtcNow;
+                            ModderLords.CompatSync.Log.Info("operation snapshot " + message.OperationId + " revision " + message.Revision + " not usable (" + problem + "); asking for a full copy");
+                            RequestSnapshot(message.OperationId);
+                        }
+                        return;
+                    }
+                    sink.State.OfferSnapshot(message.Epoch, message.Revision, json, sink.Ready, sink.Apply, sink.Refresh);
                 }
             });
+        }
+        private static bool Decode(SnapshotSink sink, OperationSnapshotV1 message, string complete, out string json, out string problem)
+        {
+            json = ""; problem = "";
+            try
+            {
+                JObject decoded;
+                switch (message.Encoding)
+                {
+                    case SnapshotTransfer.PlainJson:
+                        json = complete; decoded = SnapshotDelta.Parse(json); sink.Wire = ""; break;
+                    case SnapshotTransfer.GzipFull:
+                        json = SnapshotDelta.Unpack(complete); decoded = SnapshotDelta.Parse(json);
+                        sink.Wire = " (full, " + complete.Length + " bytes sent)"; break;
+                    case SnapshotTransfer.GzipDelta:
+                        if (sink.Last == null || message.BaseRevision != sink.LastRevision) { problem = "diff from revision " + message.BaseRevision + ", this game has " + sink.LastRevision; return false; }
+                        decoded = SnapshotDelta.Apply(sink.Last, SnapshotDelta.Parse(SnapshotDelta.Unpack(complete)));
+                        json = SnapshotDelta.Canonical(decoded);
+                        sink.Wire = " (diff, " + complete.Length + " bytes sent)"; break;
+                    default:
+                        problem = "unknown encoding " + message.Encoding; return false;
+                }
+                if (message.Fingerprint.Length > 0 && SnapshotDelta.Fingerprint(decoded) != message.Fingerprint) { problem = "rebuilt snapshot does not match the server's"; return false; }
+                sink.Last = decoded; sink.LastRevision = message.Revision;
+                return true;
+            }
+            catch (Exception ex) { problem = ex.GetBaseException().Message; return false; }
         }
         public void ApplyPendingSnapshots()
         {
