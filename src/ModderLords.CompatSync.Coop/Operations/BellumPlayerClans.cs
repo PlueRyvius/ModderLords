@@ -19,8 +19,9 @@ namespace ModderLords.CompatSync.Coop.Operations;
 /// In the methods below, only the player comparisons within a few instructions of an IsMinorFaction read are rewritten to
 /// "any player's clan" (PlayerComparisonRewriter, near mode); other "the player at this game" checks in them (menu
 /// conditions, tooltip text, a player ruler's refuge) stay as written. The list comes from an IL scan of Bellum 1.3.1:
-/// every method reading both, without the cheat commands and the testing-only treason trigger. Pinned in the
-/// bellum-civile.commands contract.
+/// every method reading both, without the cheat commands and the testing-only treason trigger, and without
+/// ExpulsionDeliberationBehavior.OnDailyTick, which the authority contract owns (a method is pinned by one contract
+/// only), so players are still not among the AI's expulsion candidates. Pinned in the bellum-civile.commands contract.
 /// </para>
 /// </summary>
 internal static class BellumPlayerClans
@@ -36,7 +37,6 @@ internal static class BellumPlayerClans
         "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::IsRecoverableExileCandidate",
         "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::TryMoveClanToRefuge",
         "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::ExpulsionMenuEntryCondition",
-        "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::OnDailyTick",
         "BellumCivile.Behaviors.FeudalPoliticalOptionsBehavior::IsValidPoliticalActionClan",
         "BellumCivile.Behaviors.FeudalServiceBehavior::IsValidAiServiceRelationship",
         "BellumCivile.Behaviors.FeudalServiceBehavior::IsValidServiceLiege",
@@ -66,7 +66,7 @@ internal static class BellumPlayerClans
     };
 
     /// <summary>Comparisons the IL scan found beside an IsMinorFaction read in <see cref="Targets"/>.</summary>
-    internal const int ExpectedComparisons = 37;
+    internal const int ExpectedComparisons = 36;
 
     /// <summary>
     /// "Is this any player's clan?" On a player's game this game's own clan is also Clan.PlayerClan, counted as well so it

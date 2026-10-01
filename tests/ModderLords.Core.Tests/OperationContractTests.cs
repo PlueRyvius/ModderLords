@@ -145,10 +145,21 @@ public sealed class OperationContractTests
         Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnTick", authority.Targets);
         Assert.DoesNotContain("BellumCivile.UI.Map.WarScoreMapWidgetVM::OnTick", authority.Targets);
         var commands = Assert.Single(bellum, c => c.Id == "bellum-civile.commands");
-        Assert.Equal(60, commands.Targets.Length);
+        Assert.Equal(59, commands.Targets.Length);
         Assert.Contains("BellumCivile.Behaviors.ClaimFeudBehavior::ResolvePetition", commands.Targets);
         Assert.Contains("BellumCivile.Behaviors.PolicyDeliberationBehavior::QueuePlayerProposedVote", commands.Targets);
         Assert.Equal(commands.Targets.Length, commands.TargetSurfaces.Length);
+    }
+
+    // The planner refuses two contracts that own one method ("Conflict"), and refuses both: live, a method listed by both
+    // the authority and the command contract switched off every Bellum adapter except the state snapshot.
+    [Fact]
+    public void NoMethodIsPinnedByTwoBellumContracts()
+    {
+        var bellum = CompatibilityPlanner.BundledContracts().Where(c => c.Module == "BellumCivile").ToList();
+        var shared = bellum.SelectMany(c => c.Targets.Select(t => (Target: t, c.Id))).GroupBy(x => x.Target)
+            .Where(g => g.Select(x => x.Id).Distinct().Count() > 1).Select(g => g.Key).ToList();
+        Assert.Empty(shared);
     }
 
     // The adapters patch their own Targets arrays, and the runtime surface check only verifies what the contract lists,

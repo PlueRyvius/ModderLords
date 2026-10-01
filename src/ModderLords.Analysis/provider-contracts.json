@@ -1022,7 +1022,6 @@
       "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::IsRecoverableExileCandidate",
       "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::TryMoveClanToRefuge",
       "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::ExpulsionMenuEntryCondition",
-      "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::OnDailyTick",
       "BellumCivile.Behaviors.FeudalPoliticalOptionsBehavior::IsValidPoliticalActionClan",
       "BellumCivile.Behaviors.FeudalServiceBehavior::IsValidAiServiceRelationship",
       "BellumCivile.Behaviors.FeudalServiceBehavior::IsValidServiceLiege",
@@ -1218,11 +1217,6 @@
       {
         "Method": "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::ExpulsionMenuEntryCondition",
         "BodyHash": "1CB8ACFA5BA2ABD041A09D6E08C4C98E5E4AF51F8DA0EE0A046B22324834A578",
-        "Callers": 1
-      },
-      {
-        "Method": "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::OnDailyTick",
-        "BodyHash": "1A1B543EAAA71755CE794B6CE2BA61F47C5D3A66A49E97770674666935C7429D",
         "Callers": 1
       },
       {
