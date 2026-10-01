@@ -133,17 +133,24 @@ internal static class FbSelfTest
             Expect(BookOf(b)?["_insucaraF"]?.Type == JTokenType.Null, "the second player's book has no caravan");
         }
 
-        // Prompts for a player with no game: the defaults, never the headless guard's "yes".
-        string? answer = null;
+        // Prompts for a player with no game: held for them (never the headless "yes"), then the AI decides at the deadline.
+        string? answer = null, disabledAnswer = null;
         List<InquiryElement>? picked = null;
         using (FbBooks.Enter(a, a.PartyBelongedTo))
         {
             InformationManager.ShowInquiry(new InquiryData("self-test", "Pay the blackmail?", true, true, "Pay", "Refuse", () => answer = "yes", () => answer = "no"));
+            InformationManager.ShowInquiry(new InquiryData("self-test", "Spend influence?", true, true, "Spend", "Refuse", () => disabledAnswer = "yes", () => disabledAnswer = "no",
+                isAffirmativeOptionEnabled: () => (false, "not enough influence")));
             var elements = new List<InquiryElement> { new InquiryElement("first", "First", null), new InquiryElement("second", "Second", null) };
             MBInformationManager.ShowMultiSelectionInquiry(new MultiSelectionInquiryData("self-test", "Give up one", elements, false, 1, 1, "Done", "", chosen => picked = chosen, null));
         }
-        Expect(answer == "no", $"an offline player's yes/no prompt got the default 'no' (got '{answer ?? "nothing"}')");
-        Expect(picked is { Count: 1 } && (string)picked[0].Identifier == "first", "an offline player's must-pick list got the first option");
+        Expect(answer == null && disabledAnswer == null && picked == null && FbPrompts.WaitingFor(a.StringId) == 3,
+            $"an offline player's prompts are held for them, not answered ({FbPrompts.WaitingFor(a.StringId)} waiting)");
+        FbPrompts.Expire(DateTime.UtcNow.AddMinutes(11));
+        Expect(answer == "yes", $"at the deadline the AI decided the yes/no prompt the way Fourberie's NPCs would: pay (got '{answer ?? "nothing"}')");
+        Expect(disabledAnswer == "no", $"with its affirmative option unavailable, the AI took the other one (got '{disabledAnswer ?? "nothing"}')");
+        Expect(picked is { Count: 1 } && (string)picked[0].Identifier == "first", "at the deadline the AI picked from the list");
+        Expect(FbPrompts.WaitingFor(a.StringId) == 0, "nothing is left waiting after the deadline");
 
         var json = BookOf(a)?.ToString(Formatting.None) ?? "";
         Log.Info($"{FourberieLayer.Tag}self-test: first player's book is {json.Length} characters");

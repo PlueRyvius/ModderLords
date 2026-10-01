@@ -20,8 +20,12 @@ namespace ModderLords.CompatSync.Coop.Fourberie;
 /// blackmail demand, which fief to give up. On the server those calls used to reach the headless guard, which says yes
 /// to everything, so the server accepted demands and wars on players' behalf. Now, while a player's Fourberie runs on the
 /// server, a prompt goes to that player's game; its callbacks wait on the server and run, as that player with their
-/// book, when the answer comes back. A player who is offline, or does not answer within the time limit, gets the default:
-/// "no" when there is a "no", else the only option.
+/// book, when the answer comes back.
+///
+/// No answer within 10 minutes means the AI decides, as it would for a lord (maintainer decision 2026-09-30, shared with
+/// the Bellum layer): the AI can still act for an away player. An offline player is no special case: their prompt
+/// waits, reaches them if they reconnect in time, and otherwise the AI decides at the same deadline. See AiAnswer for
+/// what the AI picks and why.
 ///
 /// Map notices and the contract's map conversation go to the player's game too, sent after the book rows the same run
 /// changed, so the dialog finds the contract it is about. Plain messages are forwarded by the shared notice forwarder.
@@ -36,13 +40,16 @@ internal static class FbPrompts
         public InquiryData? Inquiry;
         public MultiSelectionInquiryData? Multi;
         public DateTime Expires;
+        /// <summary>The message for the player's game; sent when they are (or come back) online.</summary>
+        public List<string> Message = new List<string>();
+        public bool Sent;
     }
 
     private static readonly Dictionary<int, Pending> Waiting = new Dictionary<int, Pending>();
     private static readonly Dictionary<string, List<List<string>>> Outbox = new Dictionary<string, List<List<string>>>(StringComparer.Ordinal);
     private static readonly Dictionary<string, Dictionary<string, string>> TextVariables = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
     private static int _nextId;
-    private static long _sent, _answered, _defaulted, _expired;
+    private static long _sent, _answered, _aiDecided;
     private static DateTime _nextExpiryCheck = DateTime.MinValue;
 
     // ---- server: capture ------------------------------------------------------------------------------------------
@@ -58,39 +65,31 @@ internal static class FbPrompts
         if (Running is not { } key || __0 == null) return true;
         var (affirmativeEnabled, affirmativeHint) = Evaluate(__0.GetIsAffirmativeOptionEnabled);
         var (negativeEnabled, negativeHint) = Evaluate(__0.GetIsNegativeOptionEnabled);
-        if (!IsConnected(key))
-        {
-            DefaultAnswer(__0, affirmativeEnabled, negativeEnabled);
-            return false;
-        }
         var id = ++_nextId;
-        Waiting[id] = new Pending { Key = key, Inquiry = __0, Expires = DateTime.UtcNow + AnswerWithin };
-        Queue(key, FbPromptWire.Pack(new FbInquiry
+        Hold(id, new Pending
         {
-            Id = id, Title = __0.TitleText ?? "", Text = __0.Text ?? "", AffirmativeText = __0.AffirmativeText ?? "", NegativeText = __0.NegativeText ?? "",
-            AffirmativeShown = __0.IsAffirmativeOptionShown, NegativeShown = __0.IsNegativeOptionShown,
-            AffirmativeEnabled = affirmativeEnabled, AffirmativeHint = affirmativeHint, NegativeEnabled = negativeEnabled, NegativeHint = negativeHint,
-        }));
+            Key = key, Inquiry = __0,
+            Message = FbPromptWire.Pack(new FbInquiry
+            {
+                Id = id, Title = __0.TitleText ?? "", Text = __0.Text ?? "", AffirmativeText = __0.AffirmativeText ?? "", NegativeText = __0.NegativeText ?? "",
+                AffirmativeShown = __0.IsAffirmativeOptionShown, NegativeShown = __0.IsNegativeOptionShown,
+                AffirmativeEnabled = affirmativeEnabled, AffirmativeHint = affirmativeHint, NegativeEnabled = negativeEnabled, NegativeHint = negativeHint,
+            }),
+        });
         return false;
     }
 
     internal static bool MultiPrefix(MultiSelectionInquiryData __0)
     {
         if (Running is not { } key || __0 == null) return true;
-        if (!IsConnected(key))
-        {
-            DefaultAnswer(__0);
-            return false;
-        }
         var id = ++_nextId;
-        Waiting[id] = new Pending { Key = key, Multi = __0, Expires = DateTime.UtcNow + AnswerWithin };
         var q = new FbMultiInquiry
         {
             Id = id, Title = __0.TitleText ?? "", Description = __0.DescriptionText ?? "", AffirmativeText = __0.AffirmativeText ?? "",
             NegativeText = __0.NegativeText ?? "", ExitShown = __0.IsExitShown, Min = __0.MinSelectableOptionCount, Max = __0.MaxSelectableOptionCount,
         };
         foreach (var e in __0.InquiryElements ?? new List<InquiryElement>()) q.Elements.Add((e.Title ?? "", e.Hint ?? "", e.IsEnabled));
-        Queue(key, FbPromptWire.Pack(q));
+        Hold(id, new Pending { Key = key, Multi = __0, Message = FbPromptWire.Pack(q) });
         return false;
     }
 
@@ -149,25 +148,41 @@ internal static class FbPrompts
 
     // ---- server: defaults, answers, sending ----------------------------------------------------------------------
 
-    private static void DefaultAnswer(InquiryData q, bool affirmativeEnabled = true, bool negativeEnabled = true)
+    /// <summary>Holds a prompt's callbacks until the player answers or the deadline passes; sends it now if they are online.</summary>
+    private static void Hold(int id, Pending pending)
     {
-        _defaulted++;
-        if (q.IsNegativeOptionShown && negativeEnabled) q.NegativeAction?.Invoke();
-        else if (q.IsAffirmativeOptionShown && affirmativeEnabled) q.AffirmativeAction?.Invoke();
-        else q.NegativeAction?.Invoke();
+        pending.Expires = DateTime.UtcNow + AnswerWithin;
+        Waiting[id] = pending;
+        if (!IsConnected(pending.Key)) return;   // sent if they come back before the deadline
+        Queue(pending.Key, pending.Message);
+        pending.Sent = true;
     }
 
-    private static void DefaultAnswer(MultiSelectionInquiryData q)
+    /// <summary>
+    /// What the AI picks when the player does not answer: the affirmative option when it is shown and enabled, else the
+    /// negative one; from a list, the first enabled options (as many as it must take, at least one). Reviewed against
+    /// every prompt Fourberie can raise from a server-run handler (FourberieSurfaceTests pins that list), this is what
+    /// Fourberie's own NPCs do in each case: a blackmailed clan pays (FSchBlackSu makes NPC victims pay what they can),
+    /// a bribe the player arranged gets paid, influence is spent to soften being uncovered when there is enough, a clan
+    /// leaving a kingdom keeps its holdings as vanilla AI clans do, and a notice is acknowledged. Fourberie's own
+    /// callbacks still apply their checks (not enough gold).
+    /// </summary>
+    private static void AiAnswer(InquiryData q)
     {
-        _defaulted++;
-        if (q.NegativeAction != null && (q.IsExitShown || q.MinSelectableOptionCount == 0))
-        {
-            q.NegativeAction(new List<InquiryElement>());
-            return;
-        }
-        // Nothing to decline with: pick the fewest allowed, first ones first, as the headless guard always did.
+        _aiDecided++;
+        var (affirmativeEnabled, _) = Evaluate(q.GetIsAffirmativeOptionEnabled);
+        var (negativeEnabled, _) = Evaluate(q.GetIsNegativeOptionEnabled);
+        if (q.IsAffirmativeOptionShown && affirmativeEnabled) q.AffirmativeAction?.Invoke();
+        else if (q.IsNegativeOptionShown && negativeEnabled) q.NegativeAction?.Invoke();
+        else (q.NegativeAction ?? q.AffirmativeAction)?.Invoke();
+    }
+
+    private static void AiAnswer(MultiSelectionInquiryData q)
+    {
+        _aiDecided++;
         var chosen = (q.InquiryElements ?? new List<InquiryElement>()).Where(e => e.IsEnabled).Take(Math.Max(1, q.MinSelectableOptionCount)).ToList();
-        q.AffirmativeAction?.Invoke(chosen);
+        if (chosen.Count > 0 && q.AffirmativeAction != null) q.AffirmativeAction(chosen);
+        else q.NegativeAction?.Invoke(new List<InquiryElement>());
     }
 
     /// <summary>Server, game thread, inside TaomActions.Run: a player's answer to one of their prompts.</summary>
@@ -195,7 +210,7 @@ internal static class FbPrompts
                     var elements = multi.InquiryElements ?? new List<InquiryElement>();
                     var chosen = picked.Select(i => elements[i]).Where(e => e.IsEnabled).ToList();
                     if (chosen.Count >= multi.MinSelectableOptionCount) multi.AffirmativeAction?.Invoke(chosen);
-                    else DefaultAnswer(multi);
+                    else AiAnswer(multi);
                 }
                 else multi.NegativeAction?.Invoke(new List<InquiryElement>());
             }
@@ -226,27 +241,43 @@ internal static class FbPrompts
         foreach (var message in list) { TaomActions.Push(hero, FbPromptWire.Feature, message); _sent++; }
     }
 
+    /// <summary>Server: sends prompts held for players who came back, and lets the AI answer the ones past the deadline.</summary>
     internal static void ServerTick()
     {
         if (!FourberieLayer.IsServer || DateTime.UtcNow < _nextExpiryCheck) return;
         _nextExpiryCheck = DateTime.UtcNow.AddSeconds(5);
-        var now = DateTime.UtcNow;
-        foreach (var pair in Waiting.Where(p => p.Value.Expires <= now || !IsConnected(p.Value.Key)).ToList())
+        Expire(DateTime.UtcNow);
+        foreach (var pending in Waiting.Values.Where(p => !p.Sent).ToList())
         {
-            Waiting.Remove(pair.Key);
-            Outbox.Remove(pair.Value.Key);
-            var hero = MBObjectManager.Instance.GetObject<Hero>(pair.Value.Key);
-            if (hero == null) continue;
-            _expired++;
-            Run(hero, hero.PartyBelongedTo, () =>
-            {
-                if (pair.Value.Inquiry is { } q) DefaultAnswer(q);
-                else if (pair.Value.Multi is { } m) DefaultAnswer(m);
-            });
+            if (!IsConnected(pending.Key)) continue;
+            Queue(pending.Key, pending.Message);
+            pending.Sent = true;
         }
     }
 
-    internal static string Summary() => $"prompts sent {_sent}, answered {_answered}, defaulted {_defaulted + _expired} ({_expired} unanswered), waiting {Waiting.Count}";
+    /// <summary>The AI answers every prompt whose deadline is at or before <paramref name="now"/>, as its player.</summary>
+    internal static int Expire(DateTime now)
+    {
+        var due = Waiting.Where(p => p.Value.Expires <= now).ToList();
+        foreach (var pair in due)
+        {
+            Waiting.Remove(pair.Key);
+            var hero = MBObjectManager.Instance.GetObject<Hero>(pair.Value.Key);
+            if (hero == null) continue;
+            Run(hero, hero.PartyBelongedTo, () =>
+            {
+                if (pair.Value.Inquiry is { } q) AiAnswer(q);
+                else if (pair.Value.Multi is { } m) AiAnswer(m);
+            });
+            Log.Info($"{FourberieLayer.Tag}prompts: no answer from {hero.Name} in time; the AI decided");
+        }
+        return due.Count;
+    }
+
+    /// <summary>Self-test: how many prompts are waiting for a player.</summary>
+    internal static int WaitingFor(string key) => Waiting.Values.Count(p => p.Key == key);
+
+    internal static string Summary() => $"prompts sent {_sent}, answered {_answered}, decided by the AI {_aiDecided}, waiting {Waiting.Count}";
 
     // ---- client ----------------------------------------------------------------------------------------------------
 

@@ -288,6 +288,17 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
    as single player would.
 3. **T3 is acceptable** for flows that phase 2 shows cannot be made coherent.
 4. **Fourberie's author is not contacted.** Nothing of Fourberie's is copied or shipped; everything binds by reflection.
+5. **Unanswered prompts: the AI decides** (2026-09-30, shared with the Bellum layer). A prompt that involves a player
+   goes to that player, with a 10-minute timer. No answer means the AI decides, so the AI can still act (pay, declare,
+   leave) for an away player. An offline player is no special case: their prompt waits, reaches them if they reconnect
+   in time, and otherwise the AI decides at the same deadline.
+
+   For every prompt a server-run handler can raise (a surface test pins the reviewed list), the AI's choice mirrors
+   Fourberie's own NPCs:
+   - the affirmative when it is available, else the negative;
+   - the first options of a list;
+   - so: blackmail is paid (NPC victims always pay), an arranged bribe is paid, influence is spent when there is enough,
+     a clan leaving a kingdom keeps its holdings (as vanilla AI clans do), and notices are acknowledged.
 
 ## Risks
 

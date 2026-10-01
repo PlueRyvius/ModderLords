@@ -283,6 +283,51 @@ public sealed class FourberieSurfaceTests
         }
     }
 
+    /// <summary>
+    /// Every place a server-run Fourberie handler can ask the player something. Each was reviewed for what the AI should
+    /// pick when nobody answers (FbPrompts.AiAnswer): affirmative when available, else negative; first options of a list.
+    /// </summary>
+    private static readonly HashSet<string> ReviewedServerPrompts = new(StringComparer.Ordinal)
+    {
+        "Fourberie.FourbContractBehavior.HourlyTick",               // contract offer: Okay only
+        "Fourberie.FourberieBehavior.HourlyTick",                   // a clan blackmails the player: NPCs pay
+        "Fourberie.FourberieBehavior.FSchBribeSu",                  // the bribe the player arranged: pay
+        "Fourberie.FourberieBehavior.PlayerActionsConsequences",    // uncovered: spend influence if there is enough; leaving: keep holdings
+        "Fourberie.FourberieBehavior.FMapEventEnded",               // insurance scam notices: Okay only
+        "Fourberie.FourberieBehavior.FOnRaidCompleted",             // extortion and militia notices: Okay only
+        "Fourberie.FourberieBehavior.HideoutDeactivated",           // safe house destroyed: Okay only
+    };
+
+    [Fact]
+    public void EveryPromptAServerRunHandlerCanRaiseWasReviewed()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        var bodies = AllBodies(module).ToDictionary(b => b.FullName);
+        var roots = FbFields.Handlers.Select(h => (h.Type, h.Method)).Concat(FbRelayTable.Methods.Select(r => (r.Type, r.Method))).ToList();
+        var found = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var (type, method) in roots)
+        {
+            var todo = new Stack<MethodDefinition>(bodies.Values.Where(b => b.DeclaringType.FullName == type && b.Name == method));
+            var seen = new HashSet<string>();
+            while (todo.Count > 0)
+            {
+                var body = todo.Pop();
+                if (!seen.Add(body.FullName)) continue;
+                foreach (var i in body.Body.Instructions)
+                {
+                    if (i.Operand is not MethodReference r) continue;
+                    if (r.Name is "ShowInquiry" or "ShowMultiSelectionInquiry" && r.DeclaringType.Name is "InformationManager" or "MBInformationManager") found.Add(Owner(body));
+                    if (bodies.TryGetValue(r.FullName, out var callee)) todo.Push(callee);
+                    // A lambda handed to an inquiry runs later (on the answer); follow it too.
+                    if (i.OpCode == OpCodes.Ldftn && bodies.TryGetValue(r.FullName, out var lambda)) todo.Push(lambda);
+                }
+            }
+        }
+        var unreviewed = found.Where(f => !ReviewedServerPrompts.Contains(f)).ToList();
+        Assert.True(unreviewed.Count == 0, "server-run Fourberie code can raise prompts nobody reviewed for the AI's answer: " + string.Join(", ", unreviewed));
+    }
+
     [Fact]
     public void TheReviewedVersionIsTheInstalledOne()
     {
