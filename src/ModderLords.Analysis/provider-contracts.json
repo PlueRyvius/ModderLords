@@ -564,7 +564,8 @@
       "BellumCivile.Behaviors.ForeignTreatyBehavior::ProcessTributes",
       "BellumCivile.Behaviors.ForeignTreatyBehavior::ResolvePendingParley",
       "BellumCivile.Behaviors.ProxyWarBehavior::CleanUpStuckHighwaymenParties",
-      "BellumCivile.Behaviors.ProxyWarBehavior::SeedMissingAiEvaluationSchedules"
+      "BellumCivile.Behaviors.ProxyWarBehavior::SeedMissingAiEvaluationSchedules",
+      "BellumCivile.Behaviors.DynamicRelationBehavior::GetRelationForRead"
     ],
     "Suppressed": false,
     "OfflineValidated": false,
@@ -955,6 +956,11 @@
         "Method": "BellumCivile.Behaviors.ProxyWarBehavior::SeedMissingAiEvaluationSchedules",
         "BodyHash": "81035D7B94911A853DD91C9E252F860E81897186DDB8CEC1DC20E1AA577C1D7F",
         "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynamicRelationBehavior::GetRelationForRead",
+        "BodyHash": "4EFE2B5561908F4A0709D2B70CFE5CEB9691F75EB52A435A43630C3BDE5644E7",
+        "Callers": 7
       }
     ],
     "SurfacesCoverTargets": true
