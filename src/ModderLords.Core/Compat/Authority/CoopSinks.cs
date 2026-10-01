@@ -33,7 +33,7 @@ public sealed record CoopGate(string TargetType, string TargetMethod, CoopGateKi
 /// </summary>
 public sealed class CoopSinkCatalogue
 {
-    public const int CurrentSchema = 2;
+    public const int CurrentSchema = 3;
     public int SchemaVersion { get; set; } = CurrentSchema;
     public string SourceSha256 { get; set; } = "";
     public List<CoopGate> Gates { get; set; } = new();
@@ -126,6 +126,7 @@ public static class CoopSinks
             if (!pe.HasMetadata) { cat.Notes.Add(Path.GetFileName(path) + ": no managed metadata"); return cat; }
             var md = pe.GetMetadataReader();
             var stateMachines = IlReader.StateMachineTypes(md);
+            var delegates = new DelegateIndex(md);
 
             foreach (var h in md.TypeDefinitions)
             {
@@ -170,6 +171,8 @@ public static class CoopSinks
                         if (target.Type is null || target.ResolvedMethod is null) continue;
                         if (Classify(md, own) is { } gateKind)
                             gates.Add(new CoopGate(target.Type, target.ResolvedMethod, gateKind, typeName + "." + name));
+                        else if (delegates.Classify(pe, own) is { } delegated)
+                            gates.Add(new CoopGate(target.Type, target.ResolvedMethod, delegated.kind, typeName + "." + name + " -> " + delegated.via));
                     }
                 }
                 catch (BadImageFormatException ex) { cat.Notes.Add("type skipped: " + ex.Message); }
@@ -185,6 +188,68 @@ public static class CoopSinks
         cat.InterceptedMembers = intercepted.ToList();
         cat.TargetMethodsTargets = listed.ToList();
         return cat;
+    }
+
+    /// <summary>
+    /// Coop's own bool methods, by "Type::Name", with interfaces resolved to their implementations. Some prefixes only
+    /// forward (<c>return kingdomInterface.RemoveDecisionPrefix(__instance, d)</c>), so the authority check that makes
+    /// them a gate is in the method they call. One level is followed, and only into bool methods: a forwarded prefix
+    /// returns its callee's answer, while a helper that merely logs under IsServer must not make its caller a gate.
+    /// </summary>
+    private sealed class DelegateIndex
+    {
+        private readonly MetadataReader _md;
+        private readonly Dictionary<string, List<MethodDefinitionHandle>> _methods = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, List<string>> _implementors = new(StringComparer.Ordinal);
+
+        public DelegateIndex(MetadataReader md)
+        {
+            _md = md;
+            foreach (var h in md.TypeDefinitions)
+            {
+                try
+                {
+                    var td = md.GetTypeDefinition(h);
+                    var type = IlReader.TypeName(md, h);
+                    foreach (var mh in td.GetMethods())
+                    {
+                        var key = type + "::" + md.GetString(md.GetMethodDefinition(mh).Name);
+                        if (!_methods.TryGetValue(key, out var list)) _methods[key] = list = new();
+                        list.Add(mh);
+                    }
+                    foreach (var ih in td.GetInterfaceImplementations())
+                    {
+                        var iface = IlReader.TypeName(md, md.GetInterfaceImplementation(ih).Interface);
+                        if (!_implementors.TryGetValue(iface, out var types)) _implementors[iface] = types = new();
+                        types.Add(type);
+                    }
+                }
+                catch (BadImageFormatException) { }
+            }
+        }
+
+        /// <summary>The gate kind of the first bool method this prefix calls that consults authority, and which one it was.</summary>
+        public (CoopGateKind kind, string via)? Classify(PEReader pe, IReadOnlyList<IlInstruction> prefix)
+        {
+            foreach (var i in prefix)
+            {
+                if (i.OpCode is not (ILOpCode.Call or ILOpCode.Callvirt)) continue;
+                var (type, name) = IlReader.MemberName(_md, i.Operand);
+                if (type.Length == 0) continue;
+                var owners = _implementors.TryGetValue(type, out var impls) ? impls.Prepend(type) : new[] { type };
+                foreach (var owner in owners)
+                {
+                    if (!_methods.TryGetValue(owner + "::" + name, out var candidates)) continue;
+                    foreach (var mh in candidates)
+                    {
+                        var m = _md.GetMethodDefinition(mh);
+                        if (!IlReader.ReturnsBool(_md, m)) continue;
+                        if (CoopSinks.Classify(_md, IlReader.Read(pe, m)) is { } kind) return (kind, owner + "." + name);
+                    }
+                }
+            }
+            return null;
+        }
     }
 
     /// <summary>Null when the prefix does not consult Coop's authority at all (e.g. a plain <c>return true</c>).</summary>
@@ -215,17 +280,20 @@ public static class CoopSinks
         }
         if (!server && !client && !policy) return null;
         if (server && !client && !policy && !otherCalls && !logic) return CoopGateKind.ClientSkip;
+        // What the client branch does decides it: a prefix can publish on the server (to broadcast) and still refuse on a
+        // client (Coop's Kingdom.RemoveDecision does nothing there).
+        if (clientCheck >= 0 && ClientBranch(md, il, clientCheck) is { allowed: { } allowed } branch)
+            return branch.publishes ? CoopGateKind.Publishes : allowed ? CoopGateKind.ClientLocal : CoopGateKind.ClientDeny;
         if (publish) return CoopGateKind.Publishes;
-        if (clientCheck >= 0 && ClientBranchResult(il, clientCheck) is { } allowed)
-            return allowed ? CoopGateKind.ClientLocal : CoopGateKind.ClientDeny;
         return server || client ? CoopGateKind.Conditional : CoopGateKind.Policy;
     }
 
     /// <summary>
     /// For <c>if (ModInformation.IsClient) { … return X; }</c>: X as a bool, read from the constant the fall-through block
-    /// loads before leaving (a direct <c>ret</c> or a jump to the shared return). Null for any other shape.
+    /// loads before leaving (a direct <c>ret</c> or a jump to the shared return), and whether that block publishes a Coop
+    /// message. Null for any other shape.
     /// </summary>
-    private static bool? ClientBranchResult(IReadOnlyList<IlInstruction> il, int clientCheck)
+    private static (bool? allowed, bool publishes)? ClientBranch(MetadataReader md, IReadOnlyList<IlInstruction> il, int clientCheck)
     {
         // Debug builds store the condition in a local first: call get_IsClient; stloc.0; ldloc.0; brfalse.
         var b = clientCheck + 1;
@@ -236,13 +304,18 @@ public static class CoopSinks
         var branch = il[b];
         var end = (b + 1 < il.Count ? il[b + 1].Offset : branch.Offset) + branch.Operand;
         bool? last = null;
+        var publishes = false;
         for (var k = b + 1; k < il.Count && il[k].Offset < end; k++)
         {
             switch (il[k].OpCode)
             {
                 case ILOpCode.Ldc_i4_0: last = false; break;
                 case ILOpCode.Ldc_i4_1: last = true; break;
-                case ILOpCode.Ret or ILOpCode.Br or ILOpCode.Br_s or ILOpCode.Leave or ILOpCode.Leave_s: return last;
+                case ILOpCode.Call or ILOpCode.Callvirt:
+                    var (t, n) = IlReader.MemberName(md, il[k].Operand);
+                    if (t.EndsWith("MessageBroker", StringComparison.Ordinal) && n == "Publish") publishes = true;
+                    break;
+                case ILOpCode.Ret or ILOpCode.Br or ILOpCode.Br_s or ILOpCode.Leave or ILOpCode.Leave_s: return (last, publishes);
             }
         }
         return null;
