@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
+using Microsoft.Win32;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModderLords.Coop.Admin;
@@ -52,6 +54,8 @@ public partial class CharactersViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(KickCommand))]
     [NotifyCanExecuteChangedFor(nameof(BanCommand))]
     [NotifyCanExecuteChangedFor(nameof(EditCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     private PlayerRow? _selectedPlayer;
 
     [ObservableProperty]
@@ -66,6 +70,8 @@ public partial class CharactersViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RefreshCommand))]
     [NotifyCanExecuteChangedFor(nameof(KickCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     private bool _isBusy;
 
     private bool Serving => _host.IsServing;
@@ -103,6 +109,80 @@ public partial class CharactersViewModel : ObservableObject
         catch (Exception ex) { Headline = ex.Message; }
         finally { IsBusy = false; }
         await RefreshIfServing();
+    }
+
+    private bool CanTransfer() => Serving && !IsBusy && SelectedPlayer is not null;
+
+    /// <summary>Saves the selected player's character to a file: everything that makes up the hero, by game id.</summary>
+    [RelayCommand(CanExecute = nameof(CanTransfer))]
+    private async Task Export()
+    {
+        if (SelectedPlayer is not { } row || Transfer() is not { } transfer) return;
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export character",
+            Filter = $"ModderLords character (*{CharacterTransferClient.FileExtension})|*{CharacterTransferClient.FileExtension}",
+            FileName = SafeFileName(row.Name) + CharacterTransferClient.FileExtension,
+        };
+        if (dialog.ShowDialog() != true) return;
+        IsBusy = true;
+        try
+        {
+            var text = await transfer.ExportAsync(row.SteamId);
+            await File.WriteAllTextAsync(dialog.FileName, text);
+            Headline = $"Exported {row.Name} to {dialog.FileName}.";
+        }
+        catch (Exception ex) { Headline = $"Could not export {row.Name}: {ex.Message}"; }
+        finally { IsBusy = false; }
+    }
+
+    /// <summary>
+    /// Imports a character file onto the selected player's hero: the server checks it against this world first and
+    /// the host sees what will and will not come across, then picks the parts to apply.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanTransfer))]
+    private async Task Import()
+    {
+        if (SelectedPlayer is not { } row || Transfer() is not { } transfer) return;
+        var dialog = new OpenFileDialog
+        {
+            Title = $"Import a character onto {row.Name}",
+            Filter = $"ModderLords character (*{CharacterTransferClient.FileExtension})|*{CharacterTransferClient.FileExtension}|All files (*.*)|*.*",
+        };
+        if (dialog.ShowDialog() != true) return;
+        string? token = null;
+        IsBusy = true;
+        try
+        {
+            token = transfer.Stage(await File.ReadAllTextAsync(dialog.FileName));
+            var check = await transfer.CheckAsync(row.SteamId, token);
+            var confirm = new ImportCharacterWindow(check, row.Name) { Owner = Application.Current.MainWindow };
+            if (confirm.ShowDialog() != true) { transfer.Discard(token); Headline = "Import cancelled; nothing was changed."; return; }
+            var done = await transfer.ApplyAsync(row.SteamId, token, confirm.SelectedParts);
+            token = null; // the server deletes it once applied
+            Headline = $"Imported {done.SourceName} onto {row.Name}: {string.Join(", ", done.Applied)}."
+                + (done.Notes.Count > 0 ? $" {done.Notes.Count} thing(s) did not come across as they were; see the check." : "");
+        }
+        catch (Exception ex) { Headline = $"Could not import onto {row.Name}: {ex.Message}"; }
+        finally
+        {
+            if (token is not null) transfer.Discard(token);
+            IsBusy = false;
+        }
+        await RefreshIfServing();
+    }
+
+    private CharacterTransferClient? Transfer()
+    {
+        try { return new CharacterTransferClient(_admin, LaunchSession.ResolvePaths(_host.ClientProfile).DataDir); }
+        catch (Exception ex) { Headline = ex.Message; return null; }
+    }
+
+    private static string SafeFileName(string name)
+    {
+        var bad = Path.GetInvalidFileNameChars();
+        var clean = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim();
+        return clean.Length > 0 ? clean : "character";
     }
 
     private bool CanEdit() => Serving && SelectedPlayer is not null;
@@ -231,6 +311,8 @@ public partial class CharactersViewModel : ObservableObject
         RefreshCommand.NotifyCanExecuteChanged();
         KickCommand.NotifyCanExecuteChanged();
         EditCommand.NotifyCanExecuteChanged();
+        ExportCommand.NotifyCanExecuteChanged();
+        ImportCommand.NotifyCanExecuteChanged();
         if (Serving) _ = Refresh();
     }
 
