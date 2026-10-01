@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using HarmonyLib;
 using ModderLords.CompatSync;
 using TaleWorlds.CampaignSystem;
@@ -28,7 +27,11 @@ public static class InventoryExchangeEvent
     private static bool _installTried, _warned;
     private static long _raised;
 
-    /// <summary>Patches the inventory screen's Done once, on a player's game whose Coop replaces it. Safe to call every tick.</summary>
+    /// <summary>
+    /// Patches the inventory screen's Done once, on a player's game. Safe to call every tick. Coop patches Done only once
+    /// its session starts, so whether to raise the event is decided at each Done (did something skip the original?), not
+    /// here: checking for Coop's prefix at install time ran at the main menu, found none and never looked again.
+    /// </summary>
     public static void EnsureInstalled()
     {
         if (_installTried) return;
@@ -36,18 +39,12 @@ public static class InventoryExchangeEvent
         if (Operations.OperationProcessSide.IsServer) return;
         try
         {
-            var done = AccessTools.Method(typeof(InventoryLogic), nameof(InventoryLogic.DoneLogic));
-            var coop = done == null ? null : Harmony.GetPatchInfo(done)?.Prefixes
-                .FirstOrDefault(p => p.PatchMethod.DeclaringType?.Assembly.GetName().Name == "GameInterface");
-            if (coop == null)
-            {
-                Log.Info("inventory exchange event: Coop does not replace the inventory screen's Done here; vanilla raises it");
-                return;
-            }
+            var done = AccessTools.Method(typeof(InventoryLogic), nameof(InventoryLogic.DoneLogic))
+                ?? throw new MissingMethodException("InventoryLogic.DoneLogic");
             // Above Coop's prefix, which returns false and so stops every prefix after it.
             Harmony.Patch(done, prefix: new HarmonyMethod(typeof(InventoryExchangeEvent), nameof(Prefix)) { priority = Priority.First },
                 postfix: new HarmonyMethod(typeof(InventoryExchangeEvent), nameof(Postfix)));
-            Log.Info("inventory exchange event: raised on this player's game when the inventory screen's Done goes through (Coop's Done never raises it)");
+            Log.Info("inventory exchange event: raised on this player's game when the inventory screen's Done goes through and the original was skipped (Coop's Done never raises it)");
         }
         catch (Exception ex) { Log.Warn("inventory exchange event not installed: " + ex.GetBaseException().Message); }
     }
@@ -63,9 +60,10 @@ public static class InventoryExchangeEvent
         catch (Exception ex) { WarnOnce(ex); }
     }
 
-    private static void Postfix(bool __result, Transfer? __state)
+    /// <summary>The original Done raises the event itself; only a Done that something replaced (Coop's) needs it raised here.</summary>
+    private static void Postfix(bool __result, bool __runOriginal, Transfer? __state)
     {
-        if (!__result || __state == null) return;
+        if (!__result || __runOriginal || __state == null) return;
         try
         {
             CampaignEventDispatcher.Instance?.OnPlayerInventoryExchange(__state.Bought, __state.Sold, __state.IsTrading);
