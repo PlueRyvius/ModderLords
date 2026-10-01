@@ -1,4 +1,4 @@
-using ModderLords.Core.Compat.Authority;
+﻿using ModderLords.Core.Compat.Authority;
 using Xunit.Abstractions;
 
 namespace ModderLords.Core.Tests;
