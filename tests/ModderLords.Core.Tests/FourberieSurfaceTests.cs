@@ -218,6 +218,71 @@ public sealed class FourberieSurfaceTests
         Assert.True(lads.Parameters.Count == 9 && lads.ReturnType.FullName == "System.Boolean");
     }
 
+    /// <summary>Model answers that read "the player" but only ever matter on a player's own game (screens, menus, missions).</summary>
+    private static readonly HashSet<string> ModelsForPlayersGamesOnly = new(StringComparer.Ordinal)
+    {
+        "FModelPrice.GetPrice",                               // trade screen
+        "FModelAccess.CanMainHeroAccessLocation",             // settlement menus
+        "FModelAccess.CanMainHeroDoSettlementAction",         // settlement menus
+        "FModelDonation.GetXpBonusForDiscardingItems",        // inventory screen
+        "FModelDamage.ApplyGeneralDamageModifiers",           // missions run on players' games
+        "FModelDamage.DecideAgentKnockedDownByBlow",          // missions
+    };
+
+    private static bool ReadsThePlayer(Instruction i) => i.Operand switch
+    {
+        FieldReference f => f.DeclaringType.Namespace == "Fourberie" && f.Resolve()?.IsStatic == true,
+        MethodReference r => (r.DeclaringType.Name, r.Name) is ("Hero", "get_MainHero") or ("Clan", "get_PlayerClan") or ("MobileParty", "get_MainParty")
+            or ("MobileParty", "get_IsMainParty") or ("CharacterObject", "get_IsPlayerCharacter") or ("PartyBase", "get_MainParty") or ("Hero", "get_IsHumanPlayerCharacter"),
+        _ => false,
+    };
+
+    [Fact]
+    public void EveryModelAnswerThatReadsThePlayerIsAnsweredForTheRightPlayer()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        var bodies = AllBodies(module).ToDictionary(b => b.FullName);
+        var scoped = FbModelTable.Methods.Select(m => m.Type.Substring("Fourberie.".Length) + "." + m.Method).ToHashSet(StringComparer.Ordinal);
+        var unhandled = new List<string>();
+        foreach (var type in module.Types.Where(t => t.Name.StartsWith("FModel", StringComparison.Ordinal) && !t.Name.StartsWith("FModelHelper", StringComparison.Ordinal)))
+            foreach (var answer in type.Methods.Where(m => m.HasBody && m.IsVirtual))
+            {
+                var seen = new HashSet<string>();
+                var todo = new Stack<MethodDefinition>(new[] { answer });
+                var reads = false;
+                while (todo.Count > 0 && !reads)
+                {
+                    var body = todo.Pop();
+                    if (!seen.Add(body.FullName)) continue;
+                    foreach (var i in body.Body.Instructions)
+                    {
+                        if (ReadsThePlayer(i)) { reads = true; break; }
+                        if (i.Operand is MethodReference r && bodies.TryGetValue(r.FullName, out var callee)) todo.Push(callee);
+                    }
+                }
+                var name = type.Name + "." + answer.Name;
+                if (reads && !scoped.Contains(name) && !ModelsForPlayersGamesOnly.Contains(name)) unhandled.Add(name);
+            }
+        Assert.True(unhandled.Count == 0, "model answers that read the player but are neither scoped on the server nor players'-games-only: " + string.Join(", ", unhandled));
+    }
+
+    [Fact]
+    public void EveryScopedModelMethodExistsWithAReturnTypeTheLayerHandles()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        var handled = new[] { "TaleWorlds.CampaignSystem.ExplainedNumber", "System.Single", "System.Boolean", "TaleWorlds.CampaignSystem.CampaignTime",
+            "System.Nullable`1<TaleWorlds.CampaignSystem.ComponentInterfaces.DiplomacyModel/DiplomacyStance>" };
+        foreach (var (type, method, count, kind) in FbModelTable.Methods)
+        {
+            var m = module.GetType(type)?.Methods.SingleOrDefault(x => x.Name == method && x.Parameters.Count == count);
+            Assert.True(m != null, type + "." + method + " with " + count + " parameter(s) not found");
+            Assert.True(handled.Contains(m!.ReturnType.FullName), type + "." + method + " returns " + m.ReturnType.FullName);
+            if (kind == FbModelTable.Kind.Summed) Assert.Equal("TaleWorlds.CampaignSystem.ExplainedNumber", m.ReturnType.FullName);
+        }
+    }
+
     [Fact]
     public void TheReviewedVersionIsTheInstalledOne()
     {

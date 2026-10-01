@@ -195,3 +195,28 @@ internal static class FbGapsTable
         ("Fourberie.HelperSubCarambush", "TroopRosterManageCarambush", 1),
     };
 }
+
+/// <summary>Fourberie model methods the server answers as their owner, or summed over players (FbModels).</summary>
+internal static class FbModelTable
+{
+    internal enum Kind { Clan, Party, Follower, PartyBase, Survival, Stance, Summed }
+
+    /// <summary>(model type, method, parameter count, how its owner is found).</summary>
+    internal static readonly (string Type, string Method, int Params, Kind Kind)[] Methods =
+    {
+        ("Fourberie.FModelClanFinance", "CalculateClanGoldChange", 4, Kind.Clan),
+        ("Fourberie.FModelClanFinance", "CalculateClanIncome", 4, Kind.Clan),
+        ("Fourberie.FModelClanFinance", "CalculateClanExpenses", 4, Kind.Clan),
+        ("Fourberie.FModelMobileFood", "CalculateDailyBaseFoodConsumptionf", 2, Kind.Party),
+        ("Fourberie.FModelMapSpeed", "CalculateBaseSpeed", 4, Kind.Follower),
+        ("Fourberie.FModelPartyTransition", "GetTransitionTimeDisembarking", 1, Kind.Follower),
+        ("Fourberie.FModelPartyTransition", "GetTransitionTimeForEmbarking", 1, Kind.Follower),
+        ("Fourberie.FModelPower", "GetPowerOfParty", 3, Kind.PartyBase),
+        ("Fourberie.FModelDeath", "GetSurvivalChance", 5, Kind.Survival),
+        ("Fourberie.FModelDiplo", "GetShallowDiplomaticStance", 2, Kind.Stance),
+        ("Fourberie.FModelDiplo", "IsAtConstantWar", 2, Kind.Stance),
+        ("Fourberie.FModelLoyalty", "CalculateLoyaltyChange", 2, Kind.Summed),
+        ("Fourberie.FModelSecurity", "CalculateSecurityChange", 2, Kind.Summed),
+        ("Fourberie.FModelCrime", "GetDailyCrimeRatingChange", 2, Kind.Summed),
+    };
+}

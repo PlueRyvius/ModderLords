@@ -115,6 +115,8 @@ internal static class FbSelfTest
         Expect(BookOf(a)?["_territoryList"] is JArray t && t.Any(x => (string?)x == town.StringId), "the first player's territory list is in their book");
         Expect(FbBooks.EncodeProblems == 0, $"every book field could be written ({FbBooks.EncodeProblems} problem(s))");
 
+        Models(a, b, seed: true);
+
         // The insurance scam's spawns, relayed as the player's game would send them.
         var merchant = town.Notables.FirstOrDefault(n => n.IsMerchant) ?? town.Notables.FirstOrDefault();
         var other = NearestTown(a.PartyBelongedTo!, town);
@@ -160,7 +162,7 @@ internal static class FbSelfTest
         Expect(Party((string?)book?["_insucaraF"]) is { IsActive: true }, "the caravan the book points at exists after loading");
         var ledger = FbLedgers.Of(a.StringId, "fb_crimebase_party");
         Expect(ledger is { IsActive: true } && ledger.MemberRoster.TotalManCount > 0, $"the gang ledger came back with its troops ({ledger?.MemberRoster.TotalManCount ?? 0})");
-        Expect(BookOf(b)?["_crimeBase"]?.Type == JTokenType.Null, "the second player still has no base");
+        Expect(Settlement.Find((string?)BookOf(b)?["_crimeBase"] ?? "")?.IsHideout == true, "the second player's base is still their hideout");
         // One more round of ticks on the loaded campaign.
         var town = Settlement.Find((string?)book?["_crimeBase"] ?? "");
         foreach (var (type, method, count, reach) in FbFields.Handlers.Where(h => h.Reach == FbFields.Reach.Connected))
@@ -169,7 +171,65 @@ internal static class FbSelfTest
             if (args != null) Invoke(type, method, args);
         }
         Expect(FbTicks.Summary().Contains("failures 0"), "no tick handler threw after loading (" + FbTicks.Summary() + ")");
+        Models(a, b, seed: false);
     }
+
+    // ---- models (phase 5) ----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The server's own answers, asked outside any player's run, must carry each player's Fourberie: the second player's
+    /// hideout gang draws wages in their clan's daily gold (and nobody else's), and a town near the bandits they support
+    /// loses security.
+    /// </summary>
+    private static void Models(Hero a, Hero b, bool seed)
+    {
+        var ledgerB = FbLedgers.Of(b.StringId, "fb_crimebase_party");
+        if (seed)
+        {
+            var hideout = Settlement.All.Where(s => s.IsHideout).OrderBy(s => s.Position.DistanceSquared(b.PartyBelongedTo!.Position)).First();
+            using (FbBooks.Enter(b, b.PartyBelongedTo))
+            {
+                Set("_crimeBase", hideout);
+                Set("_crimeBaseParty", ledgerB);
+                // What Fourberie's daily tick adds for a hideout base (its slave and mine shares).
+                Dict<int, int>("_crimeValue")[500] = 1;
+                Dict<int, int>("_crimeValue")[1000] = 0;
+                Dict<int, int>("_crimeValue")[1001] = 0;
+                Dict<int, int>("_crimeValue")[1500] = 0;
+            }
+            ledgerB?.MemberRoster.AddToCounts(b.Culture.BasicTroop, 20);
+        }
+        var finance = Campaign.Current!.Models.ClanFinanceModel;
+        var goldB = Lines(finance.CalculateClanGoldChange(b.Clan, true, false, false));
+        var goldA = Lines(finance.CalculateClanGoldChange(a.Clan, true, false, false));
+        var stranger = Clan.All.FirstOrDefault(c => c != a.Clan && c != b.Clan && !c.IsEliminated && c.Leader != null && !c.IsBanditFaction);
+        var goldStranger = stranger == null ? new List<string>() : Lines(finance.CalculateClanGoldChange(stranger, true, false, false));
+        Expect(goldB.Any(l => l.Contains("Lads Wage")), $"the second player's hideout gang draws wages in their clan's daily gold ({string.Join(" | ", goldB.Where(l => l.Contains("(F)")))})");
+        Expect(!goldA.Any(l => l.Contains("Lads Wage")), "the first player's clan pays no hideout wages (their base is a town)");
+        Expect(!goldStranger.Any(l => l.Contains("(F)")), $"a clan no player leads gets no Fourberie lines ({stranger?.StringId})");
+
+        // Security: a town near a hideout whose bandits the second player supports.
+        // On the server no hideout counts as discovered; Fourberie only counts discovered ones, so spot the one used.
+        var pair = (from h in Hideout.All
+                    where h.Settlement.Culture != null
+                    from t in Town.AllTowns
+                    where t.OwnerClan != null && !t.OwnerClan.IsRebelClan && t.OwnerClan != b.Clan && t.MapFaction?.Leader != b
+                          && h.Settlement.Position.Distance(t.Settlement.Position) <= 70f
+                    select (Hideout: h, Town: t)).FirstOrDefault();
+        if (pair.Town == null) { Log.Info(FourberieLayer.Tag + "self-test: no visible hideout near a town; the summed-model check is skipped"); return; }
+        if (seed)
+        {
+            pair.Hideout.IsSpotted = true;
+            pair.Hideout.Settlement.IsVisible = true;
+            using (FbBooks.Enter(b, b.PartyBelongedTo))
+                Dict<string, int>("_supportedBandits")[pair.Hideout.Settlement.Culture.StringId] = 1500;
+        }
+        if (!pair.Hideout.Settlement.IsVisible) { Log.Info(FourberieLayer.Tag + "self-test: the hideout did not stay discovered after loading; the summed-model check is skipped"); return; }
+        var security = Lines(Campaign.Current.Models.SettlementSecurityModel.CalculateSecurityChange(pair.Town, true));
+        Expect(security.Any(l => l.Contains("(F) Fourberie")), $"{pair.Town.Settlement.StringId}'s security carries the bandits the second player supports ({string.Join(" | ", security)})");
+    }
+
+    private static List<string> Lines(ExplainedNumber number) => number.GetLines().Select(l => l.name + " " + l.number).ToList();
 
     // ---- helpers -----------------------------------------------------------------------------------------------
 
