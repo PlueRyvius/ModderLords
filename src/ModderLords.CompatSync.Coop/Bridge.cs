@@ -20,6 +20,9 @@ public static class Bridge
         Taom.TaomStateMirror.ServerTick();
         LivingEconomy.LivingEconomyLayer.Tick();
         LivingEconomy.LeStateMirror.ServerTick();
+        Fourberie.FourberieLayer.Tick();
+        Fourberie.FbBooks.ServerTick();
+        Fourberie.FbMirrorClient.ClientTick();
         Taom.SpecialResourceSyncComponent.ClientTick();
         Taom.CareerSyncComponent.ClientTick();
         Taom.PartyComponentSyncComponent.ClientTick();
@@ -40,7 +43,7 @@ public static class Bridge
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
     public static string VerificationSummary() => BehaviorGate.VerificationSummary() + "; " + Operations.OperationRuntime.Report()
-        + LivingEconomy.LivingEconomyLayer.Summary();
+        + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary();
 
     /// <summary>Both sides, every 30 s and at unload: writes the ground-truth trace counters. Returns how many methods were written (0 when not tracing).</summary>
     public static int TraceFlush() => BehaviorGate.TraceFlush();

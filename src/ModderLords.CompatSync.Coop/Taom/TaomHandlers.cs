@@ -58,6 +58,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         public void Dispose()
         {
             if (!active) return;
+            ModderLords.CompatSync.Coop.Fourberie.FbMirrorClient.SessionEnded();
             TaomFieldCamp.Send = null;
             TaomActions.Send = null;
             LeStateMirror.RequestFull = null;
@@ -119,6 +120,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
         {
             // The joined campaign exists now, so there is somewhere to load the server's TAOM state into.
+            ModderLords.CompatSync.Coop.Fourberie.FbMirrorClient.CampaignReady();
             network.SendAll(new NetworkTaomStateRequest { ProtocolVersion = ProtocolVersion });
 
             var pending = TaomJoinGrant.Pending;
