@@ -83,7 +83,7 @@ internal static class HeroAdmin
     });
 
     /// <summary>The player, hero and party behind a Steam id, or why they cannot be had.</summary>
-    private static string? Find(string steamId, out Player? player, out Hero? hero, out MobileParty? party)
+    internal static string? Find(string steamId, out Player? player, out Hero? hero, out MobileParty? party)
     {
         hero = null;
         party = null;

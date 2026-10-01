@@ -733,10 +733,14 @@
             <TabItem Header="Characters" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <DockPanel Margin="8">
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
-                               Text="Everyone with a character on the running server. Edit changes a character’s gold, attributes, skills, focus and traits on the server. Kick disconnects a player; their character stays and they can rejoin. Ban disconnects them and refuses them from then on, by Steam id and by the address they connected from. The list updates when someone joins or leaves." />
+                               Text="Everyone with a character on the running server. Edit changes a character’s gold, attributes, skills, focus and traits on the server. Export saves a character to a file; Import brings one onto a player, cleaned of anything this world does not have. Kick disconnects a player; their character stays and they can rejoin. Ban disconnects them and refuses them from then on, by Steam id and by the address they connected from. The list updates when someone joins or leaves." />
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Content="Refresh" Command="{Binding Characters.RefreshCommand}" Padding="10,4" Margin="0,0,8,0" />
                         <Button Content="Edit…" Command="{Binding Characters.EditCommand}" Padding="10,4" Margin="0,0,8,0" />
+                        <Button Content="Export…" Command="{Binding Characters.ExportCommand}" Padding="10,4" Margin="0,0,8,0"
+                                ToolTip="Save this character to a file: attributes, skills, perks, traits, gold, look and gear" />
+                        <Button Content="Import…" Command="{Binding Characters.ImportCommand}" Padding="10,4" Margin="0,0,8,0"
+                                ToolTip="Bring a saved character onto this player. You see what this world cannot hold before anything changes." />
                         <Button Content="Kick" Command="{Binding Characters.KickCommand}" Padding="10,4" Margin="0,0,16,0" />
                         <TextBlock Text="Reason (optional):" VerticalAlignment="Center" Margin="0,0,6,0" />
                         <TextBox Text="{Binding Characters.BanReason, UpdateSourceTrigger=PropertyChanged}" Width="220" Margin="0,0,8,0" />

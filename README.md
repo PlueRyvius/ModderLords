@@ -533,6 +533,14 @@ siege), their Steam id and the address they connected from. The list updates by 
   **Apply**; only what you changed is sent, the server checks every value against the game's own limits before it
   changes any, and the player's game picks the change up through Coop's own sync. Skills are set to exactly the value
   typed and do not change the character's level. Edits are refused while the player is in a battle or a siege.
+- **Export…** saves the selected player's character to a `.mlchar` file: name, look (face, body, gender,
+  age), gold, attributes, skills, focus, traits, perks and battle and civilian gear, all by game id, plus the mod list of
+  the world it came from. Nothing tied to that world comes with it (party, clan, fiefs, relations, quests).
+- **Import…** brings a `.mlchar` file onto the selected player's existing character, so a player who joins a new
+  world makes a throwaway character and the host puts their old one on it. The server first cleans the file for the
+  world it is running: a skill, trait, perk, item or modifier from a mod this world does not have is dropped, a value
+  over this world's limits is brought within them, and the host sees every such change before anything happens. Then
+  pick what to bring across (stats, gold, look, gear, name; name is off by default) and press **Import**.
 - **Kick** disconnects the selected player. Their character stays in the world and they can rejoin.
 - **Ban** disconnects them and refuses them from then on, by Steam id and by the address they connected from (an
   address ban also refuses anyone else joining from that network). **Reason** is kept with the ban.

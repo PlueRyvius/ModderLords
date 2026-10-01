@@ -1,0 +1,28 @@
+<Window x:Class="ModderLords.App.ImportCharacterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
+        Title="Import character" Height="560" Width="640" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" x:Name="Header" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,4" />
+        <TextBlock DockPanel.Dock="Top" x:Name="ModulesLine" TextWrapping="Wrap" Foreground="{DynamicResource WarningForeground}" Margin="0,0,0,6" />
+        <StackPanel DockPanel.Dock="Bottom">
+            <TextBlock Text="Bring across" FontWeight="Bold" Margin="0,8,0,4" />
+            <CheckBox x:Name="Stats" IsChecked="True" Margin="0,2" Content="Stats: attributes, skills, focus, traits, perks and unspent points" />
+            <CheckBox x:Name="Gold" IsChecked="True" Margin="0,2" Content="Gold" />
+            <CheckBox x:Name="Look" IsChecked="True" Margin="0,2" Content="Look: face, body, gender and age" />
+            <CheckBox x:Name="Gear" IsChecked="True" Margin="0,2" Content="Gear: battle and civilian equipment (a slot whose item is not in this world keeps what it has)" />
+            <CheckBox x:Name="NameBox" IsChecked="False" Margin="0,2" Content="Name (off by default: the player chose the one they have)" />
+            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,6,0,0"
+                       Text="This overwrites the chosen parts of the player's character on the running server. Their party, clan, fiefs, relations and quests stay as they are. Export the character first if you might want it back." />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <Button Content="Import" Click="Import_Click" MinWidth="80" Margin="4,0" IsDefault="True" />
+                <Button Content="Cancel" IsCancel="True" MinWidth="80" Margin="4,0,0,0" />
+            </StackPanel>
+        </StackPanel>
+        <DockPanel>
+            <TextBlock DockPanel.Dock="Top" x:Name="NotesHeader" Margin="0,0,0,4" />
+            <ListBox x:Name="NotesList" FontFamily="Consolas" FontSize="11" />
+        </DockPanel>
+    </DockPanel>
+</Window>

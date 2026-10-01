@@ -71,6 +71,7 @@
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Admin\AdminWire.cs" Link="Module\AdminWire.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Admin\BanList.cs" Link="Module\BanList.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Admin\HeroEditWire.cs" Link="Module\HeroEditWire.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Admin\CharacterFile.cs" Link="Module\CharacterFile.cs" />
   </ItemGroup>
 
 </Project>
