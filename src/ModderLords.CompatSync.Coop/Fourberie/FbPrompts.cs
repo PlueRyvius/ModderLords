@@ -262,7 +262,7 @@ internal static class FbPrompts
         foreach (var pair in due)
         {
             Waiting.Remove(pair.Key);
-            var hero = MBObjectManager.Instance.GetObject<Hero>(pair.Value.Key);
+            var hero = FbBooks.HeroFor(pair.Value.Key);
             if (hero == null) continue;
             Run(hero, hero.PartyBelongedTo, () =>
             {

@@ -150,6 +150,13 @@ internal static class FbBooks
 
     // ---- players ---------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The hero a book belongs to, by StringId, the way Fourberie finds heroes (Hero.Find). Not MBObjectManager: Coop
+    /// renames the heroes it registers (CharacterObject_1632), and its registry lookup by that id comes back empty, which
+    /// silently left offline players' books out of world events and prompts unanswered at their deadline.
+    /// </summary>
+    internal static Hero? HeroFor(string key) => Hero.Find(key) ?? Hero.FindFirst(h => h.StringId == key);
+
     /// <summary>Server self-test only (FbSelfTest): heroes that count as connected players for ticks, with no game behind them.</summary>
     internal static List<Hero> TestPlayers { get; } = new List<Hero>();
 
@@ -180,7 +187,7 @@ internal static class FbBooks
         foreach (var key in Entries.Keys.ToList())
         {
             if (seen.Contains(key)) continue;
-            var hero = MBObjectManager.Instance.GetObject<Hero>(key);
+            var hero = HeroFor(key);
             if (hero == null || !hero.IsAlive) continue;
             list.Add((hero, hero.PartyBelongedTo));
         }

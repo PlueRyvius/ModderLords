@@ -8,6 +8,7 @@ using ModderLords.CompatSync;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
@@ -151,6 +152,14 @@ internal static class FbSelfTest
         Expect(disabledAnswer == "no", $"with its affirmative option unavailable, the AI took the other one (got '{disabledAnswer ?? "nothing"}')");
         Expect(picked is { Count: 1 } && (string)picked[0].Identifier == "first", "at the deadline the AI picked from the list");
         Expect(FbPrompts.WaitingFor(a.StringId) == 0, "nothing is left waiting after the deadline");
+
+        // World events reach an offline player's book: their paymaster dies while they are away.
+        var paymaster = Hero.AllAliveHeroes.First(h => h.IsLord && h != a && h != b && h.Clan != a.Clan && h.Clan != b.Clan);
+        using (FbBooks.Enter(b, b.PartyBelongedTo)) Dict<string, string>("_stringHeroIdDico")["paymaster"] = paymaster.StringId;
+        FbBooks.TestPlayers.Remove(b);
+        try { Invoke("Fourberie.FourberieBehavior", "FOnheroKilled", new object?[] { paymaster, null, default(KillCharacterAction.KillCharacterActionDetail), false }); }
+        finally { FbBooks.TestPlayers.Add(b); }
+        Expect(BookOf(b)?["_stringHeroIdDico"]?["paymaster"] == null, "an offline player's book heard their paymaster died and dropped them");
 
         var json = BookOf(a)?.ToString(Formatting.None) ?? "";
         Log.Info($"{FourberieLayer.Tag}self-test: first player's book is {json.Length} characters");
