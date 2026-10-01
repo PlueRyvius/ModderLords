@@ -157,6 +157,36 @@ public class ServerSubmoduleClassTests
     }
 
     [Fact]
+    public void A_desktop_reference_only_off_the_load_path_keeps_Run_with_a_named_warning()
+    {
+        // RBM 4.5.2: WinForms only in the Custom Battle preset dialogs. Downgrading it removed all of its code from the
+        // server, settings included, for a method the server never compiles.
+        var mod = SingleSubmoduleMod();
+        var scan = ScanWithDesktop(mod.Id, "System.Windows.Forms") with
+        {
+            DesktopSites = new DesktopSites([], ["RBM.CustomBattlePatches/<>c__DisplayClass7_0::<ShowSaveDialog>b__0"]),
+        };
+        var entry = Assert.Single(PlanWithScan(mod, scan).Entries);
+
+        Assert.Equal(ServerRole.Run, entry.Selection.Role);
+        Assert.Contains(entry.Notes, n => n.StartsWith("WARNING") && n.Contains("<ShowSaveDialog>b__0") && n.Contains("DependencyOnly"));
+    }
+
+    [Fact]
+    public void A_desktop_reference_on_the_load_path_still_downgrades_and_says_where()
+    {
+        var mod = SingleSubmoduleMod();
+        var scan = ScanWithDesktop(mod.Id, "System.Windows.Forms") with
+        {
+            DesktopSites = new DesktopSites(["Main::OnSubModuleLoad (submodule class, runs as the mod loads)"], ["Other::Later"]),
+        };
+        var entry = Assert.Single(PlanWithScan(mod, scan).Entries);
+
+        Assert.Equal(ServerRole.DependencyOnly, entry.Selection.Role);
+        Assert.Contains(entry.Notes, n => n.Contains("Main::OnSubModuleLoad") && n.Contains("does not ship"));
+    }
+
+    [Fact]
     public void A_desktop_reference_is_caught_even_when_the_mod_never_tagged_itself()
     {
         // The whole reason this check is not gated on HasHeadlessExclusions. A mod that forgot the tag dies exactly

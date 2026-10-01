@@ -126,11 +126,29 @@ public static class OverlayPlanner
         // not a risk, it is a certainty, and the two cases deserve the same answer. Warning alone was tried and does
         // not work - on 2026-09-19 DismembermentPlus was warned about on line 3 of a 2,687-line log and then killed
         // the server anyway, 2,684 lines later. A guard nobody reads in time is not a guard.
+        //
+        // The certainty is per method, though, not per DLL: a missing assembly only fails the method that names it,
+        // when that method is compiled. So the downgrade is for references the load path is sure to reach (see
+        // DesktopSiteScan). One that sits only in a method body the server never enters is left to Run with a named
+        // warning - RBM 4.5.2 keeps WinForms in its Custom Battle preset dialogs, and dropping it for that removed all
+        // of its code from the server, settings included.
         var desktop = scanned?.DesktopAssemblies ?? [];
-        if (desktop.Count > 0)
+        var sites = scanned?.DesktopSites;
+        if (desktop.Count > 0 && sites is { LoadSites.Count: 0 })
         {
             notes.Add("WARNING: its code references " + string.Join(", ", desktop)
-                      + ", which the dedicated server's runtime does not ship - Run would crash the server on load, "
+                      + ", which the dedicated server's runtime does not ship, but only inside "
+                      + string.Join(", ", sites.DeferredSites.Take(4)) + (sites.DeferredSites.Count > 4 ? ", ..." : "")
+                      + " - code the server does not run while loading. Running it. If one of those methods is ever "
+                      + "reached headless the server stops on the spot with no exception logged; set it to "
+                      + "DependencyOnly if that happens.");
+        }
+        else if (desktop.Count > 0)
+        {
+            notes.Add("WARNING: its code references " + string.Join(", ", desktop)
+                      + ", which the dedicated server's runtime does not ship"
+                      + (sites is { LoadSites.Count: > 0 } ? " (in " + string.Join(", ", sites.LoadSites.Take(3)) + (sites.LoadSites.Count > 3 ? ", ..." : "") + ")" : "")
+                      + " - Run would crash the server on load, "
                       + "not only if the feature is used. Falling back to DependencyOnly: data and load-order entry "
                       + "kept, code not loaded. Set it to AsShipped instead if you want the engine to decide.");
             return sel with { Role = ServerRole.DependencyOnly };
