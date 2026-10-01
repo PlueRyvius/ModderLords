@@ -1020,7 +1020,40 @@
       "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPendingPlayerRulerJudgmentInquiry",
       "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPendingPlayerRulingInquiry",
       "BellumCivile.Behaviors.ClaimFeudBehavior::TryShowPlayerSupportInvitation",
-      "BellumCivile.Behaviors.ClaimFeudBehavior::ShowPlayerRevocationDemandInquiry"
+      "BellumCivile.Behaviors.ClaimFeudBehavior::ShowPlayerRevocationDemandInquiry",
+      "BellumCivile.Behaviors.BellumMarriageStrategyHelper::IsStrategicMarriageInitiator",
+      "BellumCivile.Behaviors.ClaimFeudBehavior::IsValidFeudClan",
+      "BellumCivile.Behaviors.ClaimFeudWarBehavior::IsValidWarClan",
+      "BellumCivile.Behaviors.DynamicRelationBehavior::ShouldAffectPair",
+      "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::IsRecoverableExileCandidate",
+      "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::TryMoveClanToRefuge",
+      "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::ExpulsionMenuEntryCondition",
+      "BellumCivile.Behaviors.FeudalPoliticalOptionsBehavior::IsValidPoliticalActionClan",
+      "BellumCivile.Behaviors.FeudalServiceBehavior::IsValidAiServiceRelationship",
+      "BellumCivile.Behaviors.FeudalServiceBehavior::IsValidServiceLiege",
+      "BellumCivile.Behaviors.FeudalTitleUsurpationBehavior::IsValidNpcClan",
+      "BellumCivile.Behaviors.FiefDeliberationBehavior::GetNobleClanIdsFromSide",
+      "BellumCivile.Behaviors.IdeologyBehavior\u002B\u003C\u003Ec::\u003COnDailyTick_Consolidated\u003Eb__182_0",
+      "BellumCivile.Behaviors.IdeologyBehavior\u002B\u003C\u003Ec::\u003CProcessKingdomIdeologies\u003Eb__39_0",
+      "BellumCivile.Behaviors.IdeologyBehavior\u002B\u003C\u003Ec__DisplayClass211_0::\u003COnDailyTick_Treason\u003Eb__0",
+      "BellumCivile.Behaviors.IdeologyBehavior::CanRulerIndictClan",
+      "BellumCivile.Behaviors.IdeologyBehavior::IsEligibleCourtRebellionLeader",
+      "BellumCivile.ClanFiefDesireHelper::IsEligibleVassalForLandDemand",
+      "BellumCivile.DynamicRelationBaselineHelper::IsLandlessNobleVassal",
+      "BellumCivile.FactionObject\u002B\u003C\u003Ec::\u003CBuildFiefRedistributionRecipients\u003Eb__110_0",
+      "BellumCivile.FactionObject\u002B\u003C\u003Ec__DisplayClass122_0::\u003CBuildFiefRedistributionDonors\u003Eb__0",
+      "BellumCivile.FiefNominationHelper::IsValidCandidate",
+      "BellumCivile.FiefNominationHelper::IsValidVoter",
+      "BellumCivile.ForeignPolicyVoteEvaluator\u002B\u003C\u003Ec::\u003CGetAverageVotingClanStrength\u003Eb__13_0",
+      "BellumCivile.ForeignPolicyVoteEvaluator::IsValidVote",
+      "BellumCivile.NobleClanEligibilityHelper::IsNonPlayerMinorClan",
+      "BellumCivile.Patches.BlockCivilWarClanRecruitmentPatch::ShouldBlockVanillaDefection",
+      "BellumCivile.Patches.FiefVoteAIPatch::Prefix",
+      "BellumCivile.Patches.RevocationVoteAIPatch::FindBestInternalClaimant",
+      "BellumCivile.TreatyAiDraftService::IsEligibleClan",
+      "BellumCivile.TreatyRealmTransitionService::IsEligibleSettledClan",
+      "BellumCivile.UI.FactionsWindowVM\u002B\u003C\u003Ec__DisplayClass81_0::\u003CBuildProjectedLoyalistPowerTooltip\u003Eb__2",
+      "BellumCivile.UI.FactionsWindowVM::GetLoyalistContributionText"
     ],
     "Suppressed": false,
     "OfflineValidated": false,
@@ -1155,6 +1188,171 @@
       {
         "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::ShowPlayerRevocationDemandInquiry",
         "BodyHash": "EA0DA68528EE1A50E1D5955C0AFB3A21D1FF0DB2EADCCDA44455ED5468947BD0",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.BellumMarriageStrategyHelper::IsStrategicMarriageInitiator",
+        "BodyHash": "D7704CF88131A197461BD54CF9101BE155FF4C3CFB48E7A8E64CAB79A99D6DD7",
+        "Callers": 3
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudBehavior::IsValidFeudClan",
+        "BodyHash": "28BE0A8A484851A3C1CBADDFE4C068031788B49176149D1308AB61E9EADC1B1D",
+        "Callers": 8
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ClaimFeudWarBehavior::IsValidWarClan",
+        "BodyHash": "97ECB918716499D7FB16B49BC3AD809829DF890EA83797F6276A3A0587652AE5",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Behaviors.DynamicRelationBehavior::ShouldAffectPair",
+        "BodyHash": "DDD67C938C497AC1388DDA32F46CBCF5B6A08E1A341DE7BA5C5124B445CCF8D4",
+        "Callers": 12
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::IsRecoverableExileCandidate",
+        "BodyHash": "F52D4B02B0D5BE106D5874800C445389C6765BF57046D26F1468529B8901B257",
+        "Callers": 8
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ExiledClanRecoveryBehavior::TryMoveClanToRefuge",
+        "BodyHash": "5B8ADC1ED3E47DE1E7B6BED67DE6BAF667B1078F6FB3A690B41B3B3CDB3353B6",
+        "Callers": 4
+      },
+      {
+        "Method": "BellumCivile.Behaviors.ExpulsionDeliberationBehavior::ExpulsionMenuEntryCondition",
+        "BodyHash": "1CB8ACFA5BA2ABD041A09D6E08C4C98E5E4AF51F8DA0EE0A046B22324834A578",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalPoliticalOptionsBehavior::IsValidPoliticalActionClan",
+        "BodyHash": "FD8A77EE0D4254DF2832B5230F797A702024A1B72D9300FD8C1AAAF1AA039CBE",
+        "Callers": 7
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalServiceBehavior::IsValidAiServiceRelationship",
+        "BodyHash": "E191DBB9EBD6EA3FD598C338CAC07243D9B07084C834FBA5F6692E682C3DEACF",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalServiceBehavior::IsValidServiceLiege",
+        "BodyHash": "4DD8C81203EF4B82B74116DF1C45BE5D733279F9996D50A0702BC3BCC4A63FA9",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FeudalTitleUsurpationBehavior::IsValidNpcClan",
+        "BodyHash": "F80C56ECC9115EF5B2D04C95E73C27BC469F9065C6FF8261FC0C16F6D90ABBA2",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Behaviors.FiefDeliberationBehavior::GetNobleClanIdsFromSide",
+        "BodyHash": "F047611AD1A1B65E65EDA29565D2C36C4791A922C561C5BA09977065984528DF",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.IdeologyBehavior\u002B\u003C\u003Ec::\u003COnDailyTick_Consolidated\u003Eb__182_0",
+        "BodyHash": "583CA3CB031655DDE9866893D2D75150A2F563D72851DFAFAC7DC06220A3AD3B",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.IdeologyBehavior\u002B\u003C\u003Ec::\u003CProcessKingdomIdeologies\u003Eb__39_0",
+        "BodyHash": "51173CCFFBBE8E6AB766DF13346D5E4F2DD1BBEA9B938D4A203EBD7D24261448",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.IdeologyBehavior\u002B\u003C\u003Ec__DisplayClass211_0::\u003COnDailyTick_Treason\u003Eb__0",
+        "BodyHash": "109EA9D8A4F74173CC9C4092F73C51CD75FD5747C75DBD86E425C7C7CD0F09A7",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.Behaviors.IdeologyBehavior::CanRulerIndictClan",
+        "BodyHash": "1CDDAA288460AA7CDADD69E02B19251A7B34D670BCDF37D5322E06ADE217C443",
+        "Callers": 3
+      },
+      {
+        "Method": "BellumCivile.Behaviors.IdeologyBehavior::IsEligibleCourtRebellionLeader",
+        "BodyHash": "01BBC1149A79881B3DBC9F41531D139FC03DC265A7380DACD63D687825CFAD86",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.ClanFiefDesireHelper::IsEligibleVassalForLandDemand",
+        "BodyHash": "73B67F12541D1E4F920817FAD10B908AD164B993A1483DAFF4FE61F24EDD7292",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.DynamicRelationBaselineHelper::IsLandlessNobleVassal",
+        "BodyHash": "0416994D8AACD3BE22DF5E551FCBF6AA293F71BD7742940CB687A173180374DA",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.FactionObject\u002B\u003C\u003Ec::\u003CBuildFiefRedistributionRecipients\u003Eb__110_0",
+        "BodyHash": "8B00500C3D3339C6BD6AC0EF08D6A58E027BF93B227CA650B3332EE1793CD9B0",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.FactionObject\u002B\u003C\u003Ec__DisplayClass122_0::\u003CBuildFiefRedistributionDonors\u003Eb__0",
+        "BodyHash": "5CA75BACDC5150B3EB5EEE4BEBF5B86336E105B6C9EACAE2C4C0DA66311917AB",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.FiefNominationHelper::IsValidCandidate",
+        "BodyHash": "4AD1D78138C0CE6BA149771C39F26F675FCF6FD540014FFC59D6E06416AF6183",
+        "Callers": 3
+      },
+      {
+        "Method": "BellumCivile.FiefNominationHelper::IsValidVoter",
+        "BodyHash": "16581C2E9C70C2E0631F2031655599F01A0AA48C04589F7F9F084121816E2ACE",
+        "Callers": 8
+      },
+      {
+        "Method": "BellumCivile.ForeignPolicyVoteEvaluator\u002B\u003C\u003Ec::\u003CGetAverageVotingClanStrength\u003Eb__13_0",
+        "BodyHash": "CB64105A855FA9B72E73FEF6CF6B8502F3CC29C26EECE1C0EF4AC79CC9B00ED1",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.ForeignPolicyVoteEvaluator::IsValidVote",
+        "BodyHash": "5D50AB8D38D3D75836505155DAF09D677EC7C291EEEB3007542FAF27157221C8",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.NobleClanEligibilityHelper::IsNonPlayerMinorClan",
+        "BodyHash": "C679B9D918CACB2DD813D9655C152674E6CA931AB97B23DB3C64B419A936F8A4",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Patches.BlockCivilWarClanRecruitmentPatch::ShouldBlockVanillaDefection",
+        "BodyHash": "2FC3523A4A20997070599F9C514730A0C0D85C076ACE50533D49811240E8AC81",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.Patches.FiefVoteAIPatch::Prefix",
+        "BodyHash": "3F064B3E683A28D6B308643F8171C4E98AB663DA47BA4857F34203DCBDA1A4B5",
+        "Callers": 0
+      },
+      {
+        "Method": "BellumCivile.Patches.RevocationVoteAIPatch::FindBestInternalClaimant",
+        "BodyHash": "F6BC5EAE93D08F8442C900A7DA292C5634FB47C8A1535445D44148D9F727FAB0",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.TreatyAiDraftService::IsEligibleClan",
+        "BodyHash": "9D270A905FE1AC9714567E066962B2E24B50DCD5B156A53F08FB072F70DDADE0",
+        "Callers": 2
+      },
+      {
+        "Method": "BellumCivile.TreatyRealmTransitionService::IsEligibleSettledClan",
+        "BodyHash": "2C7BC44A05A075BF85DA873662BFF2B03CFA349A781361CD987365EB0DEC537B",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.FactionsWindowVM\u002B\u003C\u003Ec__DisplayClass81_0::\u003CBuildProjectedLoyalistPowerTooltip\u003Eb__2",
+        "BodyHash": "E3DA42641808A4FFFD0114658931DC64F3D86652E00D721D270D1995FFC2753A",
+        "Callers": 1
+      },
+      {
+        "Method": "BellumCivile.UI.FactionsWindowVM::GetLoyalistContributionText",
+        "BodyHash": "746CEE3D2CBBE60F97668EC9260AE4E84C2AF3ECD9F24F03926212EC84F7B88A",
         "Callers": 1
       }
     ],

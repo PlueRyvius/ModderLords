@@ -216,6 +216,22 @@ Still to do, in this order: the remaining choice prompts (civil war tribunal and
 surrender parley, succession ultimatum, court agenda and faction leadership, asylum, mercenary departure, policy
 deviation), Bellum's notices to a specific player, and the council-appointment vote.
 
+**Players' clans are noble houses** (`BellumPlayerClans`, validation mode, both sides; maintainer's call, 2026-10-01).
+The game defines the player's clan as a minor faction (SandBox `spclans.xml`: `player_faction` has
+`is_minor_faction="true"`), and nothing changes that at any tier or rank. Bellum's eligibility filters therefore say
+"minor factions are excluded, except the player's clan", and its AI-only filters say "never the player's clan". On a
+dedicated server `Clan.PlayerClan` is the placeholder, so every real player was excluded from claim feuds, votes,
+council and service roles, while Bellum's AI could pick players' clans as if they were lords'. The player comparisons
+within 10 IL instructions of an `IsMinorFaction` read are rewritten to "any player's clan" in 33 methods (36
+comparisons), found by an IL scan of Bellum 1.3.1. These include compiler-generated lambda methods; the cheat commands
+and the testing-only treason trigger are left out, as is
+`ExpulsionDeliberationBehavior.OnDailyTick`, which the authority contract owns (one method, one contract), so players
+are still not AI expulsion candidates. Other "the player at this game" checks in the same methods (menu
+conditions, tooltip text, a player ruler's refuge) are 16 or more instructions away and stay as written. All 34 are
+pinned in `bellum-civile.commands`, now 59 surfaces. `CecilSurface.Find` now matches the exact type name first: the
+`<`-cut normalisation made every compiler-made nested type look like its parent, so the capture tool had silently
+found the first one.
+
 ## Deliberately not claimed
 
 The adapter is not full playable compatibility yet. The first simulation-authority and full read-model tiers are

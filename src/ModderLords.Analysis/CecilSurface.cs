@@ -25,7 +25,12 @@ public static class CecilSurface
     {
         var split = identity.Split(["::"], 2, StringSplitOptions.None);
         if (split.Length != 2) return null;
-        var type = assembly.MainModule.GetTypes().FirstOrDefault(t => Name(t) == MethodSurface.NormalizeTypeName(split[0]));
+        // The exact name first: NormalizeTypeName cuts at the first '<' (generic arguments), which also cuts compiler-made
+        // types ("Behavior+<>c", "Behavior+<>c__DisplayClass211_0") down to "Behavior+", so they all looked alike and the
+        // first one won. The runtime check (TargetSurfaceCheck) resolves by exact name too.
+        var types = assembly.MainModule.GetTypes().ToList();
+        var type = types.FirstOrDefault(t => t.FullName.Replace('/', '+') == split[0])
+            ?? types.FirstOrDefault(t => Name(t) == MethodSurface.NormalizeTypeName(split[0]));
         return type?.Methods.FirstOrDefault(m => m.Name == split[1]);
     }
 

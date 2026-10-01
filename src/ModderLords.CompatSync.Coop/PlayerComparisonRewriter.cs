@@ -21,6 +21,14 @@ public static class PlayerComparisonRewriter
     private static readonly Dictionary<Kind, MethodInfo> s_helpers = new Dictionary<Kind, MethodInfo>();
     private static readonly Dictionary<string, int> s_rewritten = new Dictionary<string, int>(StringComparer.Ordinal);
     private static readonly HashSet<string> s_patched = new HashSet<string>(StringComparer.Ordinal);
+    /// <summary>Methods rewritten only where the comparison is near a call to this getter (see <see cref="Apply"/>).</summary>
+    private static readonly Dictionary<string, string> s_onlyNear = new Dictionary<string, string>(StringComparer.Ordinal);
+    /// <summary>
+    /// How near (instructions, either side) the getter must be: <c>c.IsMinorFaction &amp;&amp; c != Clan.PlayerClan</c> puts it 3
+    /// before the comparison, <c>c != Clan.PlayerClan &amp;&amp; !c.IsEliminated &amp;&amp; ... !c.IsMinorFaction</c> up to 9 after. In
+    /// Bellum 1.3.1 every such filter is within 10 and every unrelated "the player at this game" check is 16 or more away.
+    /// </summary>
+    private const int NearWindow = 10;
 
     /// <summary>Static <c>bool (T)</c> methods answering "does this belong to any player?" for each kind.</summary>
     public static void SetHelpers(MethodInfo hero, MethodInfo clan, MethodInfo party, MethodInfo partyBase)
@@ -31,8 +39,14 @@ public static class PlayerComparisonRewriter
         s_helpers[Kind.PartyBase] = partyBase;
     }
 
-    /// <summary>Installs the rewrite on each method (idempotent). Returns methods patched, comparisons rewritten, and ids not found.</summary>
-    public static (int methods, int comparisons, int missing) Apply(Harmony harmony, IEnumerable<string> methodIds, Action<string> warn)
+    /// <summary>
+    /// Installs the rewrite on each method (idempotent). Returns methods patched, comparisons rewritten, and ids not found.
+    /// With <paramref name="onlyNearCall"/> (a getter name such as <c>get_IsMinorFaction</c>), only a comparison within a few
+    /// instructions of a call to it is rewritten and every other "is this the player's?" in the method is left as written,
+    /// for methods where the checks beside that getter mean "players too" but others mean "the player at this game".
+    /// </summary>
+    public static (int methods, int comparisons, int missing) Apply(Harmony harmony, IEnumerable<string> methodIds, Action<string> warn,
+        string? onlyNearCall = null)
     {
         int methods = 0, comparisons = 0, missing = 0;
         var transpiler = new HarmonyMethod(typeof(PlayerComparisonRewriter).GetMethod(nameof(Transpiler), BindingFlags.Static | BindingFlags.Public));
@@ -45,6 +59,7 @@ public static class PlayerComparisonRewriter
             {
                 foreach (var m in targets)
                 {
+                    if (onlyNearCall != null) lock (s_rewritten) s_onlyNear[Key(m)] = onlyNearCall;
                     harmony.Patch(m, transpiler: transpiler);
                     comparisons += Rewritten(m);
                 }
@@ -69,9 +84,11 @@ public static class PlayerComparisonRewriter
         var list = instructions.ToList();
         var output = new List<CodeInstruction>(list.Count);
         var n = 0;
+        string? onlyNear;
+        lock (s_rewritten) s_onlyNear.TryGetValue(Key(__originalMethod), out onlyNear);
         for (var i = 0; i < list.Count; i++)
         {
-            if (TryRewrite(list, i, output, out var consumed))
+            if ((onlyNear == null || Near(list, i, onlyNear)) && TryRewrite(list, i, output, out var consumed))
             {
                 i += consumed - 1;
                 n++;
@@ -123,6 +140,13 @@ public static class PlayerComparisonRewriter
         output.AddRange(replacement);
         consumed = j - i + 1;
         return true;
+    }
+
+    private static bool Near(List<CodeInstruction> list, int i, string getter)
+    {
+        for (var k = Math.Max(0, i - NearWindow); k <= Math.Min(list.Count - 1, i + NearWindow); k++)
+            if (Called(list[k])?.Name == getter) return true;
+        return false;
     }
 
     private static MethodInfo? Called(CodeInstruction ci) =>
