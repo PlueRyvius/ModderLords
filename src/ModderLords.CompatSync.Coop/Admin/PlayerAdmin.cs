@@ -160,7 +160,7 @@ internal static class PlayerAdmin
         });
     });
 
-    private static string BusyReason(MobileParty? party)
+    internal static string BusyReason(MobileParty? party)
     {
         if (party?.Party?.MapEvent is not null) return "in a battle";
         if (party?.BesiegerCamp is not null) return "besieging";
@@ -168,7 +168,7 @@ internal static class PlayerAdmin
     }
 
     /// <summary>A command's body, with any exception turned into an error reply rather than a console stack trace.</summary>
-    private static string Run(string ev, List<string> args, Func<string, string> body)
+    internal static string Run(string ev, List<string> args, Func<string, string> body)
     {
         var req = AdminWire.RequestId(args);
         try

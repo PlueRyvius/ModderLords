@@ -528,6 +528,11 @@ shuts down). **Logs folder** opens the launcher's own per-launch logs.
 Everyone with a character on the running server: name, clan, level, gold, whether they are online (and in a battle or a
 siege), their Steam id and the address they connected from. The list updates by itself when someone joins or leaves.
 
+- **Edit…** opens the selected player's character: gold, hit points, unspent attribute and focus points,
+  every attribute, skill (level and focus) and trait this world has, modded ones included. Type new values and press
+  **Apply**; only what you changed is sent, the server checks every value against the game's own limits before it
+  changes any, and the player's game picks the change up through Coop's own sync. Skills are set to exactly the value
+  typed and do not change the character's level. Edits are refused while the player is in a battle or a siege.
 - **Kick** disconnects the selected player. Their character stays in the world and they can rejoin.
 - **Ban** disconnects them and refuses them from then on, by Steam id and by the address they connected from (an
   address ban also refuses anyone else joining from that network). **Reason** is kept with the ban.
