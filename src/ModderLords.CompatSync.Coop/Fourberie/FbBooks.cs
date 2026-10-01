@@ -276,6 +276,8 @@ internal static class FbBooks
                 return FbPrompts.Answer(hero, party, args);
             case "relay":
                 return FbRelay.Run(hero, party, args);
+            case "effects":
+                return FbEffects.Apply(hero, party, args);
             default:
                 return TaomActionOutcome.Fail("");
         }

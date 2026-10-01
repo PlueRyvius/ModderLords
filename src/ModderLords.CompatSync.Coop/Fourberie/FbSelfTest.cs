@@ -161,6 +161,8 @@ internal static class FbSelfTest
         finally { FbBooks.TestPlayers.Add(b); }
         Expect(BookOf(b)?["_stringHeroIdDico"]?["paymaster"] == null, "an offline player's book heard their paymaster died and dropped them");
 
+        Effects(a);
+
         var json = BookOf(a)?.ToString(Formatting.None) ?? "";
         Log.Info($"{FourberieLayer.Tag}self-test: first player's book is {json.Length} characters");
         Expect(BookOf(a)?[FbLedgers.Section]?["fb_crimebase_party"]?["m"] is JArray { Count: > 0 }, "the gang's troops are in the first player's book");
@@ -188,6 +190,51 @@ internal static class FbSelfTest
         }
         Expect(FbTicks.Summary().Contains("failures 0"), "no tick handler threw after loading (" + FbTicks.Summary() + ")");
         Models(a, b, seed: false);
+    }
+
+    // ---- effects (phase 6) ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The server's half of fourb-effects: a batch exactly as a player's game sends it (same encoder) is replayed as that
+    /// player. Gold, a relation, skill XP, a town's security, troops and an item land; an absurd transfer is refused.
+    /// </summary>
+    private static void Effects(Hero a)
+    {
+        var party = a.PartyBelongedTo!;
+        var other = Hero.AllAliveHeroes.First(h => h.IsLord && h != a && h.Clan != a.Clan);
+        var town = Settlement.All.First(s => s.IsTown && s.Town.Security >= 10);
+        var roguery = TaleWorlds.Core.DefaultSkills.Roguery;
+        var honor = TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultTraits.Honor;
+        var troop = a.Culture.BasicTroop;
+        var grain = TaleWorlds.ObjectSystem.MBObjectManager.Instance.GetObject<ItemObject>("grain");
+        var (gold, relation, xp, security) = (a.Gold, a.GetRelation(other), a.GetSkillValue(roguery) * 0 + a.HeroDeveloper.GetSkillXpProgress(roguery), town.Town.Security);
+        var troops = party.MemberRoster.GetTroopCount(troop);
+        var grainBefore = party.ItemRoster.GetItemNumber(grain);
+
+        MethodBase Key(string key) => FbEffects.MethodFor(key) ?? throw new InvalidOperationException(key + " not bound");
+        var ops = new List<FbEffectWire.Op?>
+        {
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Actions.GiveGoldAction::ApplyInternal"), null, new object?[] { other, null, a, null, 500, false, "" }),
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Actions.ChangeRelationAction::ApplyInternal"), null,
+                new object?[] { a, other, 7, false, default(ChangeRelationAction.ChangeRelationDetail) }),
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Hero::AddSkillXp"), a, new object?[] { roguery, 300f }),
+            FbEffects.EncodeCall(Key(FbEffects.TraitHelper), null, new object?[] { honor, -20, Activator.CreateInstance(Key(FbEffects.TraitHelper).GetParameters()[2].ParameterType), a }),
+            FbEffectWire.Delta("town", "Security", town.StringId, -4f),
+            new FbEffectWire.Op { Kind = "troops", Key = "m", Target = troop.StringId, Amount = 6 },
+            new FbEffectWire.Op { Kind = "items", Target = grain.StringId, Amount = 9 },
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Actions.GiveGoldAction::ApplyInternal"), null, new object?[] { other, null, a, null, 20_000_000, false, "" }),
+        };
+        Expect(ops.All(o => o != null), "every recorded change could be written for the wire");
+        var refusedBefore = FbEffects.Refused;
+        var outcome = FbEffects.Apply(a, party, new[] { FbEffectWire.Pack(ops.Where(o => o != null)!) });
+        Expect(outcome.Ok, "the server took the batch");
+        Expect(a.Gold - gold == 500, $"gold from Fourberie on the player's game reached them on the server ({gold} -> {a.Gold})");
+        Expect(a.GetRelation(other) - relation == 7, $"the relation change reached the server ({relation} -> {a.GetRelation(other)})");
+        Expect(a.HeroDeveloper.GetSkillXpProgress(roguery) != xp || a.GetSkillValue(roguery) > 0, "the skill XP reached the server");
+        Expect(Math.Abs(town.Town.Security - (security - 4)) < 0.01f, $"{town.StringId}'s security dropped by the recorded amount ({security} -> {town.Town.Security})");
+        Expect(party.MemberRoster.GetTroopCount(troop) - troops == 6, "troops the player gained reached their party on the server");
+        Expect(party.ItemRoster.GetItemNumber(grain) - grainBefore == 9, "loot reached their party on the server");
+        Expect(FbEffects.Refused - refusedBefore == 1 && a.Gold - gold == 500, "a 20,000,000 gold transfer was refused, the rest applied");
     }
 
     // ---- models (phase 5) ----------------------------------------------------------------------------------------
