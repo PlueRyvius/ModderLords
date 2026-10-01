@@ -191,17 +191,14 @@ commands, the menu consequences, the dialog consequences and the mission afterma
 
   Anything that fails gets fixed from the logs and re-checked server-side before the next session.
 
-## Decisions needed from you
+## Decisions (maintainer, 2026-09-30)
 
-1. **Trust model for T2 outcomes.** Client-played, server-applied (trusted friends, like TAOM special resources), or
-   should those flows be T3 until there is a server-side alternative? *Recommended: trusted.*
-2. **Offline players.** Should an offline player's empire keep ticking (income, upkeep, enemies scheming against them),
-   or freeze until they reconnect? *Recommended: freeze. It avoids returning to a destroyed base with nobody able to
-   answer the prompts.*
-3. **Scope.** Is it acceptable for a few flows to end as T3 ("not available in co-op") if phase 2 shows they cannot be
-   made coherent? Candidates are listed under the command tiers.
-4. **Fourberie's author.** Living Economy was written with its author's permission. Ask Fourberie's author too? Not
-   needed technically: nothing of Fourberie's is copied or shipped, everything binds by reflection.
+1. **T2 outcomes are trusted.** Client-played, server-applied, as with TAOM special resources.
+2. **Offline players freeze.** `fourb-ticks` runs only the books of connected players. World events still clean up
+   references in every book (a dead victim is removed from an offline player's schemes), but they apply no gains or
+   losses to an offline player.
+3. **T3 is acceptable** for flows that phase 2 shows cannot be made coherent.
+4. **Fourberie's author is not contacted.** Nothing of Fourberie's is copied or shipped; everything binds by reflection.
 
 ## Risks
 

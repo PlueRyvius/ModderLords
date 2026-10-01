@@ -36,7 +36,10 @@ public sealed class StaticSettingsSource : ISettingsSource
     private static readonly string[] StockModules = { "Native", "SandBox", "SandBoxCore", "StoryMode", "CustomBattle", "Multiplayer", "BirthAndDeath", "Coop", "CoopNightly", "DedicatedServer.Windows", "ModderLords.Compat", "DedicatedServer.ModderLordsCompat", "Bannerlord.Harmony", "Bannerlord.ButterLib", "Bannerlord.UIExtenderEx", "Bannerlord.MBOptionScreen" };
     private static readonly string[] SavePrefixes = { "Save", "Write", "Store", "Persist", "Serialize", "Flush" };
 
-    /// <summary>Full type names or trailing-* globs from recipes.json / the compat record. Include forces a type in past the name rule; Exclude drops it.</summary>
+    /// <summary>
+    /// Full type names or trailing-* globs from recipes.json / the compat record. Include forces a type in past the name
+    /// rule; Exclude drops it. An Exclude entry "Type.FullName::Member" drops one member only (SettingsMemberPolicy).
+    /// </summary>
     public static List<string> Include { get; } = new List<string>();
     public static List<string> Exclude { get; } = new List<string>();
 
@@ -298,11 +301,13 @@ public sealed class StaticSettingsSource : ISettingsSource
             {
                 if (p.GetIndexParameters().Length > 0 || p.GetGetMethod() == null || p.GetSetMethod() == null) continue;
                 if (!ValueConverter.IsSupported(p.PropertyType)) continue;
+                if (SettingsMemberPolicy.IsPersonal(t, p.Name, p.PropertyType, Exclude)) continue;
                 list.Add(new ReflectionPropertyRef(p, wantStatic ? null : target));
             }
             foreach (var f in t.GetFields(flags))
             {
                 if (f.IsInitOnly || f.IsLiteral || !ValueConverter.IsSupported(f.FieldType)) continue;
+                if (SettingsMemberPolicy.IsPersonal(t, f.Name, f.FieldType, Exclude)) continue;
                 if (list.Any(r => r.Id == f.Name)) continue;
                 list.Add(new ReflectionPropertyRef(f, wantStatic ? null : target));
             }

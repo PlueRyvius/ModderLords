@@ -165,6 +165,21 @@
       "Notes": "Bannerlord Living Economy (ISKL, Nexus 10796). ModderLords ships a co-op layer for it inside ModderLords.Compat (docs/LIVING-ECONOMY-LAYER.md): the server runs the economy, players' towns and gold are treated as players', menu actions are carried out by the server, and the mod's records are mirrored to players. Needs Settings sync on (the launch is refused without it). Leave Server-only logic OFF for it. Its 583 tuning values (BetterEconomySettings) follow the host through Settings sync; RuntimeSettings is left out on purpose because it holds each player's own ledger preferences. Not yet tested live.",
       "Url": "https://www.nexusmods.com/mountandblade2bannerlord/mods/10796",
       "UpdatedAt": "2026-09-29T00:00:00Z"
+    },
+    {
+      "Id": "Fourberie",
+      "Verdict": "Unknown",
+      "TestedVersions": [],
+      "DefaultRole": "Run",
+      "IgnoreSettingsTypes": [
+        "Fourberie.Settings::BaseMenuOneButton",
+        "Fourberie.Settings::HordeMenuOneButton",
+        "Fourberie.Settings::TacticsMenuOneButton",
+        "Fourberie.Settings::LootCorpsesOneButton"
+      ],
+      "Notes": "Fourberie (criminal empire). Run: its manifest says client-only, but the server must load it, and its code only reaches the UI from the map screen and missions. The four gameplay switches in FourberieConfig.xml (minor-faction recruitment, heal buttons, good fortune) follow the host through Settings sync; its key bindings and one-key/two-key choices stay each player's own. A co-op layer is planned (docs/FOURBERIE-LAYER-PLAN.md); until it lands, players' Fourberie progress is not kept in co-op.",
+      "Url": "https://www.nexusmods.com/mountandblade2bannerlord/mods/2969",
+      "UpdatedAt": "2026-09-30T00:00:00Z"
     }
   ]
 }
