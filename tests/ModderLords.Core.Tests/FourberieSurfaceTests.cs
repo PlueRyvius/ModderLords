@@ -112,6 +112,112 @@ public sealed class FourberieSurfaceTests
         Assert.True(unaccounted.Count == 0, "handler(s) neither run per player nor listed as deliberately not: " + string.Join(", ", unaccounted));
     }
 
+    /// <summary>Where each party Fourberie makes is handled (phase 4). Keyed by the method, or for a lambda the method it is written in.</summary>
+    private static readonly Dictionary<string, string> PartyCreators = new(StringComparer.Ordinal)
+    {
+        ["Fourberie.FourbBanditBehavior.FOnDailyTickSettlement"] = "server tick",
+        ["Fourberie.FourberieBehavior.HourlyTick"] = "server tick",
+        ["Fourberie.FourberieBehavior.CreateVirtualParty"] = "ledger (FbLedgers)",
+        ["Fourberie.HelperSubInsuScam.SpawnCaravan"] = "relayed",
+        ["Fourberie.HelperSubInsuScam.SpawnBandits"] = "relayed",
+        ["Fourberie.FourbBanditBehavior.LadsOnDoneClicked"] = "not in co-op (FbGaps.LadsDonePrefix)",
+        ["Fourberie.FourbSafeHouseBehavior.CrookedEncounterStart"] = "not in co-op",
+        ["Fourberie.FourbSafeHouseBehavior.BanditsRelEncounterStart"] = "not in co-op",
+        ["Fourberie.HelperSubNotableExtortion.CreateExtoParty"] = "not in co-op (only TroopRosterManageExto calls it)",
+        ["Fourberie.HelperSubCarambush.TroopRosterManageCarambush"] = "not in co-op",
+        ["Fourberie.HelperSubSabotage.Menu"] = "not in co-op (the send-raiders lambda)",
+    };
+
+    private static readonly string[] Factories =
+    {
+        "TaleWorlds.CampaignSystem.Party.MobileParty::CreateParty",
+        "TaleWorlds.CampaignSystem.Party.PartyComponents.BanditPartyComponent::CreateBanditParty",
+        "TaleWorlds.CampaignSystem.Party.PartyComponents.BanditPartyComponent::CreateLooterParty",
+        "TaleWorlds.CampaignSystem.Party.PartyComponents.CaravanPartyComponent::CreateCaravanParty",
+        "TaleWorlds.CampaignSystem.Party.PartyComponents.CustomPartyComponent::CreateCustomPartyWithTroopRoster",
+    };
+
+    /// <summary>"Type.Method" of the method a body belongs to; a compiler-generated lambda maps to the method it is written in.</summary>
+    private static string Owner(MethodDefinition m)
+    {
+        var type = m.DeclaringType;
+        while (type.IsNested && type.Name.StartsWith("<", StringComparison.Ordinal)) type = type.DeclaringType;
+        var name = m.Name.StartsWith("<", StringComparison.Ordinal) ? m.Name.Substring(1, m.Name.IndexOf('>') - 1) : m.Name;
+        if (name.Length == 0 && m.DeclaringType.Name.StartsWith("<", StringComparison.Ordinal)) name = m.Name;
+        return type.FullName + "." + name;
+    }
+
+    private static IEnumerable<MethodDefinition> AllBodies(ModuleDefinition module) =>
+        module.Types.SelectMany(t => new[] { t }.Concat(t.NestedTypes).Concat(t.NestedTypes.SelectMany(n => n.NestedTypes)))
+            .SelectMany(t => t.Methods).Where(m => m.HasBody);
+
+    [Fact]
+    public void EveryPlaceFourberieMakesAPartyIsHandled()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        var unhandled = new SortedSet<string>();
+        foreach (var body in AllBodies(module))
+            foreach (var i in body.Body.Instructions)
+                if (i.Operand is MethodReference r && Factories.Contains(r.DeclaringType.FullName + "::" + r.Name) && !PartyCreators.ContainsKey(Owner(body)))
+                    unhandled.Add(Owner(body) + " (" + body.Name + " -> " + r.Name + ")");
+        Assert.True(unhandled.Count == 0, "Fourberie makes parties where the layer does not handle it: " + string.Join("; ", unhandled));
+    }
+
+    [Fact]
+    public void OnlyTheSendRaidersLambdaInSabotageMakesABanditParty()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        var sabotage = module.GetType("Fourberie.HelperSubSabotage");
+        var callers = new[] { sabotage }.Concat(sabotage.NestedTypes).SelectMany(t => t.Methods).Where(m => m.HasBody)
+            .Where(m => m.Body.Instructions.Any(i => i.Operand is MethodReference r && r.Name == "CreateBanditParty")).ToList();
+        Assert.Single(callers);
+        Assert.Contains(callers[0].Body.Instructions, i => i.Operand is MethodReference r && r.Name == "SetMoveRaidSettlement");
+    }
+
+    [Fact]
+    public void CreateVirtualPartyIsOnlyEverAskedForAKnownLedger()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        var behavior = module.GetType(FbFields.Behavior);
+        var create = behavior.Methods.Single(m => m.Name == "CreateVirtualParty");
+        Assert.True(create.IsStatic && create.Parameters.Count == 2 && create.Parameters[0].ParameterType.FullName == "System.String"
+            && create.ReturnType.FullName == "TaleWorlds.CampaignSystem.Party.MobileParty");
+        var roles = FbLedgerRoles.Ids.ToHashSet(StringComparer.Ordinal);
+        foreach (var body in AllBodies(module))
+        {
+            var list = body.Body.Instructions.ToList();
+            for (var k = 0; k < list.Count; k++)
+            {
+                if (list[k].Operand is not MethodReference r || r.Name != "CreateVirtualParty") continue;
+                // The role id is the string pushed for the first argument: the nearest ldstr before the name's TextObject.
+                var role = list.Take(k).Reverse().Where(i => i.OpCode == OpCodes.Ldstr).Select(i => (string)i.Operand).Skip(1).FirstOrDefault();
+                Assert.True(role != null && roles.Contains(role), Owner(body) + " asks CreateVirtualParty for '" + role + "'");
+            }
+        }
+    }
+
+    [Fact]
+    public void RelayedAndBlockedMethodsExistWithTheirShapes()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        foreach (var (type, method, count) in FbRelayTable.Methods)
+        {
+            var m = module.GetType(type)?.Methods.SingleOrDefault(x => x.Name == method);
+            Assert.True(m != null && m.IsStatic && m.Parameters.Count == count && m.ReturnType.FullName == "System.Void", type + "." + method + " must be a static void with " + count + " parameter(s)");
+        }
+        foreach (var (type, method, count) in FbGapsTable.Blocked)
+        {
+            var m = module.GetType(type)?.Methods.SingleOrDefault(x => x.Name == method);
+            Assert.True(m != null && m.Parameters.Count == count, type + "." + method + " not found with " + count + " parameter(s)");
+        }
+        var lads = module.GetType("Fourberie.FourbBanditBehavior").Methods.Single(m => m.Name == "LadsOnDoneClicked");
+        Assert.True(lads.Parameters.Count == 9 && lads.ReturnType.FullName == "System.Boolean");
+    }
+
     [Fact]
     public void TheReviewedVersionIsTheInstalledOne()
     {

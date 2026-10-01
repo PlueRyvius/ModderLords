@@ -3,7 +3,7 @@
 Fourberie (module id `Fourberie`, Workshop 2875710877, Nexus 2969) under Bannerlord Coop. Reviewed at **v1.4.8.2**
 (`Fourberie.dll` SHA-256 `6c73723c6129933a170e63e6d7aaabe4e37bb4ca847206b1878041197e7cce89`, built 2026-09-29),
 against ModderLords `ba821db` (1.2.1), Coop source `97420dc` (2026-10-01) and the installed Coop **0.1.5** Workshop
-build. Status: **phases 0–3 done (offline-tested, not run live); phases 4–7 to do.**
+build. Status: **phases 0–4 done; the server side passes a live self-test on the real dedicated server (no client yet); phases 5–7 to do.**
 
 The per-line analysis (entry-point matrices with line numbers, `_crimeValue` key legend, mutation catalogue) is kept
 outside the repository, because it is derived from a decompile: `D:\Work\Claude\Tech Support\_fourberie-analysis\`
@@ -172,7 +172,7 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
    - `FbBookCodec` writes a book as JSON by object id.
    - `FbBookSync` merges rows in both directions.
    - `FbBooks` stores books in FourberieBehavior's own save data under `modderlords_fourberie_books`.
-   - `FbTicks` fans out 47 handlers: periodic ticks to connected players, world events to every book. This includes an
+   - `FbTicks` fans out 45 handlers: periodic ticks to connected players, world events to every book. This includes an
      event fired inside another player's run, while skipping books suspended further up the stack.
    - `FbMirrorClient` is the client side.
 
@@ -180,7 +180,7 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
    every registered handler are accounted for), and negative runs proving the tests catch the bugs they guard against.
    **Not run live.**
 3. **Prompts and notices** (`fourb-prompts`), because ticks in phase 2 start raising inquiries. Built (`FbPrompts`,
-   `FbPromptWire`). A Cecil call-graph over the 47 server-run handlers found what they can raise:
+   `FbPromptWire`). A Cecil call-graph over the 45 server-run handlers found what they can raise:
    - **Yes/no inquiries:** 9 call sites.
    - **List inquiries:** 2, both inside blackmail/murder consequences.
    - **Map notices:** 2, informant reports.
@@ -194,7 +194,22 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
    2.4.2 checked to skip later prefixes). Messages use the TAOM layer's notice forwarder, now shared:
    `NoticeComponent.EnsureInstalled`, and Living Economy's copy stands aside whenever it is on. Prompts still waiting
    when the server stops are lost; they are not saved.
-4. **T1 commands**: the Gauntlet screens and menu consequences, all party creation, and `fourb-phantom-guard`.
+4. **Parties** (`FbLedgers`, `FbRelay`, `FbGaps`). With two-way book sync, a player's own menu and screen actions
+   already keep Fourberie's state. What a player's game cannot do is make a party others can see. Fourberie's 11
+   party-creation sites (a Cecil test fails if a new one appears unhandled) now go four ways:
+   - **Server ticks** (bandit spawns, the revenge loop): already real, since they run on the server.
+   - **Ledgers** (`CreateVirtualParty`: "Your lads", saboteurs): the server makes each player's once, as that player.
+     `CreateVirtualParty` hands back the existing one, emptied, on either side. Its members, prisoners and warehouse
+     items travel in the book (`ml_ledgers`, row per ledger, set semantics), so Fourberie's party-screen and stash
+     callbacks reach the server.
+   - **Relayed (T1):** the insurance scam's `SpawnCaravan` and `SpawnBandits`. The player's game skips them and sends
+     the arguments by id; the server runs them as the player.
+   - **Not in co-op yet (T3, with an on-screen line):** fights against a party made on the spot (the safe-house raids,
+     extortion's village militia, the grand caravan heist), sabotage's "send raiders", and spinning a bandit party off
+     the gang. These need battle work (Coop refuses a battle with a party it does not know) or a phantom-to-real
+     migration.
+
+   A watch logs any party Fourberie code still makes on a player's game, with where it came from.
 5. **Models** (`fourb-models`).
 6. **T2 transactions**: mission and dialog flows, crime-rating mirroring, `fourb-locations`.
 7. **T3 notices + docs**: `docs/FOURBERIE-LAYER.md` as the user-facing layer doc, the README mod list and a live test
@@ -210,7 +225,26 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
   - Cecil surface parity with the installed `Fourberie.dll`;
   - full repo test suite;
   - for each new component, a test that fails with the component off.
-- **Server-only, run by Claude, no game client.** The scriptable dedicated-server host (stdin/stdout, as used for
+- **Server-only live self-test, built and passing (phase 4).** `FbSelfTest`, off unless `MODDERLORDS_FOURBERIE_SELFTEST`
+  is set, on a world generated with Fourberie in an isolated data folder:
+
+  ```
+  ModderLords.Cli launch --mods Fourberie:Run --settings-sync --create-world fbtest --data-dir <dir>
+  MODDERLORDS_FOURBERIE_SELFTEST=run MODDERLORDS_FOURBERIE_SELFTEST_SAVE=fbcheck MODDERLORDS_FOURBERIE_SELFTEST_EXIT=1     ModderLords.Cli launch --mods Fourberie:Run --settings-sync --compat --save fbtest --data-dir <dir>
+  MODDERLORDS_FOURBERIE_SELFTEST=check MODDERLORDS_FOURBERIE_SELFTEST_EXIT=1     ModderLords.Cli launch --mods Fourberie:Run --settings-sync --compat --save fbcheck --data-dir <dir>
+  ```
+
+  - **"run"** treats two AI lords from different clans as players. It makes their ledgers, gives one a crime base and
+    troops, and runs every per-player tick handler through the real prefix. It then relays the insurance scam and
+    raises a yes/no and a must-pick prompt for the (offline) player. Last, it saves.
+  - **"check"** loads that save and verifies books, base, territory, ledger troops and the caravan, then ticks again.
+  - **Result:** run 27/27 and check 7/7 on 2026-09-30.
+  - **Bugs it found:**
+    - The engine's save loader hands back `MBList<T>` for `List<T>` fields, which the codec skipped, so territory and
+      partnership lists were silently left out of the book. The codec now accepts collection subclasses, with a unit
+      test.
+    - Coop shows every active party on the server, so ledgers are hidden on players' games instead.
+- **Server-only, run by Claude, no game client (still to add).** The scriptable dedicated-server host (stdin/stdout, as used for
   Bellum) plus new console commands:
   - `modderlords.fourb.adopt <hero>`: treat a hero as a player for testing;
   - `modderlords.fourb.run <op> <args>`: drive a T1 command through the same server handler the network uses;

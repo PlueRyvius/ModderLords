@@ -145,7 +145,7 @@ internal static class FbPrompts
         FbBooks.SendSoon();
     }
 
-    private static bool IsConnected(string key) => FbBooks.Connected().Any(p => p.Hero.StringId == key);
+    private static bool IsConnected(string key) => FbBooks.Connected(withGame: true).Any(p => p.Hero.StringId == key);
 
     // ---- server: defaults, answers, sending ----------------------------------------------------------------------
 

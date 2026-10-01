@@ -130,8 +130,10 @@ internal static class FbBooks
             var problems = new List<string>();
             try
             {
-                var decoded = FbBookCodec.Decode(JObject.Parse(entry.PendingJson), _shape!, FbGameRefs.Instance, problems, i => values[_schema.Persisted[i]]);
+                var saved = JObject.Parse(entry.PendingJson);
+                var decoded = FbBookCodec.Decode(saved, _shape!, FbGameRefs.Instance, problems, i => values[_schema.Persisted[i]]);
                 for (var i = 0; i < decoded.Length; i++) values[_schema.Persisted[i]] = decoded[i];
+                FbLedgers.Restore(key, saved[FbLedgers.Section]);
             }
             catch (JsonException ex) { problems.Add("saved book is not JSON: " + ex.Message); }
             Report(key, "loading the saved book", problems);
@@ -148,10 +150,17 @@ internal static class FbBooks
 
     // ---- players ---------------------------------------------------------------------------------------------------
 
-    /// <summary>Players connected right now, with their parties. Ticks run only for these (offline players' empires freeze).</summary>
-    internal static List<(Hero Hero, MobileParty? Party)> Connected()
+    /// <summary>Server self-test only (FbSelfTest): heroes that count as connected players for ticks, with no game behind them.</summary>
+    internal static List<Hero> TestPlayers { get; } = new List<Hero>();
+
+    /// <summary>
+    /// Players connected right now, with their parties. Ticks run only for these (offline players' empires freeze).
+    /// <paramref name="withGame"/>: only players with a game to send things to (self-test players have none).
+    /// </summary>
+    internal static List<(Hero Hero, MobileParty? Party)> Connected(bool withGame = false)
     {
         var list = new List<(Hero, MobileParty?)>();
+        if (!withGame) list.AddRange(TestPlayers.Where(h => h.IsAlive).Select(h => (h, h.PartyBelongedTo)));
         if (!ContainerProvider.TryResolve<IPlayerManager>(out var manager) || !ContainerProvider.TryResolve<IObjectManager>(out var objects)) return list;
         foreach (var p in manager.Players.ToList())
         {
@@ -202,6 +211,7 @@ internal static class FbBooks
                 dataStore.SyncData(SaveKey, ref books);
                 Entries.Clear();
                 Warned.Clear();
+                FbLedgers.Reset();
                 if (books != null)
                     foreach (var pair in books) EntryFor(pair.Key).PendingJson = pair.Value;
                 Log.Info($"{FourberieLayer.Tag}books: {books?.Count ?? 0} player book(s) in this save");
@@ -219,7 +229,9 @@ internal static class FbBooks
         var problems = new List<string>();
         var json = FbBookCodec.Encode(_schema!.Persisted.Select(i => (_schema.Fields[i].Name, _schema.Fields[i].FieldType, values[i])),
             FbGameRefs.Instance, problems);
+        EncodeProblems += problems.Count;
         if (problems.Count > 0 && Warned.Add(key + "|encode")) Report(key, "writing the book", problems);
+        json[FbLedgers.Section] = FbLedgers.Capture(key);
         return json;
     }
 
@@ -234,6 +246,8 @@ internal static class FbBooks
         switch (op)
         {
             case "full":
+                // A joining player gets their gang and saboteur parties first, so the book they receive names them.
+                using (Enter(hero, party)) FbLedgers.EnsureForCurrentPlayer();
                 return new TaomActionOutcome(true, "", new[] { entry.Ledger.Full(Encode(key, entry)) });
             case "report":
             {
@@ -246,12 +260,15 @@ internal static class FbBooks
                 var values = ValuesOf(key, entry);
                 var decoded = FbBookCodec.Decode(merged, _shape!, FbGameRefs.Instance, problems, i => values[_schema!.Persisted[i]]);
                 for (var i = 0; i < decoded.Length; i++) values[_schema!.Persisted[i]] = decoded[i];
+                FbLedgers.Apply(key, merged[FbLedgers.Section], problems);
                 if (problems.Count > 0 && Warned.Add(key + "|report")) Report(key, "a reported change", problems);
                 _reports++;
                 return new TaomActionOutcome(true, "");
             }
             case "answer":
                 return FbPrompts.Answer(hero, party, args);
+            case "relay":
+                return FbRelay.Run(hero, party, args);
             default:
                 return TaomActionOutcome.Fail("");
         }
@@ -264,6 +281,7 @@ internal static class FbBooks
     internal static void ServerTick()
     {
         FbPrompts.ServerTick();
+        FbSelfTest.Tick();
         if (!FourberieLayer.IsServer || _schema == null || TaomActions.Push == null || DateTime.UtcNow < _nextSend) return;
         _nextSend = DateTime.UtcNow.AddSeconds(SendEverySeconds);
         try
@@ -290,7 +308,20 @@ internal static class FbBooks
         }
     }
 
-    internal static string Summary() => $"books {Entries.Count}, runs as a player {_scoped}, sent {_pushed}, reports {_reports}";
+    /// <summary>Self-test: one of the book's fields by name.</summary>
+    internal static FieldInfo? Field(string name) => _fields?.FirstOrDefault(f => f.Name == name);
+
+    internal static int Count => Entries.Count;
+
+    /// <summary>Book fields that could not be written, ever (self-test: must stay 0).</summary>
+    internal static long EncodeProblems { get; private set; }
+
+    internal static bool Has(string key) => Entries.ContainsKey(key);
+
+    /// <summary>Self-test: a player's book as JSON (persisted fields plus ledgers), read outside any scope.</summary>
+    internal static JObject? Json(Hero hero) => EnsureSchema() && Current == null ? Encode(hero.StringId, EntryFor(hero.StringId)) : null;
+
+    internal static string Summary() => $"books {Entries.Count}, runs as a player {_scoped}, sent {_pushed}, reports {_reports}, {FbLedgers.Summary()}";
 }
 
 /// <summary>fourb-book: the books, saved with the campaign, and the server's half of keeping players' games in step.</summary>

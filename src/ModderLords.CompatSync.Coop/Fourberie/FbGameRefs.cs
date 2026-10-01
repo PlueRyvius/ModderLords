@@ -23,6 +23,12 @@ internal sealed class FbGameRefs : IBookRefs
     private static readonly ConstructorInfo? FromTicks = typeof(CampaignTime).GetConstructor(
         BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(long) }, null);
 
+    /// <summary>
+    /// On a player's game: whether Coop knows a party (it exists on the server too). A party only this game has (a
+    /// phantom Coop never shares) is not written, so its id never reaches the server's copy of the book. Null on the server.
+    /// </summary>
+    internal static Func<object, bool>? IsShared { get; set; }
+
     /// <summary>Null when this game build moved what the time codec needs.</summary>
     internal static string? Problem => Ticks == null || FromTicks == null ? "CampaignTime's tick count is not reachable" : null;
 
@@ -41,6 +47,7 @@ internal sealed class FbGameRefs : IBookRefs
                 token = v.Settlement?.StringId;
                 return true;
             case MobileParty p:
+                if (IsShared != null && !IsShared(p)) return false;
                 token = p.StringId;
                 return true;
             case Hero h:

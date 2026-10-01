@@ -38,6 +38,7 @@ internal static class FbMirrorClient
     {
         _campaignReady = true;
         Ledger.Forget();
+        FbLedgers.Reset();
         _nextAsk = DateTime.MinValue;
     }
 
@@ -90,6 +91,7 @@ internal static class FbMirrorClient
         var problems = new List<string>();
         var values = FbBookCodec.Decode(install, _shape!, FbGameRefs.Instance, problems, i => _fields[i].GetValue(null));
         for (var i = 0; i < _fields.Length; i++) _fields[i].SetValue(null, values[i]);
+        if (Hero.MainHero is { } me) FbLedgers.Apply(me.StringId, install[FbLedgers.Section], problems);
         if (problems.Count > 0 && Warned.Add("decode|" + problems[0]))
             Log.Warn($"{FourberieLayer.Tag}mirror: {problems.Count} part(s) of the server's book could not be matched on this game: {FourberieLayer.Some(problems, 3)}");
         if (_received++ == 0) Log.Info(FourberieLayer.Tag + "mirror: this player's Fourberie book arrived from the server");
@@ -101,6 +103,7 @@ internal static class FbMirrorClient
         var json = FbBookCodec.Encode(_fields!.Select(f => (f.Name, f.FieldType, f.GetValue(null))), FbGameRefs.Instance, problems);
         if (problems.Count > 0 && Warned.Add("encode|" + problems[0]))
             Log.Warn($"{FourberieLayer.Tag}mirror: {problems.Count} part(s) of this player's book cannot be sent: {FourberieLayer.Some(problems, 3)}");
+        if (Hero.MainHero is { } me) json[FbLedgers.Section] = FbLedgers.Capture(me.StringId);
         return json;
     }
 
@@ -121,6 +124,8 @@ internal sealed class FbMirrorComponent : IFbComponent
 
     public string Install(FbContext context)
     {
+        FbGameRefs.IsShared = obj =>
+            !GameInterface.ContainerProvider.TryResolve<GameInterface.Services.ObjectManager.IObjectManager>(out var objects) || objects.Contains(obj);
         FbMirrorClient.Bind(context.Fields!.Where(f => FbFields.Persisted.Contains(f.Name) && f.DeclaringType?.FullName == FbFields.Behavior));
         TaomActions.RegisterClientApply(FourberieLayer.Feature, FbMirrorClient.Apply);
         return "this player's book follows the server's, and this game's changes are reported back";
