@@ -135,6 +135,62 @@ public class LauncherDataSyncTests : IDisposable
         Assert.DoesNotContain(plan.Changes, c => c.Id == "ModularSmithing2" && c.Action == LauncherDataSync.SyncAction.Enable);
     }
 
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> OnDisk(params (string Id, string Version)[] mods) =>
+        LauncherDataSync.ClientSideVersions(mods.Select(m => new DiscoveredModule(m.Id, m.Version, @"G\" + m.Id, ModuleSourceKind.GameModules,
+            new Bannerlord.ModuleManager.ModuleInfoExtended { Id = m.Id, Name = m.Id })));
+
+    [Fact]
+    public void A_stale_launcher_version_is_not_a_blocker_when_the_copy_on_disk_matches()
+    {
+        // The report this was written from: ModderLords had updated its own module to v0.1.37, the Bannerlord launcher
+        // had not run since, and importing a shared list said "server has v0.1.37, this PC has v0.1.8.0".
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("ModderLords.Compat", "v0.1.8.0", false));
+        var plan = LauncherDataSync.ComputePlan([E("ModderLords.Compat", "v0.1.37")], Order("ModderLords.Compat"), path,
+            installedVersions: OnDisk(("ModderLords.Compat", "v0.1.37")));
+        Assert.Empty(plan.Blockers.Where(b => b.Id == "ModderLords.Compat"));
+        Assert.Contains(plan.Changes, c => c.Id == "ModderLords.Compat" && c.Action == LauncherDataSync.SyncAction.Enable);
+    }
+
+    [Fact]
+    public void The_copy_on_disk_is_what_is_compared_even_when_the_launcher_list_agrees_with_the_server()
+    {
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("ModularSmithing2", "v0.9.28", false));
+        var plan = LauncherDataSync.ComputePlan([E("ModularSmithing2", "v0.9.28")], Order("ModularSmithing2"), path,
+            installedVersions: OnDisk(("ModularSmithing2", "v0.9.27")));
+        var blocker = Assert.Single(plan.Blockers, b => b.Id == "ModularSmithing2");
+        Assert.Contains("this PC has v0.9.27", blocker.Detail);
+    }
+
+    [Fact]
+    public void An_unlisted_mod_installed_at_another_version_is_reported_not_added()
+    {
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true));
+        var plan = LauncherDataSync.ComputePlan([E("HealOnKill", "v1.2.0")], Order("HealOnKill"), path,
+            installedClientSide: new HashSet<string> { "HealOnKill" }, installedVersions: OnDisk(("HealOnKill", "v1.1.0")));
+        Assert.Contains(plan.Blockers, b => b.Id == "HealOnKill" && b.Detail.Contains("v1.1.0"));
+        Assert.DoesNotContain(plan.Changes, c => c.Id == "HealOnKill" && c.Action == LauncherDataSync.SyncAction.Add);
+    }
+
+    [Fact]
+    public void Any_matching_copy_on_disk_is_enough()
+    {
+        var path = WriteFile(Mod("CoopNightly", "v0.1.4", true), Mod("HealOnKill", "v1.1.0", true));
+        var plan = LauncherDataSync.ComputePlan([E("HealOnKill", "v1.2.0")], Order("HealOnKill"), path,
+            installedVersions: OnDisk(("HealOnKill", "v1.1.0"), ("HealOnKill", "v1.2.0")));
+        Assert.Empty(plan.Blockers.Where(b => b.Id == "HealOnKill"));
+    }
+
+    [Fact]
+    public void Client_side_versions_only_count_places_the_game_loads_from()
+    {
+        var versions = LauncherDataSync.ClientSideVersions([
+            new DiscoveredModule("A", "v1.0.0", @"G\A", ModuleSourceKind.Workshop, new Bannerlord.ModuleManager.ModuleInfoExtended { Id = "A", Name = "A" }),
+            new DiscoveredModule("B", "v2.0.0", @"C\B", ModuleSourceKind.Custom, new Bannerlord.ModuleManager.ModuleInfoExtended { Id = "B", Name = "B" }),
+        ]);
+        Assert.Equal(["v1.0.0"], versions["A"]);
+        Assert.False(versions.ContainsKey("B"));
+    }
+
     [Fact]
     public void Four_part_and_three_part_versions_count_as_equal()
     {

@@ -75,8 +75,11 @@ public static class ClientManifest
     /// <summary>
     /// Reads the client's LauncherData.xml (Documents\Mount and Blade II Bannerlord\Configs) and reports what the validator
     /// would say. Official modules are ignored; DLC (NavalDLC) enabled is a rejection.
+    /// <paramref name="installedVersions"/>, when given, is what is actually on disk and wins over the file's
+    /// LastKnownVersion, which is only what the Bannerlord launcher saw the last time it ran (see LauncherDataSync).
     /// </summary>
-    public static IReadOnlyList<ClientCheck> CompareWithLauncherData(IReadOnlyList<Entry> server, string launcherDataPath)
+    public static IReadOnlyList<ClientCheck> CompareWithLauncherData(IReadOnlyList<Entry> server, string launcherDataPath,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? installedVersions = null)
     {
         var result = new List<ClientCheck>();
         var client = new Dictionary<string, (string version, bool selected)>(StringComparer.OrdinalIgnoreCase);
@@ -95,6 +98,9 @@ public static class ClientManifest
         foreach (var e in server)
         {
             if (IsServerOnly(e.Id)) continue;   // never installed on a client; reporting it missing is a false alarm
+            if (client.TryGetValue(e.Id, out var listed) && installedVersions is not null
+                && installedVersions.TryGetValue(e.Id, out var onDisk) && onDisk.Count > 0)
+                client[e.Id] = (onDisk.FirstOrDefault(v => Saves.SaveHeaderReader.VersionsEqual(e.Version, v)) ?? string.Join(" and ", onDisk), listed.selected);
             if (!client.TryGetValue(e.Id, out var c)) result.Add(new ClientCheck(e.Id, e.Version, null, false, "missing on client"));
             else if (!c.selected) result.Add(new ClientCheck(e.Id, e.Version, c.version, false, "installed but not enabled"));
             else if (!Saves.SaveHeaderReader.VersionsEqual(e.Version, c.version)) result.Add(new ClientCheck(e.Id, e.Version, c.version, true, "version differs"));

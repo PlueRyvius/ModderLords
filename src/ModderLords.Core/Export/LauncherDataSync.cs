@@ -98,9 +98,18 @@ public static class LauncherDataSync
     /// passes the SERVER order, where Coop is pinned after every mod — writing that into LauncherData.xml is exactly
     /// the arrangement that crashes a client running mods that patch Coop.
     /// </param>
+    /// <param name="installedVersions">
+    /// The version of every copy on disk the client can load, by id (<see cref="ClientSideVersions"/>). Versions are
+    /// compared against these when given. The launcher's own LastKnownVersion is only what it saw the last time it
+    /// ran, and nothing that bypasses it keeps that current: ModderLords updates ModderLords.Compat itself, and the
+    /// Workshop updates mods between launcher runs. Measured 2026-10-01: a v0.1.37 copy on disk was reported as
+    /// "this PC has v0.1.8.0" when importing a shared list, a blocker that did not exist. The recorded version is
+    /// used only for a mod with no copy found.
+    /// </param>
     public static SyncPlan ComputePlan(IReadOnlyList<ClientManifest.Entry> serverMods, LoadOrder.Result order, string launcherDataPath,
                                        IReadOnlySet<string>? installedClientSide = null, IReadOnlySet<string>? officialSelection = null,
-                                       bool orderIncludesCoopPosition = false)
+                                       bool orderIncludesCoopPosition = false,
+                                       IReadOnlyDictionary<string, IReadOnlyList<string>>? installedVersions = null)
     {
         var changes = new List<PlannedChange>();
         if (!File.Exists(launcherDataPath))
@@ -143,6 +152,11 @@ public static class LauncherDataSync
                 // subscribed since it last ran is missing from the file even though the client could load it fine.
                 if (installedClientSide?.Contains(e.Id) == true)
                 {
+                    if (VersionMismatch(e, installedVersions, recorded: null) is { } addMismatch)
+                    {
+                        changes.Add(new PlannedChange(e.Id, SyncAction.Unfixable, addMismatch));
+                        continue;
+                    }
                     changes.Add(new PlannedChange(e.Id, SyncAction.Add, "installed, but the Bannerlord launcher has not listed it yet", e.Version));
                     enabling.Add(e.Id);
                 }
@@ -154,9 +168,9 @@ public static class LauncherDataSync
             }
             // A version mismatch cannot be ticked away: the validator compares versions, so ticking the wrong one
             // would only look like it worked. Report it and leave the entry exactly as the player had it.
-            if (!SaveHeaderReader.VersionsEqual(e.Version, c.Version))
+            if (VersionMismatch(e, installedVersions, c.Version) is { } mismatch)
             {
-                changes.Add(new PlannedChange(e.Id, SyncAction.Unfixable, $"server has {e.Version}, this PC has {c.Version}"));
+                changes.Add(new PlannedChange(e.Id, SyncAction.Unfixable, mismatch));
                 continue;
             }
             if (!c.Selected) changes.Add(new PlannedChange(e.Id, SyncAction.Enable, "the server runs it"));
@@ -211,6 +225,31 @@ public static class LauncherDataSync
         var added = changes.Where(x => x.Action == SyncAction.Add).Select(x => x.Id).ToList();
         changes.AddRange(PlanOrder(client, added, order, enabling, orderIncludesCoopPosition, out var targetOrder));
         return new SyncPlan(changes, targetOrder);
+    }
+
+    /// <summary>
+    /// What the client could load for each id, as found on disk: the game's Modules folder and the Workshop, the two
+    /// places the game itself looks. A mod present in both lists both versions.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>> ClientSideVersions(IEnumerable<DiscoveredModule> modules) =>
+        modules.Where(m => m.Source is ModuleSourceKind.GameModules or ModuleSourceKind.Workshop)
+            .GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(m => m.Version).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Null when this PC has the server's version of <paramref name="e"/>; otherwise what to tell the player. The copies
+    /// on disk decide when there are any; <paramref name="recorded"/> (the launcher's LastKnownVersion) only when not.
+    /// Any matching copy counts: which one the game picks is not ours to predict, and a false blocker is what this fixes.
+    /// </summary>
+    private static string? VersionMismatch(ClientManifest.Entry e, IReadOnlyDictionary<string, IReadOnlyList<string>>? installedVersions,
+                                           string? recorded)
+    {
+        IReadOnlyList<string> have = installedVersions is not null && installedVersions.TryGetValue(e.Id, out var onDisk) && onDisk.Count > 0
+            ? onDisk
+            : recorded is null ? [] : [recorded];
+        if (have.Count == 0 || have.Any(v => SaveHeaderReader.VersionsEqual(e.Version, v))) return null;
+        return $"server has {e.Version}, this PC has {string.Join(" and ", have)}";
     }
 
     /// <summary>

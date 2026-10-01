@@ -1,4 +1,4 @@
-using Bannerlord.ModuleManager;
+﻿using Bannerlord.ModuleManager;
 using ModderLords.Core.Compat;
 using ModderLords.Coop.Compat;
 using ModderLords.Core.Export;
@@ -299,6 +299,34 @@ public class ClientManifestTests
             var checks = ClientManifest.CompareWithLauncherData(
                 [new ClientManifest.Entry("DedicatedServer.ModderLordsCompat", "v0.1.0", null)], path);
             Assert.DoesNotContain(checks, c => c.Id.StartsWith("DedicatedServer."));
+        }
+        finally { File.Delete(path); }
+    }
+
+    /// <summary>
+    /// "Check my client" read the launcher's LastKnownVersion, which ModderLords never updates when it installs its own
+    /// module, so a current copy was reported as "version differs". The copy on disk decides when one is known.
+    /// </summary>
+    [Fact]
+    public void Check_my_client_trusts_the_copy_on_disk_over_a_stale_launcher_version()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "mc-cm3-" + Guid.NewGuid().ToString("N") + ".xml");
+        File.WriteAllText(path,
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><UserData><SingleplayerData><ModDatas>" +
+            "<UserModData><Id>ModderLords.Compat</Id><LastKnownVersion>v0.1.8.0</LastKnownVersion><IsSelected>true</IsSelected></UserModData>" +
+            "<UserModData><Id>HealOnKill</Id><LastKnownVersion>v1.2.0</LastKnownVersion><IsSelected>true</IsSelected></UserModData>" +
+            "</ModDatas></SingleplayerData></UserData>");
+        try
+        {
+            var onDisk = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ModderLords.Compat"] = ["v0.1.37"],
+                ["HealOnKill"] = ["v1.1.0"],
+            };
+            var checks = ClientManifest.CompareWithLauncherData(
+                [new ClientManifest.Entry("ModderLords.Compat", "v0.1.37", null), new ClientManifest.Entry("HealOnKill", "v1.2.0", null)], path, onDisk);
+            Assert.Contains(checks, c => c.Id == "ModderLords.Compat" && c.Verdict == "ok");
+            Assert.Contains(checks, c => c.Id == "HealOnKill" && c.Verdict == "version differs" && c.ClientVersion == "v1.1.0");
         }
         finally { File.Delete(path); }
     }
