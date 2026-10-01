@@ -308,6 +308,19 @@ internal static class FbBooks
         }
     }
 
+    /// <summary>
+    /// A field of a player's book as it stands, without entering it: the live static when that book is installed, else
+    /// the stored value. Null when there is no such book or field.
+    /// </summary>
+    internal static object? Peek(string key, string field)
+    {
+        if (_schema == null || !Entries.TryGetValue(key, out var entry)) return null;
+        var index = _schema.Fields.ToList().FindIndex(f => f.Name == field);
+        if (index < 0) return null;
+        if (Current == key) return _schema.Fields[index].GetValue(null);
+        return ValuesOf(key, entry)[index];
+    }
+
     /// <summary>Self-test: one of the book's fields by name.</summary>
     internal static FieldInfo? Field(string name) => _fields?.FirstOrDefault(f => f.Name == name);
 

@@ -3,7 +3,7 @@
 Fourberie (module id `Fourberie`, Workshop 2875710877, Nexus 2969) under Bannerlord Coop. Reviewed at **v1.4.8.2**
 (`Fourberie.dll` SHA-256 `6c73723c6129933a170e63e6d7aaabe4e37bb4ca847206b1878041197e7cce89`, built 2026-09-29),
 against ModderLords `ba821db` (1.2.1), Coop source `97420dc` (2026-10-01) and the installed Coop **0.1.5** Workshop
-build. Status: **phases 0–4 done; the server side passes a live self-test on the real dedicated server (no client yet); phases 5–7 to do.**
+build. Status: **phases 0–5 done; the server side passes a live self-test on the real dedicated server (no client yet); phases 6–7 to do.**
 
 The per-line analysis (entry-point matrices with line numbers, `_crimeValue` key legend, mutation catalogue) is kept
 outside the repository, because it is derived from a decompile: `D:\Work\Claude\Tech Support\_fourberie-analysis\`
@@ -210,7 +210,21 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
      migration.
 
    A watch logs any party Fourberie code still makes on a player's game, with where it came from.
-5. **Models** (`fourb-models`).
+5. **Models** (`FbModels`, `FbOwners`). On the server, Fourberie's model answers now come from the right player's book:
+   - **Run as their owner:** clan gold, income and expenses (the player who leads the clan); food and power (the
+     player's own party); speed and embarking (a bandit follower, as the player whose book lists it); survival chance
+     (a player's hero or party); the partner-faction stance (the player who rules either faction).
+   - **Summed over connected players:** town loyalty, town security and a faction's daily crime change. Each is the
+     plain answer plus every player's contribution, as one "(F) Fourberie" line.
+
+   A Cecil test requires every model answer that reads "the player" to be either scoped or listed as players'-games-only
+   (trade prices, menu access, item discards, mission damage). Live self-test: the second player's hideout gang draws
+   "(F) Lads Wage −40" in their clan's daily gold and nobody else's, and a town near bandits they support gets
+   "(F) Fourberie −0.5" security. Both still hold after save and reload.
+
+   **In the real game:** Fourberie only counts hideouts the player has discovered, and on the server no hideout counts as
+   discovered unless something marks it. The bandit loyalty and security effects therefore depend on how Coop records
+   hideout discovery; to watch in the client session.
 6. **T2 transactions**: mission and dialog flows, crime-rating mirroring, `fourb-locations`.
 7. **T3 notices + docs**: `docs/FOURBERIE-LAYER.md` as the user-facing layer doc, the README mod list and a live test
    script.
@@ -238,7 +252,7 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
     troops, and runs every per-player tick handler through the real prefix. It then relays the insurance scam and
     raises a yes/no and a must-pick prompt for the (offline) player. Last, it saves.
   - **"check"** loads that save and verifies books, base, territory, ledger troops and the caravan, then ticks again.
-  - **Result:** run 27/27 and check 7/7 on 2026-09-30.
+  - **Result:** run 31/31 and check 11/11 on 2026-09-30, with the phase 5 model checks included.
   - **Bugs it found:**
     - The engine's save loader hands back `MBList<T>` for `List<T>` fields, which the codec skipped, so territory and
       partnership lists were silently left out of the book. The codec now accepts collection subclasses, with a unit
@@ -274,6 +288,17 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
    as single player would.
 3. **T3 is acceptable** for flows that phase 2 shows cannot be made coherent.
 4. **Fourberie's author is not contacted.** Nothing of Fourberie's is copied or shipped; everything binds by reflection.
+5. **Unanswered prompts: the AI decides** (2026-09-30, shared with the Bellum layer). A prompt that involves a player
+   goes to that player, with a 10-minute timer. No answer means the AI decides, so the AI can still act (pay, declare,
+   leave) for an away player. An offline player is no special case: their prompt waits, reaches them if they reconnect
+   in time, and otherwise the AI decides at the same deadline.
+
+   For every prompt a server-run handler can raise (a surface test pins the reviewed list), the AI's choice mirrors
+   Fourberie's own NPCs:
+   - the affirmative when it is available, else the negative;
+   - the first options of a list;
+   - so: blackmail is paid (NPC victims always pay), an arranged bribe is paid, influence is spent when there is enough,
+     a clan leaving a kingdom keeps its holdings (as vanilla AI clans do), and notices are acknowledged.
 
 ## Risks
 
