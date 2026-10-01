@@ -121,6 +121,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         {
             // The joined campaign exists now, so there is somewhere to load the server's TAOM state into.
             ModderLords.CompatSync.Coop.Fourberie.FbMirrorClient.CampaignReady();
+            SessionCheck.CampaignReady();
             network.SendAll(new NetworkTaomStateRequest { ProtocolVersion = ProtocolVersion });
 
             var pending = TaomJoinGrant.Pending;

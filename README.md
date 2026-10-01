@@ -406,8 +406,8 @@ one is known.
 
 ## The tabs
 
-**Mods** and **Share** are always there. **Saves**, **Server**, **Gameplay**, **Mod settings**, **Console** and
-**Performance** appear in Host mode only, and so do the coop-only columns of the Mods tab described below.
+**Mods** and **Share** are always there. **Saves**, **Server**, **Gameplay**, **Mod settings**, **Console**,
+**Smoke test** and **Performance** appear in Host mode only, and so do the coop-only columns of the Mods tab described below.
 
 ### Mods
 
@@ -523,6 +523,36 @@ Filters: **Engine** (the engine's own chatter, off by default), **Module load**,
 pins the view). **Find** filters by text. Type a server command in the box and press Enter (`help` lists them; `stop`
 shuts down). **Logs folder** opens the launcher's own per-launch logs.
 
+### Smoke test *(Host mode)*
+
+Checks, without anyone playing, that this PC's game can join the server and stay on it. **Run smoke test** starts the
+server if it is not running, then starts Bannerlord with the same mod list **Launch client** uses, plus Coop's own
+automatic join. It waits for the campaign map, keeps the game there for **Seconds on the map** (60 by default), closes
+it, and shows a checklist:
+
+| Check | What it means |
+|---|---|
+| Server is serving | the server reached *SERVING* |
+| Joined the server | the server listed a new player |
+| World received | the server sent its world and the game loaded it |
+| On the campaign map | the game got to the map; stopping at **character creation** is a warning: your character must already exist in this world, so join once by hand first |
+| Server sees the player on the map | the server's own view of the player |
+| ModderLords channel round trip | the game pinged the server through the channel every ModderLords layer uses, and the server answered (time in ms) |
+| Stayed connected | no drop while on the map |
+| No crash | neither process ended by itself, no new crash report, no fatal Coop error |
+| No ModderLords warnings | neither side's compat module warned, which a test of the server alone cannot see |
+
+Below those, for information: Coop's error counts by source (Coop logs thousands in a healthy session, so they do not
+fail the test), server error lines during the join, the game's engine errors, and Coop's frame rate. Each run's report
+and log slices are saved; **Open report folder** shows them and **Copy report** puts the checklist on the clipboard.
+
+Don't use the PC while it runs: the game window comes to the front. It refuses to start while Bannerlord is already
+running, and on a server with a password (the automatic join cannot send one). Coop's automatic join marks
+`engine_config.txt` read-only; the test puts it back as it was.
+
+From a command line: `ModderLords.Cli smoke --profile NAME`, or `smoke --attach --server-log PATH --profile-file PATH`
+against a server that is already running somewhere else. The exit code is 1 when the test fails.
+
 ### Share
 
 Left, in both modes: the exact mod list to hand somebody, with Workshop links where known, plus **Copy**, **Export…**
@@ -569,6 +599,7 @@ Per-profile things without a tab of their own:
 | Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModderLords\overlay\<profile>\` |
 | Launcher logs | `%LOCALAPPDATA%\ModderLords\logs\launch-*.log`, `app-errors.log` |
 | Support bundles you created | `%LOCALAPPDATA%\ModderLords\support\` |
+| Smoke test reports (last 20) | `%LOCALAPPDATA%\ModderLords\smoke\<date-time>\` |
 | Server data (saves, server-config.json, server logs, config backups) | `Documents\Mount and Blade II Bannerlord\CoopData\DedicatedServer\` |
 | Gameplay config | `Documents\Mount and Blade II Bannerlord\CoopData\mod-config.json` |
 | The server itself (untouched except for links under `engine\Modules`) | `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\` |

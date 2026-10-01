@@ -21,6 +21,8 @@ using ModderLords.Coop.Config;
 //            [--data-dir PATH] [--coop-data-dir PATH] [--world-log PATH] [--bundle-root PATH]
 //   saves
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
+//   smoke    --profile NAME [--save NAME] [--steady SECONDS] [--no-time] [--keep-client] [--keep-server]
+//   smoke    --attach --server-log PATH [--server-commands PATH] (--profile-file PATH | --profile NAME) [--join-host H] [--join-port N] [--steady SECONDS] [--no-time] [--keep-client]
 //   authority --mod ID [--all] [--json] [--out PATH]
 //   trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]
 
@@ -40,6 +42,7 @@ if (!opts.TryGetValue("cmd", out var cmd))
 {
     Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--join-port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
     Console.WriteLine("          play --profile NAME|--profile-file PATH [--dry-run]   (start the player's own game with a profile's mods)");
+    Console.WriteLine("          smoke --profile NAME [--save NAME] [--steady SECONDS] [--keep-client] [--keep-server]   (start the server, join it with this PC's game, report)");
     Console.WriteLine("          analyze --profile NAME [--root DedicatedServer] [--json] [--cache-dir PATH]   (read-only operation analysis)");
     Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH] [--bundle-root PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
@@ -323,6 +326,115 @@ switch (cmd)
         Console.WriteLine(plan.Changes.Count == 0 ? "no changes" : "changes:");
         foreach (var ch in plan.Changes) Console.WriteLine("  " + ch);
         return 0;
+    }
+
+    case "smoke" when opts.ContainsKey("attach"):
+    {
+        // Against a server that is already running (started by a script or another app): its console log is tailed
+        // instead of starting one, and the game is started from a client profile file (or a saved profile).
+        if (!opts.TryGetValue("server-log", out var serverLog)) { Console.Error.WriteLine("smoke --attach needs --server-log PATH (the running server's console log)"); return 2; }
+        Profile? clientProfile;
+        try
+        {
+            clientProfile = opts.TryGetValue("profile-file", out var clientFile)
+                ? System.Text.Json.JsonSerializer.Deserialize<Profile>(File.ReadAllText(clientFile), ModderLords.Analysis.AnalysisJson.Options)
+                : opts.TryGetValue("profile", out var clientName) ? ProfileStore.Load(clientName) : null;
+        }
+        catch (Exception ex) { Console.Error.WriteLine("Could not read the client profile: " + ex.Message); return 2; }
+        if (clientProfile is null) { Console.Error.WriteLine("smoke --attach needs --profile-file PATH or --profile NAME for the game"); return 2; }
+        if (ModderLords.Core.Launch.ClientLauncher.IsClientRunning()) { Console.Error.WriteLine("Bannerlord is already running; close it first."); return 2; }
+        ClientLaunchSession.Prepared attachClient;
+        try { attachClient = ClientLaunchSession.Prepare(clientProfile); }
+        catch (Exception ex) { Console.Error.WriteLine("[ModderLords] client plan: " + ex.Message); return 2; }
+
+        var attachRunner = new ModderLords.Core.Smoke.SmokeRunner(new ModderLords.Core.Smoke.SmokeOptions
+        {
+            GameRoot = attachClient.GameRoot,
+            JoinHost = opts.GetValueOrDefault("join-host") ?? "127.0.0.1",
+            JoinPort = int.TryParse(opts.GetValueOrDefault("join-port"), out var attachPort) ? attachPort : 4200,
+            SteadyFor = TimeSpan.FromSeconds(int.TryParse(opts.GetValueOrDefault("steady"), out var attachSteady) ? attachSteady : 60),
+            CloseClientWhenDone = !opts.ContainsKey("keep-client"),
+            ReportRoot = Path.Combine(ProfileStore.RootDir, "smoke"),
+            // A scripted server reads its console input from a file: one line appended is one command sent.
+            SendServerCommand = opts.TryGetValue("server-commands", out var commandFile) && !opts.ContainsKey("no-time")
+                ? command => File.AppendAllTextAsync(commandFile, command + Environment.NewLine) : null,
+        });
+        attachRunner.Progress += line => Console.WriteLine("[smoke] " + line);
+        using var attachCancel = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; attachCancel.Cancel(); };
+        // From the top of the file: SERVING went by before the test started.
+        var serverTail = new ModderLords.Core.Smoke.LogTail(serverLog, fromStart: true);
+        var tailing = Task.Run(async () =>
+        {
+            while (!attachCancel.IsCancellationRequested)
+            {
+                foreach (var line in serverTail.ReadNew()) attachRunner.ServerLine(line);
+                try { await Task.Delay(500, attachCancel.Token); } catch (OperationCanceledException) { }
+            }
+        });
+        var attachReport = await attachRunner.RunAsync(args => ClientLaunchSession.Start(attachClient.Plan with { ExtraArguments = args }), attachCancel.Token);
+        attachCancel.Cancel();
+        await tailing;
+        Console.WriteLine();
+        Console.WriteLine(attachReport.ToText());
+        return attachReport.Overall == ModderLords.Core.Smoke.SmokeVerdict.Fail ? 1 : 0;
+    }
+
+    case "smoke":
+    {
+        // The client smoke test: this profile's server, then this PC's game joining it by itself (Coop's /autoconnect),
+        // watched until it has stayed on the campaign map; see ModderLords.Core.Smoke.SmokeRunner.
+        if (!opts.TryGetValue("profile", out var smokeProfileName)) { Console.Error.WriteLine("smoke needs --profile NAME (a Host profile)"); return 2; }
+        var profile = ProfileStore.Load(smokeProfileName);
+        if (profile is null) { Console.Error.WriteLine("[ModderLords] profile not found: " + smokeProfileName); return 2; }
+        if (opts.TryGetValue("save", out var smokeSave)) profile.SaveName = smokeSave;
+        if (ModderLords.Core.Launch.ClientLauncher.IsClientRunning()) { Console.Error.WriteLine("Bannerlord is already running; close it first."); return 2; }
+        if (profile.Server.Password.Length > 0) { Console.Error.WriteLine("This server has a password, and Coop's automatic join cannot send one. Clear it for the test."); return 2; }
+
+        var prepared = LaunchSession.Prepare(profile);
+        foreach (var m in prepared.Messages) Console.WriteLine("[ModderLords] " + m);
+        ClientLaunchSession.Prepared client;
+        try { client = ServerMatchedClient.Prepare(prepared, profile); }
+        catch (Exception ex) { Console.Error.WriteLine("[ModderLords] client plan: " + ex.Message); return 2; }
+        if (prepared.Selections.Any(sel => sel.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase)))
+            Console.WriteLine("[ModderLords] " + ClientModuleInstaller.Ensure(client.GameRoot).Message);
+
+        var steady = int.TryParse(opts.GetValueOrDefault("steady"), out var steadySeconds) ? steadySeconds : 60;
+        EngineProcess? engineRef = null;
+        var runner = new ModderLords.Core.Smoke.SmokeRunner(new ModderLords.Core.Smoke.SmokeOptions
+        {
+            GameRoot = client.GameRoot,
+            JoinPort = profile.Server.JoinPort,
+            SteadyFor = TimeSpan.FromSeconds(steady),
+            CloseClientWhenDone = !opts.ContainsKey("keep-client"),
+            ReportRoot = Path.Combine(ProfileStore.RootDir, "smoke"),
+            SendServerCommand = opts.ContainsKey("no-time") ? null : command => engineRef!.SendCommandAsync(command),
+        });
+        runner.Progress += line => Console.WriteLine("[smoke] " + line);
+
+        var smokeLog = Path.Combine(Path.GetTempPath(), $"modderlords-smoke-server-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        using var smokeLogWriter = new StreamWriter(smokeLog) { AutoFlush = true };
+        Console.WriteLine($"[ModderLords] server output -> {smokeLog}");
+        using var engine = EngineProcess.Start(prepared.Plan);
+        engineRef = engine;
+        engine.LineReceived += line =>
+        {
+            runner.ServerLine(line.Text);
+            lock (smokeLogWriter) smokeLogWriter.WriteLine($"{line.At:HH:mm:ss.fff} {line.Text}");
+        };
+        _ = engine.Exited.ContinueWith(t => runner.ServerExited(t.Result), TaskScheduler.Default);
+        using var smokeCancel = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; smokeCancel.Cancel(); };
+
+        var report = await runner.RunAsync(args => ClientLaunchSession.Start(client.Plan with { ExtraArguments = args }), smokeCancel.Token);
+        Console.WriteLine();
+        Console.WriteLine(report.ToText());
+        if (!opts.ContainsKey("keep-server") && !engine.Exited.IsCompleted)
+        {
+            Console.WriteLine("[ModderLords] stopping the server…");
+            await engine.StopAsync(TimeSpan.FromSeconds(60));
+        }
+        return report.Overall == ModderLords.Core.Smoke.SmokeVerdict.Fail ? 1 : 0;
     }
 
     case "launch" when opts.ContainsKey("profile"):
