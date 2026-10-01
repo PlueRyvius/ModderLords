@@ -73,6 +73,9 @@ public static class FourberieLayer
         new FbTicksComponent(),
         new FbMirrorComponent(),
         new FbPromptsComponent(),
+        new FbLedgersComponent(),
+        new FbRelayComponent(),
+        new FbGapsComponent(),
     };
 
     private static bool _done;
@@ -112,6 +115,7 @@ public static class FourberieLayer
         if (context.MissingScratch.Count > 0)
             Log.Warn(Tag + "scratch field(s) not found, left out of the book (Fourberie changed?): " + Some(context.MissingScratch));
         Active = true;
+        FbSelfTest.Bind(context.Mod);
         foreach (var component in Components)
         {
             try
@@ -147,5 +151,5 @@ public static class FourberieLayer
     }
 
     /// <summary>"; Fourberie: ..." for the 30 s verification line, or empty when the layer is not running.</summary>
-    public static string Summary() => Active ? "; Fourberie: " + (IsServer ? FbBooks.Summary() + ", " + FbTicks.Summary() + ", " + FbPrompts.Summary() : FbMirrorClient.Summary()) : "";
+    public static string Summary() => Active ? "; Fourberie: " + (IsServer ? FbBooks.Summary() + ", " + FbTicks.Summary() + ", " + FbPrompts.Summary() + ", " + FbRelay.Summary() : FbMirrorClient.Summary() + ", " + FbRelay.Summary() + ", " + FbGaps.Summary()) : "";
 }

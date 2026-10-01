@@ -161,3 +161,37 @@ internal static class FbFields
         return (fields, null, missingScratch);
     }
 }
+
+/// <summary>The ledger parties Fourberie makes with CreateVirtualParty (FbLedgers), with the names it gives them.</summary>
+internal static class FbLedgerRoles
+{
+    internal static readonly (string Role, string Name)[] Roles =
+    {
+        ("fb_crimebase_party", "{=FoSafHou23}Your lads"),
+        ("fb_saboteurs_party", "{=FoAgeOp17}Saboteurs"),
+    };
+
+    internal static IEnumerable<string> Ids => Roles.Select(r => r.Role);
+}
+
+/// <summary>Player actions the server carries out (FbRelay): (type, static void method, parameter count), run in order.</summary>
+internal static class FbRelayTable
+{
+    internal static readonly (string Type, string Method, int Params)[] Methods =
+    {
+        ("Fourberie.HelperSubInsuScam", "SpawnCaravan", 2),
+        ("Fourberie.HelperSubInsuScam", "SpawnBandits", 1),
+    };
+}
+
+/// <summary>Actions skipped on a player's game in co-op with a "not available in co-op" line (FbGaps).</summary>
+internal static class FbGapsTable
+{
+    internal static readonly (string Type, string Method, int Params)[] Blocked =
+    {
+        ("Fourberie.FourbSafeHouseBehavior", "CrookedEncounterStart", 0),
+        ("Fourberie.FourbSafeHouseBehavior", "BanditsRelEncounterStart", 0),
+        ("Fourberie.HelperSubNotableExtortion", "TroopRosterManageExto", 1),
+        ("Fourberie.HelperSubCarambush", "TroopRosterManageCarambush", 1),
+    };
+}

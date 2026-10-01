@@ -67,6 +67,14 @@ public static class FbBookCodec
         return values;
     }
 
+    /// <summary>One value of <paramref name="type"/> as JSON (relayed method arguments); false with a reason when it cannot be written.</summary>
+    public static bool TryEncodeValue(Type type, object? value, IBookRefs refs, out JToken token, out string? problem) =>
+        TryEncode(type, value, refs, out token, out problem);
+
+    /// <summary>One value of <paramref name="type"/> from JSON; false (with a problem line) when it cannot be read.</summary>
+    public static bool TryDecodeValue(Type type, JToken token, IBookRefs refs, ICollection<string> problems, string where, out object? value) =>
+        TryDecode(type, token, refs, problems, where, out value);
+
     // ---- encode ------------------------------------------------------------------------------------------------
 
     private static bool TryEncode(Type type, object? value, IBookRefs refs, out JToken token, out string? problem)
@@ -178,7 +186,7 @@ public static class FbBookCodec
             if (token is not JObject obj) return Bad(problems, where, "not an object");
             if (!IsKey(keyType)) return Bad(problems, where, "dictionary key type " + keyType.Name + " is not supported");
             if (obj.Count > MaxCollection) return Bad(problems, where, "more than " + MaxCollection + " entries");
-            var dict = (IDictionary)Activator.CreateInstance(underlying)!;
+            var dict = (IDictionary)NewCollection(underlying, typeof(Dictionary<,>));
             foreach (var prop in obj.Properties())
             {
                 if (!TryKey(keyType, prop.Name, out var key)) { problems.Add(where + "[" + prop.Name + "]: bad key"); continue; }
@@ -194,7 +202,7 @@ public static class FbBookCodec
         {
             if (token is not JArray arr) return Bad(problems, where, "not an array");
             if (arr.Count > MaxCollection) return Bad(problems, where, "more than " + MaxCollection + " entries");
-            var list = (IList)Activator.CreateInstance(underlying)!;
+            var list = (IList)NewCollection(underlying, typeof(List<>));
             var i = 0;
             foreach (var item in arr)
             {
@@ -215,23 +223,43 @@ public static class FbBookCodec
 
     // ---- shapes ------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Dictionary&lt;K,V&gt;, or a type derived from it. The engine's save loader hands back its own collection types
+    /// (MBList) for fields declared as the plain ones, so the base type is what counts.
+    /// </summary>
     private static bool IsDictionary(Type t, out Type key, out Type value)
     {
         key = value = typeof(object);
-        if (!t.IsGenericType || t.GetGenericTypeDefinition() != typeof(Dictionary<,>)) return false;
-        var args = t.GetGenericArguments();
+        var d = GenericBase(t, typeof(Dictionary<,>));
+        if (d == null) return false;
+        var args = d.GetGenericArguments();
         key = args[0];
         value = args[1];
         return true;
     }
 
+    /// <summary>List&lt;T&gt;, or a type derived from it (MBList&lt;T&gt;).</summary>
     private static bool IsList(Type t, out Type element)
     {
         element = typeof(object);
-        if (!t.IsGenericType || t.GetGenericTypeDefinition() != typeof(List<>)) return false;
-        element = t.GetGenericArguments()[0];
+        var l = GenericBase(t, typeof(List<>));
+        if (l == null) return false;
+        element = l.GetGenericArguments()[0];
         return true;
     }
+
+    private static Type? GenericBase(Type? t, Type definition)
+    {
+        for (; t != null && t != typeof(object); t = t.BaseType)
+            if (t.IsGenericType && t.GetGenericTypeDefinition() == definition) return t;
+        return null;
+    }
+
+    /// <summary>A new, empty collection the field can hold: the declared type when it can be made, else its generic base.</summary>
+    private static object NewCollection(Type declared, Type definition) =>
+        !declared.IsAbstract && !declared.IsInterface && declared.GetConstructor(Type.EmptyTypes) != null
+            ? Activator.CreateInstance(declared)!
+            : Activator.CreateInstance(GenericBase(declared, definition)!)!;
 
     private static bool IsKey(Type t) => t == typeof(string) || t == typeof(int) || t == typeof(long) || t.IsEnum;
 

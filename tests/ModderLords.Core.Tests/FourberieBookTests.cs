@@ -250,6 +250,24 @@ public sealed class FbBookCodecTests
         Assert.Equal(2.5f, back[7]);
     }
 
+    // The engine's save loader gives back its own List<T> subclass (MBList) for a field declared List<T>.
+    private sealed class EngineList<T> : List<T> { }
+    private sealed class EngineDictionary<TK, TV> : Dictionary<TK, TV> where TK : notnull { }
+
+    [Fact]
+    public void CollectionsTheEngineSubclassedAreStillWritten()
+    {
+        var refs = new FakeRefs();
+        var problems = new List<string>();
+        var values = new object?[] { new EngineDictionary<int, int> { [500] = 1 }, null, new EngineList<string> { "town_A6" }, null, null, null, false, 0f };
+        var json = Encode(refs, values, problems);
+        Assert.Empty(problems);
+        var back = FbBookCodec.Decode(json, Shape, refs, problems, _ => null);
+        Assert.Empty(problems);
+        Assert.Equal(new[] { "town_A6" }, (List<string>)back[2]!);
+        Assert.Equal(1, ((Dictionary<int, int>)back[0]!)[500]);
+    }
+
     [Fact]
     public void DictionariesAreRowsSoOnlyChangedRowsTravel()
     {
