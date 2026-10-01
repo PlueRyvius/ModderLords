@@ -36,18 +36,32 @@ public sealed class EngineProcess : IDisposable
     public Task<int> Exited => _exit.Task;
     public bool IsRunning => _started && !_process.HasExited;
 
+    private readonly NoiseCounter _noise = new();
+
     private EngineProcess(Process process) => _process = process;
+
+    /// <summary>Every line goes to the listeners except known harmless noise (<see cref="KnownNoise"/>), explained once and counted.</summary>
+    private void Emit(OutputStream stream, string text)
+    {
+        if (_noise.Hide(text, out var explanation))
+        {
+            if (explanation != null) LineReceived?.Invoke(new EngineLine(DateTimeOffset.Now, stream, explanation));
+            return;
+        }
+        LineReceived?.Invoke(new EngineLine(DateTimeOffset.Now, stream, text));
+    }
 
     public static EngineProcess Start(LaunchPlan plan)
     {
         var p = new Process { StartInfo = plan.ToStartInfo(), EnableRaisingEvents = true };
         var ep = new EngineProcess(p);
-        p.OutputDataReceived += (_, e) => { if (e.Data is not null) ep.LineReceived?.Invoke(new EngineLine(DateTimeOffset.Now, OutputStream.Stdout, e.Data)); };
-        p.ErrorDataReceived += (_, e) => { if (e.Data is not null) ep.LineReceived?.Invoke(new EngineLine(DateTimeOffset.Now, OutputStream.Stderr, e.Data)); };
+        p.OutputDataReceived += (_, e) => { if (e.Data is not null) ep.Emit(OutputStream.Stdout, e.Data); };
+        p.ErrorDataReceived += (_, e) => { if (e.Data is not null) ep.Emit(OutputStream.Stderr, e.Data); };
         p.Exited += (_, _) =>
         {
             int code;
             try { code = p.ExitCode; } catch { code = int.MinValue; }
+            foreach (var total in ep._noise.Totals()) ep.LineReceived?.Invoke(new EngineLine(DateTimeOffset.Now, OutputStream.Stdout, total));
             ep._exit.TrySetResult(code);
         };
         ep.StartedAt = DateTimeOffset.Now;
