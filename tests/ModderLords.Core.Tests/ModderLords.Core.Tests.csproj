@@ -66,6 +66,7 @@
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbEffectWire.cs" Link="Module\FbEffectWire.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbRecordGate.cs" Link="Module\FbRecordGate.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbPatchTargets.cs" Link="Module\FbPatchTargets.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\TickSteps.cs" Link="Module\TickSteps.cs" />
   </ItemGroup>
 
 </Project>
