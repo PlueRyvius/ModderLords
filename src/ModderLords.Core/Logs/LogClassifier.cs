@@ -34,6 +34,9 @@ public static partial class LogClassifier
         // Before the general [ModderLords] branch below, which would otherwise swallow these into Tool.
         if (t.StartsWith(PerfLineParser.Prefix, StringComparison.Ordinal)) return new(line, LogCategory.Perf);
 
+        // The answer to a Characters-tab command (ModderLords.Coop.Admin): console I/O, shown and hidden with it.
+        if (t.StartsWith("@ML@", StringComparison.Ordinal)) return new(line, LogCategory.CommandReply);
+
         if (t.StartsWith("[ModderLords]", StringComparison.Ordinal) || t.StartsWith("[ModderLords.Hook]", StringComparison.Ordinal)
             || t.StartsWith("[ModderLords.Compat]", StringComparison.Ordinal)) return new(line, LogCategory.Tool);
 

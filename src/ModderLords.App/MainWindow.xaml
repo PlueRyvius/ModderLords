@@ -728,6 +728,55 @@
                 </DockPanel>
             </TabItem>
 
+            <!-- CHARACTERS: the running server's players, and the ban list. Kick and the list are server commands;
+                 bans are a file the server rereads, so they work while it is stopped too. -->
+            <TabItem Header="Characters" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
+                               Text="Everyone with a character on the running server. Kick disconnects a player; their character stays and they can rejoin. Ban disconnects them and refuses them from then on, by Steam id and by the address they connected from. The list updates when someone joins or leaves." />
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Refresh" Command="{Binding Characters.RefreshCommand}" Padding="10,4" Margin="0,0,8,0" />
+                        <Button Content="Kick" Command="{Binding Characters.KickCommand}" Padding="10,4" Margin="0,0,16,0" />
+                        <TextBlock Text="Reason (optional):" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBox Text="{Binding Characters.BanReason, UpdateSourceTrigger=PropertyChanged}" Width="220" Margin="0,0,8,0" />
+                        <Button Content="Ban…" Command="{Binding Characters.BanCommand}" Padding="10,4" />
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Characters.Headline}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Characters.ListStatus}" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="2*" MinHeight="80" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" MinHeight="80" />
+                        </Grid.RowDefinitions>
+                        <DataGrid Grid.Row="0" ItemsSource="{Binding Characters.Players}" SelectedItem="{Binding Characters.SelectedPlayer}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Character" Binding="{Binding Name}" Width="160" />
+                                <DataGridTextColumn Header="Clan" Binding="{Binding Clan}" Width="140" />
+                                <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="50" />
+                                <DataGridTextColumn Header="Gold" Binding="{Binding Gold, StringFormat=N0}" Width="80" />
+                                <DataGridTextColumn Header="State" Binding="{Binding State}" Width="140" />
+                                <DataGridTextColumn Header="Steam id" Binding="{Binding SteamId}" Width="150" />
+                                <DataGridTextColumn Header="Address" Binding="{Binding Ip}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <DockPanel Grid.Row="1" Margin="0,10,0,4">
+                            <Button DockPanel.Dock="Right" Content="Unban" Command="{Binding Characters.UnbanCommand}" Padding="10,3" />
+                            <TextBlock Text="Banned" FontWeight="Bold" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <DataGrid Grid.Row="2" ItemsSource="{Binding Characters.Bans}" SelectedItem="{Binding Characters.SelectedBan}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="160" />
+                                <DataGridTextColumn Header="Steam id" Binding="{Binding SteamId}" Width="150" />
+                                <DataGridTextColumn Header="Address" Binding="{Binding Ip}" Width="120" />
+                                <DataGridTextColumn Header="Since" Binding="{Binding At, StringFormat=yyyy-MM-dd HH:mm}" Width="120" />
+                                <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
             <!-- SHARE: hand your mod list to somebody, or take theirs. That half is the whole point of a mod
                  loader, so it is in both modes; the right-hand column compares this PC's launcher with the server
                  you are hosting, so that half is Host mode only. -->
