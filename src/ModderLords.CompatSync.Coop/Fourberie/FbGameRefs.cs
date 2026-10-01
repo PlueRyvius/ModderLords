@@ -3,6 +3,8 @@ using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.Core;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -65,6 +67,21 @@ internal sealed class FbGameRefs : IBookRefs
             case CharacterObject ch:
                 token = ch.StringId;
                 return true;
+            case PartyBase pb:
+                if (pb.MobileParty != null) { if (IsShared != null && !IsShared(pb.MobileParty)) return false; token = "p:" + pb.MobileParty.StringId; }
+                else if (pb.Settlement != null) token = "s:" + pb.Settlement.StringId;
+                else return false;
+                return true;
+            case SkillObject skill:
+                token = skill.StringId;
+                return true;
+            case TraitObject trait:
+                token = trait.StringId;
+                return true;
+            case Alley alley:
+                if (alley.Settlement == null) return false;
+                token = new JArray(alley.Settlement.StringId, alley.Settlement.Alleys.IndexOf(alley));
+                return true;
             default:
                 return false;
         }
@@ -90,6 +107,24 @@ internal sealed class FbGameRefs : IBookRefs
             return true;
         }
 
+        if (type == typeof(Alley))
+        {
+            if (token is not JArray { Count: 2 } a || a[0].Type != JTokenType.String || a[1].Type != JTokenType.Integer) { problem = "alley is malformed"; return true; }
+            var alleys = Settlement.Find((string)a[0]!)?.Alleys;
+            var index = (int)a[1]!;
+            value = alleys != null && index >= 0 && index < alleys.Count ? alleys[index] : null;
+            if (value == null) problem = "alley " + a + " not found";
+            return true;
+        }
+        if (type == typeof(PartyBase))
+        {
+            var text = token.Type == JTokenType.String ? (string)token! : "";
+            value = text.StartsWith("p:", StringComparison.Ordinal) ? MobileParty.All.FirstOrDefault(p => p.StringId == text.Substring(2))?.Party
+                : text.StartsWith("s:", StringComparison.Ordinal) ? Settlement.Find(text.Substring(2))?.Party : null;
+            if (value == null) problem = "party '" + text + "' not found";
+            return true;
+        }
+
         if (!IsRef(type)) return false;
         if (token.Type != JTokenType.String) { problem = type.Name + " reference is not an id"; return true; }
         var id = (string)token!;
@@ -100,7 +135,8 @@ internal sealed class FbGameRefs : IBookRefs
 
     private static bool IsRef(Type t) =>
         t == typeof(Hero) || t == typeof(MobileParty) || t == typeof(Settlement) || t == typeof(Village)
-        || t == typeof(Clan) || t == typeof(Kingdom) || t == typeof(CharacterObject);
+        || t == typeof(Clan) || t == typeof(Kingdom) || t == typeof(CharacterObject) || t == typeof(IFaction)
+        || t == typeof(SkillObject) || t == typeof(TraitObject);
 
     private static object? Find(Type type, string id)
     {
@@ -111,6 +147,9 @@ internal sealed class FbGameRefs : IBookRefs
         if (type == typeof(Clan)) return Clan.All.FirstOrDefault(c => c.StringId == id);
         if (type == typeof(Kingdom)) return Kingdom.All.FirstOrDefault(k => k.StringId == id);
         if (type == typeof(CharacterObject)) return MBObjectManager.Instance.GetObject<CharacterObject>(id);
+        if (type == typeof(IFaction)) return (IFaction?)Kingdom.All.FirstOrDefault(k => k.StringId == id) ?? Clan.All.FirstOrDefault(c => c.StringId == id);
+        if (type == typeof(SkillObject)) return MBObjectManager.Instance.GetObject<SkillObject>(id);
+        if (type == typeof(TraitObject)) return MBObjectManager.Instance.GetObject<TraitObject>(id);
         return null;
     }
 }

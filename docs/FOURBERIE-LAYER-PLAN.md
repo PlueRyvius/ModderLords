@@ -3,7 +3,7 @@
 Fourberie (module id `Fourberie`, Workshop 2875710877, Nexus 2969) under Bannerlord Coop. Reviewed at **v1.4.8.2**
 (`Fourberie.dll` SHA-256 `6c73723c6129933a170e63e6d7aaabe4e37bb4ca847206b1878041197e7cce89`, built 2026-09-29),
 against ModderLords `ba821db` (1.2.1), Coop source `97420dc` (2026-10-01) and the installed Coop **0.1.5** Workshop
-build. Status: **phases 0–5 done; the server side passes a live self-test on the real dedicated server (no client yet); phases 6–7 to do.**
+build. Status: **phases 0–5, 6a and 6b done; the server side passes a live self-test on the real dedicated server (no client yet); 6c (fights) and 7 to do.**
 
 The per-line analysis (entry-point matrices with line numbers, `_crimeValue` key legend, mutation catalogue) is kept
 outside the repository, because it is derived from a decompile: `D:\Work\Claude\Tech Support\_fourberie-analysis\`
@@ -225,7 +225,41 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
    **In the real game:** Fourberie only counts hideouts the player has discovered, and on the server no hideout counts as
    discovered unless something marks it. The bandit loyalty and security effects therefore depend on how Coop records
    hideout discovery; to watch in the client session.
-6. **T2 transactions**: mission and dialog flows, crime-rating mirroring, `fourb-locations`.
+6. **T2 transactions.** Split in three.
+
+   **6a, done (`FbEffects`, `FbRecordGate`, `FbEffectWire`).** What a player's own Fourberie changes in the world (menus,
+   dialogs, the Gauntlet screen, missions) is recorded on their game and replayed on the server as that player.
+   - **Calls replayed with their arguments:** gold, relations, kills, prisoners, party destruction (unless it is the
+     player's own party destroying, which Coop already sends), war, teleports, renown, kingdom changes, skill XP,
+     alley ownership, and Fourberie's trait helper. Renown and kingdom changes are not guarded by Coop on a player's
+     game, so they are sent and skipped locally.
+   - **Deltas:** settlement security, loyalty, prosperity, food and militia; clan influence.
+   - **The player's own party:** troops and items, netted per troop and item and sent only outside missions, so
+     Fourberie's take-out-and-put-back around a fight sends nothing.
+   - **What is not recorded:**
+     - calls without a Fourberie frame on the stack;
+     - calls under a handler the server already runs (on a player's game those handlers carry a flag, because
+       Harmony's replacement methods do not show in stack traces);
+     - calls nested in another recorded call, since the server's replay makes them.
+   - **Server checks:** the server replays in the player's scope, with bounds (gold ≤ 10M per transfer, relation
+     ≤ 100, XP, renown, stat deltas, troop and item counts never below zero). An absurd value is refused; the rest of
+     the batch still applies.
+   - **Tests:** the gate under real Harmony with a stand-in mod, plus the live self-test of the replay.
+
+   **6b, done (`FbCrime`): each player's own crime rating.** Coop switches vanilla's daily crime behaviour off and
+   shares one crime number per kingdom; upstream #3234 says crime is missing in co-op. Now:
+   - **Server scope swap:** entering a player's scope swaps every faction's rating to theirs, through the backing field,
+     so Coop broadcasts nothing.
+   - **Crimes stay with the player:** a crime write inside their run stays theirs. ChangeCrimeRatingAction runs whole:
+     its notice, and its war past the threshold.
+   - **Daily change restored:** once a day each connected player gets vanilla's daily change as them (decay, owned
+     alleys, Fourberie's territories and base).
+   - **Book:** ratings travel and save in the book (`ml_crime`); a player's game shows their own and reports its own
+     crimes back.
+   - **Known limit:** a crime write the server makes outside any player's run still goes to Coop's shared number.
+   - **Live:** a 40-point crime stays the player's; the other player and the shared number are untouched; the daily
+     change took it to 39; it survives save and reload.
+   **6c, to do:** revisit the fights against on-the-spot parties (`FbGaps`).
 7. **T3 notices + docs**: `docs/FOURBERIE-LAYER.md` as the user-facing layer doc, the README mod list and a live test
    script.
 
@@ -252,7 +286,7 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
     troops, and runs every per-player tick handler through the real prefix. It then relays the insurance scam and
     raises a yes/no and a must-pick prompt for the (offline) player. Last, it saves.
   - **"check"** loads that save and verifies books, base, territory, ledger troops and the caravan, then ticks again.
-  - **Result:** run 31/31 and check 11/11 on 2026-09-30, with the phase 5 model checks included.
+  - **Result:** run 49/49 and check 13/13 on 2026-10-01, with the phase 5 model checks, the AI deciding unanswered prompts, an offline book hearing a death, the phase 6a replay and 6b crime included.
   - **Bugs it found:**
     - The engine's save loader hands back `MBList<T>` for `List<T>` fields, which the codec skipped, so territory and
       partnership lists were silently left out of the book. The codec now accepts collection subclasses, with a unit

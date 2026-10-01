@@ -92,6 +92,7 @@ internal static class FbMirrorClient
         var values = FbBookCodec.Decode(install, _shape!, FbGameRefs.Instance, problems, i => _fields[i].GetValue(null));
         for (var i = 0; i < _fields.Length; i++) _fields[i].SetValue(null, values[i]);
         if (Hero.MainHero is { } me) FbLedgers.Apply(me.StringId, install[FbLedgers.Section], problems);
+        FbCrime.ApplyOnClient(install[FbCrime.Section]);
         if (problems.Count > 0 && Warned.Add("decode|" + problems[0]))
             Log.Warn($"{FourberieLayer.Tag}mirror: {problems.Count} part(s) of the server's book could not be matched on this game: {FourberieLayer.Some(problems, 3)}");
         if (_received++ == 0) Log.Info(FourberieLayer.Tag + "mirror: this player's Fourberie book arrived from the server");
@@ -104,6 +105,7 @@ internal static class FbMirrorClient
         if (problems.Count > 0 && Warned.Add("encode|" + problems[0]))
             Log.Warn($"{FourberieLayer.Tag}mirror: {problems.Count} part(s) of this player's book cannot be sent: {FourberieLayer.Some(problems, 3)}");
         if (Hero.MainHero is { } me) json[FbLedgers.Section] = FbLedgers.Capture(me.StringId);
+        json[FbCrime.Section] = FbCrime.CaptureOnClient();
         return json;
     }
 

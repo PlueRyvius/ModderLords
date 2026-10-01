@@ -25,6 +25,7 @@ public static class Bridge
         Fourberie.FourberieLayer.Tick();
         Fourberie.FbBooks.ServerTick();
         Fourberie.FbMirrorClient.ClientTick();
+        Fourberie.FbEffects.ClientTick();
         Taom.SpecialResourceSyncComponent.ClientTick();
         Taom.CareerSyncComponent.ClientTick();
         Taom.PartyComponentSyncComponent.ClientTick();

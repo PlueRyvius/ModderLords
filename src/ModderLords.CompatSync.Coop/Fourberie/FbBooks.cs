@@ -76,7 +76,8 @@ internal static class FbBooks
         if (hero == null || !EnsureSchema()) return null;
         var key = hero.StringId;
         var entry = EntryFor(key);
-        if (!string.Equals(_switch!.Current, key, StringComparison.Ordinal)) FbPrompts.BookEntered(key);
+        var switching = !string.Equals(_switch!.Current, key, StringComparison.Ordinal);
+        if (switching) FbPrompts.BookEntered(key);
         var player = new ServerRelay.PlayerScope(hero, party ?? hero.PartyBelongedTo);
         IDisposable book;
         try
@@ -88,23 +89,29 @@ internal static class FbBooks
             player.Dispose();
             throw;
         }
+        // The player's crime ratings go in and out with their book (only when the book actually changes).
+        var crime = switching ? FbCrime.Enter(key) : null;
         _scoped++;
-        return new Both(book, player);
+        return new Both(book, player, crime);
     }
 
     private sealed class Both : IDisposable
     {
         private IDisposable? _book;
         private IDisposable? _player;
+        private IDisposable? _crime;
 
-        public Both(IDisposable book, IDisposable player)
+        public Both(IDisposable book, IDisposable player, IDisposable? crime)
         {
             _book = book;
             _player = player;
+            _crime = crime;
         }
 
         public void Dispose()
         {
+            try { _crime?.Dispose(); _crime = null; }
+            catch (Exception ex) { Log.Warn(FourberieLayer.Tag + "crime ratings could not be put back: " + ex.GetBaseException().Message); }
             try { _book?.Dispose(); }
             finally
             {
@@ -134,6 +141,7 @@ internal static class FbBooks
                 var decoded = FbBookCodec.Decode(saved, _shape!, FbGameRefs.Instance, problems, i => values[_schema.Persisted[i]]);
                 for (var i = 0; i < decoded.Length; i++) values[_schema.Persisted[i]] = decoded[i];
                 FbLedgers.Restore(key, saved[FbLedgers.Section]);
+                FbCrime.Store(key, saved[FbCrime.Section]);
             }
             catch (JsonException ex) { problems.Add("saved book is not JSON: " + ex.Message); }
             Report(key, "loading the saved book", problems);
@@ -149,6 +157,13 @@ internal static class FbBooks
     }
 
     // ---- players ---------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The hero a book belongs to, by StringId, the way Fourberie finds heroes (Hero.Find). Not MBObjectManager: Coop
+    /// renames the heroes it registers (CharacterObject_1632), and its registry lookup by that id comes back empty, which
+    /// silently left offline players' books out of world events and prompts unanswered at their deadline.
+    /// </summary>
+    internal static Hero? HeroFor(string key) => Hero.Find(key) ?? Hero.FindFirst(h => h.StringId == key);
 
     /// <summary>Server self-test only (FbSelfTest): heroes that count as connected players for ticks, with no game behind them.</summary>
     internal static List<Hero> TestPlayers { get; } = new List<Hero>();
@@ -180,7 +195,7 @@ internal static class FbBooks
         foreach (var key in Entries.Keys.ToList())
         {
             if (seen.Contains(key)) continue;
-            var hero = MBObjectManager.Instance.GetObject<Hero>(key);
+            var hero = HeroFor(key);
             if (hero == null || !hero.IsAlive) continue;
             list.Add((hero, hero.PartyBelongedTo));
         }
@@ -212,6 +227,7 @@ internal static class FbBooks
                 Entries.Clear();
                 Warned.Clear();
                 FbLedgers.Reset();
+                FbCrime.Reset();
                 if (books != null)
                     foreach (var pair in books) EntryFor(pair.Key).PendingJson = pair.Value;
                 Log.Info($"{FourberieLayer.Tag}books: {books?.Count ?? 0} player book(s) in this save");
@@ -232,6 +248,7 @@ internal static class FbBooks
         EncodeProblems += problems.Count;
         if (problems.Count > 0 && Warned.Add(key + "|encode")) Report(key, "writing the book", problems);
         json[FbLedgers.Section] = FbLedgers.Capture(key);
+        json[FbCrime.Section] = FbCrime.Capture(key);
         return json;
     }
 
@@ -261,6 +278,7 @@ internal static class FbBooks
                 var decoded = FbBookCodec.Decode(merged, _shape!, FbGameRefs.Instance, problems, i => values[_schema!.Persisted[i]]);
                 for (var i = 0; i < decoded.Length; i++) values[_schema!.Persisted[i]] = decoded[i];
                 FbLedgers.Apply(key, merged[FbLedgers.Section], problems);
+                FbCrime.Store(key, merged[FbCrime.Section]);
                 if (problems.Count > 0 && Warned.Add(key + "|report")) Report(key, "a reported change", problems);
                 _reports++;
                 return new TaomActionOutcome(true, "");
@@ -269,6 +287,8 @@ internal static class FbBooks
                 return FbPrompts.Answer(hero, party, args);
             case "relay":
                 return FbRelay.Run(hero, party, args);
+            case "effects":
+                return FbEffects.Apply(hero, party, args);
             default:
                 return TaomActionOutcome.Fail("");
         }
@@ -281,6 +301,7 @@ internal static class FbBooks
     internal static void ServerTick()
     {
         FbPrompts.ServerTick();
+        FbCrime.ServerTick();
         FbSelfTest.Tick();
         if (!FourberieLayer.IsServer || _schema == null || TaomActions.Push == null || DateTime.UtcNow < _nextSend) return;
         _nextSend = DateTime.UtcNow.AddSeconds(SendEverySeconds);
@@ -334,7 +355,7 @@ internal static class FbBooks
     /// <summary>Self-test: a player's book as JSON (persisted fields plus ledgers), read outside any scope.</summary>
     internal static JObject? Json(Hero hero) => EnsureSchema() && Current == null ? Encode(hero.StringId, EntryFor(hero.StringId)) : null;
 
-    internal static string Summary() => $"books {Entries.Count}, runs as a player {_scoped}, sent {_pushed}, reports {_reports}, {FbLedgers.Summary()}";
+    internal static string Summary() => $"books {Entries.Count}, runs as a player {_scoped}, sent {_pushed}, reports {_reports}, {FbLedgers.Summary()}, {FbCrime.Summary()}";
 }
 
 /// <summary>fourb-book: the books, saved with the campaign, and the server's half of keeping players' games in step.</summary>

@@ -8,6 +8,7 @@ using ModderLords.CompatSync;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
@@ -152,6 +153,17 @@ internal static class FbSelfTest
         Expect(picked is { Count: 1 } && (string)picked[0].Identifier == "first", "at the deadline the AI picked from the list");
         Expect(FbPrompts.WaitingFor(a.StringId) == 0, "nothing is left waiting after the deadline");
 
+        // World events reach an offline player's book: their paymaster dies while they are away.
+        var paymaster = Hero.AllAliveHeroes.First(h => h.IsLord && h != a && h != b && h.Clan != a.Clan && h.Clan != b.Clan);
+        using (FbBooks.Enter(b, b.PartyBelongedTo)) Dict<string, string>("_stringHeroIdDico")["paymaster"] = paymaster.StringId;
+        FbBooks.TestPlayers.Remove(b);
+        try { Invoke("Fourberie.FourberieBehavior", "FOnheroKilled", new object?[] { paymaster, null, default(KillCharacterAction.KillCharacterActionDetail), false }); }
+        finally { FbBooks.TestPlayers.Add(b); }
+        Expect(BookOf(b)?["_stringHeroIdDico"]?["paymaster"] == null, "an offline player's book heard their paymaster died and dropped them");
+
+        Effects(a);
+        Crime(a, b);
+
         var json = BookOf(a)?.ToString(Formatting.None) ?? "";
         Log.Info($"{FourberieLayer.Tag}self-test: first player's book is {json.Length} characters");
         Expect(BookOf(a)?[FbLedgers.Section]?["fb_crimebase_party"]?["m"] is JArray { Count: > 0 }, "the gang's troops are in the first player's book");
@@ -179,6 +191,71 @@ internal static class FbSelfTest
         }
         Expect(FbTicks.Summary().Contains("failures 0"), "no tick handler threw after loading (" + FbTicks.Summary() + ")");
         Models(a, b, seed: false);
+        var kingdom = Kingdom.All.First(k => !k.IsEliminated);
+        Expect(FbCrime.Of(a.StringId, kingdom.StringId) > 0, $"the first player's crime with {kingdom.StringId} came back with the save ({FbCrime.Of(a.StringId, kingdom.StringId)})");
+        Expect(FbCrime.Of(b.StringId, kingdom.StringId) == 0, "the second player's crime is still clean");
+    }
+
+    // ---- crime (phase 6b) ----------------------------------------------------------------------------------------
+
+    /// <summary>A crime in one player's run is that player's: not the other player's, not the shared number Coop sends to all.</summary>
+    private static void Crime(Hero a, Hero b)
+    {
+        var kingdom = Kingdom.All.First(k => !k.IsEliminated);
+        var shared = kingdom.MainHeroCrimeRating;
+        using (FbBooks.Enter(a, a.PartyBelongedTo)) TaleWorlds.CampaignSystem.Actions.ChangeCrimeRatingAction.Apply(kingdom, 40f, false);
+        Expect(Math.Abs(FbCrime.Of(a.StringId, kingdom.StringId) - 40f) < 0.01f, $"a crime in the first player's run is theirs ({FbCrime.Of(a.StringId, kingdom.StringId)})");
+        Expect(FbCrime.Of(b.StringId, kingdom.StringId) == 0, "the second player's crime did not change");
+        Expect(Math.Abs(kingdom.MainHeroCrimeRating - shared) < 0.01f, $"the shared number every player's game gets did not change ({shared} -> {kingdom.MainHeroCrimeRating})");
+        Expect(BookOf(a)?[FbCrime.Section]?[kingdom.StringId] != null, "the crime rating is in the first player's book");
+        FbCrime.Daily();
+        Expect(FbCrime.Of(a.StringId, kingdom.StringId) < 40f, $"vanilla's daily crime change ran for the player (40 -> {FbCrime.Of(a.StringId, kingdom.StringId)})");
+    }
+
+    // ---- effects (phase 6) ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The server's half of fourb-effects: a batch exactly as a player's game sends it (same encoder) is replayed as that
+    /// player. Gold, a relation, skill XP, a town's security, troops and an item land; an absurd transfer is refused.
+    /// </summary>
+    private static void Effects(Hero a)
+    {
+        var party = a.PartyBelongedTo!;
+        var other = Hero.AllAliveHeroes.First(h => h.IsLord && h != a && h.Clan != a.Clan);
+        var town = Settlement.All.First(s => s.IsTown && s.Town.Security >= 10);
+        var roguery = TaleWorlds.Core.DefaultSkills.Roguery;
+        var honor = TaleWorlds.CampaignSystem.CharacterDevelopment.DefaultTraits.Honor;
+        var troop = a.Culture.BasicTroop;
+        var grain = TaleWorlds.ObjectSystem.MBObjectManager.Instance.GetObject<ItemObject>("grain");
+        var (gold, relation, xp, security) = (a.Gold, a.GetRelation(other), a.GetSkillValue(roguery) * 0 + a.HeroDeveloper.GetSkillXpProgress(roguery), town.Town.Security);
+        var troops = party.MemberRoster.GetTroopCount(troop);
+        var grainBefore = party.ItemRoster.GetItemNumber(grain);
+
+        MethodBase Key(string key) => FbEffects.MethodFor(key) ?? throw new InvalidOperationException(key + " not bound");
+        var ops = new List<FbEffectWire.Op?>
+        {
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Actions.GiveGoldAction::ApplyInternal"), null, new object?[] { other, null, a, null, 500, false, "" }),
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Actions.ChangeRelationAction::ApplyInternal"), null,
+                // A loss: vanilla scales gains by charm and rounds at random, but applies losses exactly.
+                new object?[] { a, other, -7, false, default(ChangeRelationAction.ChangeRelationDetail) }),
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Hero::AddSkillXp"), a, new object?[] { roguery, 300f }),
+            FbEffects.EncodeCall(Key(FbEffects.TraitHelper), null, new object?[] { honor, -20, Activator.CreateInstance(Key(FbEffects.TraitHelper).GetParameters()[2].ParameterType), a }),
+            FbEffectWire.Delta("town", "Security", town.StringId, -4f),
+            new FbEffectWire.Op { Kind = "troops", Key = "m", Target = troop.StringId, Amount = 6 },
+            new FbEffectWire.Op { Kind = "items", Target = grain.StringId, Amount = 9 },
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Actions.GiveGoldAction::ApplyInternal"), null, new object?[] { other, null, a, null, 20_000_000, false, "" }),
+        };
+        Expect(ops.All(o => o != null), "every recorded change could be written for the wire");
+        var refusedBefore = FbEffects.Refused;
+        var outcome = FbEffects.Apply(a, party, new[] { FbEffectWire.Pack(ops.Where(o => o != null)!) });
+        Expect(outcome.Ok, "the server took the batch");
+        Expect(a.Gold - gold == 500, $"gold from Fourberie on the player's game reached them on the server ({gold} -> {a.Gold})");
+        Expect(a.GetRelation(other) == Math.Max(-100, relation - 7), $"the relation change reached the server ({relation} -> {a.GetRelation(other)})");
+        Expect(a.HeroDeveloper.GetSkillXpProgress(roguery) != xp || a.GetSkillValue(roguery) > 0, "the skill XP reached the server");
+        Expect(Math.Abs(town.Town.Security - (security - 4)) < 0.01f, $"{town.StringId}'s security dropped by the recorded amount ({security} -> {town.Town.Security})");
+        Expect(party.MemberRoster.GetTroopCount(troop) - troops == 6, "troops the player gained reached their party on the server");
+        Expect(party.ItemRoster.GetItemNumber(grain) - grainBefore == 9, "loot reached their party on the server");
+        Expect(FbEffects.Refused - refusedBefore == 1 && a.Gold - gold == 500, "a 20,000,000 gold transfer was refused, the rest applied");
     }
 
     // ---- models (phase 5) ----------------------------------------------------------------------------------------
