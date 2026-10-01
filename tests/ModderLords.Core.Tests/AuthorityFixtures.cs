@@ -36,7 +36,7 @@ namespace TaleWorlds.CampaignSystem
     public class AuthPartyWageModel { public virtual int GetWage() => 0; }
     public class AuthTownVisit { public void game_menu_recruit_on_consequence() { } }
     public class Hero { public static Hero? MainHero => null; public Clan? Clan => null; }
-    public class Clan { public static Clan? PlayerClan => null; }
+    public class Clan { public static Clan? PlayerClan => null; public bool IsMinorFaction { get; set; } }
     // Engine setters are not mod code; an empty body keeps the walker from following into a fake backing field.
     public static class PlayerEncounter { public static bool LeaveEncounter { get => false; set { } } }
     public static class AuthLeaveAction { public static void ApplyForParty(object? party) { } }

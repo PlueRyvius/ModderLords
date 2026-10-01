@@ -90,11 +90,14 @@ public sealed class OperationContractTests
             Assert.True(contract.SurfacesCoverTargets, contract.Id + " installs an adapter without a surface for every patched target");
             Assert.All(contract.TargetSurfaces, s => Assert.Equal(64, s.BodyHash.Length));
             // Most patched methods must have an IL caller. Public UI Execute methods are invoked by Gauntlet data
-            // binding, so zero assembly call sites is expected; their declaring UI type and body are still pinned.
+            // binding, and the provider's own Harmony patch methods by Harmony, so zero assembly call sites is expected
+            // for those; their declaring type and body are still pinned.
             Assert.All(contract.TargetSurfaces, s => Assert.True(s.Callers > 0
                 || (s.Method.StartsWith("BellumCivile.UI.", StringComparison.Ordinal)
-                    && s.Method.Substring(s.Method.IndexOf("::", StringComparison.Ordinal) + 2).StartsWith("Execute", StringComparison.Ordinal)),
-                s.Method + " records no call sites and is not a data-bound UI command"));
+                    && s.Method.Substring(s.Method.IndexOf("::", StringComparison.Ordinal) + 2).StartsWith("Execute", StringComparison.Ordinal))
+                || (s.Method.StartsWith("BellumCivile.Patches.", StringComparison.Ordinal)
+                    && s.Method.Substring(s.Method.IndexOf("::", StringComparison.Ordinal) + 2) is "Prefix" or "Postfix" or "Finalizer"),
+                s.Method + " records no call sites and is not a data-bound UI command or a Harmony patch method"));
             // A reflection-only adapter has no method boundary, so its provider assembly must be pinned. Patching
             // adapters may also deliberately pin a provider (Bellum is version-pinned by policy); their method
             // surfaces still prove that the compiled target list is complete and make review changes explicit.
@@ -142,7 +145,7 @@ public sealed class OperationContractTests
         Assert.DoesNotContain("BellumCivile.Behaviors.ForeignTreatyBehavior::OnTick", authority.Targets);
         Assert.DoesNotContain("BellumCivile.UI.Map.WarScoreMapWidgetVM::OnTick", authority.Targets);
         var commands = Assert.Single(bellum, c => c.Id == "bellum-civile.commands");
-        Assert.Equal(26, commands.Targets.Length);
+        Assert.Equal(60, commands.Targets.Length);
         Assert.Contains("BellumCivile.Behaviors.ClaimFeudBehavior::ResolvePetition", commands.Targets);
         Assert.Contains("BellumCivile.Behaviors.PolicyDeliberationBehavior::QueuePlayerProposedVote", commands.Targets);
         Assert.Equal(commands.Targets.Length, commands.TargetSurfaces.Length);
@@ -152,7 +155,7 @@ public sealed class OperationContractTests
     // so a method added to an adapter but not to the contract would be patched without its body being pinned.
     [Theory]
     [InlineData("bellum-civile.authority", "BellumCivileAuthorityAdapter.cs", null)]
-    [InlineData("bellum-civile.commands", "BellumCivileCommandAdapter.cs", "BellumPromptSites.cs")]
+    [InlineData("bellum-civile.commands", "BellumCivileCommandAdapter.cs", "BellumPromptSites.cs;BellumPlayerClans.cs")]
     public void BellumAdapterTargetsMatchTheirContractExactly(string contractId, string adapterFile, string? sitesFile)
     {
         static string Read(string file) => File.ReadAllText(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
@@ -163,8 +166,9 @@ public sealed class OperationContractTests
         var start = source.IndexOf("internal static readonly string[] Targets", StringComparison.Ordinal);
         Assert.True(start >= 0, adapterFile + " no longer declares Targets");
         var block = source[start..source.IndexOf("};", start, StringComparison.Ordinal)];
-        // The prompt relay (BellumPrompts) patches every method its sites file names: the sites and the "any player" checks.
-        var adapterTargets = Ids(block).Concat(sitesFile == null ? Enumerable.Empty<string>() : Ids(Read(sitesFile))).Distinct().ToArray();
+        // The prompt relay (BellumPrompts) patches every method its sites file names (the sites and the "any player" checks),
+        // and BellumPlayerClans every method it lists.
+        var adapterTargets = Ids(block).Concat(sitesFile == null ? Enumerable.Empty<string>() : sitesFile.Split(';').SelectMany(f => Ids(Read(f)))).Distinct().ToArray();
         var contract = Assert.Single(CompatibilityPlanner.BundledContracts(), c => c.Id == contractId);
         Assert.Equal(contract.Targets.OrderBy(x => x, StringComparer.Ordinal), adapterTargets.OrderBy(x => x, StringComparer.Ordinal));
         Assert.Equal(contract.Targets.OrderBy(x => x, StringComparer.Ordinal), contract.TargetSurfaces.Select(s => s.Method).OrderBy(x => x, StringComparer.Ordinal));

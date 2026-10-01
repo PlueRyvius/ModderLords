@@ -24,6 +24,8 @@ namespace ModderLords.Core.Tests.PlayerFakes
 
 namespace ModderLords.Core.Tests
 {
+    // PlayerComparisonRewriter's helpers are static: classes that set them must not run at the same time.
+    [Collection("PlayerComparisonRewriter")]
     public sealed class PlayerComparisonTests
     {
         private static readonly string T = typeof(PlayerCompareFixtures).FullName + "::";

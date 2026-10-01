@@ -94,7 +94,7 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 operation = new BellumCommandOperation();
                 global::Coop.Core.Server.Services.ModderLordsCompat.Handlers.OperationServerHandler.Register(operation);
                 var prompts = BellumPrompts.Install(true, BellumPromptSites.All(), BellumPromptSites.AnyPlayerChecks);
-                Detail = Targets.Length + " Bellum player actions registered for server execution; " + prompts;
+                Detail = Targets.Length + " Bellum player actions registered for server execution; " + prompts + "; " + BellumPlayerClans.Install();
             }
             else
             {
@@ -112,7 +112,7 @@ public sealed class BellumCivileCommandAdapter : ICompatibilityAdapter
                 }
                 installed = true;
                 var prompts = BellumPrompts.Install(false, Array.Empty<BellumPromptSite>(), Array.Empty<string>());
-                Detail = Targets.Length + " Bellum player actions bound to authenticated Coop commands; " + prompts;
+                Detail = Targets.Length + " Bellum player actions bound to authenticated Coop commands; " + prompts + "; " + BellumPlayerClans.Install();
             }
             Readiness = AdapterReadiness.Ready;
         }
