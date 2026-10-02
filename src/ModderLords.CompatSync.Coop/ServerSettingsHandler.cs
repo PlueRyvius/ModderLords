@@ -37,6 +37,12 @@ public sealed class ServerSettingsHandler : IHandler
         broker.Subscribe<NetworkRequestSettingsSnapshots>(HandleRequest);
         broker.Subscribe<NetworkRequestCompatRecipes>(HandleRecipeRequest);
         Current = this;
+        ModKingdomDecisions.Broadcast = (kingdomId, type, fields, ignoreInfluenceCost, randomNumber) =>
+            network.SendAll(new NetworkModKingdomDecision
+            {
+                KingdomId = kingdomId, TypeName = type, Fields = fields, IgnoreInfluenceCost = ignoreInfluenceCost,
+                RandomNumber = randomNumber, ProtocolVersion = ProtocolVersion,
+            });
         var recipes = BehaviorGate.ReadLocalRecipes();
         sessionRecipes = recipes ?? sessionRecipes;
         Log.Info("settings sync (server) armed" + (recipes is null ? "; no recipes.json (no server-only behaviours)" : "; recipes.json loaded"));
@@ -93,6 +99,7 @@ public sealed class ServerSettingsHandler : IHandler
         if (!active) return;
         broker.Unsubscribe<NetworkRequestSettingsSnapshots>(HandleRequest);
         broker.Unsubscribe<NetworkRequestCompatRecipes>(HandleRecipeRequest);
+        ModKingdomDecisions.Broadcast = null;
 
         if (ReferenceEquals(Current, this)) Current = null;
     }

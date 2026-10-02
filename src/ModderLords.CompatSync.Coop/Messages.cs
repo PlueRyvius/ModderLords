@@ -184,3 +184,18 @@ public sealed class NetworkTaomNotice : IEvent
     [ProtoMember(3)] public bool Quick { get; set; }
     [ProtoMember(4)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>
+/// Server -> every client: a kingdom decision of a mod's own type, which Coop cannot send (see ModKingdomDecisions).
+/// Fields are (name, kind, value) triples.
+/// </summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkModKingdomDecision : IEvent
+{
+    [ProtoMember(1)] public string KingdomId { get; set; } = "";
+    [ProtoMember(2)] public string TypeName { get; set; } = "";
+    [ProtoMember(3)] public List<string>? Fields { get; set; }
+    [ProtoMember(4)] public bool IgnoreInfluenceCost { get; set; }
+    [ProtoMember(5)] public float RandomNumber { get; set; }
+    [ProtoMember(6)] public int ProtocolVersion { get; set; }
+}

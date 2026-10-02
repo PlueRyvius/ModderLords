@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Common;
 using Common.Messaging;
 using Common.Network;
 using GameInterface.Services.GameState.Messages;
@@ -36,6 +37,7 @@ public sealed class ClientSettingsHandler : IHandler
         broker.Subscribe<NetworkCompatRecipes>(HandleRecipes);
         broker.Subscribe<CampaignReady>(HandleCampaignReady);
         broker.Subscribe<NetworkRelayResult>(HandleRelayResult);
+        broker.Subscribe<NetworkModKingdomDecision>(HandleModKingdomDecision);
         // Generic relays are diagnostic only; the operation channel owns validated commands.
         Current = this;
         Log.Info("settings sync (client) armed; settings sources: " + SettingsSources.Summary());
@@ -147,5 +149,13 @@ public sealed class ClientSettingsHandler : IHandler
         broker.Unsubscribe<NetworkCompatRecipes>(HandleRecipes);
         broker.Unsubscribe<CampaignReady>(HandleCampaignReady);
         broker.Unsubscribe<NetworkRelayResult>(HandleRelayResult);
+        broker.Unsubscribe<NetworkModKingdomDecision>(HandleModKingdomDecision);
+    }
+
+    private void HandleModKingdomDecision(MessagePayload<NetworkModKingdomDecision> payload)
+    {
+        var msg = payload.What;
+        GameThread.RunSafe(() => ModKingdomDecisions.ClientAdd(msg.KingdomId, msg.TypeName, msg.Fields ?? new List<string>(),
+            msg.IgnoreInfluenceCost, msg.RandomNumber), false, "ModderLords mod kingdom decision");
     }
 }
