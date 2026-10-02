@@ -52,6 +52,7 @@
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RootTracer.cs" Link="Module\RootTracer.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\PlayerComparisonRewriter.cs" Link="Module\PlayerComparisonRewriter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayGates.cs" Link="Module\RelayGates.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\DecisionFieldCodec.cs" Link="Module\DecisionFieldCodec.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayCoalescer.cs" Link="Module\RelayCoalescer.cs" />
     <!-- The Living Economy layer's wire forms (state mirror deltas, action arguments), game- and Coop-free. -->
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\LivingEconomy\LeMirrorDelta.cs" Link="Module\LeMirrorDelta.cs" />
