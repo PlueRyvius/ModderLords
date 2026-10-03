@@ -28,9 +28,10 @@
                  The status line lives in the bottom bar, where there is room for it. -->
             <DockPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Top" DockPanel.Dock="Right">
-                    <!-- One click, no restart. Which half of the app you get is the first thing you chose and the
-                         easiest thing to change; see FirstRunWindow. -->
-                    <Button x:Name="ModeButton" Content="Player mode" Click="Mode_Click" MinWidth="92" Margin="4,0,4,0" />
+                    <!-- Hidden: everyone runs in Host mode (see the MainWindow constructor). The button and its
+                         handler are kept so the switch can be brought back by removing the Visibility. -->
+                    <Button x:Name="ModeButton" Content="Host mode" Click="Mode_Click" MinWidth="92" Margin="4,0,4,0"
+                            Visibility="Collapsed" />
                     <Button Content="Report a problem…" Click="ReportProblem_Click" MinWidth="116" Margin="4,0"
                             ToolTip="Create a private-on-this-PC, redacted support ZIP, then open the public GitHub bug-report form. Nothing is uploaded automatically." />
                     <Button Content="Updates" Command="{Binding Update.CheckNowCommand}" MinWidth="64" Margin="4,0,4,0"

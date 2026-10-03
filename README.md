@@ -33,14 +33,7 @@ Nothing needs installing — run the exe from wherever you unzipped it. Keep the
 `ModderLords.Hook.dll` and the `compat` folder next to the exe. If Windows SmartScreen warns about an unknown
 publisher, choose "More info" then "Run anyway"; [Install](#install) explains what the app does and does not touch.
 
-### 2. Choose what you are here to do
-
-It asks once and remembers. The toolbar button changes it later, one click and no restart — so picking the "wrong"
-one now costs you nothing.
-
-![The first-run dialog: What are you here to do? Play with mods, or Host a coop server](docs/images/first-run.png)
-
-### 3. Tick your mods, set the order, press Play
+### 2. Tick your mods, set the order, press Play
 
 On the **Mods** tab, tick the mods you want. Drag rows, or use **Move up** / **Move down**, to set the order; the
 panel on the right shows the order the engine will actually use. Click **Save** to keep the selection in the current
@@ -288,15 +281,16 @@ Nothing needs unpacking or installing: run the exe from wherever you unzipped it
 
 ## Player mode and Host mode
 
-ModderLords asks once, on first run, which one you want, and remembers it.
+Since 1.2.6 ModderLords always runs in Host mode: it no longer asks on first run, and the toolbar's mode button is
+hidden. A copy that was in Player mode is moved to Host mode the next time it starts.
 
-- **Player mode** is the mod loader: the **Mods** and **Share** tabs, and the **Play** button. Nothing about
-  dedicated servers appears anywhere.
-- **Host mode** is all of that plus running the Bannerlord Coop dedicated server: the Saves, Server, Gameplay, Mod
-  settings, Console and Performance tabs, the server buttons, and the server half of the Share tab.
+- **Host mode** is the mod loader — the **Mods** and **Share** tabs — plus running the Bannerlord Coop dedicated
+  server: the Saves, Server, Gameplay, Mod settings, Console and Performance tabs, the server buttons, and the server
+  half of the Share tab.
+- **Player mode** was the mod loader alone, with nothing about dedicated servers shown. The descriptions of it below
+  are kept for reference; it cannot currently be selected.
 
-Switch whenever you like with the mode button in the toolbar — one click, no restart. Stop the server first if one is
-running. Your window size, theme and selected tab are remembered between runs too.
+Your window size, theme and selected tab are remembered between runs.
 
 ---
 
@@ -599,7 +593,7 @@ it by hand**, or your edit will be overwritten.
 
 | Setting | Where | What it does |
 |---|---|---|
-| Mode | toolbar button, one click, no restart | Player mode or Host mode; see [Player mode and Host mode](#player-mode-and-host-mode). Delete this value from `ui-state.json` to be asked again on the next start. |
+| Mode | not changeable since 1.2.6 | Always Host mode; see [Player mode and Host mode](#player-mode-and-host-mode). |
 | Theme | **Light** / **Dark** button on the top bar | Remembered between runs. |
 | `CheckForUpdates` | `ui-state.json` only | `false` stops the check on startup. **Updates** on the top bar still checks on demand. See [Updates](#updates). |
 | `SkippedVersion` | set by **Skip this version** on the update banner | That one version is never mentioned again; a later one still is. Clear it to be offered the skipped version again. |

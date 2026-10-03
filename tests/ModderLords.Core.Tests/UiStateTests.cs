@@ -57,8 +57,7 @@ public class UiStateTests
         Assert.Contains("\"Host\"", json);
     }
 
-    /// <summary>A null Mode is what makes the first-run dialog appear, so it must survive a round trip as null
-    /// rather than defaulting to Player.</summary>
+    /// <summary>A missing Mode must survive a round trip as null rather than defaulting to Player.</summary>
     [Fact]
     public void Missing_mode_stays_null()
     {
@@ -77,7 +76,7 @@ public class UiStateTests
             var path = Path.Combine(dir, "ui-state.json");
             File.WriteAllText(path, "{ this is not json");
             var loaded = UiStateStore.LoadFrom(path);
-            Assert.Null(loaded.Mode);           // so the first-run dialog asks again
+            Assert.Null(loaded.Mode);
             Assert.Null(loaded.WindowLeft);
         }
         finally { Directory.Delete(dir, recursive: true); }

@@ -17,7 +17,7 @@ public enum AppMode { Player, Host }
 /// </summary>
 public sealed class UiState
 {
-    /// <summary>Null until the first-run dialog has been answered; that null is what triggers the dialog.</summary>
+    /// <summary>Null in a fresh state file. The window sets it to Host on startup whatever was saved.</summary>
     public AppMode? Mode { get; set; }
 
     /// <summary>"Light" or "Dark". A name, not an index, so reordering the enum cannot repaint someone's app.</summary>
@@ -87,7 +87,7 @@ public static class UiStateStore
     };
 
     /// <summary>Never throws: a corrupt or unreadable state file must cost the user their window position, not
-    /// their launcher. A fresh <see cref="UiState"/> has a null Mode, so the first-run dialog asks again.</summary>
+    /// their launcher.</summary>
     public static UiState Load() => LoadFrom(Path);
 
     public static UiState LoadFrom(string path)
