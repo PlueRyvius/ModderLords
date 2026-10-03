@@ -34,13 +34,17 @@ public partial class MainWindow : Window
         RestoreTheme();
 
         // The mode decides which half of the app is even constructed, so it is settled before the first scan.
-        // A state file with no mode is a first run (or a fresh data dir): ask, once, and remember the answer.
-        var mode = _ui.Mode;
-        if (mode is null) mode = AskForMode();
+        // Everyone is a host now: the mode button is hidden and the first-run question is not asked, so a saved
+        // Player mode would be a mode with no way out of it. It is overridden here rather than honoured.
+        if (_ui.Mode != AppMode.Host)
+        {
+            _ui.Mode = AppMode.Host;
+            UiStateStore.Save(_ui);
+        }
         ViewModel.ExperimentalCompat = _ui.ExperimentalCompat;
         ViewModel.AutoSubscribeWorkshop = _ui.AutoSubscribeWorkshop;
         ViewModel.AlwaysSubscribeCoop = _ui.AlwaysSubscribeCoop;
-        ViewModel.ApplyMode(mode.Value);
+        ViewModel.ApplyMode(AppMode.Host);
         _baseTitle = Title;
         ViewModel.Update = new UpdateViewModel(ViewModel, _ui);
         if (App.UpdatedFrom is { } from)
@@ -59,28 +63,6 @@ public partial class MainWindow : Window
     }
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;
-
-    /// <summary>
-    /// The first-run choice, shown from this window's constructor - which is before the window is shown, so it is
-    /// the application's only window while it is up. Under the default ShutdownMode that makes closing it the last
-    /// window closing, and WPF ends the process before ModderLords has drawn a frame; hence the explicit shutdown
-    /// mode across the dialog.
-    /// </summary>
-    private AppMode AskForMode()
-    {
-        var app = Application.Current;
-        var previous = app?.ShutdownMode ?? ShutdownMode.OnLastWindowClose;
-        if (app is not null) app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        try
-        {
-            var dlg = new FirstRunWindow();
-            dlg.ShowDialog();
-            _ui.Mode = dlg.ChosenMode;
-            UiStateStore.Save(_ui);
-            return dlg.ChosenMode;
-        }
-        finally { if (app is not null) app.ShutdownMode = previous; }
-    }
 
     // ---- mode ------------------------------------------------------------------------------------------
 
