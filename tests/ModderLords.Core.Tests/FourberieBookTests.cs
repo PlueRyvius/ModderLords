@@ -411,4 +411,145 @@ public sealed class FbBookSyncTests
     [Fact]
     public void GarbageIsIgnored() =>
         Assert.Null(new FbClientLedger().Receive("not a payload", Book(), out _));
+
+    // Agent training: 300 is trained saboteurs, 301 saboteurs in training. The player's game adds to 301 when troops are
+    // enlisted; the server's daily tick moves one from 301 to 300.
+
+    private static JObject Reported(FbServerLedger server, JObject serverBook, string report)
+    {
+        Assert.True(LeMirrorDelta.TryUnpack(report, out _, out var seen, out _, out var values));
+        return server.Merge(serverBook, values, seen);
+    }
+
+    private static (FbServerLedger Server, FbClientLedger Client, JObject ServerBook, JObject Local) Joined(JObject book)
+    {
+        var server = new FbServerLedger();
+        var client = new FbClientLedger();
+        var local = client.Receive(server.Full(book), new JObject(), out _)!;
+        return (server, client, book, (JObject)local.DeepClone());
+    }
+
+    private static void AssertInStep(FbServerLedger server, FbClientLedger client, JObject serverBook, JObject local)
+    {
+        Assert.Null(server.DeltaIfChanged(serverBook));
+        Assert.Null(client.Report(local));
+        Assert.True(JToken.DeepEquals(serverBook, local), $"server {serverBook} / player {local}");
+    }
+
+    [Fact]
+    public void TroopsEnlistedAsTheDayRollsOverStayInTraining_TheServersRowsArriveFirst()
+    {
+        var (server, client, serverBook, local) = Joined(Book(("300", 2), ("301", 3)));
+
+        local["_crimeValue"]!["301"] = 8;                          // 5 enlisted, not reported yet
+        serverBook["_crimeValue"]!["301"] = 2;                     // the daily tick
+        serverBook["_crimeValue"]!["300"] = 3;
+        local = client.Receive(server.DeltaIfChanged(serverBook)!, local, out _)!;
+        Assert.Equal(7, (int)local["_crimeValue"]!["301"]!);       // not back to 2: the 5 are still in training
+        Assert.Equal(3, (int)local["_crimeValue"]!["300"]!);
+
+        serverBook = Reported(server, serverBook, client.Report(local)!);
+        Assert.Equal(7, (int)serverBook["_crimeValue"]!["301"]!);
+        AssertInStep(server, client, serverBook, local);
+    }
+
+    [Fact]
+    public void TroopsEnlistedAsTheDayRollsOverStayInTraining_TheReportArrivesFirst()
+    {
+        var (server, client, serverBook, local) = Joined(Book(("300", 2), ("301", 3)));
+
+        local["_crimeValue"]!["301"] = 8;
+        var report = client.Report(local)!;
+        serverBook["_crimeValue"]!["301"] = 2;                     // the daily tick, not sent yet
+        serverBook["_crimeValue"]!["300"] = 3;
+        serverBook = Reported(server, serverBook, report);
+        Assert.Equal(7, (int)serverBook["_crimeValue"]!["301"]!);  // the trainee the tick moved on is not back in training
+        Assert.Equal(3, (int)serverBook["_crimeValue"]!["300"]!);
+
+        local = client.Receive(server.DeltaIfChanged(serverBook)!, local, out _)!;
+        AssertInStep(server, client, serverBook, local);
+    }
+
+    [Fact]
+    public void TroopsEnlistedAsTheDayRollsOverStayInTraining_TheMessagesCross()
+    {
+        var (server, client, serverBook, local) = Joined(Book(("300", 2), ("301", 3)));
+
+        local["_crimeValue"]!["301"] = 8;
+        var report = client.Report(local)!;                        // on its way to the server
+        serverBook["_crimeValue"]!["301"] = 2;
+        serverBook["_crimeValue"]!["300"] = 3;
+        var tick = server.DeltaIfChanged(serverBook)!;             // on its way to the player
+
+        serverBook = Reported(server, serverBook, report);
+        Assert.Equal(7, (int)serverBook["_crimeValue"]!["301"]!);
+        local = client.Receive(tick, local, out var needFull)!;
+        Assert.False(needFull);
+        local["_crimeValue"]!["550"] = 1;                          // the player carries on in the menu
+        serverBook = Reported(server, serverBook, client.Report(local)!);
+
+        local = client.Receive(server.DeltaIfChanged(serverBook)!, local, out _)!;
+        Assert.Equal(7, (int)local["_crimeValue"]!["301"]!);
+        Assert.Equal(1, (int)local["_crimeValue"]!["550"]!);
+        AssertInStep(server, client, serverBook, local);
+    }
+
+    [Fact]
+    public void TwoReportsMadeBeforeAServerMessageArrivedAreBothKept()
+    {
+        var (server, client, serverBook, local) = Joined(Book(("300", 2), ("301", 3)));
+
+        local["_crimeValue"]!["301"] = 8;
+        var first = client.Report(local)!;
+        local["_crimeValue"]!["301"] = 10;
+        var second = client.Report(local)!;
+        serverBook["_crimeValue"]!["301"] = 2;
+        serverBook["_crimeValue"]!["300"] = 3;
+        var tick = server.DeltaIfChanged(serverBook)!;
+
+        serverBook = Reported(server, serverBook, first);
+        serverBook = Reported(server, serverBook, second);
+        Assert.Equal(9, (int)serverBook["_crimeValue"]!["301"]!);
+        local = client.Receive(tick, local, out _)!;
+        local = client.Receive(server.DeltaIfChanged(serverBook)!, local, out _)!;
+        AssertInStep(server, client, serverBook, local);
+    }
+
+    [Fact]
+    public void LadsEnlistedFromTheBaseWhileTheServerWoundsSomeLeaveTheBaseOnce()
+    {
+        static JObject WithLads(JObject book, params object[][] lads)
+        {
+            book["ml_ledgers"] = new JObject
+            {
+                ["fb_lads"] = new JObject { ["p"] = "party_1", ["m"] = new JArray(lads.Select(l => new JArray(l))), ["i"] = new JArray() },
+            };
+            return book;
+        }
+        var (server, client, serverBook, local) = Joined(WithLads(Book(("301", 1)), new object[] { "looter", 10, 0, 0 }, new object[] { "sea_raider", 4, 1, 0 }));
+
+        WithLads(local, new object[] { "looter", 6, 0, 0 });                                                          // 4 looters and the raiders enlisted
+        local["_crimeValue"]!["301"] = 9;
+        WithLads(serverBook, new object[] { "looter", 10, 2, 30 }, new object[] { "sea_raider", 4, 1, 30 });         // the daily tick
+        serverBook["_crimeValue"]!["301"] = 0;
+
+        local = client.Receive(server.DeltaIfChanged(serverBook)!, local, out _)!;
+        var lads = (JArray)local["ml_ledgers"]!["fb_lads"]!["m"]!;
+        Assert.Equal("[[\"looter\",6,2,30]]", lads.ToString(Newtonsoft.Json.Formatting.None));
+        Assert.Equal(8, (int)local["_crimeValue"]!["301"]!);
+
+        serverBook = Reported(server, serverBook, client.Report(local)!);
+        AssertInStep(server, client, serverBook, local);
+    }
+
+    [Fact]
+    public void ARowBothSidesChangedKeepsBothChangesOnlyWhereThatMeansSomething()
+    {
+        Assert.Equal(1, (int)FbRowMerge.Merge(0, 1, 1)!);                      // the same change is one change
+        Assert.Equal(0, (int)FbRowMerge.Merge(5, 3, 0)!);                      // a count does not go below zero
+        Assert.Equal(4, (int)FbRowMerge.Merge(null, 3, 1)!);                   // a row both sides added
+        Assert.Equal(6, (int)FbRowMerge.Merge(5, 6, null)!);                   // dropped here, changed there: the server's
+        Assert.True((bool)FbRowMerge.Merge(false, true, "x")!);                // not numbers: the server's
+        Assert.Equal("[\"b\"]", FbRowMerge.Merge(new JArray("a"), new JArray("b"), new JArray("c"))!.ToString(Newtonsoft.Json.Formatting.None));
+    }
 }
