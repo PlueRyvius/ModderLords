@@ -269,10 +269,11 @@ internal static class FbBooks
             case "report":
             {
                 if (args.Count != 1 || args[0].Length > MaxPayload
-                    || !LeMirrorDelta.TryUnpack(args[0], out var kind, out _, out _, out var reported) || kind != LeMirrorDelta.KindDelta)
+                    || !LeMirrorDelta.TryUnpack(args[0], out var kind, out var seen, out _, out var reported) || kind != LeMirrorDelta.KindDelta)
                     return TaomActionOutcome.Fail("");
                 if (Current == key) return TaomActionOutcome.Fail("");   // never happens on the game thread; never overwrite a running book
-                var merged = entry.Ledger.Merge(Encode(key, entry), reported);
+                var merged = entry.Ledger.Merge(Encode(key, entry), reported, seen);
+                entry.Dirty = true;   // a row both sides changed was merged: the player's game gets the result
                 var problems = new List<string>();
                 var values = ValuesOf(key, entry);
                 var decoded = FbBookCodec.Decode(merged, _shape!, FbGameRefs.Instance, problems, i => values[_schema!.Persisted[i]]);
