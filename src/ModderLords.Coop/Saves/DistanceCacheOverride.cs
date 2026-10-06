@@ -37,7 +37,7 @@ public static class DistanceCacheOverride
     public static string RelativePath => Path.Combine("ModuleData", "DistanceCaches", CacheFileName);
 
     /// <summary>The vanilla file the engine actually opens. Folder name, not module id: the engine's path is literal.</summary>
-    public static string TargetPath(ServerPaths paths) => Path.Combine(paths.ModulesRoot, "SandBox", RelativePath);
+    public static string TargetPath(ServerPaths paths) => Path.Combine(paths.StockModulesRoot, "SandBox", RelativePath);
 
     /// <summary>Kept beside the original and never overwritten, so the vanilla cache is always recoverable.</summary>
     public static string BackupPath(ServerPaths paths) => TargetPath(paths) + ".modderlords-original";

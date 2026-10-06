@@ -185,6 +185,9 @@ about the players' game, which is the copy the host is handing out.
 - **Launches the official server engine directly** with the module list and load order you choose.
 - **Uses mods where they are.** Your game `Modules` folder and Steam Workshop items are linked into the server with
   NTFS junctions (no admin rights). Removing a mod removes only the link. Workshop updates flow through automatically.
+- **Works when Steam is on an exFAT or FAT32 drive.** Those drives cannot hold junctions, so the server is started
+  from a private view under `%LOCALAPPDATA%\ModderLords\server-view` that links back to the real install. Still
+  nothing is copied, and the console says when this is in use.
 - **Loads client-only mods on the server.** Mods that only ship a client build, or whose manifest says "client only", get
   a small shadow copy of their `SubModule.xml` so the headless server accepts them; the mod folder itself is never edited.
 - **Resolves mod DLLs the engine cannot find.** A tiny helper is loaded into the engine that finds each mod's own

@@ -13,6 +13,12 @@ Status: Phase 1 complete (community mods load on the pristine server through jun
 - Launches the official Coop dedicated server engine directly with your own module list and load order.
 - Never copies mods into the server. Mods are exposed to the engine through NTFS junctions and a small
   rewritten copy of each `SubModule.xml` kept in `%LOCALAPPDATA%\ModderLords`.
+- A junction is stored on the drive that holds the link, so a server installed on exFAT, FAT32 or a network share
+  cannot have one mod linked into its `engine\Modules`. `ServerView` then builds the same folder layout under
+  `%LOCALAPPDATA%\ModderLords\server-view\<key>`: junctions back to every folder of the install, a real
+  `engine\Modules` with one junction per stock module, and the mods linked in beside them. The engine is started
+  from there (`ServerPaths.EngineRoot`); the catalog, the default configs and the distance cache keep using the
+  install itself (`StockModulesRoot`). Verified 2026-10-05 with world creation and hosting from a forced view.
 - Owns `server-config.json` rendering instead of regex-editing it.
 - Warns about save/mod version drift but never blocks a launch and never rewrites save bytes.
 - Streams the engine console with classification (module load, server, Coop, warnings, errors, milestones).
@@ -207,6 +213,7 @@ variables, marked, so "was it actually set?" is answerable from the log):
 | `MODDERLORDS_STUB_WARNINGS` | on | Warns once per run when a mod reads a query the server does not implement. `0` silences. |
 | `MODDERLORDS_HEADLESS_MAP_BOUNDS_CHECK` | on | Checks the loaded scene's own border markers against the bounds in effect, and warns loudly if they disagree. Replaced the navmesh hash check and the `Exit(12)`. `0` disables. |
 | `MODDERLORDS_ASSERT_THROTTLE` | on | Forwards each failed assert site the first 20 times, then once per 10,000, and reports the busiest held-back sites every 30 s. A new site always gets through. Added after one pathfinding assert repeated ~7,300×/s, wrote 2.7 GB and cut the tick rate to 15/s. `0` disables. |
+| `MODDERLORDS_SERVER_VIEW` | off | `1` starts the server from the private view (`ServerView`) even when its own drive could hold the junctions. For testing the exFAT path on an NTFS machine. Read by the launcher. |
 | `MODDERLORDS_TERRAIN_PROBE` | off | Samples the map scene to a CSV; `scripts/Compare-TerrainProbe.ps1` diffs a server's against a client's. |
 | `MODDERLORDS_MAPSCENE_CENSUS` | off | Counts which map-scene members are actually called, and names those never called. |
 | `MODDERLORDS_HEADLESS_MAP_KEEP_TERRAIN` | off | Keeps the scene's `<terrain>` descriptor. Measured safe; not currently needed. |
