@@ -90,7 +90,7 @@ public partial class ModRow : ObservableObject
                 _ => "loads after the game's own modules",
             };
             return HasVersionSiblings
-                ? band + $"\n\n{VersionCount} copies of {Id} are installed at different versions. Only one can be on: ticking this one unticks the others.\nThis copy: {Folder}"
+                ? band + $"\n\n{VersionCount} copies of {Id} are installed, at different versions or with different contents. Only one can be on: ticking this one unticks the others.\nThis copy: {Folder}"
                 : band;
         }
     }
@@ -133,8 +133,9 @@ public partial class ModRow : ObservableObject
     public bool HostMode { get; init; }
 
     /// <summary>
-    /// How many copies of this module id are installed at different versions. More than one means this row is one
-    /// of several and only one of them can be ticked, because the engine loads a module id once.
+    /// How many copies of this module id have a row: one per version, and per distinct set of top-level folders
+    /// within a version. More than one means this row is one of several and only one of them can be ticked,
+    /// because the engine loads a module id once.
     /// </summary>
     public int VersionCount { get; set; } = 1;
 
@@ -629,7 +630,8 @@ public partial class MainViewModel : ObservableObject
                     && other.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase) && other.Enabled)
                 {
                     other.Enabled = false;
-                    Status = $"{row.Id}: using {row.Version} ({row.Source}); the other copy was switched off.";
+                    // The folder, not just the version: two copies at one version are told apart by nothing else.
+                    Status = $"{row.Id}: using {row.Version} from {row.Folder}; the other copy was switched off.";
                 }
         }
         finally { _syncingVersions = false; }
@@ -657,7 +659,11 @@ public partial class MainViewModel : ObservableObject
             pm.Role = row.Role;
             pm.ServerAuthoritative = row.ServerAuthoritative;
             pm.ClientSideBehaviors = row.ClientSideBehaviors.ToList();
-            if (!row.IsMissing) pm.SourcePath = row.Folder;
+            // The pin moves only when a copy is ticked: that is the one way a user says "this copy". With every copy
+            // unticked the rows say nothing about which, so a pin that still names a folder is left alone - taking
+            // the first row instead is one of the ways a pinned server copy became the game's (1.2.5).
+            if (!row.IsMissing && (row.Enabled || pm.SourcePath is null || !Directory.Exists(pm.SourcePath)))
+                pm.SourcePath = row.Folder;
             ordered.Add(pm);
         }
         // Entries with no row this session are requirements, not a request to delete them from the profile -- and
@@ -725,8 +731,11 @@ public partial class MainViewModel : ObservableObject
 
             // One row per module id AND version. The same mod routinely exists in the game's Modules folder and in
             // the workshop at different versions, and which one loads changes what you are playing - so both are
-            // shown and you pick. Two copies at the SAME version are still one row: there is nothing to choose
-            // between them, and ModuleSelector would pick either.
+            // shown and you pick. Two copies at the SAME version are one row only while they also hold the same
+            // top-level folders (ModuleCopies): a host's cut-down server copy next to the full one is a real choice,
+            // and treating it as "nothing to choose" is what sent a pinned server copy back to the game's (1.2.5).
+            // Every copy is kept here; the folding happens per mod below, once the copy that loads is known, so
+            // that copy is never the one folded away.
             // The server supplies Coop in Host mode; in Player mode it is an ordinary selectable client mod.
             var stockIds = new HashSet<string>(catalog.Modules.Where(m => m.IsStock).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
             // Coop is the exception to "stock modules are not rows". In Host mode the server supplies it, so it is
@@ -736,10 +745,8 @@ public partial class MainViewModel : ObservableObject
             var byId = catalog.Modules.Where(m => !m.IsStock && !OfficialModules.IsGameModule(m.Id)
                                                   && (!stockIds.Contains(m.Id) || ClientManifest.CoopClientModuleIds.Contains(m.Id)))
                 .GroupBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g
-                    .GroupBy(m => m.Version ?? "", StringComparer.OrdinalIgnoreCase)
-                    .Select(vg => vg.OrderByDescending(m => m.FolderName.Equals(g.Key, StringComparison.OrdinalIgnoreCase)).First())
-                    .ToList(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+            var side = IsHost && Host is not null ? ModuleSelector.ModuleSide.Server : ModuleSelector.ModuleSide.Client;
 
             Mods.Clear();
 
@@ -755,7 +762,7 @@ public partial class MainViewModel : ObservableObject
                 // decides nothing here, so a version sibling would be a choice about nothing - show a single row.
                 if (IsHost && ClientManifest.CoopClientModuleIds.Contains(pm.Id))
                 {
-                    var coop = (byId.TryGetValue(pm.Id, out var coopCopies) ? coopCopies.FirstOrDefault() : null)
+                    var coop = (byId.TryGetValue(pm.Id, out var coopCopies) ? ModuleCopies.Distinct(coopCopies, pm.Id).FirstOrDefault() : null)
                                ?? catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
                     byId.Remove(pm.Id);
                     if (coop is null) continue;      // no Coop anywhere: nothing to place
@@ -769,6 +776,13 @@ public partial class MainViewModel : ObservableObject
                 if (!byId.TryGetValue(pm.Id, out var copies))
                 {
                     if (IsHost && stockIds.Contains(pm.Id)) continue;
+                    copies = [];
+                }
+                // A pinned folder outside every scanned folder still loads - the launch reads it directly - so it
+                // gets a row like any other copy. Without one the list showed, and then saved, a different copy.
+                if (ModuleSelector.Pinned(pm, copies) is { } pinned && !copies.Contains(pinned)) copies.Add(pinned);
+                if (copies.Count == 0)
+                {
                     Messages.Add($"MISSING: {pm.Id} — download it, then Rescan, or right-click it → Remove from profile."
                                  + (string.IsNullOrWhiteSpace(pm.DownloadUrl) ? "" : " " + pm.DownloadUrl));
                     modRows.Add(new ModRow
@@ -780,13 +794,10 @@ public partial class MainViewModel : ObservableObject
                     });
                     continue;
                 }
-                // The profile pins a folder, so that copy is the one that is on; the rest are shown alongside it,
-                // newest first, and are off. This is the same choice ModuleSelector makes at launch.
-                var pinned = pm.SourcePath is null ? null : copies.FirstOrDefault(c => Junction.PathsEqual(c.FolderPath, pm.SourcePath));
-                pinned ??= pm.LastVersion is null ? null : copies.FirstOrDefault(c => SaveHeaderReader.VersionsEqual(c.Version, pm.LastVersion));
-                var ordered = OrderCopies(copies, pm.Id, pinned);
-                var chosen = pinned ?? ordered[0];
-                foreach (var c in ordered)
+                // The copy that is on is the one the launch would link, asked of ModuleSelector itself rather than
+                // worked out again here; the rest are shown alongside it, newest first, and are off.
+                var chosen = ModuleSelector.Pick(pm, copies, side)!;
+                foreach (var c in OrderCopies(ModuleCopies.Distinct(copies, pm.Id, chosen), pm.Id, chosen))
                     modRows.Add(new ModRow
                     {
                         Module = c, Enabled = pm.Enabled && ReferenceEquals(c, chosen), Role = pm.Role,
@@ -803,13 +814,13 @@ public partial class MainViewModel : ObservableObject
                 {
                     modRows.Add(new ModRow
                     {
-                        Module = kv.Value[0], Enabled = true, Role = ServerRole.AsShipped,
+                        Module = ModuleCopies.Distinct(kv.Value, kv.Key)[0], Enabled = true, Role = ServerRole.AsShipped,
                         IsCoopClientMarker = true, HostMode = true,
                     });
                     continue;
                 }
                 var rec = db.Find(kv.Key);
-                foreach (var c in OrderCopies(kv.Value, kv.Key, null))
+                foreach (var c in OrderCopies(ModuleCopies.Distinct(kv.Value, kv.Key), kv.Key, null))
                     modRows.Add(new ModRow
                     {
                         Module = c, Enabled = false, Role = db.DefaultRoleFor(kv.Key),
@@ -824,7 +835,10 @@ public partial class MainViewModel : ObservableObject
             {
                 var n = g.Count();
                 foreach (var r in g) r.VersionCount = n;
-                if (n > 1) Messages.Add($"{g.Key}: {n} versions installed ({string.Join(", ", g.Select(r => r.Version))}); only the ticked one loads");
+                // Two rows at one version cannot be told apart by version, so that case names the folders instead.
+                if (n > 1) Messages.Add(g.Select(r => r.Version).Distinct(StringComparer.OrdinalIgnoreCase).Count() == n
+                    ? $"{g.Key}: {n} versions installed ({string.Join(", ", g.Select(r => r.Version))}); only the ticked one loads"
+                    : $"{g.Key}: {n} copies installed ({string.Join("; ", g.Select(r => r.Version + " in " + r.Folder))}); only the ticked one loads");
                 foreach (var r in g.Where(r => !r.IsMissing && r.Module.HasUnparsableVersion))
                     Messages.Add($"{r.Id}: SubModule.xml says version “{r.Version}”, which Bannerlord cannot parse "
                                + "(a prefix letter then numbers only, e.g. v0.9.30). Everything that reads it, Coop's module check included, sees a0.0.0.");
