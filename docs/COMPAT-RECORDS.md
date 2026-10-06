@@ -6,7 +6,7 @@ request by hand.
 
 ## The flow
 
-1. **The user submits.** ModderLords' "Submit record" button opens the *Compat record* issue form
+1. **The user submits.** the Submit… button on ModderLords' Mods tab opens the *Compat record* issue form
    (`.github/ISSUE_TEMPLATE/compat-record.yml`) with the fields filled in. The form can also be filled in by hand.
    The template gives the issue the `compat-record` label.
 2. **The workflow checks it.** `.github/workflows/compat-record.yml` runs on issues carrying that label when they are

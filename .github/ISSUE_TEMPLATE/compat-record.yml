@@ -1,5 +1,5 @@
 # The field ids, the labels, the title prefix and the label below are a contract:
-#   - ModderLords' "Submit record" button builds a prefilled link from the ids,
+#   - the Submit… button on ModderLords' Mods tab builds a prefilled link from the ids,
 #   - the compat-record workflow finds each field by its label (GitHub renders labels, not ids, as headings).
 # CompatIntake in ModderLords.Core holds the labels and a test fails when the two drift apart. See docs/COMPAT-RECORDS.md.
 name: Compat record
@@ -12,7 +12,7 @@ body:
       value: |
         A compatibility record tells ModderLords how one mod behaves on a Bannerlord Coop server: whether it works, and which settings it needs. Submitting yours here proposes it for the list that ships with ModderLords, so other hosts get it without working it out again.
 
-        You do not have to fill this in by hand. In ModderLords, open the mod's compatibility record and press **Submit record**: it opens this form with everything filled in. The record is checked automatically and then reviewed by the maintainer before anything changes.
+        You do not have to fill this in by hand. In ModderLords, select the mod on the Mods tab and press **Submit…**: it opens this form with everything filled in. The record is checked automatically and then reviewed by the maintainer before anything changes.
 
   - type: input
     id: mod

@@ -133,7 +133,7 @@ string InvalidComment(IReadOnlyList<string> problems)
     sb.Append("Thank you for the submission. The record could not be accepted as it is:\n\n");
     foreach (var p in problems) sb.Append("- ").Append(p).Append('\n');
     sb.Append("\nTo fix it, edit this issue (the pencil on the first post) and it will be checked again. ");
-    sb.Append("The easiest way to get a record that passes is ModderLords' \"Submit record\" button, which fills the form in for you.\n");
+    sb.Append("The easiest way to get a record that passes is the Submit… button on ModderLords' Mods tab, which fills the form in for you.\n");
     sb.Append("\nIf an earlier version of this issue already opened a pull request, that pull request still holds the earlier record.\n");
     return sb.ToString();
 }
