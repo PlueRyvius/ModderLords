@@ -201,7 +201,8 @@ public partial class ModRow : ObservableObject
                 lines.Add($"Defaults: role {r.DefaultRole?.ToString() ?? "-"}, server-only logic {(r.ServerAuthoritative is true ? "on" : r.ServerAuthoritative is false ? "off" : "-")}" +
                           (r.ClientSideBehaviors.Count > 0 ? $", client-side: {string.Join(", ", r.ClientSideBehaviors)}" : ""));
             if (!string.IsNullOrWhiteSpace(r.Url)) lines.Add(r.Url);
-            lines.Add("Source: " + (Compat.Source == CompatSource.Local ? "your local record (compat-db.local.json)" : "bundled with the launcher"));
+            lines.Add("Source: " + (Compat.Source != CompatSource.Local ? "bundled with the launcher"
+                : "your local record (compat-db.local.json)" + (Compat.OverBundled ? ", over the one bundled with the launcher" : "")));
             return string.Join("\n", lines);
         }
     }
@@ -979,11 +980,20 @@ public partial class MainViewModel : ObservableObject
                 RefreshCompatBadges();
                 Status = $"{SelectedMod.Id}: local record removed" + (SelectedMod.Compat.Source == CompatSource.Bundled ? ", showing the bundled one" : "");
             }
-            else
+            else if (CompatDb.LocalPart(win.Result, CompatDb.Current.FindBundled(SelectedMod.Id)) is { } part)
             {
-                CompatDb.SaveLocal(CompatDb.LocalPath, win.Result);
+                // Only what differs from the bundled record is stored. The dialog edits the effective record, and saving
+                // that whole would pin today's bundled values in the local file, hiding every later bundled fix.
+                CompatDb.SaveLocal(CompatDb.LocalPath, part);
                 RefreshCompatBadges();
                 Status = $"{SelectedMod.Id}: recorded as {SelectedMod.CompatText} in {CompatDb.LocalPath}";
+            }
+            else
+            {
+                // Nothing differs from the bundled record, so there is nothing of the user's to keep.
+                CompatDb.RemoveLocal(CompatDb.LocalPath, SelectedMod.Id);
+                RefreshCompatBadges();
+                Status = $"{SelectedMod.Id}: same as the bundled record, no local record kept";
             }
         }
         catch (Exception ex) { Status = ex.Message; Messages.Add("compat db: " + ex.Message); }
@@ -993,7 +1003,10 @@ public partial class MainViewModel : ObservableObject
     private void ExportCompat()
     {
         var db = CompatDb.Current;
-        var selected = SelectedMod is not null ? db.Find(SelectedMod.Id) : null;
+        // The user's own record as stored, not the effective one: an export of the merged record would hand the recipient
+        // a copy of today's bundled values that then masks their own bundled record. A mod with only a bundled record
+        // still exports that.
+        var selected = SelectedMod is not null ? db.FindLocal(SelectedMod.Id) ?? db.Find(SelectedMod.Id) : null;
         var records = selected is not null ? new[] { selected } : db.LocalRecords.ToArray();
         if (records.Length == 0) { Status = "Nothing to export: select a mod with a record, or record one first"; return; }
         var dlg = new SaveFileDialog

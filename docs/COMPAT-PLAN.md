@@ -114,10 +114,27 @@ Shipped (v0.6): one file, `compat-db.json` next to the launcher, `{ SchemaVersio
 `Verdict` (Works / NeedsRecipe / Broken / Unknown), `TestedVersions`, `TestedCoopVersion`, the launcher defaults for a
 mod new to a profile (`DefaultRole`, `ServerAuthoritative`, `ClientSideBehaviors`), `KeepSubModules` (submodule classes
 that survive DependencyOnly; MCM's settings core), `Notes`, `Url`, `UpdatedAt`. The user's own records live in
-`%LOCALAPPDATA%\ModderLords\compat-db.local.json` with the same shape; a local record replaces the bundled one whole, by
-id. `Record…` on the Mods tab writes a local record; `Export…` / `Import…` share them (import keeps whichever record has
-the newer `UpdatedAt`). `ModderLords.Core.Compat.CompatDb` replaced the hardcoded role and keep-submodule tables. The
-recipe itself (guards, synced fields, settings classes from Layer 2) is not in the record yet; the behaviours list is.
+`%LOCALAPPDATA%\ModderLords\compat-db.local.json` with the same shape. `Record…` on the Mods tab writes a local record;
+`Export…` / `Import…` share them (import keeps whichever record has the newer `UpdatedAt`).
+`ModderLords.Core.Compat.CompatDb` replaced the hardcoded role and keep-submodule tables. The recipe itself (guards,
+synced fields, settings classes from Layer 2) is not in the record yet; the behaviours list is.
+
+A local record is laid over the bundled one **field by field**, by id (`CompatDb.Merge`, which documents the rule for
+every field). It used to replace the bundled record whole, which meant that a user who had recorded anything for a mod
+never received a later bundled `EnsureLines`, `DefaultSettings`, `KeepSubModules` or corrected `DefaultRole` for it.
+Now a local field counts only when it is set (non-null, non-empty, verdict other than `Unknown`):
+
+- `Verdict`, `TestedVersions`, `TestedCoopVersion`, `Notes` travel together when the local record has a verdict, because
+  they describe one person's test.
+- `DefaultSettings` merges per settings id and per property.
+- Lists are replaced by a non-empty local list, never unioned.
+- Everything else is local-if-set.
+
+Known limitation: a local record cannot blank a bundled value, since empty means "no opinion". The `Record…` dialog
+edits the effective record and stores only the difference from the bundled one (`CompatDb.LocalPart`), so opening and
+saving a record does not copy bundled values into the local file. `Export…` writes the local record as stored.
+A property added to `CompatRecord` has to be added to `Clone`, `Merge` and `LocalPart`; `CompatDbTests` fails by
+reflection for one that is not.
 
 `ClientLoadsAfterCoop` records that a mod patches Coop and must load after it **on a player's machine**. It exists
 because no manifest carries the fact: CoopMarriage depends only on Harmony, ButterLib, UIExtenderEx, MCM and the
