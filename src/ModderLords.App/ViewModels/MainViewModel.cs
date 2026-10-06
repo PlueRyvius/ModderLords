@@ -972,6 +972,57 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { Status = ex.Message; }
     }
 
+    /// <summary>How Submit… asks before opening the browser. Replaceable so tests never block on a message box.</summary>
+    internal Func<string, bool> ConfirmCompatSubmit { get; set; } = message => MessageBox.Show(
+        message, "Submit compatibility record", MessageBoxButton.OKCancel, MessageBoxImage.Information) == MessageBoxResult.OK;
+
+    /// <summary>Opens the issue form in the default browser. Replaceable so tests never start one.</summary>
+    internal Action<string> OpenCompatSubmitPage { get; set; } = url =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+
+    /// <summary>Puts an oversized record on the clipboard; false when Windows refuses. Replaceable for the same reason.</summary>
+    internal Func<string, bool> CopyCompatSubmitText { get; set; } = text =>
+    {
+        try { Clipboard.SetText(text); return true; }
+        catch (Exception) { return false; }
+    };
+
+    [RelayCommand]
+    private void SubmitCompat() => SubmitCompatFrom(CompatDb.Current);
+
+    /// <summary>
+    /// Opens a prefilled GitHub issue for the selected mod's local record. Only a record the user made is offered:
+    /// the bundled one came from the maintainer, so sending it back says nothing new.
+    /// </summary>
+    internal void SubmitCompatFrom(CompatDb db)
+    {
+        if (SelectedMod is null) { Status = "Select a mod first"; return; }
+        var record = db.Find(SelectedMod.Id);
+        if (record is null) { Status = $"{SelectedMod.Id} has no record to submit: press Record… first"; return; }
+        if (db.SourceOf(record.Id) != CompatSource.Local) { Status = $"{record.Id} shows the bundled record, which the maintainer already has: press Record… to make your own first"; return; }
+
+        var link = CompatSubmission.Build(record, SelectedMod.Version, CoopVersion);
+        var message = $"This opens a GitHub issue form in your browser, filled in with your {record.Id} record: verdict {record.Verdict}, "
+                    + "the versions it was tested with, the defaults you stored and your notes, plus this mod's version and Coop's. "
+                    + "Nothing else about this PC or your other mods is included.\n\n"
+                    + "Nothing is sent by pressing OK here. Once you press Submit on GitHub it becomes a public issue posted from your own GitHub account."
+                    + (link.RecordInUrl ? "" : "\n\nThis record is too large to put in a link, so it will be copied to the clipboard (replacing what is there) for you to paste into the form.");
+        if (!ConfirmCompatSubmit(message)) return;
+        try
+        {
+            if (!link.RecordInUrl && !CopyCompatSubmitText(link.RecordJson))
+            {
+                Status = $"The {record.Id} record is too large for a link and could not be copied to the clipboard: use Export… and attach the file instead";
+                return;
+            }
+            OpenCompatSubmitPage(link.Url);
+            Status = link.RecordInUrl
+                ? $"Opened the GitHub form for the {record.Id} record. Nothing is posted until you press Submit there"
+                : $"The {record.Id} record is too large for a link, so it was copied to the clipboard: paste it into the Record field of the GitHub form that just opened, then press Submit there";
+        }
+        catch (Exception ex) { Status = "Could not open the GitHub form: " + ex.Message; }
+    }
+
     [RelayCommand]
     private void ImportCompat()
     {

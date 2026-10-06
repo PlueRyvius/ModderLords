@@ -821,6 +821,11 @@ changed.
 - **Sharing**: **Export…** writes the selected mod's record (or, with nothing selected, all your local records) to a
   `.json` file. **Import…** merges such a file into your local database; when both sides have a record for the same mod
   the newer one wins and the kept ones are listed under Messages.
+- **Submitting**: **Submit…** offers the selected mod's record (one you made with Record…) to the maintainer for the
+  bundled database. It opens a GitHub issue form in your browser, already filled in with the record, the mod's version
+  and Coop's version, and nothing else about your PC or your other mods. Pressing the button sends nothing: the record
+  becomes a public issue, posted from your own GitHub account, only when you press Submit on GitHub. A record too large
+  for a link is copied to the clipboard instead, to paste into the form.
 
 The badge is a claim about what someone tested, so `· untested version` appears whenever your copy's version is not in
 the record; the mod may still work.

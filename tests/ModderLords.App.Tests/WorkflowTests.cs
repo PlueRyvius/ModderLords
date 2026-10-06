@@ -2,6 +2,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using ModderLords.App.ViewModels;
+using ModderLords.Core.Compat;
 using ModderLords.Core.Launch;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Modules;
@@ -565,4 +566,111 @@ public class WorkflowTests
         Assert.True(FolderChecks.Game(null, fixture.Root).Ok);
         Assert.False(FolderChecks.Game(null, null).Ok);
     }
+
+    /// <summary>
+    /// Submit… with the browser, the clipboard and the question replaced, against a database built in the fixture
+    /// folder: the real one lives in this machine's profile folder and a test must not read meaning into it.
+    /// </summary>
+    private sealed class SubmitHarness
+    {
+        public List<string> Opened { get; } = new();
+        public List<string> Copied { get; } = new();
+        public List<string> Asked { get; } = new();
+        public bool Answer { get; set; } = true;
+        public bool ClipboardWorks { get; set; } = true;
+        public MainViewModel Vm { get; }
+        private readonly string _dir;
+
+        public SubmitHarness(Fixture fixture)
+        {
+            _dir = Path.Combine(fixture.Root, "compat");
+            fixture.Module("TestMod"); fixture.Module("BundledMod"); fixture.Module("PlainMod");
+            Vm = fixture.ViewModel(); Vm.Rescan();
+            Vm.ConfirmCompatSubmit = message => { Asked.Add(message); return Answer; };
+            Vm.OpenCompatSubmitPage = Opened.Add;
+            Vm.CopyCompatSubmitText = text => { Copied.Add(text); return ClipboardWorks; };
+        }
+
+        public void Submit(string? modId, params CompatRecord[] local)
+        {
+            var bundled = Path.Combine(_dir, CompatDb.BundledFileName);
+            var mine = Path.Combine(_dir, CompatDb.LocalFileName);
+            CompatDb.WriteFile(bundled, [new CompatRecord { Id = "BundledMod", Verdict = CompatVerdict.Works }]);
+            CompatDb.WriteFile(mine, local);
+            Vm.SelectedMod = modId is null ? null : Vm.Mods.Single(m => m.Id == modId);
+            Vm.SubmitCompatFrom(CompatDb.Load(bundled, mine));
+        }
+    }
+
+    [Fact]
+    public void SubmitOpensThePrefilledIssueOnlyAfterTheUserAgrees() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+        var record = new CompatRecord { Id = "TestMod", Verdict = CompatVerdict.Broken, Notes = "dies & never recovers" };
+
+        h.Answer = false;
+        h.Submit("TestMod", record);
+        Assert.Contains("public issue", Assert.Single(h.Asked));
+        Assert.Contains("your own GitHub account", h.Asked[0]);
+        Assert.Contains("Nothing is sent by pressing OK", h.Asked[0]);
+        Assert.Empty(h.Opened);
+
+        h.Answer = true;
+        h.Submit("TestMod", record);
+        var url = Assert.Single(h.Opened);
+        Assert.Equal(CompatSubmission.Build(record, "v1.0.0", null).Url, url);
+        Assert.Contains("&mod=TestMod&mod-version=v1.0.0&record=", url);
+        Assert.Empty(h.Copied);
+        Assert.Contains("Nothing is posted until you press Submit", h.Vm.Status);
+        // The privacy property, end to end: the fixture's folder, profile and other mods are nowhere in the link.
+        var sent = Uri.UnescapeDataString(url);
+        Assert.DoesNotContain(Path.GetFileName(fixture.Root), sent);
+        Assert.DoesNotContain(h.Vm.Profile.Name, sent);
+        Assert.DoesNotContain("PlainMod", sent);
+    });
+
+    [Fact]
+    public void SubmitHasNothingToSendWithoutALocalRecord() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+
+        h.Submit(null);
+        Assert.Equal("Select a mod first", h.Vm.Status);
+
+        h.Submit("PlainMod");
+        Assert.Contains("press Record… first", h.Vm.Status);
+
+        // The maintainer wrote the bundled record; sending it back says nothing.
+        h.Submit("BundledMod");
+        Assert.Contains("bundled record", h.Vm.Status);
+
+        Assert.Empty(h.Asked);
+        Assert.Empty(h.Opened);
+        Assert.Empty(h.Copied);
+    });
+
+    [Fact]
+    public void SubmitCopiesARecordTooLargeForALinkAndSaysSo() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+        var record = new CompatRecord { Id = "TestMod", Verdict = CompatVerdict.Broken, Notes = new string('x', CompatSubmission.MaxUrlLength) };
+
+        h.Submit("TestMod", record);
+        Assert.Contains("copied to the clipboard", Assert.Single(h.Asked));
+        Assert.Equal(CompatSubmission.RecordJson(record), Assert.Single(h.Copied));
+        var url = Assert.Single(h.Opened);
+        Assert.True(url.Length <= CompatSubmission.MaxUrlLength);
+        Assert.Contains("&mod=TestMod&", url);
+        Assert.Contains("copied to the clipboard", h.Vm.Status);
+        Assert.Contains("paste", h.Vm.Status);
+
+        // A clipboard that refuses must not leave the user at a form with nothing to paste.
+        h.ClipboardWorks = false;
+        h.Submit("TestMod", record);
+        Assert.Single(h.Opened);
+        Assert.Contains("Export…", h.Vm.Status);
+    });
 }
