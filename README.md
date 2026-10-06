@@ -825,6 +825,19 @@ changed.
 The badge is a claim about what someone tested, so `· untested version` appears whenever your copy's version is not in
 the record; the mod may still work.
 
+### Folders to leave out on the server
+
+Some mods ship folders only a player's game uses (`RuntimeDataCache`, for example). If you suspect one of them of
+upsetting the dedicated server, right-click the mod on the Mods tab → **Folders to leave out on the server…** and list
+the folder names, one per line. The server is then given that mod through a shadow folder that links everything except
+those folders; the mod's own folder is not changed and players are not affected. Only folders directly inside the mod
+can be named (never `bin`, and not a path), and the launch console says what was left out, from which copy of the mod,
+and which names matched nothing. Nothing is left out unless you ask: this is a tool for finding out, not a known fix.
+
+A compat record can carry the same list as `ServerExcludedFolders` (edit `compat-db.local.json` by hand), which then
+applies to every profile that has not set its own. A profile's list replaces the record's, and an empty one means
+"leave nothing out" even when the record names folders.
+
 ---
 
 ## Licence

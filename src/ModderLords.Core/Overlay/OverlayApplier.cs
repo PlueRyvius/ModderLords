@@ -122,6 +122,9 @@ public sealed class OverlayApplier
             var name = Path.GetFileName(dir);
             if (name.Equals("bin", StringComparison.OrdinalIgnoreCase)) continue;
             if (name.Equals("AssetPackages", StringComparison.OrdinalIgnoreCase)) continue;
+            // Asked for per mod (profile or compat record) and already checked by the planner. Not adding the name to
+            // wantedDirs is what removes a junction an earlier launch made for it: the sweep below takes it away.
+            if (e.ExcludedFolders is { } excluded && excluded.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
             if (name.Equals("SceneObj", StringComparison.OrdinalIgnoreCase) && e.HeadlessMapPath is not null)
             {
                 wantedDirs.Add(name);

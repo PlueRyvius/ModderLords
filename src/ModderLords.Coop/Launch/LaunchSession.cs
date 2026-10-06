@@ -309,12 +309,23 @@ public sealed class LaunchSession
         var headlessAssets = content.AssetPaths;
         var headlessMaps = content.MapPaths;
         var overlayPlan = OverlayPlanner.Plan(overlayRoot, paths.ModulesRoot, selections,
-            headlessAssetPaths: headlessAssets, headlessMapPaths: headlessMaps, record: compatDb.Find);
+            headlessAssetPaths: headlessAssets, headlessMapPaths: headlessMaps, record: compatDb.Find,
+            profileExcludedFolders: ProfileExcludedFolders(profile));
         // The planner's warnings (a Run mod that declares itself client-only and reaches for the render stack) have to
         // reach the launch messages: the CLI prints plan notes itself, the app only ever sees this list.
         foreach (var e in overlayPlan.Entries)
             foreach (var n in e.Notes.Where(n => n.StartsWith("WARNING", StringComparison.Ordinal)))
                 messages.Add($"{e.Selection.Module.Id}: {n}");
+        // Leaving folders out is an experiment a host runs to find out what hangs their server, so the log has to
+        // show what the experiment was: which copy of the mod the server read and what it was not shown. Only mods
+        // that asked for it get a line; one per mod on every launch would bury the lines that mean something.
+        foreach (var e in overlayPlan.Entries)
+        {
+            foreach (var n in e.Notes.Where(n => n.StartsWith(OverlayPlanner.LeftOutNote, StringComparison.Ordinal)))
+                messages.Add($"{e.Selection.Module.Id}: server uses {e.Selection.Module.FolderPath}; {n}");
+            foreach (var n in e.Notes.Where(n => n.StartsWith(OverlayPlanner.NotLeftOutNote, StringComparison.Ordinal)))
+                messages.Add($"{e.Selection.Module.Id}: {n}");
+        }
 
         var extraEnv = new Dictionary<string, string>();
         if (headlessMaps.TryGetValue("TAOM_Map", out var mapPath))
@@ -552,9 +563,18 @@ public sealed class LaunchSession
         var paths = ResolvePaths(profile);
         var catalog = Scan(profile, paths, out _);
         var selections = WithCompat(profile, Select(profile, catalog, new List<string>()), new List<string>());
-        var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections, record: compatDb.Find);
+        var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections, record: compatDb.Find,
+            profileExcludedFolders: ProfileExcludedFolders(profile));
         return new OverlayApplier { KeepForDependencyOnly = compatDb.KeepForDependencyOnly() }.Apply(plan);
     }
+
+    /// <summary>
+    /// The profile's own "leave these folders out on the server" list for a mod, or null when it has none and the
+    /// compat record decides. Passed to both Prepare and Resync: a re-sync that forgot it would quietly put the
+    /// folders back until the next launch.
+    /// </summary>
+    private static Func<string, IReadOnlyList<string>?> ProfileExcludedFolders(Profile profile) =>
+        id => profile.Mods.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))?.ServerExcludedFolders;
 
     /// <summary>
     /// Server-only logic is ticked for a mod that will run, but Settings sync is off. The shared ModderLords.Compat module

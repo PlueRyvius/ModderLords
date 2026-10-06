@@ -39,6 +39,12 @@ public sealed class CompatRecord
     /// The dedicated server pins Coop after the community block regardless, so this only ever moves a client order.
     /// </summary>
     public bool? ClientLoadsAfterCoop { get; set; }
+    /// <summary>
+    /// Top-level folders of the mod the dedicated server is not shown: client-only content the headless engine has no
+    /// use for (RuntimeDataCache is the one that prompted this). A profile's own list for the mod, when it has one,
+    /// replaces this - including an empty one, which means "leave nothing out".
+    /// </summary>
+    public List<string> ServerExcludedFolders { get; set; } = new();
     /// <summary>Lines the mod's own config files must contain under Coop, applied to its folder before launch. See <see cref="EnsureLinesApplier"/>.</summary>
     public List<EnsureLine> EnsureLines { get; set; } = new();
     /// <summary>
@@ -57,7 +63,7 @@ public sealed class CompatRecord
         Id = Id, Verdict = Verdict, TestedVersions = TestedVersions.ToList(), TestedCoopVersion = TestedCoopVersion,
         DefaultRole = DefaultRole, ServerAuthoritative = ServerAuthoritative, ClientSideBehaviors = ClientSideBehaviors.ToList(),
         KeepSubModules = KeepSubModules.ToList(), SettingsTypes = SettingsTypes.ToList(), IgnoreSettingsTypes = IgnoreSettingsTypes.ToList(),
-        ClientLoadsAfterCoop = ClientLoadsAfterCoop,
+        ClientLoadsAfterCoop = ClientLoadsAfterCoop, ServerExcludedFolders = ServerExcludedFolders.ToList(),
         EnsureLines = EnsureLines.Select(l => new EnsureLine { File = l.File, Section = l.Section, Value = l.Value }).ToList(),
         DefaultSettings = DefaultSettings.ToDictionary(o => o.Key, o => new Dictionary<string, string>(o.Value, StringComparer.Ordinal), StringComparer.Ordinal),
         Notes = Notes, Url = Url, UpdatedAt = UpdatedAt,

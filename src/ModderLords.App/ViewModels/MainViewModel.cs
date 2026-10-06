@@ -199,6 +199,7 @@ public partial class ModRow : ObservableObject
             if (r.DefaultRole is not null || r.ServerAuthoritative is not null)
                 lines.Add($"Defaults: role {r.DefaultRole?.ToString() ?? "-"}, server-only logic {(r.ServerAuthoritative is true ? "on" : r.ServerAuthoritative is false ? "off" : "-")}" +
                           (r.ClientSideBehaviors.Count > 0 ? $", client-side: {string.Join(", ", r.ClientSideBehaviors)}" : ""));
+            if (r.ServerExcludedFolders.Count > 0) lines.Add("Left out on the server: " + string.Join(", ", r.ServerExcludedFolders));
             if (!string.IsNullOrWhiteSpace(r.Url)) lines.Add(r.Url);
             lines.Add("Source: " + (Compat.Source == CompatSource.Local ? "your local record (compat-db.local.json)" : "bundled with the launcher"));
             return string.Join("\n", lines);
@@ -315,6 +316,7 @@ public partial class MainViewModel : ObservableObject
         if (value == AppMode.Host) Host ??= new HostViewModel(this);
         OnPropertyChanged(nameof(IsHost));
         OnPropertyChanged(nameof(ShowExperimentalCompat));
+        EditServerFoldersCommand.NotifyCanExecuteChanged();
         Rescan();
         if (IsHost) Host?.OnProfileSelected();
     }
@@ -1017,6 +1019,7 @@ public partial class MainViewModel : ObservableObject
         RemoveModCommand.NotifyCanExecuteChanged();
         OpenModFolderCommand.NotifyCanExecuteChanged();
         SetSourceLinkCommand.NotifyCanExecuteChanged();
+        EditServerFoldersCommand.NotifyCanExecuteChanged();
     }
 
     // ---- removing mods that are gone ---------------------------------------------------------------
@@ -1151,6 +1154,77 @@ public partial class MainViewModel : ObservableObject
     }
 
     private bool CanSetSourceLink() => SelectedMod is { IsGameModule: false };
+
+    // ---- folders left out on the server ------------------------------------------------------------
+
+    /// <summary>Lets a host name top-level folders of the selected mod that the dedicated server is not shown.</summary>
+    [RelayCommand(CanExecute = nameof(CanEditServerFolders))]
+    private void EditServerFolders()
+    {
+        if (!CanEditServerFolders() || SelectedMod is not { } row) return;
+        var recordFolders = CompatDb.Current.Find(row.Id)?.ServerExcludedFolders ?? [];
+        var win = new ServerFoldersWindow(row.Id, ServerExcludedFoldersFor(row), recordFolders) { Owner = Application.Current.MainWindow };
+        if (win.ShowDialog() != true) return;
+        SetServerExcludedFolders(row, win.Result);
+    }
+
+    /// <summary>A server-side choice, so Host mode only; Coop's marker row and the game's own modules are never overlaid by choice.</summary>
+    private bool CanEditServerFolders() => IsHost && SelectedMod is { IsGameModule: false, IsCoopClientMarker: false };
+
+    /// <summary>The profile's own list for this row's mod; null when the profile has no opinion (or no entry yet).</summary>
+    internal List<string>? ServerExcludedFoldersFor(ModRow row) =>
+        Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase))?.ServerExcludedFolders?.ToList();
+
+    /// <summary>
+    /// Stores the list on the profile entry, not on the row. Rows are thrown away and rebuilt from the profile on
+    /// every Rescan, and <see cref="CollectProfileFromRows"/> writes back only what a row carries - so anything kept
+    /// on the row has to be copied in both directions or it is lost. The profile entry itself survives both (it is
+    /// reused by id), which is how the download link is kept too.
+    /// </summary>
+    internal void SetServerExcludedFolders(ModRow row, List<string>? folders)
+    {
+        if (row.IsGameModule) return;
+        // A mod that has only ever been a row has no profile entry yet; collecting creates one.
+        CollectProfileFromRows();
+        var pm = Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
+        if (pm is null) return;
+        pm.ServerExcludedFolders = folders;
+        IsDirty = true;
+        Status = folders switch
+        {
+            null => $"{row.Id}: folders left out on the server follow the compatibility database. Save to keep it.",
+            { Count: 0 } => $"{row.Id}: nothing is left out on the server. Save to keep it.",
+            _ => $"{row.Id}: {string.Join(", ", folders)} will be left out on the server from the next launch. Save to keep it.",
+        };
+        // The preview's messages are where a host sees what the launch will do with the list (and a rejected name).
+        RefreshPreview();
+    }
+
+    /// <summary>
+    /// What the dialog's text means for the profile. Ticking "use the database's list" is null, no opinion. With no
+    /// record list to overrule, an empty box is also null rather than an empty list: an empty list would pin "leave
+    /// nothing out" against a record a later release might ship, and a host who typed nothing has not asked for that.
+    /// </summary>
+    internal static List<string>? ServerFoldersChoice(string? text, bool useRecord, bool recordHasFolders)
+    {
+        if (useRecord && recordHasFolders) return null;
+        var names = ServerFolderExclusions.ParseLines(text);
+        return names.Count == 0 && !recordHasFolders ? null : names;
+    }
+
+    /// <summary>The line under the dialog's text box: what OK will do, and which names the launch would refuse.</summary>
+    internal static string ServerFoldersHint(string? text, bool useRecord, bool recordHasFolders)
+    {
+        if (useRecord && recordHasFolders) return "Untick to choose your own list for this profile.";
+        var (valid, rejected) = ServerFolderExclusions.Split(ServerFolderExclusions.ParseLines(text));
+        if (rejected.Count > 0)
+            return "Will be ignored: " + string.Join(", ", rejected.Select(r => $"{r} ({ServerFolderExclusions.Problem(r)})"))
+                 + ". Only the name of a folder directly inside the mod can be left out.";
+        if (valid.Count == 0)
+            return recordHasFolders ? "Empty: nothing is left out for this profile, whatever the compatibility database says."
+                                    : "Empty: the server sees the whole mod.";
+        return "The launch console lists what was left out. A name that matches no folder in the mod is reported there and changes nothing.";
+    }
 
     /// <summary>Removes every missing row without asking. The command asks first; tests call this directly.</summary>
     internal void RemoveMissingRows()
