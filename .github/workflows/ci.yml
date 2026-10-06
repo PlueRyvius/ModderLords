@@ -39,6 +39,11 @@ jobs:
       - name: Build ModderLords.CompatSync (net472 shared module)
         run: dotnet build src/ModderLords.CompatSync/ModderLords.CompatSync.csproj -c Release --nologo
 
+      # The rules a submitted compat record must pass (docs/COMPAT-RECORDS.md), applied to the committed database,
+      # so a hand-edited record with a typo or an escaping path fails here too.
+      - name: Check the compat database
+        run: dotnet run --project tools/CompatRecordIntake/CompatRecordIntake.csproj -c Release -- check src/ModderLords.Core/compat-db.json
+
       - name: Test
         run: dotnet test tests/ModderLords.Core.Tests/ModderLords.Core.Tests.csproj -c Release --nologo --logger "console;verbosity=normal"
 
