@@ -106,4 +106,7 @@ public sealed class ServerSettingsHandler : IHandler
 
     /// <summary>The live instance (set while armed) so the submodule's tick can drive change broadcasts without owning Coop's lifetime.</summary>
     public static ServerSettingsHandler? Current { get; private set; }
+
+    /// <summary>The session's network object, for <see cref="NetMeter"/>.</summary>
+    internal INetwork Network => network;
 }

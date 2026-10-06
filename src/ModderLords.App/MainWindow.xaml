@@ -901,7 +901,9 @@
                             <TextBlock Text="{Binding Performance.CampaignMode}" Margin="0,0,20,0" />
                             <TextBlock Text="Players: " Foreground="{DynamicResource MutedForeground}" />
                             <TextBlock Text="{Binding Performance.Players}" Margin="0,0,8,0" />
-                            <TextBlock Text="{Binding Performance.PlayersNote}" Foreground="{DynamicResource MutedForeground}" FontStyle="Italic" />
+                            <TextBlock Text="{Binding Performance.PlayersNote}" Foreground="{DynamicResource MutedForeground}" FontStyle="Italic" Margin="0,0,20,0" />
+                            <TextBlock Text="Data this session: " Foreground="{DynamicResource MutedForeground}" />
+                            <TextBlock Text="{Binding Performance.DataTotals}" />
                         </StackPanel>
                     </Border>
 
