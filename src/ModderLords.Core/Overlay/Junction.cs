@@ -39,6 +39,29 @@ public static class Junction
     public static bool PathsEqual(string a, string b) =>
         string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether a junction can be created at <paramref name="path"/>. A junction is stored on the drive that holds
+    /// the link, and only NTFS and ReFS can store one: exFAT and FAT32 (common on external and shared drives)
+    /// cannot, and neither can a network share. What the junction points at may be on any local drive.
+    /// </summary>
+    public static bool SupportedAt(string path)
+    {
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(path));
+            if (string.IsNullOrEmpty(root) || root.StartsWith(@"\\", StringComparison.Ordinal)) return false;
+            var drive = new DriveInfo(root);
+            if (drive.DriveType == DriveType.Network) return false;
+            return drive.DriveFormat.Equals("NTFS", StringComparison.OrdinalIgnoreCase) ||
+                   drive.DriveFormat.Equals("ReFS", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // Unknown is not "no": creating the junction will say so itself if it cannot be done.
+            return true;
+        }
+    }
+
     /// <summary>Creates (or repoints) a junction. Refuses to replace a real directory.</summary>
     public static void Create(string junctionPath, string target)
     {

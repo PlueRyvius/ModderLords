@@ -185,6 +185,9 @@ about the players' game, which is the copy the host is handing out.
 - **Launches the official server engine directly** with the module list and load order you choose.
 - **Uses mods where they are.** Your game `Modules` folder and Steam Workshop items are linked into the server with
   NTFS junctions (no admin rights). Removing a mod removes only the link. Workshop updates flow through automatically.
+- **Works when Steam is on an exFAT or FAT32 drive.** Those drives cannot hold junctions, so the server is started
+  from a private view under `%LOCALAPPDATA%\ModderLords\server-view` that links back to the real install. Still
+  nothing is copied, and the console says when this is in use.
 - **Loads client-only mods on the server.** Mods that only ship a client build, or whose manifest says "client only", get
   a small shadow copy of their `SubModule.xml` so the headless server accepts them; the mod folder itself is never edited.
 - **Resolves mod DLLs the engine cannot find.** A tiny helper is loaded into the engine that finds each mod's own
@@ -615,7 +618,7 @@ Per-profile things without a tab of their own:
 |---|---|
 | Profiles | `%LOCALAPPDATA%\ModderLords\profiles\<name>.json` |
 | Mode, theme, window size | `%LOCALAPPDATA%\ModderLords\ui-state.json` |
-| Compatibility database | `compat-db.json` next to the launcher (bundled); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
+| Compatibility database | `compat-db.json` next to the launcher (bundled); the newer copy downloaded between releases in `%LOCALAPPDATA%\ModderLords\compat-db.remote.json` (with `compat-db.remote.meta.json`); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
 | Mod settings overrides / cache | `%LOCALAPPDATA%\ModderLords\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModderLords\cache\<profile>.settings-cache.json` |
 | Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModderLords\overlay\<profile>\` |
 | Launcher logs | `%LOCALAPPDATA%\ModderLords\logs\launch-*.log`, `app-errors.log` |
@@ -814,13 +817,26 @@ changed.
 
 - **Bundled**: `compat-db.json` next to the launcher, updated with each release. Starts with the frameworks (Harmony,
   ButterLib, UIExtenderEx, MCM), ModularSmithing2 and ImprovedGarrisons.
+- **Downloaded**: records added on GitHub after your release reach you without waiting for the next one. On startup
+  the launcher quietly fetches the current `compat-db.json` from the project's repository and, if it checks out, uses it
+  in place of the bundled file from the next **Rescan mods** or restart. Messages says so (`compat db: using the
+  database downloaded …`) whenever a downloaded copy is in use. Offline, or handed a file that is damaged, cut short or
+  older than the bundled one, the launcher keeps what it had. The request sends nothing about you or your mods. To turn
+  it off, set the environment variable `MODDERLORDS_COMPAT_REMOTE=0`, or `"DownloadCompatDb": false` in
+  `ui-state.json`; deleting `compat-db.remote.json` goes back to the bundled file until the next download.
 - **Yours**: `%LOCALAPPDATA%\ModderLords\compat-db.local.json`. Select a mod and press **Record…** after testing it:
   pick the verdict, tick *Tested with this version* (records the mod and Coop versions), add notes, and press *Use
-  current row as defaults* to store the Role / Server-only logic / behaviours you settled on. A local record replaces the
-  bundled one for that mod; *Remove local record* brings the bundled one back.
+  current row as defaults* to store the Role / Server-only logic / behaviours you settled on. Only what you change is
+  stored. Where the bundled database also has the mod, your record is laid over the bundled one field by field: what you
+  set wins, everything else still comes from the bundled record, so a later release can improve it without your record
+  hiding the improvement. Your verdict brings its own tested versions and notes with it, since those describe your test;
+  per-setting defaults merge value by value; a list you fill in replaces the bundled list. One consequence: leaving a
+  field empty means "no opinion", so you cannot blank a bundled value, only replace it with another. *Remove local
+  record* brings the bundled record back whole.
 - **Sharing**: **Export…** writes the selected mod's record (or, with nothing selected, all your local records) to a
-  `.json` file. **Import…** merges such a file into your local database; when both sides have a record for the same mod
-  the newer one wins and the kept ones are listed under Messages.
+  `.json` file. It writes your record as stored, without the bundled values that show through it; a mod you have no
+  record for exports the bundled one. **Import…** merges such a file into your local database; when both sides have a
+  record for the same mod the newer one wins and the kept ones are listed under Messages.
 
 The badge is a claim about what someone tested, so `· untested version` appears whenever your copy's version is not in
 the record; the mod may still work.

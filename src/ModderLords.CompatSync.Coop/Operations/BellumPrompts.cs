@@ -11,6 +11,7 @@ using ModderLords.CompatSync.Coop.Taom;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using TaleWorlds.MountAndBlade;
 
 namespace ModderLords.CompatSync.Coop.Operations;
 
@@ -43,6 +44,10 @@ internal sealed class BellumPromptSite
 /// the shared action channel and Bellum's own callback runs on the server as that player. A player who does not answer
 /// within ten minutes, or is offline, gets Bellum's AI decision (the site's <see cref="BellumPromptSite.Ai"/>): the world
 /// keeps moving around an absent player instead of waiting for them.
+/// </para>
+/// <para>
+/// The player's game opens them one at a time and never during a mission (<see cref="PromptQueue{T}"/>): Bellum raises
+/// them in bursts, and a stack of inquiries landing mid-battle is where a host reported crashes.
 /// </para>
 /// <para>Wire form is the Fourberie layer's FbPromptWire, under its own feature.</para>
 /// </summary>
@@ -98,7 +103,7 @@ internal static class BellumPrompts
         if (!server)
         {
             TaomActions.RegisterClientApply(Feature, ClientApply);
-            return "this player's game shows the Bellum prompts the server raises for them";
+            return "this player's game shows the Bellum prompts the server raises for them, one at a time and not during a mission";
         }
 
         var siteList = sites.ToList();
@@ -321,7 +326,10 @@ internal static class BellumPrompts
         }
     }
 
-    internal static string Summary() => $"Bellum prompts sent {_sent}, answered {_answered}, decided for absent players {_decided}, waiting {Waiting.Count}";
+    /// <summary>This side's part of the verification line; empty when Bellum's prompts are not in use.</summary>
+    internal static string Summary() => !_installed ? ""
+        : _server ? $"; Bellum prompts sent {_sent}, answered {_answered}, decided for absent players {_decided}, waiting {Waiting.Count}"
+        : $"; Bellum prompts waiting to open {Incoming.Count}, held during a mission {_held}, decided before they could open {_lapsed}";
 
     // ---- who is who ------------------------------------------------------------------------------------------------
 
@@ -348,9 +356,58 @@ internal static class BellumPrompts
 
     // ---- client ----------------------------------------------------------------------------------------------------
 
+    /// <summary>What the server has asked this player and their game has not opened yet. See <see cref="PromptQueue{T}"/>.</summary>
+    private static readonly PromptQueue<object> Incoming = new PromptQueue<object>(AnswerWithin, TimeSpan.FromSeconds(1));
+    private static long _held, _lapsed;
+
+    /// <summary>Client, game thread: a prompt the server raised for this player. Queued, not opened: see <see cref="ClientTick"/>.</summary>
     private static void ClientApply(IList<string> data)
     {
-        switch (FbPromptWire.Unpack(data))
+        var prompt = FbPromptWire.Unpack(data);
+        var title = prompt is FbInquiry q ? q.Title : prompt is FbMultiInquiry m ? m.Title : null;
+        if (prompt == null || title == null) { Log.Warn("Bellum prompts: a server prompt could not be read"); return; }
+        Incoming.Add(prompt, DateTime.UtcNow);
+        if (Mission.Current != null)
+        {
+            // The server's clock is already running, so say that something is waiting rather than staying silent
+            // until the battle is over.
+            _held++;
+            Log.Info($"Bellum prompts: '{title}' held until this player leaves the mission");
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"A decision is waiting for you: \"{title}\". It opens when you are back on the map; unanswered after "
+                + $"{(int)AnswerWithin.TotalMinutes} minutes, it is decided for you.", Colors.Yellow));
+        }
+        ClientTick();
+    }
+
+    /// <summary>
+    /// Client, game thread, every quarter second: opens the next waiting prompt when the player is on the map and no
+    /// other inquiry is up, one at a time.
+    /// </summary>
+    internal static void ClientTick()
+    {
+        if (_server || !_installed) return;
+        if (TaomActions.Send == null) { Incoming.Clear(); return; }   // the session ended; its prompts cannot be answered
+        if (Incoming.Count == 0) return;
+        var busy = Mission.Current != null || AnyInquiryOpen();
+        var take = Incoming.TryTake(DateTime.UtcNow, busy, out var prompt, out var dropped);
+        if (dropped > 0)
+        {
+            _lapsed += dropped;
+            Log.Info($"Bellum prompts: {dropped} prompt(s) were decided by the server before this player could be asked");
+        }
+        if (take) Show(prompt);
+    }
+
+    private static bool AnyInquiryOpen()
+    {
+        try { return InformationManager.IsAnyInquiryActive(); }
+        catch { return false; }
+    }
+
+    private static void Show(object prompt)
+    {
+        switch (prompt)
         {
             case FbInquiry q:
                 InformationManager.ShowInquiry(new InquiryData(q.Title, q.Text, q.AffirmativeShown, q.NegativeShown, q.AffirmativeText, q.NegativeText,
@@ -365,11 +422,13 @@ internal static class BellumPrompts
                     chosen => Reply(FbPromptWire.AnswerPicked(m.Id, chosen.Select(c => (int)c.Identifier))),
                     _ => Reply(FbPromptWire.Answer(m.Id, false))));
                 break;
-            default:
-                Log.Warn("Bellum prompts: a server prompt could not be read");
-                break;
         }
     }
 
-    private static void Reply(List<string> answer) => TaomActions.Send?.Invoke(Feature, "answer", answer);
+    private static void Reply(List<string> answer)
+    {
+        // The next prompt is opened by the tick, not from inside this one's button callback while it is closing.
+        Incoming.Answered();
+        TaomActions.Send?.Invoke(Feature, "answer", answer);
+    }
 }

@@ -159,6 +159,15 @@ public class WorkflowTests
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "SubModule.xml"), $"<Module><Name value='{id}'/><Id value='{id}'/><Version value='v1.0.0'/><SubModules/></Module>");
         }
+        /// <summary>A copy of a mod anywhere under the fixture, with the given top-level folders inside it.</summary>
+        public string Copy(string relativeFolder, string id, params string[] folders)
+        {
+            var folder = Path.Combine(Root, relativeFolder);
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "SubModule.xml"), $"<Module><Name value='{id}'/><Id value='{id}'/><Version value='v1.0.0'/><SubModules/></Module>");
+            foreach (var f in folders) Directory.CreateDirectory(Path.Combine(folder, f));
+            return folder;
+        }
         public MainViewModel ViewModel() => new(false)
         {
             Profile = new Profile { Name = "ui-test-" + Guid.NewGuid().ToString("N"), GameRoot = Root,
@@ -669,6 +678,188 @@ public class WorkflowTests
         Assert.Equal([Path.Combine(fixture.Root, "ExtraMods")], vm.Profile.CustomModRoots);
         Assert.Contains(vm.Mods, m => m.Id == "SideMod" && m.Source == "Custom");
         Assert.True(vm.IsDirty);
+    });
+
+    // ---- two copies of one mod at one version (the pinned server copy that "reverted", 1.2.5) -------------------
+
+    /// <summary>The host's layout: the full mod in the game's Modules, the same version minus RuntimeDataCache in
+    /// a folder of their own for the server.</summary>
+    private static (string Game, string Server) FullAndServerCopies(Fixture fixture, bool sameFolders = false)
+    {
+        var game = fixture.Copy(Path.Combine("Modules", "TwinMod"), "TwinMod", "ModuleData", "RuntimeDataCache");
+        var server = sameFolders
+            ? fixture.Copy(Path.Combine("ServerMods", "TwinMod"), "TwinMod", "ModuleData", "RuntimeDataCache")
+            : fixture.Copy(Path.Combine("ServerMods", "TwinMod"), "TwinMod", "ModuleData");
+        return (game, server);
+    }
+
+    private static MainViewModel PinnedTo(Fixture fixture, string? pin, bool scanServerFolder = true)
+    {
+        var vm = fixture.ViewModel();
+        if (scanServerFolder) vm.Profile.CustomModRoots = [Path.Combine(fixture.Root, "ServerMods")];
+        vm.Profile.Mods = [new ProfileMod { Id = "TwinMod", Enabled = true, SourcePath = pin, LastVersion = "v1.0.0" }];
+        return vm;
+    }
+
+    private static string? PinOf(Profile profile) => profile.Mods.Single(m => m.Id == "TwinMod").SourcePath;
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void APinOnEitherOfTwoSameVersionCopiesSurvivesRescanSaveAndLoad(bool pinServerCopy) => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var (game, server) = FullAndServerCopies(fixture);
+        var pin = pinServerCopy ? server : game;
+        var vm = PinnedTo(fixture, pin);
+        var path = ProfileStore.PathFor(vm.Profile.Name);
+        try
+        {
+            vm.Rescan();
+
+            // Both copies are listed, told apart by folder, and the pinned one is the one that is on.
+            var rows = vm.Mods.Where(r => r.Id == "TwinMod").ToList();
+            Assert.Equal(new[] { game, server }.Order(), rows.Select(r => r.Folder).Order());
+            Assert.Equal(pin, rows.Single(r => r.Enabled).Folder);
+            Assert.All(rows, r => Assert.Contains(r.Folder, r.BandName));
+            Assert.Contains(vm.Messages, m => m.Contains("TwinMod: 2 copies installed") && m.Contains(game) && m.Contains(server));
+
+            vm.CollectProfileFromRows();
+            Assert.Equal(pin, PinOf(vm.Profile));
+
+            vm.SaveProfileCommand.Execute(null);
+            var loaded = ProfileStore.Load(vm.Profile.Name)!;
+            Assert.Equal(pin, PinOf(loaded));
+
+            vm.Profile = loaded;
+            vm.Rescan();
+            vm.CollectProfileFromRows();
+            Assert.Equal(pin, PinOf(vm.Profile));
+            Assert.Equal(pin, vm.Mods.Single(r => r.Id == "TwinMod" && r.Enabled).Folder);
+            // The list and the launch agree on the copy.
+            Assert.Equal(pin, ClientLaunchSession.Prepare(vm.Profile).Mods.Single(m => m.Id == "TwinMod").FolderPath);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    });
+
+    [Fact]
+    public void IdenticalSameVersionCopiesAreStillOneRow() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var (game, server) = FullAndServerCopies(fixture, sameFolders: true);
+
+        // Nothing pinned: one row, the copy the launch would pick.
+        var vm = PinnedTo(fixture, null);
+        vm.Rescan();
+        Assert.Equal(game, vm.Mods.Single(r => r.Id == "TwinMod").Folder);
+        Assert.DoesNotContain(vm.Messages, m => m.Contains("TwinMod: 2"));
+
+        // Pinned to the one that would have been folded away: still one row, and it is the pinned copy.
+        vm = PinnedTo(fixture, server);
+        vm.Rescan();
+        Assert.Equal(server, vm.Mods.Single(r => r.Id == "TwinMod").Folder);
+        vm.CollectProfileFromRows();
+        Assert.Equal(server, PinOf(vm.Profile));
+    });
+
+    [Fact]
+    public void APinOutsideEveryScannedFolderSurvives() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var (game, server) = FullAndServerCopies(fixture);
+        var vm = PinnedTo(fixture, server, scanServerFolder: false);
+        vm.Rescan();
+
+        var rows = vm.Mods.Where(r => r.Id == "TwinMod").ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(server, rows.Single(r => r.Enabled).Folder);
+        Assert.DoesNotContain(rows, r => r.IsMissing);
+        vm.CollectProfileFromRows();
+        Assert.Equal(server, PinOf(vm.Profile));
+        vm.Rescan();
+        vm.CollectProfileFromRows();
+        Assert.Equal(server, PinOf(vm.Profile));
+        Assert.Equal(server, ClientLaunchSession.Prepare(vm.Profile).Mods.Single(m => m.Id == "TwinMod").FolderPath);
+        Assert.Equal(game, rows.Single(r => !r.Enabled).Folder);
+    });
+
+    [Fact]
+    public void APinnedCopyThatIsTheOnlyOneInstalledIsNotReportedMissing() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var server = fixture.Copy(Path.Combine("ServerMods", "TwinMod"), "TwinMod", "ModuleData");
+        var vm = PinnedTo(fixture, server, scanServerFolder: false);
+        vm.Rescan();
+
+        var row = vm.Mods.Single(r => r.Id == "TwinMod");
+        Assert.False(row.IsMissing);
+        Assert.True(row.Enabled);
+        Assert.Equal(server, row.Folder);
+        Assert.Equal(0, vm.MissingCount);
+    });
+
+    [Fact]
+    public void TickingTheOtherCopyMovesThePin() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var (game, server) = FullAndServerCopies(fixture);
+        var vm = PinnedTo(fixture, server);
+        vm.Rescan();
+
+        vm.Mods.Single(r => r.Id == "TwinMod" && r.Folder == game).Enabled = true;
+
+        Assert.False(vm.Mods.Single(r => r.Id == "TwinMod" && r.Folder == server).Enabled);
+        Assert.Contains(game, vm.Status);
+        vm.CollectProfileFromRows();
+        Assert.Equal(game, PinOf(vm.Profile));
+        vm.Rescan();
+        Assert.Equal(game, vm.Mods.Single(r => r.Id == "TwinMod" && r.Enabled).Folder);
+    });
+
+    [Fact]
+    public void UntickingAModDoesNotMoveItsPin() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var (game, server) = FullAndServerCopies(fixture);
+        var vm = PinnedTo(fixture, server);
+        vm.Rescan();
+
+        // Off, and with the other copy dragged above it: "the first row" is now the copy that was NOT chosen.
+        var pinned = vm.Mods.Single(r => r.Id == "TwinMod" && r.Folder == server);
+        pinned.Enabled = false;
+        vm.Mods.Move(vm.Mods.IndexOf(vm.Mods.Single(r => r.Id == "TwinMod" && r.Folder == game)), vm.Mods.IndexOf(pinned));
+        Assert.Equal(game, vm.Mods.First(r => r.Id == "TwinMod").Folder);
+
+        vm.CollectProfileFromRows();
+
+        Assert.False(vm.Profile.Mods.Single(m => m.Id == "TwinMod").Enabled);
+        Assert.Equal(server, PinOf(vm.Profile));
+    });
+
+    /// <summary>
+    /// Launch client builds the game's mod list from the SERVER's selections. Once the server's pin holds, that
+    /// would point the host's own game at the copy cut down for the server.
+    /// </summary>
+    [Fact]
+    public void TheHostsClientLaunchUsesTheFullCopyWhenTheServerRunsACutDownOne() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var (game, server) = FullAndServerCopies(fixture);
+        var vm = PinnedTo(fixture, server);
+        vm.Rescan();
+        var selected = ClientLaunchSession.Prepare(vm.Profile);
+        Assert.Equal(server, selected.Mods.Single(m => m.Id == "TwinMod").FolderPath);   // what the server links
+        var paths = ServerPaths.Create(vm.Profile.DedicatedServerRoot!, fixture.Root, fixture.Root);
+        var selections = selected.Modules.Selections;
+        var prepared = new LaunchSession.Prepared(paths, selected.Catalog, selections, selected.Order,
+            OverlayPlanner.Plan(Path.Combine(fixture.Root, "overlay"), paths.ModulesRoot, selections),
+            new LaunchPlan { Paths = paths, ModuleIds = selected.Order.ModuleIds }, []);
+        vm.Mode = AppMode.Host;
+        vm.Host!.RecordRunningSession(prepared, ProfileStore.Snapshot(vm.Profile));
+
+        var launch = vm.Host.PrepareClientLaunch();
+
+        Assert.Equal(game, launch.Mods.Single(m => m.Id == "TwinMod").FolderPath);
     });
 
     [Fact]

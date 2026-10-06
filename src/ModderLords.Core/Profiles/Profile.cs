@@ -161,6 +161,8 @@ public static class ProfileStore
     public static string RootDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ModderLords");
     public static string ProfilesDir => Path.Combine(RootDir, "profiles");
     public static string OverlayDirFor(string profileName) => Path.Combine(RootDir, "overlay", Safe(profileName));
+    /// <summary>Where the private server views live, one per dedicated server folder (see ServerView).</summary>
+    public static string ServerViewsDir => Path.Combine(RootDir, "server-view");
 
     private static readonly JsonSerializerOptions Json = new()
     {

@@ -130,8 +130,8 @@ if (cmd == "play")
 var root = opts.GetValueOrDefault("root") ?? ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault();
 if (root is null) { Console.Error.WriteLine("No DedicatedServer folder found; pass --root."); return 2; }
 var diagnosticData = opts.GetValueOrDefault("data-dir");
-var paths = ServerPaths.Create(root, diagnosticData,
-    opts.GetValueOrDefault("coop-data-dir") ?? (diagnosticData is null ? null : Path.Combine(diagnosticData, "CoopData")));
+var paths = ServerView.For(ServerPaths.Create(root, diagnosticData,
+    opts.GetValueOrDefault("coop-data-dir") ?? (diagnosticData is null ? null : Path.Combine(diagnosticData, "CoopData"))));
 // Validate creation before overlays, config, caches, or logs can be changed.
 if (cmd == "launch" && opts.GetValueOrDefault("create-world") is { } requestedWorld)
 {
@@ -145,7 +145,7 @@ if (problems.Count > 0) return 2;
 var libraries = ServerPaths.SteamLibraries().ToList();
 var gameRoot = opts.GetValueOrDefault("game") ?? ModuleCatalog.FindGameRoot(libraries);
 var customRoots = opts.TryGetValue("source", out var src) ? src.Split(';', StringSplitOptions.RemoveEmptyEntries) : [];
-var catalog = ModuleCatalog.Scan(paths.ModulesRoot, gameRoot, libraries, customRoots);
+var catalog = ModuleCatalog.Scan(paths.StockModulesRoot, gameRoot, libraries, customRoots);
 foreach (var p in catalog.Problems) Console.Error.WriteLine("[ModderLords] catalog: " + p);
 
 var overlayRoot = diagnosticData is null
@@ -663,11 +663,18 @@ OverlayApplier.ApplyResult? ApplyOverlay(List<ModSelection> selections, OverlayP
     }
     try
     {
+        ServerView.Build(paths);
+        if (ServerView.Describe(paths) is { } viewNote) Console.WriteLine("[ModderLords] " + viewNote);
         var result = applier.Apply(plan);
         foreach (var a in result.Applied)
             foreach (var c in a.ManifestChanges) Console.WriteLine($"             {a.ModuleId}: {c}");
         foreach (var r in result.Removed) Console.WriteLine("[ModderLords] removed stale junction " + r);
         foreach (var w in result.Warnings) Console.WriteLine("[ModderLords] WARNING " + w);
+        if (result.Failed.Count > 0)
+        {
+            Console.Error.WriteLine($"[ModderLords] overlay failed: {result.Failed.Count} mod(s) could not be linked into the server");
+            return null;
+        }
         return result;
     }
     catch (Exception ex)

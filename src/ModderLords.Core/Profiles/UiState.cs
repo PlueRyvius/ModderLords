@@ -36,6 +36,12 @@ public sealed class UiState
     /// <summary>A release the user chose "Skip this version" on. A later release is offered again.</summary>
     public string? SkippedVersion { get; set; }
 
+    /// <summary>
+    /// Whether to pick up a newer compatibility database from GitHub between releases, and use the one already
+    /// downloaded. Read by CompatDbRemote, so the CLI honours it too. No checkbox yet: edit ui-state.json.
+    /// </summary>
+    public bool DownloadCompatDb { get; set; } = true;
+
     /// <summary>Experimental compatibility (Server tab, Advanced). Off by default; see MainViewModel.ExperimentalCompat.</summary>
     public bool ExperimentalCompat { get; set; }
 
