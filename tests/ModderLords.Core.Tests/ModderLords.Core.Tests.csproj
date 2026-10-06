@@ -68,6 +68,7 @@
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbRecordGate.cs" Link="Module\FbRecordGate.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbPatchTargets.cs" Link="Module\FbPatchTargets.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\TickSteps.cs" Link="Module\TickSteps.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Operations\PromptQueue.cs" Link="Module\PromptQueue.cs" />
     <!-- The server-admin console wire and ban list, game- and Coop-free: checked against the launcher's own end. -->
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Admin\AdminWire.cs" Link="Module\AdminWire.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Admin\BanList.cs" Link="Module\BanList.cs" />

@@ -54,13 +54,19 @@ public static class Bridge
         Steps.Run("OperationClientHandler.ApplyPendingSnapshots", () => global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.OperationClientHandler.Current?.ApplyPendingSnapshots());
     }
 
-    /// <summary>Client, every quarter second: sends relayed player actions whose control has settled. Cheap when none are waiting.</summary>
-    public static void RelayTick() =>
-        global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.ClientSettingsHandler.Current?.FlushRelays();
+    /// <summary>
+    /// Client, every quarter second: sends relayed player actions whose control has settled, and opens the next Bellum
+    /// prompt the server is waiting on. Cheap when none are waiting.
+    /// </summary>
+    public static void RelayTick()
+    {
+        Steps.Run("ClientSettingsHandler.FlushRelays", () => global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.ClientSettingsHandler.Current?.FlushRelays());
+        Steps.Run("BellumPrompts.ClientTick", () => Operations.BellumPrompts.ClientTick());
+    }
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
     public static string VerificationSummary() => BehaviorGate.VerificationSummary() + "; " + Operations.OperationRuntime.Report()
-        + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary() + "; " + InventoryExchangeEvent.Summary() + "; " + Steps.Summary();
+        + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary() + Operations.BellumPrompts.Summary() + "; " + InventoryExchangeEvent.Summary() + "; " + Steps.Summary();
 
     /// <summary>Both sides, every 30 s and at unload: writes the ground-truth trace counters. Returns how many methods were written (0 when not tracing).</summary>
     public static int TraceFlush() => BehaviorGate.TraceFlush();

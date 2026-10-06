@@ -207,6 +207,15 @@ First set, claim feuds: crown judgment (AI: Bellum judges the petition as for a 
 ruling (AI: `GetRulingResponses` for that clan), the call to arms (AI: answer it, as a lord who qualifies does) and a
 title revocation demand (AI: `TryExecuteRevocation`, where the holder's defiance is Bellum's own call).
 
+On the player's side the prompts are queued (`PromptQueue`): one opens at a time, and none while the player is in a
+mission or another inquiry is up. Bellum raises prompts in bursts, and a host reported crashes "when the server forces
+those on you all at once and you are in combat" (issue #170, 2026-10-03). No log or dump came with the report, so this
+is a best guess that removes the situation rather than a fix for a known faulting call; it has not been reproduced. The
+server's ten-minute timer is not paused for a battle: a held prompt is announced in the message log when it arrives,
+and one the server has already decided is dropped instead of being shown late. Both sides now report their prompt
+counters in the verification line (waiting, held during a mission, decided before they could open), which is the
+evidence to ask for if it recurs. The Fourberie layer's prompts still open as they arrive.
+
 Known limits: Bellum models one player per decision, so if the ruler and a party of the same feud are both players,
 the second is decided like a lord. Prompts still waiting when the server stops are not saved; Bellum re-raises its
 pending feud prompts each day, so those come back. Not yet exercised in play: the save used for headless runs has no
