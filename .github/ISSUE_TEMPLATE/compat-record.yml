@@ -1,0 +1,56 @@
+# The field ids, the labels, the title prefix and the label below are a contract:
+#   - the Submit… button on ModderLords' Mods tab builds a prefilled link from the ids,
+#   - the compat-record workflow finds each field by its label (GitHub renders labels, not ids, as headings).
+# CompatIntake in ModderLords.Core holds the labels and a test fails when the two drift apart. See docs/COMPAT-RECORDS.md.
+name: Compat record
+description: Share what you found out about a mod under Bannerlord Coop, so every ModderLords user gets it
+title: "Compat record: "
+labels: ["compat-record"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A compatibility record tells ModderLords how one mod behaves on a Bannerlord Coop server: whether it works, and which settings it needs. Submitting yours here proposes it for the list that ships with ModderLords, so other hosts get it without working it out again.
+
+        You do not have to fill this in by hand. In ModderLords, select the mod on the Mods tab and press **Submit…**: it opens this form with everything filled in. The record is checked automatically and then reviewed by the maintainer before anything changes.
+
+  - type: input
+    id: mod
+    attributes:
+      label: Module id
+      description: The mod's id as ModderLords shows it, for example ImprovedGarrisons. It must match the Id inside the record.
+    validations:
+      required: true
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: Mod version
+      description: The version of the mod you tested, for example v4.2.0.7.
+    validations:
+      required: false
+
+  - type: input
+    id: coop-version
+    attributes:
+      label: Coop version
+      description: The version of Bannerlord Coop you tested with, for example v0.1.5.
+    validations:
+      required: false
+
+  - type: textarea
+    id: record
+    attributes:
+      label: Compatibility record
+      description: The record exactly as ModderLords exported it. One record per issue.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Optional. What you tested and how, for example how many players, for how long, and what you saw.
+    validations:
+      required: false

@@ -13,8 +13,13 @@ public partial class CompatRecordWindow : Window
     private readonly ModRow _row;
     private readonly string? _coopVersion;
     private readonly CompatRecord _record;
+    private readonly CompatRecord? _bundled;
 
-    /// <summary>The record to save (valid when DialogResult is true and RemoveLocal is false).</summary>
+    /// <summary>
+    /// The effective record as the user left it (valid when DialogResult is true and RemoveLocal is false). It still holds
+    /// every bundled value the user did not touch, so it is not what goes in the local file: the caller stores
+    /// <see cref="CompatDb.LocalPart"/> of it.
+    /// </summary>
     public CompatRecord Result => _record;
     /// <summary>True when the user chose to delete the local record instead of saving one.</summary>
     public bool RemoveLocal { get; private set; }
@@ -24,16 +29,18 @@ public partial class CompatRecordWindow : Window
         InitializeComponent();
         _row = row;
         _coopVersion = coopVersion;
-        // Start from the record the badge shows (bundled or local) so recording a verdict keeps the notes and defaults already known.
+        // Start from the record the badge shows (bundled, local, or local over bundled) so the user sees what is in effect.
         _record = row.Compat.Record?.Clone() ?? new CompatRecord { Id = row.Id };
         _record.Id = row.Id;
         _record.UpdatedAt = null; // stamped on save
+        _bundled = CompatDb.Current.FindBundled(row.Id);
 
         Header.Text = $"{row.Id} {row.Version}";
         SourceLine.Text = row.Compat.Source switch
         {
+            CompatSource.Local when row.Compat.OverBundled => "Editing your local record; the record bundled with the launcher fills in what you have not changed.",
             CompatSource.Local => "Editing your local record (compat-db.local.json).",
-            CompatSource.Bundled => "Starting from the record bundled with the launcher; saving creates a local record that overrides it.",
+            CompatSource.Bundled => "Starting from the record bundled with the launcher; saving stores only what you change.",
             _ => "No record yet; saving creates one in your local compat database.",
         };
         RemoveButton.IsEnabled = row.Compat.Source == CompatSource.Local;
@@ -71,9 +78,11 @@ public partial class CompatRecordWindow : Window
 
     private void ClearDefaults_Click(object sender, RoutedEventArgs e)
     {
-        _record.DefaultRole = null;
-        _record.ServerAuthoritative = null;
-        _record.ClientSideBehaviors = new List<string>();
+        // Clearing drops the user's defaults, and a local record cannot blank a bundled value (CompatDb.Merge): the bundled
+        // defaults come back. Show those now rather than "None", which the next launch would contradict.
+        _record.DefaultRole = _bundled?.DefaultRole;
+        _record.ServerAuthoritative = _bundled?.ServerAuthoritative;
+        _record.ClientSideBehaviors = _bundled?.ClientSideBehaviors.ToList() ?? new List<string>();
         ShowDefaults();
     }
 

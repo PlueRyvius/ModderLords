@@ -1,5 +1,6 @@
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
+using ModderLords.Core.Modules;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
 
@@ -16,7 +17,7 @@ public static class ServerMatchedClient
         var client = ProfileStore.Snapshot(clientProfile);
         client.Mods = target.Selections.Where(s => !ClientManifest.IsServerOnly(s.Module.Id)).Select(s => new ProfileMod
         {
-            Id = s.Module.Id, Enabled = true, SourcePath = s.Module.FolderPath, LastVersion = s.Module.Version,
+            Id = s.Module.Id, Enabled = true, SourcePath = ClientCopy(s.Module, target.Catalog).FolderPath, LastVersion = s.Module.Version,
         }).ToList();
         foreach (var missing in clientProfile.EnabledMods.Where(pm => !client.Mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
                      !ClientManifest.IsServerOnly(pm.Id) && !ClientManifest.CoopClientModuleIds.Contains(pm.Id)))
@@ -43,6 +44,17 @@ public static class ServerMatchedClient
         if (mismatched.Count > 0) throw new InvalidOperationException("Client versions differ from the server: " + string.Join(", ", mismatched) + ". Update matching copies or restart the server.");
         return result;
     }
+
+    /// <summary>
+    /// The folder the player's game should load for a mod the server selected. Normally the very same one. The
+    /// exception is a host who pins a copy cut down for the server (the same mod without <c>RuntimeDataCache</c>,
+    /// say) while the full copy sits in the game's Modules folder: handing the game the server's folder would run
+    /// the player on the stripped copy. The profile has one pin per mod and it is the server's, so the full copy is
+    /// recognised from the outside instead - same id, same version, every top-level folder the server's copy has
+    /// and more. Coop's handshake matches on id and version, so the two sides still agree.
+    /// </summary>
+    public static DiscoveredModule ClientCopy(DiscoveredModule serverCopy, ModuleCatalog catalog) =>
+        ModuleCopies.FullerCopy(serverCopy, catalog.Candidates(serverCopy.Id)) ?? serverCopy;
 
     /// <summary>
     /// Where Coop belongs in a synthesized client list: after however many of these mods the profile places ahead of

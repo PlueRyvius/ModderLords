@@ -64,8 +64,12 @@ public sealed class CompatRecord
     };
 }
 
-/// <summary>What the Mods tab shows for one mod: the verdict, whether this exact version was tested, and where the record came from.</summary>
-public sealed record CompatBadge(CompatVerdict Verdict, bool VersionUntested, CompatSource Source, CompatRecord? Record)
+/// <summary>
+/// What the Mods tab shows for one mod: the verdict, whether this exact version was tested, and where the record came from.
+/// <paramref name="Record"/> is the effective record. <paramref name="OverBundled"/> is true when that is the user's local
+/// record laid over a bundled one (<see cref="CompatDb.Merge"/>); the source is still Local, because the user has a say in it.
+/// </summary>
+public sealed record CompatBadge(CompatVerdict Verdict, bool VersionUntested, CompatSource Source, CompatRecord? Record, bool OverBundled = false)
 {
     public static readonly CompatBadge None = new(CompatVerdict.Unknown, false, CompatSource.None, null);
 }
@@ -78,7 +82,8 @@ public sealed class CompatDbFile
 }
 
 /// <summary>
-/// Bundled compat-db.json (next to the exe) merged with the user's compat-db.local.json (whole record by id, local wins).
+/// Bundled compat-db.json (next to the exe) merged with the user's compat-db.local.json: by id, and field by field where
+/// both files have the mod, so a local record only covers what it actually says (see <see cref="Merge"/>).
 /// Replaces the hardcoded per-mod role and keep-submodule tables; those values remain as the fallback when no file ships.
 /// </summary>
 public sealed class CompatDb
@@ -95,19 +100,170 @@ public sealed class CompatDb
         PropertyNameCaseInsensitive = true,
     };
 
+    /// <summary>The effective record per id: what every launch-time consumer and the badge read.</summary>
     private readonly Dictionary<string, (CompatRecord Record, CompatSource Source)> _records = new(StringComparer.OrdinalIgnoreCase);
+    // The two files as read, kept apart from the effective records: Export and the Record dialog must work from what the
+    // user actually stored, or a merged record would be written back and pin every bundled value it happened to contain.
+    private readonly Dictionary<string, CompatRecord> _bundled = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CompatRecord> _local = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyList<string> Problems { get; }
+    /// <summary>Effective records: bundled, local, or a local one laid over the bundled one.</summary>
     public IEnumerable<CompatRecord> Records => _records.Values.Select(v => v.Record);
-    public IEnumerable<CompatRecord> LocalRecords => _records.Values.Where(v => v.Source == CompatSource.Local).Select(v => v.Record);
+    /// <summary>The user's records exactly as stored in the local file, never merged. This is what Export shares.</summary>
+    public IEnumerable<CompatRecord> LocalRecords => _local.Values;
+    /// <summary>Records the user has said nothing about, so the bundled one is shown as it ships.</summary>
     public IEnumerable<CompatRecord> BundledRecords => _records.Values.Where(v => v.Source == CompatSource.Bundled).Select(v => v.Record);
 
     private CompatDb(IEnumerable<CompatRecord> bundled, IEnumerable<CompatRecord> local, List<string> problems)
     {
-        foreach (var r in bundled) if (!string.IsNullOrWhiteSpace(r.Id)) _records[r.Id] = (r, CompatSource.Bundled);
-        foreach (var r in local) if (!string.IsNullOrWhiteSpace(r.Id)) _records[r.Id] = (r, CompatSource.Local);
+        foreach (var r in bundled)
+        {
+            if (string.IsNullOrWhiteSpace(r.Id)) continue;
+            _bundled[r.Id] = r;
+            _records[r.Id] = (r, CompatSource.Bundled);
+        }
+        foreach (var r in local)
+        {
+            if (string.IsNullOrWhiteSpace(r.Id)) continue;
+            _local[r.Id] = r;
+            _records[r.Id] = (_bundled.TryGetValue(r.Id, out var b) ? Merge(b, r) : r, CompatSource.Local);
+        }
         Problems = problems;
     }
+
+    // ---- merging -----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The effective record for a mod both files know: the bundled record with the local record's <em>set</em> fields
+    /// laid over it. Taking the local record whole (the earlier rule) meant that recording anything for a mod froze every
+    /// other field at whatever the bundled record said that day, so later bundled fixes never reached that user.
+    ///
+    /// "Set" means non-null, a non-empty list or dictionary, non-blank text, or a verdict other than Unknown. Per field:
+    /// <list type="bullet">
+    /// <item><c>Id</c>: the bundled spelling; ids match case-insensitively and the bundled one is the curated form.</item>
+    /// <item><c>Verdict</c>, <c>TestedVersions</c>, <c>TestedCoopVersion</c>, <c>Notes</c>: one block, the test report. When
+    /// the local record has a verdict all four come from it, empty or not: they say what <em>this user</em> tested, and
+    /// the bundled versions or notes under someone else's verdict would claim a test nobody ran. Without a local verdict
+    /// the bundled verdict stands and each of the other three falls back on its own, like any other field.</item>
+    /// <item><c>UpdatedAt</c>: local when set, else bundled. SaveLocal always stamps it, so it dates the user's part.</item>
+    /// <item><c>DefaultRole</c>, <c>ServerAuthoritative</c>, <c>ClientLoadsAfterCoop</c>, <c>Url</c>: local when set, else bundled.</item>
+    /// <item><c>ClientSideBehaviors</c>, <c>KeepSubModules</c>, <c>SettingsTypes</c>, <c>IgnoreSettingsTypes</c>,
+    /// <c>EnsureLines</c>: the local list when it has entries, else the bundled list. Replaced, not unioned: a user who
+    /// states a list must be able to leave a bundled entry out of it.</item>
+    /// <item><c>DefaultSettings</c>: merged per settingsId and per property; a local value wins, bundled values for other
+    /// properties stay. Here the key being present is what counts as set, so a local value may be the empty string.</item>
+    /// </list>
+    ///
+    /// The price: a local record cannot blank a bundled value any more. An empty local list, null, blank notes or an
+    /// Unknown verdict all read as "no opinion" and the bundled value shows through; to switch something off the local
+    /// record has to say something else (a different role, a list with other entries, a setting's other value).
+    ///
+    /// Every public property of <see cref="CompatRecord"/> must be handled here and in <see cref="LocalPart"/>;
+    /// CompatDbTests walks the properties by reflection and fails for one that is not.
+    /// </summary>
+    public static CompatRecord Merge(CompatRecord bundled, CompatRecord local)
+    {
+        var m = bundled.Clone();
+        var l = local.Clone(); // so the merged record shares no list with the stored local one
+
+        if (l.Verdict != CompatVerdict.Unknown)
+        {
+            m.Verdict = l.Verdict;
+            m.TestedVersions = l.TestedVersions;
+            m.TestedCoopVersion = l.TestedCoopVersion;
+            m.Notes = l.Notes;
+        }
+        else
+        {
+            if (l.TestedVersions.Count > 0) m.TestedVersions = l.TestedVersions;
+            m.TestedCoopVersion = l.TestedCoopVersion ?? m.TestedCoopVersion;
+            if (!string.IsNullOrWhiteSpace(l.Notes)) m.Notes = l.Notes;
+        }
+        m.UpdatedAt = l.UpdatedAt ?? m.UpdatedAt;
+
+        m.DefaultRole = l.DefaultRole ?? m.DefaultRole;
+        m.ServerAuthoritative = l.ServerAuthoritative ?? m.ServerAuthoritative;
+        m.ClientLoadsAfterCoop = l.ClientLoadsAfterCoop ?? m.ClientLoadsAfterCoop;
+        if (!string.IsNullOrWhiteSpace(l.Url)) m.Url = l.Url;
+
+        if (l.ClientSideBehaviors.Count > 0) m.ClientSideBehaviors = l.ClientSideBehaviors;
+        if (l.KeepSubModules.Count > 0) m.KeepSubModules = l.KeepSubModules;
+        if (l.SettingsTypes.Count > 0) m.SettingsTypes = l.SettingsTypes;
+        if (l.IgnoreSettingsTypes.Count > 0) m.IgnoreSettingsTypes = l.IgnoreSettingsTypes;
+        if (l.EnsureLines.Count > 0) m.EnsureLines = l.EnsureLines;
+
+        foreach (var (settingsId, props) in l.DefaultSettings)
+        {
+            if (!m.DefaultSettings.TryGetValue(settingsId, out var target))
+                m.DefaultSettings[settingsId] = target = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (prop, value) in props) target[prop] = value;
+        }
+        return m;
+    }
+
+    /// <summary>
+    /// The inverse of <see cref="Merge"/>, for the Record dialog: given the effective record as the user left it, the
+    /// local record to store so that merging it over <paramref name="bundled"/> gives that record back. Anything still
+    /// equal to the bundled value is left unset, which is the whole point: the dialog shows the effective record, and
+    /// saving that as it stands would copy every bundled value into the local file and freeze it there.
+    ///
+    /// Null when nothing differs, so the caller keeps no local record at all. With no bundled record the edited record
+    /// is the local record. A field the user blanked comes out unset and the bundled value returns (see Merge).
+    /// </summary>
+    public static CompatRecord? LocalPart(CompatRecord edited, CompatRecord? bundled)
+    {
+        if (bundled is null) return edited;
+        var e = edited.Clone();
+        var part = new CompatRecord { Id = e.Id };
+
+        var sameVersions = e.TestedVersions.SequenceEqual(bundled.TestedVersions, StringComparer.Ordinal);
+        var sameNotes = Text(e.Notes) == Text(bundled.Notes);
+        if (e.Verdict != CompatVerdict.Unknown)
+        {
+            // The report travels as a block (Merge), so one changed part stores all four.
+            if (e.Verdict != bundled.Verdict || !sameVersions || e.TestedCoopVersion != bundled.TestedCoopVersion || !sameNotes)
+            {
+                part.Verdict = e.Verdict;
+                part.TestedVersions = e.TestedVersions;
+                part.TestedCoopVersion = e.TestedCoopVersion;
+                part.Notes = e.Notes;
+            }
+        }
+        else
+        {
+            if (!sameVersions) part.TestedVersions = e.TestedVersions;
+            if (e.TestedCoopVersion != bundled.TestedCoopVersion) part.TestedCoopVersion = e.TestedCoopVersion;
+            if (!sameNotes) part.Notes = e.Notes;
+        }
+
+        if (e.DefaultRole != bundled.DefaultRole) part.DefaultRole = e.DefaultRole;
+        if (e.ServerAuthoritative != bundled.ServerAuthoritative) part.ServerAuthoritative = e.ServerAuthoritative;
+        if (e.ClientLoadsAfterCoop != bundled.ClientLoadsAfterCoop) part.ClientLoadsAfterCoop = e.ClientLoadsAfterCoop;
+        if (Text(e.Url) != Text(bundled.Url)) part.Url = e.Url;
+
+        if (!e.ClientSideBehaviors.SequenceEqual(bundled.ClientSideBehaviors, StringComparer.Ordinal)) part.ClientSideBehaviors = e.ClientSideBehaviors;
+        if (!e.KeepSubModules.SequenceEqual(bundled.KeepSubModules, StringComparer.Ordinal)) part.KeepSubModules = e.KeepSubModules;
+        if (!e.SettingsTypes.SequenceEqual(bundled.SettingsTypes, StringComparer.Ordinal)) part.SettingsTypes = e.SettingsTypes;
+        if (!e.IgnoreSettingsTypes.SequenceEqual(bundled.IgnoreSettingsTypes, StringComparer.Ordinal)) part.IgnoreSettingsTypes = e.IgnoreSettingsTypes;
+        if (!e.EnsureLines.Select(LineKey).SequenceEqual(bundled.EnsureLines.Select(LineKey))) part.EnsureLines = e.EnsureLines;
+
+        foreach (var (settingsId, props) in e.DefaultSettings)
+        {
+            bundled.DefaultSettings.TryGetValue(settingsId, out var known);
+            var changed = props.Where(p => known is null || !known.TryGetValue(p.Key, out var v) || v != p.Value)
+                               .ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+            if (changed.Count > 0) part.DefaultSettings[settingsId] = changed;
+        }
+
+        // Compared as text against a record with nothing in it, so a field added later cannot be forgotten here.
+        if (Serialize([part]) == Serialize([new CompatRecord { Id = part.Id }])) return null;
+        part.UpdatedAt = e.UpdatedAt;
+        return part;
+    }
+
+    private static string Text(string? s) => string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
+    private static (string, string?, string) LineKey(EnsureLine l) => (l.File, l.Section, l.Value);
 
     // ---- locations ---------------------------------------------------------------------------------------------
 
@@ -126,18 +282,36 @@ public sealed class CompatDb
     public static string LocalPath => Path.Combine(ProfileStore.RootDir, LocalFileName);
 
     private static CompatDb? _current;
-    /// <summary>The process-wide DB (bundled + local). Reload() after writing the local file.</summary>
-    public static CompatDb Current => _current ??= Load(BundledPath, LocalPath);
-    public static CompatDb Reload() => _current = Load(BundledPath, LocalPath);
+    /// <summary>
+    /// The process-wide DB (bundled or downloaded, + local). Reload() after writing the local file.
+    /// The app and the CLI both come through here, so the CLI uses a database the app downloaded without fetching one.
+    /// </summary>
+    public static CompatDb Current => _current ??= Load(BundledPath, LocalPath, CompatDbRemote.Default);
+    public static CompatDb Reload() => _current = Load(BundledPath, LocalPath, CompatDbRemote.Default);
+
+    /// <summary>
+    /// When the bundled layer of this instance is the downloaded copy: when it was fetched. Null means the file that
+    /// shipped with the launcher is in use.
+    /// </summary>
+    public DateTime? DownloadedAtUtc { get; private init; }
 
     // ---- loading -----------------------------------------------------------------------------------------------
 
-    public static CompatDb Load(string? bundledPath, string? localPath)
+    public static CompatDb Load(string? bundledPath, string? localPath) => Load(bundledPath, localPath, null);
+
+    /// <summary>
+    /// With <paramref name="remote"/>, a valid downloaded cache stands in for the bundled file. It replaces that layer
+    /// whole rather than merging into it, so a record removed upstream is gone here too; the user's local file still
+    /// goes on top. The bundled file is read either way: the cache is measured against it, and it is what remains
+    /// when the cache is refused.
+    /// </summary>
+    public static CompatDb Load(string? bundledPath, string? localPath, CompatDbRemote? remote)
     {
         var problems = new List<string>();
         var bundled = ReadFile(bundledPath, problems);
+        var downloaded = remote?.TryReadCache(bundled);
         var local = ReadFile(localPath, problems);
-        return new CompatDb(bundled, local, problems);
+        return new CompatDb(downloaded?.Records ?? bundled, local, problems) { DownloadedAtUtc = downloaded?.FetchedAtUtc };
     }
 
     public static CompatDb Empty() => new(Array.Empty<CompatRecord>(), Array.Empty<CompatRecord>(), new List<string>());
@@ -171,14 +345,20 @@ public sealed class CompatDb
 
     // ---- queries -----------------------------------------------------------------------------------------------
 
+    /// <summary>The effective record: what the launcher acts on.</summary>
     public CompatRecord? Find(string id) => _records.TryGetValue(id, out var v) ? v.Record : null;
+    /// <summary>The user's own record as stored, without the bundled values that show through it.</summary>
+    public CompatRecord? FindLocal(string id) => _local.GetValueOrDefault(id);
+    /// <summary>The bundled record as shipped, whether or not a local record is laid over it.</summary>
+    public CompatRecord? FindBundled(string id) => _bundled.GetValueOrDefault(id);
+    /// <summary>Local whenever the user has a record for the mod, merged over a bundled one or not.</summary>
     public CompatSource SourceOf(string id) => _records.TryGetValue(id, out var v) ? v.Source : CompatSource.None;
 
     public CompatBadge For(string id, string? version)
     {
         if (!_records.TryGetValue(id, out var v)) return CompatBadge.None;
         var untested = v.Record.TestedVersions.Count > 0 && !v.Record.IsVersionTested(version);
-        return new CompatBadge(v.Record.Verdict, untested, v.Source, v.Record);
+        return new CompatBadge(v.Record.Verdict, untested, v.Source, v.Record, v.Source == CompatSource.Local && _bundled.ContainsKey(id));
     }
 
     /// <summary>Role for a mod new to a profile: the record's DefaultRole, else the pre-DB table, else Run.</summary>
@@ -204,7 +384,10 @@ public sealed class CompatDb
 
     // ---- local override ----------------------------------------------------------------------------------------
 
-    /// <summary>Writes (or replaces) one record in the local override file. Caller does Reload() afterwards.</summary>
+    /// <summary>
+    /// Writes (or replaces) one record in the local override file. Caller does Reload() afterwards.
+    /// Pass the user's own part (<see cref="LocalPart"/>), never an effective record from <see cref="Find"/>.
+    /// </summary>
     public static void SaveLocal(string localPath, CompatRecord record)
     {
         var existing = ReadFile(localPath, new List<string>());

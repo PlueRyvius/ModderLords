@@ -55,6 +55,9 @@ public partial class MainWindow : Window
             await ViewModel.EnsureClientModuleAtStartupAsync();
             try { if (ViewModel.Update is { } update) await update.CheckOnStartupAsync(); }
             catch (Exception) { }
+            // Last, and on its own: nothing waits on it, and a failure here must not cost the update check above.
+            try { await ViewModel.DownloadCompatDbAtStartupAsync(); }
+            catch (Exception) { }
         };
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         AttachHost();

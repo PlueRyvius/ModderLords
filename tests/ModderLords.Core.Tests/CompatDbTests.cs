@@ -30,19 +30,245 @@ public sealed class CompatDbTests : IDisposable
     }
 
     [Fact]
-    public void LocalRecord_WinsWholeRecord()
+    public void LocalRecord_IsLaidOverTheBundledOne_FieldByField()
     {
-        CompatDb.WriteFile(Bundled, [new CompatRecord { Id = "ModA", Verdict = CompatVerdict.Works, Notes = "bundled", DefaultRole = ServerRole.DependencyOnly }]);
+        CompatDb.WriteFile(Bundled, [new CompatRecord
+        {
+            Id = "ModA", Verdict = CompatVerdict.Works, TestedVersions = ["v1.0.0"], TestedCoopVersion = "v0.1.4", Notes = "bundled",
+            DefaultRole = ServerRole.DependencyOnly, KeepSubModules = ["A.Core"], Url = "https://bundled",
+        }]);
         CompatDb.WriteFile(Local, [new CompatRecord { Id = "moda", Verdict = CompatVerdict.Broken }]);
         var db = CompatDb.Load(Bundled, Local);
 
         var badge = db.For("ModA", null);
         Assert.Equal(CompatVerdict.Broken, badge.Verdict);
         Assert.Equal(CompatSource.Local, badge.Source);
-        Assert.Null(badge.Record!.Notes);                       // whole-record replacement, no field merge
-        Assert.Equal(ServerRole.Run, db.DefaultRoleFor("ModA")); // local record has no DefaultRole -> not the bundled one
-        Assert.Single(db.LocalRecords);
+        Assert.Equal(CompatSource.Local, db.SourceOf("ModA"));
+        Assert.True(badge.OverBundled);
+        // The report is the user's as a block: the bundled notes and versions described somebody else's "Works".
+        Assert.Null(badge.Record!.Notes);
+        Assert.Empty(badge.Record.TestedVersions);
+        Assert.Null(badge.Record.TestedCoopVersion);
+        Assert.False(badge.VersionUntested);
+        // Everything the local record says nothing about still comes from the bundled one.
+        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("ModA"));
+        Assert.Contains("A.Core", db.KeepForDependencyOnly());
+        Assert.Equal("https://bundled", badge.Record.Url);
         Assert.Empty(db.BundledRecords);
+    }
+
+    /// <summary>The case the field merge exists for: a record made long ago must not hide what the bundled file learned since.</summary>
+    [Fact]
+    public void A_local_record_does_not_hide_later_bundled_improvements()
+    {
+        CompatDb.WriteFile(Local, [new CompatRecord { Id = "ModA", SettingsTypes = ["A.Settings"], DefaultSettings = new() { ["A"] = new() { ["Mine"] = "1", ["Shared"] = "local" } } }]);
+        CompatDb.WriteFile(Bundled, [new CompatRecord
+        {
+            Id = "ModA", Verdict = CompatVerdict.NeedsRecipe, TestedVersions = ["v2.0.0"], Notes = "needs the recipe", DefaultRole = ServerRole.DependencyOnly,
+            ClientLoadsAfterCoop = true, KeepSubModules = ["A.Core"], SettingsTypes = ["A.Other"],
+            EnsureLines = [new EnsureLine { File = "coop.txt", Value = "x" }],
+            DefaultSettings = new() { ["A"] = new() { ["Shared"] = "bundled", ["Theirs"] = "2" }, ["B"] = new() { ["P"] = "3" } },
+        }]);
+        var db = CompatDb.Load(Bundled, Local);
+        var rec = db.Find("ModA")!;
+
+        Assert.Equal(CompatVerdict.NeedsRecipe, rec.Verdict);       // no local verdict: the bundled report stands
+        Assert.Equal(["v2.0.0"], rec.TestedVersions);
+        Assert.Equal("needs the recipe", rec.Notes);
+        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("ModA"));
+        Assert.Contains("ModA", db.ClientFollowsCoop());
+        Assert.Contains("A.Core", db.KeepForDependencyOnly());
+        Assert.Single(rec.EnsureLines);
+        Assert.Equal(["A.Settings"], rec.SettingsTypes);            // a stated list replaces the bundled list, it is not unioned
+        // Settings merge per property: the local value wins, the others stay.
+        Assert.Equal("local", rec.DefaultSettings["A"]["Shared"]);
+        Assert.Equal("1", rec.DefaultSettings["A"]["Mine"]);
+        Assert.Equal("2", rec.DefaultSettings["A"]["Theirs"]);
+        Assert.Equal("3", rec.DefaultSettings["B"]["P"]);
+    }
+
+    [Fact]
+    public void Without_a_local_verdict_local_notes_and_versions_still_show()
+    {
+        var merged = CompatDb.Merge(
+            new CompatRecord { Id = "ModA", Verdict = CompatVerdict.Works, TestedVersions = ["v1"], TestedCoopVersion = "c1", Notes = "bundled" },
+            new CompatRecord { Id = "ModA", Notes = "mine" });
+        Assert.Equal(CompatVerdict.Works, merged.Verdict);
+        Assert.Equal("mine", merged.Notes);
+        Assert.Equal(["v1"], merged.TestedVersions);
+        Assert.Equal("c1", merged.TestedCoopVersion);
+    }
+
+    /// <summary>The stated limitation: empty, null and Unknown mean "no opinion", so they cannot switch a bundled value off.</summary>
+    [Fact]
+    public void A_local_record_cannot_blank_a_bundled_value()
+    {
+        var bundled = new CompatRecord { Id = "ModA", Verdict = CompatVerdict.Broken, DefaultRole = ServerRole.DependencyOnly, KeepSubModules = ["A.Core"], Notes = "n", Url = "u" };
+        var merged = CompatDb.Merge(bundled, new CompatRecord { Id = "ModA", Notes = " ", Url = "" });
+        Assert.Equal(CompatDb.Serialize([bundled]), CompatDb.Serialize([merged]));
+    }
+
+    [Fact]
+    public void LocalRecords_AreTheStoredOnes_NotTheMerged()
+    {
+        CompatDb.WriteFile(Bundled, [new CompatRecord { Id = "ModA", Verdict = CompatVerdict.Works, Notes = "bundled", DefaultRole = ServerRole.DependencyOnly, KeepSubModules = ["A.Core"] }]);
+        var mine = new CompatRecord { Id = "ModA", Url = "https://mine", UpdatedAt = new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc) };
+        CompatDb.WriteFile(Local, [mine]);
+        var db = CompatDb.Load(Bundled, Local);
+
+        // Export writes LocalRecords / FindLocal: it must reproduce the local file, with none of the bundled values in it.
+        Assert.Equal(File.ReadAllText(Local), CompatDb.Serialize(db.LocalRecords));
+        Assert.Equal(CompatDb.Serialize([mine]), CompatDb.Serialize([db.FindLocal("moda")!]));
+        Assert.Equal("bundled", db.FindBundled("ModA")!.Notes);
+        Assert.Null(db.FindBundled("ModA")!.Url);          // merging did not write into the bundled record either
+        Assert.Equal("https://mine", db.Find("ModA")!.Url);
+        Assert.Null(db.FindLocal("Nope"));
+    }
+
+    [Fact]
+    public void RemoveLocal_BringsTheBundledRecordBack()
+    {
+        CompatDb.WriteFile(Bundled, [new CompatRecord { Id = "ModA", Verdict = CompatVerdict.Works, Notes = "bundled" }]);
+        CompatDb.SaveLocal(Local, new CompatRecord { Id = "ModA", Verdict = CompatVerdict.Broken, Notes = "mine" });
+        Assert.Equal(CompatVerdict.Broken, CompatDb.Load(Bundled, Local).For("ModA", null).Verdict);
+
+        CompatDb.RemoveLocal(Local, "moda");
+        var badge = CompatDb.Load(Bundled, Local).For("ModA", null);
+        Assert.Equal(CompatVerdict.Works, badge.Verdict);
+        Assert.Equal("bundled", badge.Record!.Notes);
+        Assert.Equal(CompatSource.Bundled, badge.Source);
+        Assert.False(badge.OverBundled);
+    }
+
+    // ---- what the Record dialog stores ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// The dialog shows the effective record and hands it back edited. Storing that whole is how the masking began:
+    /// only the difference may reach the local file.
+    /// </summary>
+    [Fact]
+    public void LocalPart_StoresOnlyWhatTheUserChanged()
+    {
+        var bundled = new CompatRecord
+        {
+            Id = "ModA", Verdict = CompatVerdict.NeedsRecipe, TestedVersions = ["v1"], Notes = "bundled", DefaultRole = ServerRole.DependencyOnly,
+            KeepSubModules = ["A.Core"], DefaultSettings = new() { ["A"] = new() { ["P"] = "1" } }, Url = "https://bundled",
+        };
+
+        // Opened and saved untouched: nothing of the user's, so no local record.
+        Assert.Null(CompatDb.LocalPart(bundled.Clone(), bundled));
+
+        var edited = bundled.Clone();
+        edited.DefaultRole = ServerRole.Run;
+        var part = CompatDb.LocalPart(edited, bundled)!;
+        Assert.Equal(CompatDb.Serialize([new CompatRecord { Id = "ModA", DefaultRole = ServerRole.Run }]), CompatDb.Serialize([part]));
+
+        // A later bundled release improves the record; the user's one change stays, the rest follows the release.
+        var newer = bundled.Clone();
+        newer.Notes = "better notes"; newer.KeepSubModules = ["A.Core", "A.More"]; newer.DefaultRole = ServerRole.AsShipped;
+        var merged = CompatDb.Merge(newer, part);
+        Assert.Equal(ServerRole.Run, merged.DefaultRole);
+        Assert.Equal("better notes", merged.Notes);
+        Assert.Equal(["A.Core", "A.More"], merged.KeepSubModules);
+    }
+
+    [Fact]
+    public void LocalPart_KeepsTheReportTogether_WhenTheUserTestedAnotherVersion()
+    {
+        var bundled = new CompatRecord { Id = "ModA", Verdict = CompatVerdict.Works, TestedVersions = ["v1"], TestedCoopVersion = "c1", Notes = "bundled", Url = "u" };
+        var edited = bundled.Clone();
+        edited.TestedVersions.Add("v2");
+
+        var part = CompatDb.LocalPart(edited, bundled)!;
+        Assert.Equal(CompatVerdict.Works, part.Verdict);
+        Assert.Equal(["v1", "v2"], part.TestedVersions);
+        Assert.Equal("c1", part.TestedCoopVersion);
+        Assert.Equal("bundled", part.Notes);
+        Assert.Null(part.Url);
+    }
+
+    [Fact]
+    public void LocalPart_WithNoBundledRecord_IsTheRecordItself()
+    {
+        var edited = new CompatRecord { Id = "ModA" };
+        Assert.Same(edited, CompatDb.LocalPart(edited, null));
+    }
+
+    // ---- every field is merged -----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Fills every public settable property of a record by type, so the tests below cover a property nobody told them
+    /// about. A property of a type not listed here fails loudly: teach this method the type, then the merge the field.
+    /// </summary>
+    private static CompatRecord Filled(int n)
+    {
+        var rec = new CompatRecord();
+        foreach (var p in MergedProperties())
+        {
+            object value = p.PropertyType switch
+            {
+                var t when t == typeof(string) => "text" + n,
+                var t when t == typeof(CompatVerdict) => n == 1 ? CompatVerdict.Works : CompatVerdict.Broken,
+                var t when t == typeof(ServerRole?) => n == 1 ? ServerRole.DependencyOnly : ServerRole.AsShipped,
+                var t when t == typeof(bool?) => n == 1,
+                var t when t == typeof(DateTime?) => new DateTime(2026, 1, n, 0, 0, 0, DateTimeKind.Utc),
+                var t when t == typeof(List<string>) => new List<string> { "item" + n },
+                var t when t == typeof(List<EnsureLine>) => new List<EnsureLine> { new() { File = "f" + n, Section = "s", Value = "v" + n } },
+                var t when t == typeof(Dictionary<string, Dictionary<string, string>>) =>
+                    new Dictionary<string, Dictionary<string, string>> { ["S"] = new() { ["P"] = "value" + n } },
+                _ => throw new InvalidOperationException($"CompatRecord.{p.Name} has type {p.PropertyType}, which this test cannot fill. Add it to Filled(), and handle the property in CompatDb.Merge and CompatDb.LocalPart."),
+            };
+            p.SetValue(rec, value);
+        }
+        rec.Id = "ModA";
+        return rec;
+    }
+
+    private static IEnumerable<System.Reflection.PropertyInfo> MergedProperties() =>
+        typeof(CompatRecord).GetProperties().Where(p => p.CanWrite && p.Name != nameof(CompatRecord.Id));
+
+    private static string Json(object? value) => System.Text.Json.JsonSerializer.Serialize(value);
+
+    private static void AssertSameFields(CompatRecord expected, CompatRecord actual, string because)
+    {
+        foreach (var p in MergedProperties())
+            Assert.True(Json(p.GetValue(expected)) == Json(p.GetValue(actual)), $"CompatRecord.{p.Name}: {because}");
+    }
+
+    /// <summary>
+    /// A property added to CompatRecord and not to Clone or Merge would be dropped from every merged record without a
+    /// sound: the bundled value lost, or the user's value ignored. This fails for exactly that property.
+    /// </summary>
+    [Fact]
+    public void Merge_HandlesEveryProperty()
+    {
+        var bundled = Filled(1);
+        var local = Filled(2);
+
+        AssertSameFields(bundled, bundled.Clone(), "Clone() does not copy it");
+        AssertSameFields(bundled, CompatDb.Merge(bundled, new CompatRecord { Id = "ModA" }), "Merge loses the bundled value when the local record does not set it");
+        AssertSameFields(local, CompatDb.Merge(bundled, local), "Merge ignores the local value; add the property to CompatDb.Merge");
+        AssertSameFields(local, CompatDb.Merge(new CompatRecord { Id = "ModA" }, local), "Merge ignores the local value over an empty bundled record");
+    }
+
+    [Fact]
+    public void LocalPart_HandlesEveryProperty()
+    {
+        var bundled = Filled(1);
+        var edited = Filled(2);
+
+        var part = CompatDb.LocalPart(edited, bundled)!;
+        AssertSameFields(edited, part, "LocalPart does not store a changed value; add the property to CompatDb.LocalPart");
+        AssertSameFields(edited, CompatDb.Merge(bundled, part), "storing the local part and merging it back does not give the edited record");
+
+        // Changing one property alone must be enough to produce a local record holding it.
+        foreach (var p in MergedProperties().Where(p => p.Name != nameof(CompatRecord.UpdatedAt)))
+        {
+            var one = bundled.Clone();
+            p.SetValue(one, p.GetValue(Filled(2)));
+            var stored = CompatDb.LocalPart(one, bundled);
+            Assert.True(stored is not null && Json(p.GetValue(one)) == Json(p.GetValue(stored)), $"CompatRecord.{p.Name}: a change to it alone is not stored by LocalPart");
+        }
     }
 
     [Fact]

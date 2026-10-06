@@ -55,14 +55,14 @@ public sealed class LaunchSession
     {
         var root = profile.DedicatedServerRoot ?? ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault()
             ?? throw new InvalidOperationException("No DedicatedServer folder found. Subscribe to Bannerlord Coop on the workshop or set the path in the profile.");
-        return ServerPaths.Create(root);
+        return ServerView.For(ServerPaths.Create(root));
     }
 
     public static ModuleCatalog Scan(Profile profile, ServerPaths paths, out string? gameRoot)
     {
         var libraries = ServerPaths.SteamLibraries().ToList();
         gameRoot = profile.GameRoot ?? ModuleCatalog.FindGameRoot(libraries);
-        return ModuleCatalog.Scan(paths.ModulesRoot, gameRoot, libraries, profile.CustomModRoots);
+        return ModuleCatalog.Scan(paths.StockModulesRoot, gameRoot, libraries, profile.CustomModRoots);
     }
 
     /// <summary>Picks a concrete folder for each enabled profile mod. Shared with the client launch path.</summary>
@@ -161,6 +161,9 @@ public sealed class LaunchSession
         var paths = ResolvePaths(profile);
         var problems = paths.Validate().ToList();
         if (problems.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, problems));
+        // Before anything asks which folders exist: the hook's search dirs are filtered to the ones that do.
+        if (applySideEffects) ServerView.Build(paths);
+        if (ServerView.Describe(paths) is { } viewNote) messages.Add(viewNote);
 
         string? gameRoot;
         ModuleCatalog catalog;
@@ -377,6 +380,13 @@ public sealed class LaunchSession
             foreach (var a in result.Applied) foreach (var c in a.ManifestChanges) messages.Add($"{a.ModuleId}: {c}");
             foreach (var r in result.Removed) messages.Add("removed stale junction " + r);
             foreach (var w in result.Warnings) messages.Add("WARNING " + w);
+            // Refused, not warned. The module list still names these mods and the engine skips a listed module it
+            // cannot find without saying so: on 2026-10-05 a host on an exFAT drive had all eight links fail, the
+            // server came up vanilla, and the first sign was a player being rejected for the mods it did not load.
+            if (result.Failed.Count > 0)
+                throw new InvalidOperationException(
+                    $"Could not link {result.Failed.Count} mod(s) into the dedicated server, so it would start without them:" +
+                    Environment.NewLine + string.Join(Environment.NewLine, result.Failed));
             foreach (var s in selections)
             {
                 var pm = profile.Mods.FirstOrDefault(m => m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase));
@@ -550,6 +560,7 @@ public sealed class LaunchSession
     {
         var compatDb = CompatDb.Current;
         var paths = ResolvePaths(profile);
+        ServerView.Build(paths);
         var catalog = Scan(profile, paths, out _);
         var selections = WithCompat(profile, Select(profile, catalog, new List<string>()), new List<string>());
         var plan = OverlayPlanner.Plan(ProfileStore.OverlayDirFor(profile.Name), paths.ModulesRoot, selections, record: compatDb.Find);

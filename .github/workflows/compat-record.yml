@@ -1,0 +1,117 @@
+# Turns a "Compat record" issue into a pull request against src/ModderLords.Core/compat-db.json.
+# The maintainer reviews and merges that pull request by hand; nothing here merges anything. See docs/COMPAT-RECORDS.md.
+#
+# SECURITY. Anyone with a GitHub account can open the issue, so its title and body are hostile input.
+#   - No step interpolates ${{ github.event.issue.* }} (or any other expression) into a script. The few values a
+#     script needs arrive through env:, and the only one that comes from the issue is its number.
+#   - The body is fetched into a file and read as data by tools/CompatRecordIntake, which is built from the default
+#     branch. Nothing from the issue is ever executed, sourced, eval'd or used to build a command line.
+#   - The branch name is built from the issue number alone. The commit message and the pull request title contain the
+#     module id only after CompatIntake held it to [A-Za-z0-9._-]. Every other text the workflow publishes is written
+#     to a file by the tool and passed to gh as a file.
+#   - Actions are pinned to a commit. The token is the built-in one, limited to the three permissions below.
+name: Compat record intake
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write        # push the compat-record/issue-N branch
+  pull-requests: write   # open or update the pull request
+  issues: write          # comment on the issue
+
+# One run at a time per issue. The form fires "opened" and "labeled" together; the second run waits for the first and
+# then finds the branch already holding its result.
+concurrency:
+  group: compat-record-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  intake:
+    if: >-
+      github.event.issue.state == 'open'
+      && contains(github.event.issue.labels.*.name, 'compat-record')
+      && (github.event.action != 'labeled' || github.event.label.name == 'compat-record')
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      BASE_BRANCH: ${{ github.event.repository.default_branch }}
+      DB_PATH: src/ModderLords.Core/compat-db.json
+      # Relative on purpose: it is handed to git, gh and dotnet alike, and a relative path means the same to all three.
+      WORK: .compat-record-intake
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Fetch the issue body and any earlier result
+        run: |
+          set -euo pipefail
+          case "$ISSUE_NUMBER" in ''|*[!0-9]*) echo "Unexpected issue number."; exit 1 ;; esac
+          BRANCH="compat-record/issue-$ISSUE_NUMBER"
+          mkdir -p "$WORK"
+          gh issue view "$ISSUE_NUMBER" --json body --jq '.body' > "$WORK/issue-body.md"
+          # The branch of an earlier run for this issue, if there is one: its copy of the database lets an unchanged
+          # submission reproduce the same bytes instead of a new commit.
+          if git fetch --quiet --no-tags --depth=1 origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null; then
+            git show "origin/$BRANCH:$DB_PATH" > "$WORK/previous-db.json" || rm -f "$WORK/previous-db.json"
+          fi
+
+      # Writes outcome = ok | unchanged | invalid. A record that fails validation is "invalid", not a failed step:
+      # the submitter gets a comment and the maintainer gets no failure mail.
+      - name: Validate the record and merge it into the database
+        id: intake
+        run: |
+          set -euo pipefail
+          dotnet run --project tools/CompatRecordIntake/CompatRecordIntake.csproj -c Release -- intake \
+            --body "$WORK/issue-body.md" --db "$DB_PATH" --out "$WORK" --issue "$ISSUE_NUMBER" \
+            --previous "$WORK/previous-db.json"
+
+      - name: Push the branch and open or update the pull request
+        if: steps.intake.outputs.outcome == 'ok'
+        run: |
+          set -euo pipefail
+          BRANCH="compat-record/issue-$ISSUE_NUMBER"
+          git checkout --quiet -B "$BRANCH"
+          git add -- "$DB_PATH"
+          if git rev-parse --verify --quiet "refs/remotes/origin/$BRANCH" > /dev/null \
+             && git diff --cached --quiet "origin/$BRANCH" -- "$DB_PATH"; then
+            echo "The branch already holds this record; nothing to push."
+          else
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit --quiet -F "$WORK/commit-message.txt"
+            # The branch belongs to this workflow and is rebuilt from the default branch on every run.
+            git push --quiet --force origin "HEAD:refs/heads/$BRANCH"
+          fi
+
+          PR_NUMBER="$(gh pr list --head "$BRANCH" --base "$BASE_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$PR_NUMBER" ]; then
+            PR_URL="$(gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "$(cat "$WORK/pr-title.txt")" --body-file "$WORK/pr-body.md" | tail -n 1)"
+          else
+            PR_URL="$(gh api --method PATCH "repos/$GH_REPO/pulls/$PR_NUMBER" -f "title=$(cat "$WORK/pr-title.txt")" -F "body=@$WORK/pr-body.md" --jq '.html_url')"
+          fi
+          printf '\nPull request: %s\n' "$PR_URL" >> "$WORK/comment.md"
+
+      # One comment per issue, rewritten on each run, so a submitter fixing a record is not buried in bot replies.
+      - name: Comment on the issue
+        if: steps.intake.outputs.outcome != ''
+        run: |
+          set -euo pipefail
+          COMMENT_ID="$(gh api "repos/$GH_REPO/issues/$ISSUE_NUMBER/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- compat-record-intake -->"))) | .id' | tail -n 1)"
+          if [ -n "$COMMENT_ID" ]; then
+            gh api --method PATCH "repos/$GH_REPO/issues/comments/$COMMENT_ID" -F "body=@$WORK/comment.md" --silent
+          else
+            gh api --method POST "repos/$GH_REPO/issues/$ISSUE_NUMBER/comments" -F "body=@$WORK/comment.md" --silent
+          fi
