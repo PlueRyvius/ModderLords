@@ -88,7 +88,8 @@ public static partial class CompatIntake
         nameof(CompatRecord.Id), nameof(CompatRecord.Verdict), nameof(CompatRecord.TestedVersions), nameof(CompatRecord.TestedCoopVersion),
         nameof(CompatRecord.DefaultRole), nameof(CompatRecord.ServerAuthoritative), nameof(CompatRecord.ClientSideBehaviors),
         nameof(CompatRecord.KeepSubModules), nameof(CompatRecord.SettingsTypes), nameof(CompatRecord.IgnoreSettingsTypes),
-        nameof(CompatRecord.ClientLoadsAfterCoop), nameof(CompatRecord.EnsureLines), nameof(CompatRecord.DefaultSettings),
+        nameof(CompatRecord.ClientLoadsAfterCoop), nameof(CompatRecord.ServerExcludedFolders), nameof(CompatRecord.EnsureLines),
+        nameof(CompatRecord.DefaultSettings),
         nameof(CompatRecord.Notes), nameof(CompatRecord.Url), nameof(CompatRecord.UpdatedAt),
     ];
 
@@ -294,6 +295,16 @@ public static partial class CompatIntake
                 case nameof(CompatRecord.SettingsTypes):
                 case nameof(CompatRecord.IgnoreSettingsTypes):
                     CheckStringList(p.Name, v, MaxListItems, MaxTypeNameLength, problems);
+                    break;
+                case nameof(CompatRecord.ServerExcludedFolders):
+                    CheckStringList(p.Name, v, MaxListItems, MaxTypeNameLength, problems);
+                    // The launcher ignores a name it cannot honour and says so in the launch log; a curated record
+                    // should not ship one for every host to be warned about.
+                    if (v.ValueKind == JsonValueKind.Array)
+                        foreach (var item in v.EnumerateArray())
+                            if (item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString())
+                                && Overlay.ServerFolderExclusions.Problem(item.GetString()) is { } why)
+                                problems.Add($"{p.Name} entry {Quote(item.GetString()!)} cannot be left out: {why}.");
                     break;
                 case nameof(CompatRecord.EnsureLines):
                     CheckEnsureLines(v, problems);

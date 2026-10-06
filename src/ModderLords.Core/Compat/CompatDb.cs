@@ -154,7 +154,7 @@ public sealed class CompatDb
     /// the bundled verdict stands and each of the other three falls back on its own, like any other field.</item>
     /// <item><c>UpdatedAt</c>: local when set, else bundled. SaveLocal always stamps it, so it dates the user's part.</item>
     /// <item><c>DefaultRole</c>, <c>ServerAuthoritative</c>, <c>ClientLoadsAfterCoop</c>, <c>Url</c>: local when set, else bundled.</item>
-    /// <item><c>ClientSideBehaviors</c>, <c>KeepSubModules</c>, <c>SettingsTypes</c>, <c>IgnoreSettingsTypes</c>,
+    /// <item><c>ClientSideBehaviors</c>, <c>KeepSubModules</c>, <c>SettingsTypes</c>, <c>IgnoreSettingsTypes</c>, <c>ServerExcludedFolders</c>,
     /// <c>EnsureLines</c>: the local list when it has entries, else the bundled list. Replaced, not unioned: a user who
     /// states a list must be able to leave a bundled entry out of it.</item>
     /// <item><c>DefaultSettings</c>: merged per settingsId and per property; a local value wins, bundled values for other
@@ -197,6 +197,7 @@ public sealed class CompatDb
         if (l.KeepSubModules.Count > 0) m.KeepSubModules = l.KeepSubModules;
         if (l.SettingsTypes.Count > 0) m.SettingsTypes = l.SettingsTypes;
         if (l.IgnoreSettingsTypes.Count > 0) m.IgnoreSettingsTypes = l.IgnoreSettingsTypes;
+        if (l.ServerExcludedFolders.Count > 0) m.ServerExcludedFolders = l.ServerExcludedFolders;
         if (l.EnsureLines.Count > 0) m.EnsureLines = l.EnsureLines;
 
         foreach (var (settingsId, props) in l.DefaultSettings)
@@ -252,6 +253,7 @@ public sealed class CompatDb
         if (!e.KeepSubModules.SequenceEqual(bundled.KeepSubModules, StringComparer.Ordinal)) part.KeepSubModules = e.KeepSubModules;
         if (!e.SettingsTypes.SequenceEqual(bundled.SettingsTypes, StringComparer.Ordinal)) part.SettingsTypes = e.SettingsTypes;
         if (!e.IgnoreSettingsTypes.SequenceEqual(bundled.IgnoreSettingsTypes, StringComparer.Ordinal)) part.IgnoreSettingsTypes = e.IgnoreSettingsTypes;
+        if (!e.ServerExcludedFolders.SequenceEqual(bundled.ServerExcludedFolders, StringComparer.OrdinalIgnoreCase)) part.ServerExcludedFolders = e.ServerExcludedFolders;
         if (!e.EnsureLines.Select(LineKey).SequenceEqual(bundled.EnsureLines.Select(LineKey))) part.EnsureLines = e.EnsureLines;
 
         foreach (var (settingsId, props) in e.DefaultSettings)
