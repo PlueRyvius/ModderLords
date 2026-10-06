@@ -15,10 +15,8 @@ public static class ServerMatchedClient
     public static ClientLaunchSession.Prepared Prepare(LaunchSession.Prepared target, Profile clientProfile)
     {
         var client = ProfileStore.Snapshot(clientProfile);
-        client.Mods = target.Selections.Where(s => !ClientManifest.IsServerOnly(s.Module.Id)).Select(s => new ProfileMod
-        {
-            Id = s.Module.Id, Enabled = true, SourcePath = ClientCopy(s.Module, target.Catalog).FolderPath, LastVersion = s.Module.Version,
-        }).ToList();
+        client.Mods = target.Selections.Where(s => !ClientManifest.IsServerOnly(s.Module.Id))
+            .Select(s => ClientEntry(s.Module, target.Catalog, clientProfile)).ToList();
         foreach (var missing in clientProfile.EnabledMods.Where(pm => !client.Mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
                      !ClientManifest.IsServerOnly(pm.Id) && !ClientManifest.CoopClientModuleIds.Contains(pm.Id)))
             client.Mods.Add(missing);
@@ -44,6 +42,18 @@ public static class ServerMatchedClient
         if (mismatched.Count > 0) throw new InvalidOperationException("Client versions differ from the server: " + string.Join(", ", mismatched) + ". Update matching copies or restart the server.");
         return result;
     }
+
+    /// <summary>
+    /// The client's entry for one mod the server selected. Almost everything on a profile entry is about the server
+    /// and is left behind, but the "server only" folders are the one thing that is about the player's game: without
+    /// them a host's own client would be shown folders the profile says it must not see.
+    /// </summary>
+    public static ProfileMod ClientEntry(DiscoveredModule serverCopy, ModuleCatalog catalog, Profile hostProfile) => new()
+    {
+        Id = serverCopy.Id, Enabled = true, SourcePath = ClientCopy(serverCopy, catalog).FolderPath, LastVersion = serverCopy.Version,
+        ClientExcludedFolders = hostProfile.Mods
+            .FirstOrDefault(m => m.Id.Equals(serverCopy.Id, StringComparison.OrdinalIgnoreCase))?.ClientExcludedFolders?.ToList(),
+    };
 
     /// <summary>
     /// The folder the player's game should load for a mod the server selected. Normally the very same one. The

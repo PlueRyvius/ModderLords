@@ -2,27 +2,14 @@ namespace ModderLords.Core.Overlay;
 
 /// <summary>
 /// The names a host (or a compat record) may ask to have left out of the server's view of a mod, and which of them
-/// can be honoured. Shared by the planner, which applies them, and the app, which lets a host type them.
+/// can be honoured. Shared by the planner, which applies them, the client launch, which follows the same rules for
+/// the folders a game is not shown, and the app, which shows a host why a stored name will be ignored.
 ///
 /// A name is only ever a folder directly inside the mod. That is not a limitation of taste: the shadow is built one
 /// top-level junction at a time, so a top-level folder is the only thing it can leave out without copying anything.
 /// </summary>
 public static class ServerFolderExclusions
 {
-    /// <summary>One name per line as a host types them: trimmed, blanks dropped, repeats (in any casing) dropped.</summary>
-    public static List<string> ParseLines(string? text)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var list = new List<string>();
-        foreach (var line in (text ?? "").Split('\n', '\r'))
-        {
-            // A trailing slash is how a folder is usually written; it is not a path.
-            var name = line.Trim().TrimEnd('\\', '/');
-            if (name.Length > 0 && seen.Add(name)) list.Add(name);
-        }
-        return list;
-    }
-
     /// <summary>
     /// Why this name cannot be honoured, or null when it can. A path (or "..") would reach outside the one level the
     /// shadow controls; <c>bin</c> and <c>SubModule.xml</c> are the two things the shadow always supplies itself, so

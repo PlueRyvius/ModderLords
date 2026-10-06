@@ -45,7 +45,41 @@ public sealed record ModListFile
     public sealed record CoopRef(string Id, string Version);
 
     /// <param name="Source">Workshop link where we know one, so a missing mod can actually be found.</param>
-    public sealed record ModEntry(string Id, string Version, string? Source, ServerRole Role, bool ServerAuthoritative);
+    public sealed record ModEntry(string Id, string Version, string? Source, ServerRole Role, bool ServerAuthoritative)
+    {
+        // The two folder lists are optional properties rather than constructor parameters so the format stays 2: a
+        // file from before them reads as "nothing said", and an older launcher skips the properties it does not know
+        // (it then hosts and plays with every folder on both sides, which is what it always did).
+
+        /// <summary>
+        /// "Client only" folders, as <see cref="ProfileMod.ServerExcludedFolders"/> holds them. Absent and empty are
+        /// different answers and both are written as they are: absent follows the importer's compat database, an
+        /// empty list overrules it.
+        /// </summary>
+        public IReadOnlyList<string>? ServerExcludedFolders { get; init; }
+
+        /// <summary>"Server only" folders, as <see cref="ProfileMod.ClientExcludedFolders"/> holds them. Absent when there are none.</summary>
+        public IReadOnlyList<string>? ClientExcludedFolders { get; init; }
+
+        // A record compares a list by reference, which would make two entries read from the same file unequal.
+        public bool Equals(ModEntry? other) =>
+            other is not null && Id == other.Id && Version == other.Version && Source == other.Source && Role == other.Role
+            && ServerAuthoritative == other.ServerAuthoritative
+            && SameList(ServerExcludedFolders, other.ServerExcludedFolders) && SameList(ClientExcludedFolders, other.ClientExcludedFolders);
+
+        public override int GetHashCode() => HashCode.Combine(Id, Version, Source, Role, ServerAuthoritative);
+
+        private static bool SameList(IReadOnlyList<string>? a, IReadOnlyList<string>? b) =>
+            a is null || b is null ? a is null && b is null : a.SequenceEqual(b);
+
+        /// <summary>An entry for a mod as this profile holds it; the folder lists are copied, never shared with the profile.</summary>
+        internal static ModEntry For(string id, string version, string? source, ProfileMod? mod) =>
+            new(id, version, source, mod?.Role ?? ServerRole.AsShipped, mod?.ServerAuthoritative ?? false)
+            {
+                ServerExcludedFolders = mod?.ServerExcludedFolders?.ToList(),
+                ClientExcludedFolders = mod?.ClientExcludedFolders is { Count: > 0 } client ? client.ToList() : null,
+            };
+    }
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -62,18 +96,14 @@ public sealed record ModListFile
         var position = ClientOrder.For(prepared, profile)
             .Select((id, i) => (id, i))
             .ToDictionary(x => x.id, x => x.i, StringComparer.OrdinalIgnoreCase);
-        var authoritative = profile.Mods
-            .Where(m => m.ServerAuthoritative)
-            .Select(m => m.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        // Roles come from the profile, not from the selections: a player's prepare has no roles to report (every mod
-        // simply loads), so reading them from there would make a player's export differ from a host's.
-        var roles = profile.Mods.ToDictionary(m => m.Id, m => m.Role, StringComparer.OrdinalIgnoreCase);
+        // Roles (and everything else a host sets per mod) come from the profile, not from the selections: a player's
+        // prepare has no roles to report (every mod simply loads), so reading them from there would make a player's
+        // export differ from a host's.
+        var listed = profile.Mods.ToDictionary(m => m.Id, m => m, StringComparer.OrdinalIgnoreCase);
         // A link set on the profile wins over one read from the folder name: it is how a mod installed by hand into
         // Modules, which has no Workshop folder to read, still reaches the importer with somewhere to get it.
         var links = profile.Mods.Where(m => !string.IsNullOrWhiteSpace(m.DownloadUrl))
             .ToDictionary(m => m.Id, m => m.DownloadUrl!, StringComparer.OrdinalIgnoreCase);
-        ServerRole RoleOf(string id) => roles.TryGetValue(id, out var r) ? r : ServerRole.AsShipped;
 
         var coop = ClientOrder.Coop(prepared);
         var exported = prepared.Selections.Select(s => s.Module)
@@ -87,14 +117,14 @@ public sealed record ModListFile
         var mods = exported
             .OrderBy(m => position.TryGetValue(m.Id, out var i) ? i : int.MaxValue)
             .ThenBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(m => new ModEntry(m.Id, m.Version, links.GetValueOrDefault(m.Id) ?? ClientManifest.WorkshopUrl(m.FolderPath),
-                                      RoleOf(m.Id), authoritative.Contains(m.Id)))
+            .Select(m => ModEntry.For(m.Id, m.Version, links.GetValueOrDefault(m.Id) ?? ClientManifest.WorkshopUrl(m.FolderPath),
+                                      listed.GetValueOrDefault(m.Id)))
             .ToList();
 
         var installedCount = mods.Count;
         foreach (var missing in profile.EnabledMods.Where(pm => !mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
                      !ClientManifest.IsServerOnly(pm.Id) && !OfficialModules.IsGameModule(pm.Id)))
-            mods.Add(new ModEntry(missing.Id, missing.LastVersion ?? "", missing.DownloadUrl, missing.Role, missing.ServerAuthoritative));
+            mods.Add(ModEntry.For(missing.Id, missing.LastVersion ?? "", missing.DownloadUrl, missing));
         // Until every requested module is installed there is no complete engine order to export.
         // Preserve the requested order, rather than moving missing requirements to the end on every round-trip.
         if (mods.Count != installedCount)
@@ -123,7 +153,7 @@ public sealed record ModListFile
         Name = profile.Name,
         Mods = profile.EnabledMods
             .Where(m => !ClientManifest.IsServerOnly(m.Id) && !OfficialModules.IsGameModule(m.Id))
-            .Select(m => new ModEntry(m.Id, m.LastVersion ?? "", m.DownloadUrl, m.Role, m.ServerAuthoritative))
+            .Select(m => ModEntry.For(m.Id, m.LastVersion ?? "", m.DownloadUrl, m))
             .ToList(),
         ClientOfficialModules = profile.ClientOfficialModules.ToList(),
     };
@@ -192,6 +222,8 @@ public sealed record ModListFile
             ServerAuthoritative = m.ServerAuthoritative,
             LastVersion = m.Version,
             DownloadUrl = m.Source,
+            ServerExcludedFolders = m.ServerExcludedFolders?.ToList(),
+            ClientExcludedFolders = m.ClientExcludedFolders is { Count: > 0 } client ? client.ToList() : null,
         }).Concat(Coop is not null && !Mods.Any(m => ClientManifest.CoopClientModuleIds.Contains(m.Id))
             ? new[] { new ProfileMod { Id = Coop.Id, LastVersion = Coop.Version, Enabled = true } }
             : Array.Empty<ProfileMod>()).ToList(),

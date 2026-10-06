@@ -385,7 +385,8 @@ Edits to another profile take effect on a later server launch. Player mode alway
 so you can test a mod set alone and then switch to Host mode without losing it. Coop is selectable in Player mode.
 
 Private client launch views live under `%LOCALAPPDATA%\ModderLords\client-launches`. They contain directory links
-and copies of the game root's small top-level files, not copies of installed mods. They remain after ModderLords
+and copies of the game root's small top-level files, not copies of installed mods (a mod with a **Server only**
+folder is a folder of links plus copies of the files directly inside it). They remain after ModderLords
 closes so a detached game can keep using them. Do not remove a view while its game is running.
 
 **Import…** reads one back and offers the two things it is good for, either or both:
@@ -846,18 +847,37 @@ changed.
 The badge is a claim about what someone tested, so `· untested version` appears whenever your copy's version is not in
 the record; the mod may still work.
 
-### Folders to leave out on the server
+### Folders for the server, the game, or both
 
-Some mods ship folders only a player's game uses (`RuntimeDataCache`, for example). If you suspect one of them of
-upsetting the dedicated server, right-click the mod on the Mods tab → **Folders to leave out on the server…** and list
-the folder names, one per line. The server is then given that mod through a shadow folder that links everything except
-those folders; the mod's own folder is not changed and players are not affected. Only folders directly inside the mod
-can be named (never `bin`, and not a path), and the launch console says what was left out, from which copy of the mod,
-and which names matched nothing. Nothing is left out unless you ask: this is a tool for finding out, not a known fix.
+Some mods ship folders only a player's game uses (`RuntimeDataCache`, for example), and some ship folders only the
+dedicated server needs. Right-click the mod on the Mods tab → **Folders: server and client…** to see every folder
+directly inside the mod and choose who gets each one:
 
-A compat record can carry the same list as `ServerExcludedFolders` (edit `compat-db.local.json` by hand), which then
-applies to every profile that has not set its own. A profile's list replaces the record's, and an empty one means
-"leave nothing out" even when the record names folders.
+- **Server + Client**: the dedicated server and the game both get the folder. This is what every folder is until you
+  change it.
+- **Server only**: the game is started without the folder.
+- **Client only**: the dedicated server is started without the folder. Use this if you suspect a client-only folder
+  of upsetting the server.
+
+The mod's own files are never changed. The server, or the game, is given the mod through a private folder of links
+that leaves the chosen folders out. The launch log says what was left out, from which copy of the mod, and which
+names matched nothing. Nothing is left out unless you ask: this is a tool for finding out, not a known fix.
+
+Things to know:
+
+- The choices are saved in the profile and travel with a shared mod list, because whoever receives it may host or
+  may play. A launcher from before this feature still reads such a list; it ignores the choices.
+- **Server only** applies to games started from ModderLords: on this PC, and by anyone else using the profile. A game
+  started from Steam or the Bannerlord launcher still sees every folder.
+- `bin` is always **Server + Client**: it is the mod's code. `AssetPackages` is always **Client only**: the dedicated
+  server is never shown it.
+- A folder the profile remembers but this copy of the mod does not have is still listed, marked as not present, so
+  you can see it and set it back to **Server + Client** to forget it.
+
+A compat record can carry a **Client only** list as `ServerExcludedFolders` (edit `compat-db.local.json` by hand),
+which then applies to every profile that has not made its own choice for that mod. Once you change a folder's choice
+the profile's own list replaces the record's, and choosing **Server + Client** for everything means "leave nothing
+out" even when the record names folders. There is no record list for **Server only**.
 
 ---
 

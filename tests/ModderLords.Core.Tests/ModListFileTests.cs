@@ -251,3 +251,129 @@ public class ModListFilePendingTests
         Assert.True(System.Text.Json.JsonSerializer.Deserialize<Profile>(json)!.PendingLauncherApply);
     }
 }
+
+/// <summary>
+/// A shared list carries, per mod, which folders are for the server only and which for the game only: whoever
+/// receives it may host or may play. Both lists were added without a new format number, so the two directions that
+/// could break are checked here: a list written before them, and an older launcher reading one written after.
+/// </summary>
+public class ModListFileFolderTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "mbc-modlist-folders-" + Guid.NewGuid().ToString("N"));
+
+    public ModListFileFolderTests() => Directory.CreateDirectory(_dir);
+    public void Dispose() => Directory.Delete(_dir, true);
+
+    private static readonly ModListFile WithFolders = new()
+    {
+        Name = "friends",
+        Mods =
+        [
+            new("NoOpinion", "1.0", null, ServerRole.Run, false),
+            new("LeaveNothingOut", "1.0", null, ServerRole.Run, false) { ServerExcludedFolders = [] },
+            new("Both", "1.0", null, ServerRole.Run, true) { ServerExcludedFolders = ["RuntimeDataCache"], ClientExcludedFolders = ["DsData", "ServerScripts"] },
+        ],
+    };
+
+    private ModListFile ThroughAFile(ModListFile file)
+    {
+        var path = Path.Combine(_dir, Guid.NewGuid().ToString("N") + ".json");
+        ModListFile.Write(path, file);
+        return ModListFile.Read(path);
+    }
+
+    /// <summary>
+    /// For the server's list, absent and empty are different answers: absent follows the importer's compat database,
+    /// empty overrules it. A round trip that blurred them would silently change what a host's server is shown.
+    /// </summary>
+    [Fact]
+    public void Both_lists_survive_a_file_with_null_and_empty_kept_apart()
+    {
+        var read = ThroughAFile(WithFolders);
+
+        Assert.Null(read.Mods[0].ServerExcludedFolders);
+        Assert.Null(read.Mods[0].ClientExcludedFolders);
+        Assert.NotNull(read.Mods[1].ServerExcludedFolders);
+        Assert.Empty(read.Mods[1].ServerExcludedFolders!);
+        Assert.Equal(["RuntimeDataCache"], read.Mods[2].ServerExcludedFolders);
+        Assert.Equal(["DsData", "ServerScripts"], read.Mods[2].ClientExcludedFolders);
+        Assert.Equal(WithFolders.Mods, read.Mods);
+        Assert.Equal(ModListFile.CurrentFormatVersion, read.FormatVersion);
+    }
+
+    [Fact]
+    public void Import_and_export_carry_both_lists_through_a_profile()
+    {
+        var profile = ThroughAFile(WithFolders).ToProfile("friends");
+
+        Assert.Null(profile.Mods[0].ServerExcludedFolders);
+        Assert.Null(profile.Mods[0].ClientExcludedFolders);
+        Assert.Empty(profile.Mods[1].ServerExcludedFolders!);
+        Assert.Equal(["RuntimeDataCache"], profile.Mods[2].ServerExcludedFolders);
+        Assert.Equal(["DsData", "ServerScripts"], profile.Mods[2].ClientExcludedFolders);
+
+        var back = ModListFile.AsListed(profile);
+        Assert.Equal(WithFolders.Mods, back.Mods);
+        // The exported lists are copies: editing the profile afterwards must not rewrite a file already built.
+        profile.Mods[2].ClientExcludedFolders!.Clear();
+        Assert.Equal(["DsData", "ServerScripts"], back.Mods[2].ClientExcludedFolders);
+
+        // "Server only" has no third state, so an empty list is not worth a line in the file.
+        profile.Mods[2].ClientExcludedFolders = [];
+        Assert.Null(ModListFile.AsListed(profile).Mods[2].ClientExcludedFolders);
+    }
+
+    [Fact]
+    public void A_list_from_before_the_folder_lists_reads_as_nothing_said()
+    {
+        var path = Path.Combine(_dir, "old.json");
+        File.WriteAllText(path, """{"FormatVersion":2,"Mods":[{"Id":"A","Version":"v1","Role":"Run","ServerAuthoritative":true}]}""");
+
+        var entry = Assert.Single(ModListFile.Read(path).Mods);
+
+        Assert.Null(entry.ServerExcludedFolders);
+        Assert.Null(entry.ClientExcludedFolders);
+        Assert.True(entry.ServerAuthoritative);
+        var mod = Assert.Single(ModListFile.Read(path).ToProfile("p").Mods);
+        Assert.Null(mod.ServerExcludedFolders);
+        Assert.Null(mod.ClientExcludedFolders);
+    }
+
+    /// <summary>A mod nobody set folders for is written exactly as before, so most files do not change at all.</summary>
+    [Fact]
+    public void An_entry_without_folder_lists_is_written_as_it_always_was()
+    {
+        var json = new ModListFile { Mods = [new("A", "v1", null, ServerRole.Run, false)] }.ToJson();
+        Assert.DoesNotContain("ExcludedFolders", json);
+        Assert.Contains("\"ServerExcludedFolders\": []", new ModListFile { Mods = [WithFolders.Mods[1]] }.ToJson());
+    }
+
+    // The entry as launchers before the folder lists declared it, read with the options they read it with.
+    private sealed record OldEntry(string Id, string Version, string? Source, ServerRole Role, bool ServerAuthoritative);
+    private sealed record OldFile
+    {
+        public int FormatVersion { get; init; }
+        public IReadOnlyList<OldEntry> Mods { get; init; } = [];
+    }
+
+    /// <summary>
+    /// The format number was not bumped, so an older launcher will open a new file. It has to read it: the unknown
+    /// properties are skipped and everything it knew about is still where it was.
+    /// </summary>
+    [Fact]
+    public void An_older_launcher_reads_a_file_that_has_the_folder_lists()
+    {
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        };
+
+        var old = System.Text.Json.JsonSerializer.Deserialize<OldFile>(WithFolders.ToJson(), options)!;
+
+        Assert.Equal(2, old.FormatVersion);
+        Assert.Equal(["NoOpinion", "LeaveNothingOut", "Both"], old.Mods.Select(m => m.Id));
+        Assert.True(old.Mods[2].ServerAuthoritative);
+        Assert.Equal(ServerRole.Run, old.Mods[2].Role);
+    }
+}

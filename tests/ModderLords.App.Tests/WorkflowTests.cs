@@ -467,118 +467,218 @@ public class WorkflowTests
 
     /// <summary>
     /// Rows are rebuilt from the profile on every Rescan and the profile is rebuilt from the rows on every save, so
-    /// a per-mod option that lives in only one of them is lost on the first round trip. The folders a host leaves
-    /// out on the server must survive both directions, in all three of their states.
+    /// a per-mod option that lives in only one of them is lost on the first round trip. The two folder lists must
+    /// survive both directions, and the server's list in all three of its states.
     /// </summary>
     [Fact]
-    public void FoldersLeftOutOnTheServerSurviveCollectAndRescan() => Sta(() =>
+    public void FolderChoicesSurviveCollectAndRescan() => Sta(() =>
     {
         using var fixture = new Fixture();
         fixture.Module("Named"); fixture.Module("Nothing"); fixture.Module("NoOpinion");
         var vm = fixture.ViewModel(); vm.Rescan();
         Assert.False(vm.IsDirty);
-        // None of the three is in the profile yet: setting the list has to create the entry, not drop the edit.
-        Assert.Null(vm.ServerExcludedFoldersFor(vm.Mods.Single(m => m.Id == "Named")));
 
-        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "Named"), ["RuntimeDataCache", "AssetSources"]);
+        // None of the three is in the profile yet: setting the lists has to create the entry, not drop the edit.
+        vm.SetModFolders(vm.Mods.Single(m => m.Id == "Named"), ["RuntimeDataCache", "AssetSources"], ["DsData"]);
         Assert.True(vm.IsDirty);
         Assert.Contains("RuntimeDataCache", vm.Status);
-        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "Nothing"), []);
-        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "NoOpinion"), null);
+        Assert.Contains("DsData", vm.Status);
+        vm.SetModFolders(vm.Mods.Single(m => m.Id == "Nothing"), [], []);
+        vm.SetModFolders(vm.Mods.Single(m => m.Id == "NoOpinion"), null, null);
 
-        void AssertKept()
+        void AssertKept(Profile profile)
         {
-            Assert.Equal(["RuntimeDataCache", "AssetSources"], vm.Profile.Mods.Single(m => m.Id == "Named").ServerExcludedFolders);
-            Assert.Empty(vm.Profile.Mods.Single(m => m.Id == "Nothing").ServerExcludedFolders!);
-            Assert.Null(vm.Profile.Mods.Single(m => m.Id == "NoOpinion").ServerExcludedFolders);
-            Assert.Equal(["RuntimeDataCache", "AssetSources"], vm.ServerExcludedFoldersFor(vm.Mods.Single(m => m.Id == "Named")));
+            Assert.Equal(["RuntimeDataCache", "AssetSources"], profile.Mods.Single(m => m.Id == "Named").ServerExcludedFolders);
+            Assert.Equal(["DsData"], profile.Mods.Single(m => m.Id == "Named").ClientExcludedFolders);
+            Assert.Empty(profile.Mods.Single(m => m.Id == "Nothing").ServerExcludedFolders!);
+            // "Server only" has no record behind it, so an empty list says nothing null does not and is not stored.
+            Assert.Null(profile.Mods.Single(m => m.Id == "Nothing").ClientExcludedFolders);
+            Assert.Null(profile.Mods.Single(m => m.Id == "NoOpinion").ServerExcludedFolders);
+            Assert.Null(profile.Mods.Single(m => m.Id == "NoOpinion").ClientExcludedFolders);
         }
 
-        AssertKept();
-        vm.CollectProfileFromRows(); AssertKept();
-        vm.Rescan(); AssertKept();
-        // An unrelated edit to the same row, then the save path's collect: the list must not be rewritten from the row.
+        AssertKept(vm.Profile);
+        vm.CollectProfileFromRows(); AssertKept(vm.Profile);
+        vm.Rescan(); AssertKept(vm.Profile);
+        // An unrelated edit to the same row, then the save path's collect: the lists must not be rewritten from the row.
         vm.Mods.Single(m => m.Id == "Named").Enabled = true;
-        vm.CollectProfileFromRows(); AssertKept();
-        vm.Rescan(); vm.CollectProfileFromRows(); AssertKept();
+        vm.CollectProfileFromRows(); AssertKept(vm.Profile);
+        vm.Rescan(); vm.CollectProfileFromRows(); AssertKept(vm.Profile);
         // And through the file format the launch reads.
-        var saved = ProfileStore.Snapshot(vm.Profile);
-        Assert.Equal(["RuntimeDataCache", "AssetSources"], saved.Mods.Single(m => m.Id == "Named").ServerExcludedFolders);
-        Assert.Empty(saved.Mods.Single(m => m.Id == "Nothing").ServerExcludedFolders!);
-        Assert.Null(saved.Mods.Single(m => m.Id == "NoOpinion").ServerExcludedFolders);
+        AssertKept(ProfileStore.Snapshot(vm.Profile));
 
-        // Clearing it again is an edit like any other.
-        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "Named"), null);
+        // Clearing them again is an edit like any other.
+        vm.SetModFolders(vm.Mods.Single(m => m.Id == "Named"), null, null);
         vm.Rescan();
         Assert.Null(vm.Profile.Mods.Single(m => m.Id == "Named").ServerExcludedFolders);
+        Assert.Null(vm.Profile.Mods.Single(m => m.Id == "Named").ClientExcludedFolders);
     });
 
-    /// <summary>A server-side option: offered for a mod in Host mode, never in Player mode or for the game's own modules.</summary>
+    /// <summary>Set where a server is set up: offered for a mod in Host mode, never in Player mode or for the game's own modules.</summary>
     [Fact]
-    public void FoldersLeftOutOnTheServerAreAHostModeChoiceForMods() => Sta(() =>
+    public void FolderChoicesAreAHostModeChoiceForMods() => Sta(() =>
     {
         using var fixture = new Fixture(); fixture.Module("TestMod");
         var vm = fixture.ViewModel(); vm.Rescan();
         vm.SelectedMod = vm.Mods.Single(m => m.Id == "TestMod");
-        Assert.False(vm.EditServerFoldersCommand.CanExecute(null));
+        Assert.False(vm.EditModFoldersCommand.CanExecute(null));
 
         // Setting it for a game module is refused outright rather than writing Native into Profile.Mods.
-        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "Native"), ["ModuleData"]);
+        vm.SetModFolders(vm.Mods.Single(m => m.Id == "Native"), ["ModuleData"], ["GUI"]);
         Assert.DoesNotContain(vm.Profile.Mods, m => m.Id == "Native");
     });
 
+    /// <summary>
+    /// The dialog lists the folders of the copy the row shows, and what it stores is what the launch reads. Opening
+    /// it and pressing OK without touching anything is not an edit.
+    /// </summary>
     [Fact]
-    public void TheFoldersDialogTurnsItsTextIntoTheRightProfileValue()
+    public void TheFoldersDialogReadsTheModsOwnFoldersAndStoresTheChoices() => Sta(() =>
     {
-        // No record list to overrule: an empty box is "no opinion", not a pinned empty list.
-        Assert.Null(MainViewModel.ServerFoldersChoice("", useRecord: false, recordHasFolders: false));
-        Assert.Null(MainViewModel.ServerFoldersChoice("  \r\n ", useRecord: false, recordHasFolders: false));
-        Assert.Equal(["RuntimeDataCache", "AssetSources"],
-            MainViewModel.ServerFoldersChoice("RuntimeDataCache\r\n\r\n AssetSources \r\nruntimedatacache", useRecord: false, recordHasFolders: false));
+        using var fixture = new Fixture();
+        fixture.Copy(Path.Combine("Modules", "FolderMod"), "FolderMod", "bin", "ModuleData", "RuntimeDataCache", "DsData");
+        var vm = fixture.ViewModel(); vm.Rescan();
+        var row = vm.Mods.Single(m => m.Id == "FolderMod");
 
-        // With a record list: ticked = follow it, unticked and empty = leave nothing out despite it.
-        Assert.Null(MainViewModel.ServerFoldersChoice("RuntimeDataCache", useRecord: true, recordHasFolders: true));
-        var nothing = MainViewModel.ServerFoldersChoice("", useRecord: false, recordHasFolders: true);
-        Assert.NotNull(nothing);
-        Assert.Empty(nothing!);
-        Assert.Equal(["AssetSources"], MainViewModel.ServerFoldersChoice("AssetSources", useRecord: false, recordHasFolders: true));
+        var untouched = vm.ModFolderChoicesFor(row);
+        Assert.Equal(["bin", "DsData", "ModuleData", "RuntimeDataCache"], untouched.Rows.Select(r => r.Name));
+        Assert.All(untouched.Rows, r => Assert.Equal(FolderSide.Both, r.Side));
+        vm.SetModFolders(row, untouched.ServerExcluded, untouched.ClientExcluded);
+        Assert.False(vm.IsDirty);
 
-        // The hint names what the launch would refuse, before the host presses OK.
-        var hint = MainViewModel.ServerFoldersHint("RuntimeDataCache\nbin\n..\\Other", useRecord: false, recordHasFolders: false);
-        Assert.Contains("bin", hint);
-        Assert.Contains("..\\Other", hint);
-        Assert.DoesNotContain("RuntimeDataCache", hint);
+        var edited = vm.ModFolderChoicesFor(row);
+        edited.Rows.Single(r => r.Name == "RuntimeDataCache").Choice = ModFolderRow.ClientOnlyLabel;
+        edited.Rows.Single(r => r.Name == "DsData").Choice = ModFolderRow.ServerOnlyLabel;
+        vm.SetModFolders(row, edited.ServerExcluded, edited.ClientExcluded);
+        Assert.True(vm.IsDirty);
+        var stored = vm.Profile.Mods.Single(m => m.Id == "FolderMod");
+        Assert.Equal(["RuntimeDataCache"], stored.ServerExcludedFolders);
+        Assert.Equal(["DsData"], stored.ClientExcludedFolders);
+
+        // Opened again, the dialog shows what was stored.
+        var reopened = vm.ModFolderChoicesFor(vm.Mods.Single(m => m.Id == "FolderMod"));
+        Assert.Equal(FolderSide.ClientOnly, reopened.Rows.Single(r => r.Name == "RuntimeDataCache").Side);
+        Assert.Equal(FolderSide.ServerOnly, reopened.Rows.Single(r => r.Name == "DsData").Side);
+        Assert.Equal(FolderSide.Both, reopened.Rows.Single(r => r.Name == "ModuleData").Side);
+    });
+
+    [Fact]
+    public void FolderRowsStartFromTheListsAndTheCompatRecord()
+    {
+        // The profile has no opinion about the server's list, so the record's applies.
+        var choices = new ModFolderChoices(
+            ["SceneObj", "bin", "AssetPackages", "RuntimeDataCache", "DsData", "ModuleData"],
+            profileServerExcluded: null, recordServerExcluded: ["runtimedatacache"], profileClientExcluded: ["DsData", "Gone"]);
+
+        Assert.Equal(["AssetPackages", "bin", "DsData", "Gone", "ModuleData", "RuntimeDataCache", "SceneObj"], choices.Rows.Select(r => r.Name));
+        ModFolderRow Row(string name) => choices.Rows.Single(r => r.Name == name);
+        Assert.Equal(FolderSide.ClientOnly, Row("RuntimeDataCache").Side);
+        Assert.Equal(FolderSide.ServerOnly, Row("DsData").Side);
+        Assert.Equal(FolderSide.Both, Row("ModuleData").Side);
+        Assert.Equal(FolderSide.Both, Row("SceneObj").Side);
+
+        // bin and AssetPackages are listed, but their side is not a choice, and the row says why.
+        Assert.True(Row("bin").IsLocked);
+        Assert.False(Row("bin").CanChange);
+        Assert.Equal(ModFolderRow.BothLabel, Row("bin").Choice);
+        Assert.Contains("code", Row("bin").Note);
+        Assert.True(Row("AssetPackages").IsLocked);
+        Assert.Equal(ModFolderRow.ClientOnlyLabel, Row("AssetPackages").Choice);
+        Assert.Contains("never shown AssetPackages", Row("AssetPackages").Note);
+
+        // A stored name this copy has no folder for is still a row, so a host can see it and clear it.
+        Assert.False(Row("Gone").IsPresent);
+        Assert.Equal(FolderSide.ServerOnly, Row("Gone").Side);
+        Assert.Contains("Not present in this copy", Row("Gone").Note);
+        Assert.True(Row("Gone").CanChange);
+        Assert.True(Row("DsData").IsPresent);
+        Assert.Equal("", Row("DsData").Note);
+
+        // Untouched, the profile keeps following the database: null, not a copy of the record's list.
+        Assert.Null(choices.ServerExcluded);
+        Assert.Equal(["DsData", "Gone"], choices.ClientExcluded);
+
+        Row("Gone").Choice = ModFolderRow.BothLabel;
+        Assert.Equal(["DsData"], choices.ClientExcluded);
     }
 
-    /// <summary>The dialog itself, never shown: its XAML loads and its three starting states give back what they were given.</summary>
     [Fact]
-    public void TheFoldersDialogOpensOnTheProfilesCurrentState() => Sta(() =>
+    public void FolderRowsTurnBackIntoTheRightProfileValues()
     {
-        // No opinion, and a record with a list: the tick is on, the box shows the record's list and is locked.
-        var following = new ServerFoldersWindow("Mod", null, ["RuntimeDataCache"]);
-        Assert.True(following.UseRecordBox.IsChecked);
-        Assert.False(following.FoldersBox.IsEnabled);
-        Assert.Equal("RuntimeDataCache", following.FoldersBox.Text);
-        Assert.Null(following.Result);
-        // Unticking starts from the record's list, so overruling it is an edit rather than retyping.
-        following.UseRecordBox.IsChecked = false;
-        Assert.True(following.FoldersBox.IsEnabled);
-        Assert.Equal(["RuntimeDataCache"], following.Result);
-        following.FoldersBox.Text = "";
-        Assert.Empty(following.Result!);
+        // A record list and no opinion: overruling it is an explicit list, and "nothing" is an EMPTY list, not null.
+        var following = new ModFolderChoices(["RuntimeDataCache", "ModuleData"], null, ["RuntimeDataCache"], null);
+        following.Rows.Single(r => r.Name == "RuntimeDataCache").Choice = ModFolderRow.BothLabel;
+        Assert.NotNull(following.ServerExcluded);
+        Assert.Empty(following.ServerExcluded!);
+        following.Rows.Single(r => r.Name == "ModuleData").Choice = ModFolderRow.ClientOnlyLabel;
+        Assert.Equal(["ModuleData"], following.ServerExcluded);
+        // Back to exactly what the record says is "no opinion" again.
+        following.Rows.Single(r => r.Name == "ModuleData").Choice = ModFolderRow.BothLabel;
+        following.Rows.Single(r => r.Name == "RuntimeDataCache").Choice = ModFolderRow.ClientOnlyLabel;
+        Assert.Null(following.ServerExcluded);
+        Assert.Null(following.ClientExcluded);
 
-        // The profile already overrules the record with "nothing".
-        var nothing = new ServerFoldersWindow("Mod", [], ["RuntimeDataCache"]);
-        Assert.False(nothing.UseRecordBox.IsChecked);
-        Assert.Empty(nothing.Result!);
+        // The profile already overrules the record with "nothing": that survives an untouched OK.
+        var nothing = new ModFolderChoices(["RuntimeDataCache"], [], ["RuntimeDataCache"], null);
+        Assert.Equal(FolderSide.Both, nothing.Rows.Single().Side);
+        Assert.Empty(nothing.ServerExcluded!);
 
-        // No record list: no tick to offer, and the profile's own names come back unchanged.
-        var own = new ServerFoldersWindow("Mod", ["RuntimeDataCache", "AssetSources"], []);
-        Assert.Equal(System.Windows.Visibility.Collapsed, own.UseRecordBox.Visibility);
-        Assert.Equal(["RuntimeDataCache", "AssetSources"], own.Result);
-        own.FoldersBox.Text = "";
-        Assert.Null(own.Result);
-        Assert.Contains("RuntimeDataCache", own.PromptText.Text);
+        // No record list: nothing chosen is null, never a pinned empty list.
+        Assert.Null(new ModFolderChoices(["ModuleData"], null, [], null).ServerExcluded);
+        Assert.Null(new ModFolderChoices(["ModuleData"], [], [], []).ServerExcluded);
+        Assert.Null(new ModFolderChoices(["ModuleData"], [], [], []).ClientExcluded);
+        Assert.Empty(new ModFolderChoices([], null, [], null).Rows);
+
+        // One choice per folder: picking "Server only" for a client-only folder takes it off the server's list.
+        var own = new ModFolderChoices(["RuntimeDataCache", "AssetSources"], ["RuntimeDataCache", "AssetSources"], [], null);
+        Assert.Equal(["AssetSources", "RuntimeDataCache"], own.ServerExcluded);
+        own.Rows.Single(r => r.Name == "AssetSources").Choice = ModFolderRow.ServerOnlyLabel;
+        Assert.Equal(["RuntimeDataCache"], own.ServerExcluded);
+        Assert.Equal(["AssetSources"], own.ClientExcluded);
+        // A label the drop-down never offers changes nothing.
+        own.Rows.Single(r => r.Name == "AssetSources").Choice = "Nobody";
+        Assert.Equal(FolderSide.ServerOnly, own.Rows.Single(r => r.Name == "AssetSources").Side);
+        Assert.Equal(["Server + Client", "Server only", "Client only"], ModFolderRow.Labels);
+    }
+
+    /// <summary>
+    /// A locked row is not a choice, so it must never read as an edit: whatever the server's list said about bin or
+    /// AssetPackages comes back unchanged (the launch ignores both), and neither can be made "Server only".
+    /// </summary>
+    [Fact]
+    public void LockedFolderRowsNeverChangeWhatIsStored()
+    {
+        var record = new ModFolderChoices(["bin", "AssetPackages", "ModuleData"], null, ["AssetPackages"], ["bin", "AssetPackages"]);
+        Assert.Null(record.ServerExcluded);
+        Assert.Null(record.ClientExcluded);
+
+        var profile = new ModFolderChoices(["bin", "AssetPackages", "ModuleData"], ["AssetPackages", "ModuleData"], [], null);
+        Assert.Equal(["AssetPackages", "ModuleData"], profile.ServerExcluded);
+
+        // A name the launch would refuse is shown with the reason and can be cleared like any other.
+        var invalid = new ModFolderChoices(["ModuleData"], ["..\\Other"], [], null);
+        var row = invalid.Rows.Single(r => r.Name == "..\\Other");
+        Assert.Contains("Ignored when launching", row.Note);
+        row.Choice = ModFolderRow.BothLabel;
+        Assert.Null(invalid.ServerExcluded);
+    }
+
+    /// <summary>The dialog itself, never shown: its XAML loads, it shows the model's rows and says what the choices mean.</summary>
+    [Fact]
+    public void TheFoldersDialogShowsTheRowsAndExplainsTheChoices() => Sta(() =>
+    {
+        var choices = new ModFolderChoices(["bin", "RuntimeDataCache"], null, ["RuntimeDataCache"], null);
+        var win = new ModFoldersWindow("Mod", choices);
+        Assert.Same(choices.Rows, win.Grid.ItemsSource);
+        Assert.Equal(System.Windows.Visibility.Visible, win.Grid.Visibility);
+        Assert.Contains("Mod", win.Header.Text);
+        foreach (var label in ModFolderRow.Labels) Assert.Contains(label, win.IntroText.Text);
+        Assert.Contains("never changed", win.IntroText.Text);
+        Assert.Contains("Steam", win.IntroText.Text);
+
+        var empty = new ModFoldersWindow("Mod", new ModFolderChoices([], null, [], null));
+        Assert.Equal(System.Windows.Visibility.Collapsed, empty.Grid.Visibility);
+        Assert.Equal(System.Windows.Visibility.Visible, empty.EmptyText.Visibility);
     });
 
     [Fact]
