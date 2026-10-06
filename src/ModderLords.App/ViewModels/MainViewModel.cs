@@ -260,6 +260,13 @@ public partial class ModRow : ObservableObject
 public sealed record RoleChoiceItem(RoleChoice Choice)
 {
     public string Label => RoleLabels.For(Choice);
+
+    /// <summary>
+    /// The label, not the record's own dump. A closed combo shows its selection through the theme's template, and the
+    /// first build of this showed "RoleChoiceItem { Choice = ..." in every Role cell because that template did not
+    /// pass DisplayMemberPath on. The template is fixed; this keeps the cell readable if another one forgets.
+    /// </summary>
+    public override string ToString() => Label;
 }
 
 public sealed record ConsoleLine(string Time, LogCategory Category, string Text);
