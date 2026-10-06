@@ -14,7 +14,15 @@ public sealed class OverlayApplier
     private const string StateFileName = "overlay-state.json";
 
     public sealed record AppliedEntry(string ModuleId, string EngineModulePath, string Target, OverlayKind Kind, IReadOnlyList<string> ManifestChanges);
-    public sealed record ApplyResult(IReadOnlyList<AppliedEntry> Applied, IReadOnlyList<string> Removed, IReadOnlyList<string> Warnings);
+    public sealed record ApplyResult(IReadOnlyList<AppliedEntry> Applied, IReadOnlyList<string> Removed, IReadOnlyList<string> Warnings)
+    {
+        /// <summary>
+        /// Mods that could not be linked into the engine, each with the reason. They are still in the launch's module
+        /// list, and the engine drops a listed module it cannot find without a word, so a launch that goes ahead
+        /// hosts without them.
+        /// </summary>
+        public IReadOnlyList<string> Failed { get; init; } = Array.Empty<string>();
+    }
 
     private sealed class State
     {
@@ -30,6 +38,7 @@ public sealed class OverlayApplier
         var state = LoadState(plan.OverlayRoot);
         var applied = new List<AppliedEntry>();
         var warnings = new List<string>();
+        var failed = new List<string>();
         var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var e in plan.Entries)
@@ -64,6 +73,7 @@ public sealed class OverlayApplier
             catch (Exception ex)
             {
                 warnings.Add($"{mod.Id}: overlay failed and the mod was skipped: {ex.Message}");
+                failed.Add($"{mod.Id}: {ex.Message}");
                 // A half-built engine link would make the engine see a broken module; drop it.
                 try { if (Junction.IsJunction(e.EngineModulePath)) Junction.Remove(e.EngineModulePath); } catch { }
             }
@@ -79,7 +89,7 @@ public sealed class OverlayApplier
         }
 
         SaveState(plan.OverlayRoot, state);
-        return new ApplyResult(applied, removed, warnings);
+        return new ApplyResult(applied, removed, warnings) { Failed = failed };
     }
 
     /// <summary>Removes every junction recorded in the state file (used by "disable all" / uninstall).</summary>

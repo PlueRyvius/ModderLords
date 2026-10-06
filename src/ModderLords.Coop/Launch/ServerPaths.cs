@@ -24,7 +24,18 @@ public sealed record ServerPaths(string DedicatedServerRoot, string DataDir, str
 {
     public const long CoopWorkshopItemId = 3770450698;
 
-    public string EngineRoot => Path.Combine(DedicatedServerRoot, "engine");
+    /// <summary>
+    /// A private copy-free view of the server (see <see cref="ServerView"/>) that the engine runs from when the
+    /// drive holding <see cref="DedicatedServerRoot"/> cannot hold junctions. Null on a normal install.
+    /// </summary>
+    public string? ViewRoot { get; init; }
+
+    /// <summary>The engine folder the server is launched from: the view's when there is one, otherwise the real one.</summary>
+    public string EngineRoot => Path.Combine(ViewRoot ?? DedicatedServerRoot, "engine");
+    /// <summary>The engine folder as installed, whatever the server is launched from.</summary>
+    public string StockEngineRoot => Path.Combine(DedicatedServerRoot, "engine");
+    /// <summary>The installed engine\Modules: where the stock modules really are, never where a view puts its links.</summary>
+    public string StockModulesRoot => Path.Combine(StockEngineRoot, "Modules");
     public string ServerBin => Path.Combine(EngineRoot, "bin", "Win64_Shipping_Server");
     public string ModulesRoot => Path.Combine(EngineRoot, "Modules");
     public string DotnetExe => Path.Combine(EngineRoot, "dotnet", "dotnet.exe");
@@ -89,9 +100,13 @@ public sealed record ServerPaths(string DedicatedServerRoot, string DataDir, str
     public IEnumerable<string> Validate()
     {
         if (!File.Exists(OfficialHostExe)) yield return $"Missing official host: {OfficialHostExe}";
-        if (!File.Exists(DotnetExe)) yield return $"Missing bundled .NET: {DotnetExe}";
-        if (!File.Exists(StarterDll)) yield return $"Missing engine starter: {StarterDll}";
+        // Against the installation, not the view: this runs before a view has been built, and what it asks is
+        // whether the package is complete.
+        var dotnet = Path.Combine(StockEngineRoot, "dotnet", "dotnet.exe");
+        var starter = Path.Combine(StockEngineRoot, "bin", "Win64_Shipping_Server", "TaleWorlds.Starter.DotNetCore.dll");
+        if (!File.Exists(dotnet)) yield return $"Missing bundled .NET: {dotnet}";
+        if (!File.Exists(starter)) yield return $"Missing engine starter: {starter}";
         foreach (var m in new[] { "Native", "SandBoxCore", "SandBox", "Coop", "DedicatedServer.Windows" })
-            if (!File.Exists(Path.Combine(ModulesRoot, m, "SubModule.xml"))) yield return $"Missing stock module: {m}";
+            if (!File.Exists(Path.Combine(StockModulesRoot, m, "SubModule.xml"))) yield return $"Missing stock module: {m}";
     }
 }

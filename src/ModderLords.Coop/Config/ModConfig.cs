@@ -49,7 +49,7 @@ public static class ModConfig
 
     public static string? TemplatePath(ServerPaths paths)
     {
-        var p = Path.Combine(paths.ModulesRoot, "Coop", "mod-config.default.json");
+        var p = Path.Combine(paths.StockModulesRoot, "Coop", "mod-config.default.json");
         if (File.Exists(p)) return p;
         p = Path.Combine(paths.DedicatedServerRoot, "server-data", "mod-config.json");
         return File.Exists(p) ? p : null;
