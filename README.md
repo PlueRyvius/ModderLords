@@ -847,11 +847,19 @@ changed.
   `.json` file. It writes your record as stored, without the bundled values that show through it; a mod you have no
   record for exports the bundled one. **Import…** merges such a file into your local database; when both sides have a
   record for the same mod the newer one wins and the kept ones are listed under Messages.
-- **Submitting**: **Submit…** offers the selected mod's record (one you made with Record…) to the maintainer for the
-  bundled database. It opens a GitHub issue form in your browser, already filled in with the record, the mod's version
-  and Coop's version, and nothing else about your PC or your other mods. Pressing the button sends nothing: the record
-  becomes a public issue, posted from your own GitHub account, only when you press Submit on GitHub. A record too large
-  for a link is copied to the clipboard instead, to paste into the form.
+- **Submitting**: **Submit…** offers the selected mod's settings to the maintainer for the bundled database, as a
+  compatibility record. What is sent is the mod's record with its settings on the Mods tab written into it: the Role,
+  the Server-only logic tick, and both folder lists from *Folders: server and client…*.
+  - You do not have to write a record first. Host a server with the mod and have a player reach the campaign map (the
+    Smoke test tab does both by itself). ModderLords notes that the set-up worked, and Submit… then sends it as
+    **Works** for that mod version and Coop version, with the date it was seen working.
+  - That note covers exactly the version and settings that were hosted. Change the mod's role or folders, or update
+    the mod or Coop, and you host once more before Submit… offers it again.
+  - A record you wrote with Record… can be submitted without hosting; the form then does not claim it was tried.
+  - It opens a GitHub issue form in your browser, already filled in, with nothing else about your PC, your profile or
+    your other mods, and nothing about who joined. Pressing the button sends nothing: the record becomes a public
+    issue, posted from your own GitHub account, only when you press Submit on GitHub. A record too large for a link
+    is copied to the clipboard instead, to paste into the form.
 
 The badge is a claim about what someone tested, so `· untested version` appears whenever your copy's version is not in
 the record; the mod may still work.
@@ -883,10 +891,11 @@ Things to know:
 - A folder the profile remembers but this copy of the mod does not have is still listed, marked as not present, so
   you can see it and set it back to **Server + Client** to forget it.
 
-A compat record can carry a **Client only** list as `ServerExcludedFolders` (edit `compat-db.local.json` by hand),
-which then applies to every profile that has not made its own choice for that mod. Once you change a folder's choice
-the profile's own list replaces the record's, and choosing **Server + Client** for everything means "leave nothing
-out" even when the record names folders. There is no record list for **Server only**.
+A compat record can carry both lists: **Client only** as `ServerExcludedFolders` and **Server only** as
+`ClientExcludedFolders`. Submit… fills them in from your choices here. A record's list applies to every profile that
+has not made its own choice for that mod. Once you change a folder's choice the profile's own list replaces the
+record's, and choosing **Server + Client** for everything means "leave nothing out" even when the record names
+folders.
 
 ---
 

@@ -54,18 +54,37 @@ public static class CompatSubmission
 
     /// <summary>
     /// The link for one record. <paramref name="modVersion"/> and <paramref name="coopVersion"/> are the versions on
-    /// the submitter's machine; a missing one leaves its field empty for them to fill in.
+    /// the submitter's machine; a missing one leaves its field empty for them to fill in. <paramref name="notes"/>
+    /// goes in the form's free-text field, which the reviewer reads and the database never stores.
     /// </summary>
-    public static CompatSubmissionLink Build(CompatRecord record, string? modVersion, string? coopVersion)
+    public static CompatSubmissionLink Build(CompatRecord record, string? modVersion, string? coopVersion, string? notes = null)
     {
         var json = RecordJson(record);
-        var url = Url(record, modVersion, coopVersion, json);
+        var url = Url(record, modVersion, coopVersion, json, notes);
         return url.Length <= MaxUrlLength
             ? new CompatSubmissionLink(url, json, RecordInUrl: true)
-            : new CompatSubmissionLink(Url(record, modVersion, coopVersion, PastePlaceholder), json, RecordInUrl: false);
+            : new CompatSubmissionLink(Url(record, modVersion, coopVersion, PastePlaceholder, notes), json, RecordInUrl: false);
     }
 
-    private static string Url(CompatRecord record, string? modVersion, string? coopVersion, string recordField)
+    /// <summary>
+    /// What the form's notes say when the launcher watched the set-up work. The date and nothing else about the
+    /// session: who joined, from where and under which profile is nobody's business in a public issue.
+    /// </summary>
+    public static string ProofNote(DateTime provenAtUtc) =>
+        $"Hosted through ModderLords with exactly these settings on {provenAtUtc:yyyy-MM-dd}: the dedicated server started and a player reached the campaign map.";
+
+    /// <summary>
+    /// Whether two records say the same thing, whenever they were written. Submit… uses it to tell a host that the
+    /// maintainer already has exactly what they are about to send.
+    /// </summary>
+    public static bool SameContent(CompatRecord a, CompatRecord b)
+    {
+        var (x, y) = (a.Clone(), b.Clone());
+        x.UpdatedAt = y.UpdatedAt = null;
+        return CompatDb.Serialize([x]) == CompatDb.Serialize([y]);
+    }
+
+    private static string Url(CompatRecord record, string? modVersion, string? coopVersion, string recordField, string? notes)
     {
         var sb = new StringBuilder($"https://github.com/{UpdateChecker.Repository}/issues/new?template={Template}");
         Add(sb, "title", TitleFor(record));
@@ -73,6 +92,7 @@ public static class CompatSubmission
         Add(sb, "mod-version", modVersion);
         Add(sb, "coop-version", coopVersion);
         Add(sb, "record", recordField);
+        Add(sb, "notes", notes);
         return sb.ToString();
     }
 

@@ -36,8 +36,8 @@ public sealed class ProfileMod
     public List<string>? ServerExcludedFolders { get; set; }
     /// <summary>
     /// Top-level folders of this mod that only the dedicated server uses: a game started through ModderLords is not
-    /// shown them (see <see cref="Launch.ClientFolderExclusions"/>). Null or empty means none; there is no compat
-    /// record behind this list, so it has no "no opinion" state to keep apart from "nothing". It travels with the
+    /// shown them (see <see cref="Launch.ClientFolderExclusions"/>). The same three states as the list above: null
+    /// follows the compat record, an empty list is "none" whatever the record says. It travels with the
     /// profile because the person who receives it may play rather than host. A game started from Steam or the
     /// TaleWorlds launcher never passes through here and sees the whole mod.
     /// </summary>

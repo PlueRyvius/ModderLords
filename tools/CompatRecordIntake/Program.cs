@@ -150,9 +150,11 @@ string PullRequestBody(int issue, CompatIntake.MergeResult merge, IReadOnlyList<
         sb.Append($"\nThe submitter reports testing with mod version `{modVersion ?? "not given"}` and Coop version `{coopVersion ?? "not given"}`.\n");
 
     sb.Append("\n## Review these first\n\n");
-    sb.Append("These three fields change what the launcher does on every host that has this mod. The automatic checks only prove they are well-formed, not that they are right.\n\n");
+    sb.Append("These four fields change what the launcher does on every host that has this mod. The automatic checks only prove they are well-formed, not that they are right.\n\n");
     sb.Append("### ServerExcludedFolders\n\nTop-level folders of the mod that the dedicated server is not shown.\n\n");
     sb.Append(Fenced(CompatIntake.Display(record.ServerExcludedFolders))).Append('\n');
+    sb.Append("### ClientExcludedFolders\n\nTop-level folders of the mod that a game started through ModderLords is not shown.\n\n");
+    sb.Append(Fenced(CompatIntake.Display(record.ClientExcludedFolders))).Append('\n');
     sb.Append("### EnsureLines\n\nLines the launcher writes into files inside the mod's own folder before launch.\n\n");
     sb.Append(Fenced(CompatIntake.Display(record.EnsureLines))).Append('\n');
     sb.Append("### DefaultSettings\n\nMod setting values staged as host overrides at launch and carried to every player by settings sync.\n\n");
