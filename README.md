@@ -816,11 +816,17 @@ changed.
   ButterLib, UIExtenderEx, MCM), ModularSmithing2 and ImprovedGarrisons.
 - **Yours**: `%LOCALAPPDATA%\ModderLords\compat-db.local.json`. Select a mod and press **Record…** after testing it:
   pick the verdict, tick *Tested with this version* (records the mod and Coop versions), add notes, and press *Use
-  current row as defaults* to store the Role / Server-only logic / behaviours you settled on. A local record replaces the
-  bundled one for that mod; *Remove local record* brings the bundled one back.
+  current row as defaults* to store the Role / Server-only logic / behaviours you settled on. Only what you change is
+  stored. Where the bundled database also has the mod, your record is laid over the bundled one field by field: what you
+  set wins, everything else still comes from the bundled record, so a later release can improve it without your record
+  hiding the improvement. Your verdict brings its own tested versions and notes with it, since those describe your test;
+  per-setting defaults merge value by value; a list you fill in replaces the bundled list. One consequence: leaving a
+  field empty means "no opinion", so you cannot blank a bundled value, only replace it with another. *Remove local
+  record* brings the bundled record back whole.
 - **Sharing**: **Export…** writes the selected mod's record (or, with nothing selected, all your local records) to a
-  `.json` file. **Import…** merges such a file into your local database; when both sides have a record for the same mod
-  the newer one wins and the kept ones are listed under Messages.
+  `.json` file. It writes your record as stored, without the bundled values that show through it; a mod you have no
+  record for exports the bundled one. **Import…** merges such a file into your local database; when both sides have a
+  record for the same mod the newer one wins and the kept ones are listed under Messages.
 
 The badge is a claim about what someone tested, so `· untested version` appears whenever your copy's version is not in
 the record; the mod may still work.
