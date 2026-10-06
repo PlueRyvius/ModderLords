@@ -111,6 +111,43 @@ place; they open the release page, so test with a packaged Release build.
 The install swaps files in place: the running exe is renamed to `ModderLords.exe.old` (deleted on the next start),
 replaced items move to `.previous\` inside the install folder, and any failure part-way restores the folder.
 
+### The compat database travels separately
+
+`compat-db.json` ships in every release, and installed copies also fetch it between releases
+(`src/ModderLords.Core/Compat/CompatDbRemote.cs`): once per app start, after the update check, from
+`https://raw.githubusercontent.com/PlueRyvius/ModderLords/main/src/ModderLords.Core/compat-db.json`. **Merging a change
+to that file into `main` therefore reaches every install on its next start, with no release and no click.** Review
+such a PR as you would a release.
+
+What an install does with the file:
+
+- **Cache**: `%LOCALAPPDATA%\ModderLords\compat-db.remote.json`, plus a sidecar `compat-db.remote.meta.json` (launcher
+  version that fetched it, ETag, time, SHA-256 of the cache, the last refused file). The cache replaces the *bundled*
+  layer whole; `compat-db.local.json` still goes on top. `CompatDb.Current` reads it, so the CLI uses a cache the app
+  downloaded, but only the app fetches.
+- **Refused, keeping what was in use**: anything over 2 MB, invalid UTF-8 or JSON, a schema newer than the launcher
+  understands, no records, fewer than half as many records as the bundled file, or a newest `UpdatedAt` older than the
+  bundled newest. Offline, a timeout (10 s) and HTTP errors are silence. A refused file is reported under Messages
+  once, not on every start.
+- **Ignored cache**: one fetched by an older launcher version than the one running (until that version completes its
+  own fetch), one whose bytes do not match the sidecar's hash, and one that would be refused as a download today. The
+  last rule is what keeps a branch or dev build with newer records on its own bundled file.
+- **Applied** at the next Rescan or start, never from the download's own continuation: a launch that is preparing reads
+  `CompatDb.Current` several times and those reads must agree.
+- **Off**: `MODDERLORDS_COMPAT_REMOTE=0` (also `off`, `false`, `no`), or `"DownloadCompatDb": false` in
+  `ui-state.json`. Either stops the fetch and stops the cache being used, in the app and the CLI. The Core test project
+  sets the variable for its own process, so tests of the bundled file never read this machine's cache.
+
+Consequences for whoever edits the file:
+
+- **Set `UpdatedAt` on every record you add or change.** It is how an install tells a newer file from an older one. A
+  bundled record you edit *without* touching `UpdatedAt` is hidden on your own machine by a cache of `main`; set the
+  environment variable while working on the file.
+- **Retract a record by editing it, not only by deleting it.** If the deleted record carried the newest `UpdatedAt`,
+  installs whose bundled file still has it see `main` as older and keep their own copy until another record is dated
+  later.
+- **A schema bump strands old launchers on their last good copy**, by design: they refuse the new file and say so once.
+
 ## Licensing note
 
 Bannerlord Coop is source-available, not open source. This project launches its binaries and relies only on their public

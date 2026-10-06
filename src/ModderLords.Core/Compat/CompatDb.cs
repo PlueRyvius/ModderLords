@@ -126,18 +126,36 @@ public sealed class CompatDb
     public static string LocalPath => Path.Combine(ProfileStore.RootDir, LocalFileName);
 
     private static CompatDb? _current;
-    /// <summary>The process-wide DB (bundled + local). Reload() after writing the local file.</summary>
-    public static CompatDb Current => _current ??= Load(BundledPath, LocalPath);
-    public static CompatDb Reload() => _current = Load(BundledPath, LocalPath);
+    /// <summary>
+    /// The process-wide DB (bundled or downloaded, + local). Reload() after writing the local file.
+    /// The app and the CLI both come through here, so the CLI uses a database the app downloaded without fetching one.
+    /// </summary>
+    public static CompatDb Current => _current ??= Load(BundledPath, LocalPath, CompatDbRemote.Default);
+    public static CompatDb Reload() => _current = Load(BundledPath, LocalPath, CompatDbRemote.Default);
+
+    /// <summary>
+    /// When the bundled layer of this instance is the downloaded copy: when it was fetched. Null means the file that
+    /// shipped with the launcher is in use.
+    /// </summary>
+    public DateTime? DownloadedAtUtc { get; private init; }
 
     // ---- loading -----------------------------------------------------------------------------------------------
 
-    public static CompatDb Load(string? bundledPath, string? localPath)
+    public static CompatDb Load(string? bundledPath, string? localPath) => Load(bundledPath, localPath, null);
+
+    /// <summary>
+    /// With <paramref name="remote"/>, a valid downloaded cache stands in for the bundled file. It replaces that layer
+    /// whole rather than merging into it, so a record removed upstream is gone here too; the user's local file still
+    /// goes on top. The bundled file is read either way: the cache is measured against it, and it is what remains
+    /// when the cache is refused.
+    /// </summary>
+    public static CompatDb Load(string? bundledPath, string? localPath, CompatDbRemote? remote)
     {
         var problems = new List<string>();
         var bundled = ReadFile(bundledPath, problems);
+        var downloaded = remote?.TryReadCache(bundled);
         var local = ReadFile(localPath, problems);
-        return new CompatDb(bundled, local, problems);
+        return new CompatDb(downloaded?.Records ?? bundled, local, problems) { DownloadedAtUtc = downloaded?.FetchedAtUtc };
     }
 
     public static CompatDb Empty() => new(Array.Empty<CompatRecord>(), Array.Empty<CompatRecord>(), new List<string>());

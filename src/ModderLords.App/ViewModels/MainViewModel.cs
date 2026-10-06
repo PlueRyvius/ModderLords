@@ -720,6 +720,8 @@ public partial class MainViewModel : ObservableObject
             foreach (var p in catalog.Problems) Messages.Add("catalog: " + p);
             var db = CompatDb.Reload();
             foreach (var p in db.Problems) Messages.Add("compat db: " + p);
+            if (db.DownloadedAtUtc is { } downloaded)
+                Messages.Add($"compat db: using the database downloaded {downloaded.ToLocalTime():yyyy-MM-dd HH:mm} in place of the bundled one");
             foreach (var m in LegacyModuleNotice(gameRoot, paths)) Messages.Add(m);
             CoopVersion = catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop")?.Version;
 
@@ -918,6 +920,29 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Coop's version from the last scan (recorded as TestedCoopVersion); null when the server was not found.</summary>
     [ObservableProperty] private string? _coopVersion;
+
+    /// <summary>
+    /// Called once the window has drawn: asks GitHub for a newer compat database, off the UI thread. Silent when
+    /// there is nothing to say, which includes being offline.
+    ///
+    /// A database that arrives is NOT applied here. It lands in the cache and is picked up by the next Rescan (which
+    /// reloads the database anyway) or the next start. Reloading from this continuation could swap the database under
+    /// a launch that is already preparing: LaunchSession reads CompatDb.Current several times while it plans, and
+    /// those reads have to agree. Rescan is the point where the rows and their defaults are rebuilt from one database,
+    /// so that is where a new one belongs.
+    /// </summary>
+    public async Task DownloadCompatDbAtStartupAsync()
+    {
+        var remote = CompatDbRemote.Default;
+        if (!remote.Enabled) return;
+        using var http = ModderLords.Core.Updates.UpdateChecker.CreateCheckClient();
+        var result = await Task.Run(() => remote.RefreshAsync(http, CompatDbRemote.ReadBundled(CompatDb.BundledPath)));
+        if (result.Outcome == CompatDbRemoteOutcome.Updated)
+            Messages.Add("compat db: a newer database was downloaded; it is used from the next \"Rescan mods\" or restart");
+        // Once per refused file, not once per start: the sidecar remembers which one it was.
+        else if (result is { Outcome: CompatDbRemoteOutcome.Rejected, AlreadyReported: false })
+            Messages.Add($"compat db: the downloaded database was not used ({result.Reason}); keeping the one in use");
+    }
 
     private void RefreshCompatBadges()
     {
