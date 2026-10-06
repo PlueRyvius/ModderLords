@@ -248,7 +248,9 @@
                                     Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                             <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MutedForeground}"
                                        Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
-                                       Text="Run = load its code on the server. DependencyOnly = listed for the handshake, no code (UI frameworks). AsShipped = let the engine decide." />
+                                       TextWrapping="Wrap"
+                                       ToolTip="Server + Client: the mod's code loads on the server and on players' games. The usual choice for gameplay mods.&#x0a;Client only: the server keeps the mod in its list so players can join, but loads none of its code. For UI frameworks such as Harmony, ButterLib, UIExtenderEx and MCM.&#x0a;Mod decides: the mod's own manifest says what the server loads. Only for mods built for dedicated servers.&#x0a;Server only: the mod's behaviours run on the server and players' games skip them. Experimental, so it is offered only with Experimental compatibility on (Server tab, Advanced), and it needs Settings sync."
+                                       Text="Role: Server + Client runs the mod's code on the server and on players' games; Client only runs it on players' games only (UI frameworks); Mod decides leaves it to the mod's own manifest. Server only appears with Experimental compatibility on." />
                         </WrapPanel>
                         <!-- CanUserSortColumns is OFF and must stay off. This list IS the load order: the row order
                              is the thing being edited, and a column sort silently decouples what you see from the
@@ -317,8 +319,12 @@
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Header="Version" Binding="{Binding Version}" IsReadOnly="True" Width="90" />
-                                <DataGridComboBoxColumn Header="Role" x:Name="RoleColumn" SelectedItemBinding="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
-                                                        ItemsSource="{x:Static vm:ModRow.Roles}" Width="130">
+                                <!-- The cell shows a plain-language label and stores a RoleChoice, which the row turns into the
+                                     role and the Server-only logic tick the profile keeps. No ItemsSource here: a column is
+                                     not in the visual tree, so it cannot bind to the view model, and the list changes with
+                                     Experimental compatibility. The window sets it (ApplyRoleChoices). -->
+                                <DataGridComboBoxColumn Header="Role" x:Name="RoleColumn" SelectedValueBinding="{Binding RoleChoice, UpdateSourceTrigger=PropertyChanged}"
+                                                        DisplayMemberPath="Label" SelectedValuePath="Choice" Width="130">
                                     <DataGridComboBoxColumn.ElementStyle>
                                         <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
                                             <Style.Triggers>

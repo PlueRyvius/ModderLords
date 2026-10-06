@@ -71,6 +71,9 @@ public class ServerSubmoduleClassTests
         Assert.Equal(ServerRole.DependencyOnly, entry.Selection.Role);
         Assert.Contains(entry.Notes, n => n.Contains(ServerClass) && n.Contains("not in this mod's DLLs"));
         Assert.Contains(entry.Notes, n => n.Contains("DependencyOnly"));
+        // The stored name for whoever searches the log, and beside it the entry of the Role drop-down it is.
+        Assert.Contains(entry.Notes, n => n.Contains("Falling back to DependencyOnly (\"Client only\" on the Mods tab)"));
+        Assert.Contains(entry.Notes, n => n.Contains("Run (\"Server + Client\" on the Mods tab) would crash"));
     }
 
     [Fact]
@@ -83,7 +86,7 @@ public class ServerSubmoduleClassTests
 
         Assert.Equal(OverlayKind.Shadow, entry.Kind);
         Assert.NotNull(entry.ShadowPath);
-        Assert.Contains(entry.Notes, n => n.Contains("dependency-only: kept in the module list for the handshake"));
+        Assert.Contains(entry.Notes, n => n.Contains("dependency-only (\"Client only\" on the Mods tab): kept in the module list for the handshake"));
     }
 
     [Fact]
