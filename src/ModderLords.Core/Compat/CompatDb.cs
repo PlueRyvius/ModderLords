@@ -45,6 +45,11 @@ public sealed class CompatRecord
     /// replaces this - including an empty one, which means "leave nothing out".
     /// </summary>
     public List<string> ServerExcludedFolders { get; set; } = new();
+    /// <summary>
+    /// The other direction: top-level folders only the dedicated server uses, which a game started through ModderLords
+    /// is not shown. A profile's own list for the mod, when it has one, replaces this - including an empty one.
+    /// </summary>
+    public List<string> ClientExcludedFolders { get; set; } = new();
     /// <summary>Lines the mod's own config files must contain under Coop, applied to its folder before launch. See <see cref="EnsureLinesApplier"/>.</summary>
     public List<EnsureLine> EnsureLines { get; set; } = new();
     /// <summary>
@@ -64,6 +69,7 @@ public sealed class CompatRecord
         DefaultRole = DefaultRole, ServerAuthoritative = ServerAuthoritative, ClientSideBehaviors = ClientSideBehaviors.ToList(),
         KeepSubModules = KeepSubModules.ToList(), SettingsTypes = SettingsTypes.ToList(), IgnoreSettingsTypes = IgnoreSettingsTypes.ToList(),
         ClientLoadsAfterCoop = ClientLoadsAfterCoop, ServerExcludedFolders = ServerExcludedFolders.ToList(),
+        ClientExcludedFolders = ClientExcludedFolders.ToList(),
         EnsureLines = EnsureLines.Select(l => new EnsureLine { File = l.File, Section = l.Section, Value = l.Value }).ToList(),
         DefaultSettings = DefaultSettings.ToDictionary(o => o.Key, o => new Dictionary<string, string>(o.Value, StringComparer.Ordinal), StringComparer.Ordinal),
         Notes = Notes, Url = Url, UpdatedAt = UpdatedAt,
@@ -155,7 +161,7 @@ public sealed class CompatDb
     /// <item><c>UpdatedAt</c>: local when set, else bundled. SaveLocal always stamps it, so it dates the user's part.</item>
     /// <item><c>DefaultRole</c>, <c>ServerAuthoritative</c>, <c>ClientLoadsAfterCoop</c>, <c>Url</c>: local when set, else bundled.</item>
     /// <item><c>ClientSideBehaviors</c>, <c>KeepSubModules</c>, <c>SettingsTypes</c>, <c>IgnoreSettingsTypes</c>, <c>ServerExcludedFolders</c>,
-    /// <c>EnsureLines</c>: the local list when it has entries, else the bundled list. Replaced, not unioned: a user who
+    /// <c>ClientExcludedFolders</c>, <c>EnsureLines</c>: the local list when it has entries, else the bundled list. Replaced, not unioned: a user who
     /// states a list must be able to leave a bundled entry out of it.</item>
     /// <item><c>DefaultSettings</c>: merged per settingsId and per property; a local value wins, bundled values for other
     /// properties stay. Here the key being present is what counts as set, so a local value may be the empty string.</item>
@@ -198,6 +204,7 @@ public sealed class CompatDb
         if (l.SettingsTypes.Count > 0) m.SettingsTypes = l.SettingsTypes;
         if (l.IgnoreSettingsTypes.Count > 0) m.IgnoreSettingsTypes = l.IgnoreSettingsTypes;
         if (l.ServerExcludedFolders.Count > 0) m.ServerExcludedFolders = l.ServerExcludedFolders;
+        if (l.ClientExcludedFolders.Count > 0) m.ClientExcludedFolders = l.ClientExcludedFolders;
         if (l.EnsureLines.Count > 0) m.EnsureLines = l.EnsureLines;
 
         foreach (var (settingsId, props) in l.DefaultSettings)
@@ -254,6 +261,7 @@ public sealed class CompatDb
         if (!e.SettingsTypes.SequenceEqual(bundled.SettingsTypes, StringComparer.Ordinal)) part.SettingsTypes = e.SettingsTypes;
         if (!e.IgnoreSettingsTypes.SequenceEqual(bundled.IgnoreSettingsTypes, StringComparer.Ordinal)) part.IgnoreSettingsTypes = e.IgnoreSettingsTypes;
         if (!e.ServerExcludedFolders.SequenceEqual(bundled.ServerExcludedFolders, StringComparer.OrdinalIgnoreCase)) part.ServerExcludedFolders = e.ServerExcludedFolders;
+        if (!e.ClientExcludedFolders.SequenceEqual(bundled.ClientExcludedFolders, StringComparer.OrdinalIgnoreCase)) part.ClientExcludedFolders = e.ClientExcludedFolders;
         if (!e.EnsureLines.Select(LineKey).SequenceEqual(bundled.EnsureLines.Select(LineKey))) part.EnsureLines = e.EnsureLines;
 
         foreach (var (settingsId, props) in e.DefaultSettings)

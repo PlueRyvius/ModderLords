@@ -12,7 +12,7 @@ body:
       value: |
         A compatibility record tells ModderLords how one mod behaves on a Bannerlord Coop server: whether it works, and which settings it needs. Submitting yours here proposes it for the list that ships with ModderLords, so other hosts get it without working it out again.
 
-        You do not have to fill this in by hand. In ModderLords, select the mod on the Mods tab and press **Submit…**: it opens this form with everything filled in. The record is checked automatically and then reviewed by the maintainer before anything changes.
+        You do not have to fill this in by hand. In ModderLords, host a server with the mod and have a player join, then select the mod on the Mods tab and press **Submit…**: it opens this form with everything filled in, including the mod's role and folder settings. The record is checked automatically and then reviewed by the maintainer before anything changes.
 
   - type: input
     id: mod

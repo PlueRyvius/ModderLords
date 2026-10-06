@@ -53,6 +53,7 @@ public partial class ModFolderRow : ObservableObject
 public sealed class ModFolderChoices
 {
     private readonly List<string> _recordServerExcluded;
+    private readonly List<string> _recordClientExcluded;
     /// <summary>Names of locked rows the server list already held; see <see cref="ServerExcluded"/>.</summary>
     private readonly HashSet<string> _lockedInServerList = new(StringComparer.OrdinalIgnoreCase);
 
@@ -61,13 +62,16 @@ public sealed class ModFolderChoices
     /// <param name="foldersOnDisk">Names of the folders directly inside this copy of the mod.</param>
     /// <param name="profileServerExcluded">The profile's "Client only" list; null when it has no opinion.</param>
     /// <param name="recordServerExcluded">The compat record's list, which applies while the profile has none.</param>
-    /// <param name="profileClientExcluded">The profile's "Server only" list.</param>
+    /// <param name="profileClientExcluded">The profile's "Server only" list; null when it has no opinion.</param>
+    /// <param name="recordClientExcluded">The compat record's "Server only" list, which applies while the profile has none.</param>
     public ModFolderChoices(IEnumerable<string> foldersOnDisk, IReadOnlyList<string>? profileServerExcluded,
-        IReadOnlyList<string> recordServerExcluded, IReadOnlyList<string>? profileClientExcluded)
+        IReadOnlyList<string> recordServerExcluded, IReadOnlyList<string>? profileClientExcluded,
+        IReadOnlyList<string>? recordClientExcluded = null)
     {
         _recordServerExcluded = Names(recordServerExcluded);
+        _recordClientExcluded = Names(recordClientExcluded);
         var clientOnly = Names(profileServerExcluded ?? recordServerExcluded);
-        var serverOnly = Names(profileClientExcluded);
+        var serverOnly = Names(profileClientExcluded ?? recordClientExcluded);
         var onDisk = Names(foldersOnDisk);
 
         // Names a list holds that this copy has no folder for are rows too. Another copy of the mod may have the
@@ -130,13 +134,17 @@ public sealed class ModFolderChoices
         }
     }
 
-    /// <summary>What to store as the profile's "Server only" list; null when there is none.</summary>
+    /// <summary>
+    /// What to store as the profile's "Server only" list, by the same rule as <see cref="ServerExcluded"/>: null
+    /// whenever the rows say what the compat record says (which, with no record, is "none"), otherwise the explicit
+    /// list - empty when the host switched off everything the record names.
+    /// </summary>
     public List<string>? ClientExcluded
     {
         get
         {
             var names = Rows.Where(r => !r.IsLocked && r.Side == FolderSide.ServerOnly).Select(r => r.Name).ToList();
-            return names.Count == 0 ? null : names;
+            return SameNames(names, _recordClientExcluded) ? null : names;
         }
     }
 

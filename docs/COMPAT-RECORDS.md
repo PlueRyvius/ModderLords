@@ -9,6 +9,14 @@ request by hand.
 1. **The user submits.** the Submit… button on ModderLords' Mods tab opens the *Compat record* issue form
    (`.github/ISSUE_TEMPLATE/compat-record.yml`) with the fields filled in. The form can also be filled in by hand.
    The template gives the issue the `compat-record` label.
+
+   The record in the form is the mod's effective record with the submitter's Mods-tab settings written into it:
+   `DefaultRole`, `ServerAuthoritative` (with `ClientSideBehaviors`), `ServerExcludedFolders` and
+   `ClientExcludedFolders`. When the launcher watched that exact set-up work (a hosted server and a player on the
+   campaign map, at this mod version, Coop version and these settings), the Notes field says so with the date, the
+   verdict is filled in as Works if the record had none, and the version is added to `TestedVersions`. Without
+   that, only a record the submitter wrote with Record… can be sent, and Notes stays empty. The Notes line is
+   written by the submitter's own launcher and is not verified by the workflow: treat it as their word.
 2. **The workflow checks it.** `.github/workflows/compat-record.yml` runs on issues carrying that label when they are
    opened, edited or labelled. It runs `tools/CompatRecordIntake`, which reads the record out of the issue body and
    validates it.
@@ -56,12 +64,12 @@ it does not know so that an old build can read a newer file, while a submission 
   `..`, plain names only) and is a line-based config file (`.txt .ini .cfg .conf .toml .properties`); `Value` may
   only use the `{coopModuleId}` token;
 - `DefaultSettings`: settings id, then setting name, then the value as text, bounded at every level;
-- `ServerExcludedFolders`: each entry is the name of a folder directly inside the mod, one the launcher would honour
-  (no path, no `..`, not `bin`).
+- `ServerExcludedFolders`, `ClientExcludedFolders`: each entry is the name of a folder directly inside the mod, one
+  the launcher would honour (no path, no `..`, not `bin`).
 
-`ServerExcludedFolders`, `EnsureLines` and `DefaultSettings` change what the launcher does on every host that has the
-mod. The checks only prove they are well-formed. The pull request shows all three at the top, under "Review these
-first": read them before anything else.
+`ServerExcludedFolders`, `ClientExcludedFolders`, `EnsureLines` and `DefaultSettings` change what the launcher does on
+every host that has the mod. The checks only prove they are well-formed. The pull request shows all four at the top,
+under "Review these first": read them before anything else.
 
 The same rules run in CI against the committed file (`check`, below), so a hand-edited record is held to them as well.
 If a legitimate record ever needs something the rules refuse, change the rule in `CompatIntake` in the same pull
