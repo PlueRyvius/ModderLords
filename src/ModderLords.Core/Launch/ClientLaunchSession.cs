@@ -10,8 +10,8 @@ namespace ModderLords.Core.Launch;
 /// live, order them, and hand back the command line. The player-facing sibling of <see cref="LaunchSession"/>.
 ///
 /// It shares the catalogue and sorter with the server path. Ambiguous IDs and custom roots use a private client
-/// view so the requested copy wins over the game's normal discovery order. No manifests are rewritten and no
-/// server config, save preparation, or resolver hook is involved.
+/// view so the requested copy wins over the game's normal discovery order, and so does a mod with a "server only"
+/// folder to leave out. No manifests are rewritten and no server config, save preparation, or resolver hook is involved.
 /// </summary>
 public static class ClientLaunchSession
 {
@@ -79,14 +79,19 @@ public static class ClientLaunchSession
             CompatDb.Current.ClientFollowsCoop());
         messages.AddRange(order.Issues.Select(i => "order: " + i));
 
+        // "Server only" folders. Community mods only: the profile has no entry for an official module, and hiding
+        // part of the game's own modules from the game is not something a tick box should be able to do.
+        var excludedFolders = ClientFolderExclusions.Resolve(mods, profile, messages);
+
         var plan = new ClientLaunchPlan
         {
             GameRoot = gameRoot, ModuleIds = order.ModuleIds,
+            ExcludedFolders = excludedFolders,
             SelectedModules = officials.Concat(mods).ToList(),
             MissingModules = profile.EnabledMods.Where(pm => !mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)))
                 .Select(pm => pm.Id).Concat(profile.ClientOfficialModules.Where(id => !officials.Any(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-            RequiresIsolatedView = mods.Any(m => m.Source == ModuleSourceKind.Custom ||
+            RequiresIsolatedView = excludedFolders.Count > 0 || mods.Any(m => m.Source == ModuleSourceKind.Custom ||
                 catalog.Candidates(m.Id).Select(c => Path.GetFullPath(c.FolderPath)).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1),
         };
         var problems = plan.Validate().ToList();
@@ -114,7 +119,7 @@ public static class ClientLaunchSession
                 ". Download them and Rescan, or untick them to launch without them. The imported list has been kept.");
         var errors = plan.Validate().ToList();
         if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
-        if (plan.RequiresIsolatedView && OperatingSystem.IsWindows())
+        if (plan.UsesIsolatedView && OperatingSystem.IsWindows())
             plan = plan with { GameRoot = ClientModuleView.Create(plan, Path.Combine(Profiles.ProfileStore.RootDir, "client-launches")) };
         var psi = new System.Diagnostics.ProcessStartInfo
         {

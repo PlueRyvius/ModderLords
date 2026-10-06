@@ -395,7 +395,7 @@ public partial class MainViewModel : ObservableObject
         if (value == AppMode.Host) Host ??= new HostViewModel(this);
         OnPropertyChanged(nameof(IsHost));
         ShowExperimentalCompatChanged();
-        EditServerFoldersCommand.NotifyCanExecuteChanged();
+        EditModFoldersCommand.NotifyCanExecuteChanged();
         Rescan();
         if (IsHost) Host?.OnProfileSelected();
     }
@@ -1202,7 +1202,7 @@ public partial class MainViewModel : ObservableObject
         RemoveModCommand.NotifyCanExecuteChanged();
         OpenModFolderCommand.NotifyCanExecuteChanged();
         SetSourceLinkCommand.NotifyCanExecuteChanged();
-        EditServerFoldersCommand.NotifyCanExecuteChanged();
+        EditModFoldersCommand.NotifyCanExecuteChanged();
     }
 
     // ---- removing mods that are gone ---------------------------------------------------------------
@@ -1338,75 +1338,67 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanSetSourceLink() => SelectedMod is { IsGameModule: false };
 
-    // ---- folders left out on the server ------------------------------------------------------------
+    // ---- folders: server and client ------------------------------------------------------------------
 
-    /// <summary>Lets a host name top-level folders of the selected mod that the dedicated server is not shown.</summary>
-    [RelayCommand(CanExecute = nameof(CanEditServerFolders))]
-    private void EditServerFolders()
+    /// <summary>Lets a host say, folder by folder, whether the selected mod's folders are for the server, the game, or both.</summary>
+    [RelayCommand(CanExecute = nameof(CanEditModFolders))]
+    private void EditModFolders()
     {
-        if (!CanEditServerFolders() || SelectedMod is not { } row) return;
-        var recordFolders = CompatDb.Current.Find(row.Id)?.ServerExcludedFolders ?? [];
-        var win = new ServerFoldersWindow(row.Id, ServerExcludedFoldersFor(row), recordFolders) { Owner = Application.Current.MainWindow };
+        if (!CanEditModFolders() || SelectedMod is not { } row) return;
+        var choices = ModFolderChoicesFor(row);
+        var win = new ModFoldersWindow(row.Id, choices) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
-        SetServerExcludedFolders(row, win.Result);
+        SetModFolders(row, choices.ServerExcluded, choices.ClientExcluded);
     }
 
-    /// <summary>A server-side choice, so Host mode only; Coop's marker row and the game's own modules are never overlaid by choice.</summary>
-    private bool CanEditServerFolders() => IsHost && SelectedMod is { IsGameModule: false, IsCoopClientMarker: false };
-
-    /// <summary>The profile's own list for this row's mod; null when the profile has no opinion (or no entry yet).</summary>
-    internal List<string>? ServerExcludedFoldersFor(ModRow row) =>
-        Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase))?.ServerExcludedFolders?.ToList();
+    /// <summary>Set where a server is set up, so Host mode only; Coop's marker row and the game's own modules are never overlaid by choice.</summary>
+    private bool CanEditModFolders() => IsHost && SelectedMod is { IsGameModule: false, IsCoopClientMarker: false };
 
     /// <summary>
-    /// Stores the list on the profile entry, not on the row. Rows are thrown away and rebuilt from the profile on
-    /// every Rescan, and <see cref="CollectProfileFromRows"/> writes back only what a row carries - so anything kept
-    /// on the row has to be copied in both directions or it is lost. The profile entry itself survives both (it is
-    /// reused by id), which is how the download link is kept too.
+    /// The dialog's rows for this row's mod: the folders of the copy the row shows, with the profile's two lists and
+    /// the compat record's laid over them.
     /// </summary>
-    internal void SetServerExcludedFolders(ModRow row, List<string>? folders)
+    internal ModFolderChoices ModFolderChoicesFor(ModRow row)
+    {
+        var pm = Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
+        return new ModFolderChoices(ModFolderChoices.FoldersIn(row.Folder), pm?.ServerExcludedFolders,
+            CompatDb.Current.Find(row.Id)?.ServerExcludedFolders ?? [], pm?.ClientExcludedFolders);
+    }
+
+    /// <summary>
+    /// Stores the two lists on the profile entry, not on the row. Rows are thrown away and rebuilt from the profile
+    /// on every Rescan, and <see cref="CollectProfileFromRows"/> writes back only what a row carries - so anything
+    /// kept on the row has to be copied in both directions or it is lost. The profile entry itself survives both (it
+    /// is reused by id), which is how the download link is kept too.
+    /// </summary>
+    /// <param name="serverExcluded">"Client only" folders: null = no opinion (the compat record decides), empty = none.</param>
+    /// <param name="clientExcluded">"Server only" folders: null or empty = none.</param>
+    internal void SetModFolders(ModRow row, List<string>? serverExcluded, List<string>? clientExcluded)
     {
         if (row.IsGameModule) return;
         // A mod that has only ever been a row has no profile entry yet; collecting creates one.
         CollectProfileFromRows();
         var pm = Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
         if (pm is null) return;
-        pm.ServerExcludedFolders = folders;
+        if (clientExcluded is { Count: 0 }) clientExcluded = null;
+        // OK on an untouched dialog is not an edit, and must not ask for a save.
+        if ((serverExcluded is null) == (pm.ServerExcludedFolders is null)
+            && ModFolderChoices.SameNames(serverExcluded, pm.ServerExcludedFolders)
+            && ModFolderChoices.SameNames(clientExcluded, pm.ClientExcludedFolders))
+            return;
+        pm.ServerExcludedFolders = serverExcluded;
+        pm.ClientExcludedFolders = clientExcluded;
         IsDirty = true;
-        Status = folders switch
+        var clientOnly = serverExcluded switch
         {
-            null => $"{row.Id}: folders left out on the server follow the compatibility database. Save to keep it.",
-            { Count: 0 } => $"{row.Id}: nothing is left out on the server. Save to keep it.",
-            _ => $"{row.Id}: {string.Join(", ", folders)} will be left out on the server from the next launch. Save to keep it.",
+            null => "client-only folders follow the compatibility database",
+            { Count: 0 } => "no folder is client only",
+            _ => "client only: " + string.Join(", ", serverExcluded),
         };
-        // The preview's messages are where a host sees what the launch will do with the list (and a rejected name).
+        var serverOnly = clientExcluded is null ? "no folder is server only" : "server only: " + string.Join(", ", clientExcluded);
+        Status = $"{row.Id}: {clientOnly}; {serverOnly}. Applies from the next launch. Save to keep it.";
+        // The preview's messages are where a host sees what the launch will do with the lists (and a rejected name).
         RefreshPreview();
-    }
-
-    /// <summary>
-    /// What the dialog's text means for the profile. Ticking "use the database's list" is null, no opinion. With no
-    /// record list to overrule, an empty box is also null rather than an empty list: an empty list would pin "leave
-    /// nothing out" against a record a later release might ship, and a host who typed nothing has not asked for that.
-    /// </summary>
-    internal static List<string>? ServerFoldersChoice(string? text, bool useRecord, bool recordHasFolders)
-    {
-        if (useRecord && recordHasFolders) return null;
-        var names = ServerFolderExclusions.ParseLines(text);
-        return names.Count == 0 && !recordHasFolders ? null : names;
-    }
-
-    /// <summary>The line under the dialog's text box: what OK will do, and which names the launch would refuse.</summary>
-    internal static string ServerFoldersHint(string? text, bool useRecord, bool recordHasFolders)
-    {
-        if (useRecord && recordHasFolders) return "Untick to choose your own list for this profile.";
-        var (valid, rejected) = ServerFolderExclusions.Split(ServerFolderExclusions.ParseLines(text));
-        if (rejected.Count > 0)
-            return "Will be ignored: " + string.Join(", ", rejected.Select(r => $"{r} ({ServerFolderExclusions.Problem(r)})"))
-                 + ". Only the name of a folder directly inside the mod can be left out.";
-        if (valid.Count == 0)
-            return recordHasFolders ? "Empty: nothing is left out for this profile, whatever the compatibility database says."
-                                    : "Empty: the server sees the whole mod.";
-        return "The launch console lists what was left out. A name that matches no folder in the mod is reported there and changes nothing.";
     }
 
     /// <summary>Removes every missing row without asking. The command asks first; tests call this directly.</summary>

@@ -124,11 +124,8 @@ public sealed class ServerFolderExclusionPlannerTests
     }
 
     [Fact]
-    public void Names_are_validated_and_split_the_same_way_for_the_dialog()
+    public void Names_are_validated_the_same_way_for_the_dialog()
     {
-        Assert.Equal(["RuntimeDataCache", "AssetSources"],
-            ServerFolderExclusions.ParseLines("  RuntimeDataCache \r\n\r\nAssetSources\\\nruntimedatacache\n"));
-        Assert.Empty(ServerFolderExclusions.ParseLines(null));
         Assert.Null(ServerFolderExclusions.Problem("RuntimeDataCache"));
         Assert.Null(ServerFolderExclusions.Problem("Scene Edit Data"));
         Assert.NotNull(ServerFolderExclusions.Problem(" "));

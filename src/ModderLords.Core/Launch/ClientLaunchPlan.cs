@@ -18,6 +18,17 @@ public sealed record ClientLaunchPlan
     public IReadOnlyList<Modules.DiscoveredModule> SelectedModules { get; init; } = [];
     public IReadOnlyList<string> MissingModules { get; init; } = [];
     public bool RequiresIsolatedView { get; init; }
+
+    /// <summary>
+    /// Module id to the top-level folders of that mod this game must not be shown ("server only" folders), already
+    /// checked against the selected copy by <see cref="ClientFolderExclusions.Resolve"/>. An entry forces the private
+    /// view: launched from its real folder a mod is all or nothing, so there is no other way to leave a folder out.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> ExcludedFolders { get; init; } =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Whether this launch runs from a private view rather than the game's own folder.</summary>
+    public bool UsesIsolatedView => RequiresIsolatedView || ExcludedFolders.Values.Any(f => f.Count > 0);
     public ModderLords.Analysis.AnalysisRequest? OperationInputs { get; init; }
 
     public string WorkingDirectory => GamePaths.ClientBin(GameRoot);
