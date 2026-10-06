@@ -618,7 +618,7 @@ Per-profile things without a tab of their own:
 |---|---|
 | Profiles | `%LOCALAPPDATA%\ModderLords\profiles\<name>.json` |
 | Mode, theme, window size | `%LOCALAPPDATA%\ModderLords\ui-state.json` |
-| Compatibility database | `compat-db.json` next to the launcher (bundled); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
+| Compatibility database | `compat-db.json` next to the launcher (bundled); the newer copy downloaded between releases in `%LOCALAPPDATA%\ModderLords\compat-db.remote.json` (with `compat-db.remote.meta.json`); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
 | Mod settings overrides / cache | `%LOCALAPPDATA%\ModderLords\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModderLords\cache\<profile>.settings-cache.json` |
 | Shadow mod folders (rewritten manifests + links) | `%LOCALAPPDATA%\ModderLords\overlay\<profile>\` |
 | Launcher logs | `%LOCALAPPDATA%\ModderLords\logs\launch-*.log`, `app-errors.log` |
@@ -817,6 +817,13 @@ changed.
 
 - **Bundled**: `compat-db.json` next to the launcher, updated with each release. Starts with the frameworks (Harmony,
   ButterLib, UIExtenderEx, MCM), ModularSmithing2 and ImprovedGarrisons.
+- **Downloaded**: records added on GitHub after your release reach you without waiting for the next one. On startup
+  the launcher quietly fetches the current `compat-db.json` from the project's repository and, if it checks out, uses it
+  in place of the bundled file from the next **Rescan mods** or restart. Messages says so (`compat db: using the
+  database downloaded …`) whenever a downloaded copy is in use. Offline, or handed a file that is damaged, cut short or
+  older than the bundled one, the launcher keeps what it had. The request sends nothing about you or your mods. To turn
+  it off, set the environment variable `MODDERLORDS_COMPAT_REMOTE=0`, or `"DownloadCompatDb": false` in
+  `ui-state.json`; deleting `compat-db.remote.json` goes back to the bundled file until the next download.
 - **Yours**: `%LOCALAPPDATA%\ModderLords\compat-db.local.json`. Select a mod and press **Record…** after testing it:
   pick the verdict, tick *Tested with this version* (records the mod and Coop versions), add notes, and press *Use
   current row as defaults* to store the Role / Server-only logic / behaviours you settled on. A local record replaces the
