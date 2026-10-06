@@ -28,9 +28,43 @@ public partial class ModRow : ObservableObject
     public required DiscoveredModule Module { get; init; }
     public bool IsMissing { get; init; }
     [ObservableProperty] private bool _enabled;
-    [ObservableProperty] private ServerRole _role;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(RoleChoice))] private ServerRole _role;
     /// <summary>Layer 1: behaviours run on the server only; clients skip them (needs the shared module on both sides).</summary>
-    [ObservableProperty] private bool _serverAuthoritative;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(RoleChoice))] private bool _serverAuthoritative;
+
+    /// <summary>
+    /// Whether the grid this row is in shows the experimental columns (<see cref="MainViewModel.ShowExperimentalCompat"/>,
+    /// which hands it to every row). It decides how the Role cell reads a ticked Server-only logic: with it off the
+    /// tick is hidden and a launch ignores it, so the cell must not show - or change - something nobody can see.
+    /// </summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(RoleChoice))] private bool _showExperimental;
+
+    /// <summary>
+    /// What the Role cell shows and edits: <see cref="Role"/> and <see cref="ServerAuthoritative"/> together, in the
+    /// words of <see cref="RoleLabels"/>. Nothing is stored under this name - the profile keeps the role and the tick.
+    ///
+    /// "Server only" is Run with the tick, and exists only while the experimental columns are shown. With them hidden:
+    /// a ticked Run row reads "Server + Client", which is what a launch does with it, and choosing a role leaves the
+    /// tick exactly as it was - the host cannot see it and did not ask for it to change, and it has to still be there
+    /// when the switch comes back on. With them shown, "Server + Client" clears the tick and "Server only" sets it.
+    ///
+    /// "Client only" and "Mod decides" never touch the tick, as changing Role never did. A tick on such a row is kept
+    /// and shown in the Server-only logic column, and the cell goes on naming the role: the tick only moves the cell
+    /// between "Server + Client" and "Server only".
+    /// </summary>
+    public RoleChoice RoleChoice
+    {
+        get => RoleLabels.Choice(Role, ServerAuthoritative, ShowExperimental);
+        set
+        {
+            // Not offered while the experimental columns are hidden, so there is nothing a host could have meant by it.
+            if (value == RoleChoice.ServerOnly && !ShowExperimental) return;
+            // The tick first: going from "Client only" to "Server only" then passes through nothing but the two.
+            if (ShowExperimental && value is RoleChoice.ServerOnly or RoleChoice.ServerAndClient)
+                ServerAuthoritative = value == RoleChoice.ServerOnly;
+            Role = RoleLabels.Role(value);
+        }
+    }
     /// <summary>Behaviours excluded from gating (kept on clients), edited in the Behaviours window.</summary>
     public List<string> ClientSideBehaviors { get; set; } = new();
     /// <summary>The assembly scan, computed on demand. The grid's columns never call this: reading a mod's DLLs for
@@ -151,7 +185,20 @@ public partial class ModRow : ObservableObject
         Module.HasCode ? null : "data only",
         Module.HasServerBin ? null : "no server bin",
     }.Where(s => s is not null));
-    public static ServerRole[] Roles { get; } = [ServerRole.Run, ServerRole.DependencyOnly, ServerRole.AsShipped];
+
+    /// <summary>
+    /// What the Role drop-down offers. "Server only" is in it only while the experimental columns are shown: with them
+    /// hidden a launch would not act on it. The entries are shared between the two lists, so swapping one list for
+    /// the other leaves every cell's selection where it was.
+    /// </summary>
+    public static IReadOnlyList<RoleChoiceItem> RoleChoicesFor(bool showExperimental) => showExperimental ? ExperimentalRoleChoices : StandardRoleChoices;
+
+    private static readonly RoleChoiceItem ServerAndClientItem = new(RoleChoice.ServerAndClient);
+    private static readonly RoleChoiceItem ClientOnlyItem = new(RoleChoice.ClientOnly);
+    private static readonly RoleChoiceItem ModDecidesItem = new(RoleChoice.ModDecides);
+    private static readonly IReadOnlyList<RoleChoiceItem> StandardRoleChoices = [ServerAndClientItem, ClientOnlyItem, ModDecidesItem];
+    private static readonly IReadOnlyList<RoleChoiceItem> ExperimentalRoleChoices =
+        [ServerAndClientItem, ClientOnlyItem, new(RoleChoice.ServerOnly), ModDecidesItem];
 
     private ModderLords.Core.Compat.ScanResult? _scan;
 
@@ -198,7 +245,7 @@ public partial class ModRow : ObservableObject
             lines.Add(r.TestedVersions.Count == 0 ? "Tested versions: (none recorded)" : "Tested versions: " + string.Join(", ", r.TestedVersions) + (Compat.VersionUntested ? $" (this copy is {Version})" : ""));
             if (r.TestedCoopVersion is not null) lines.Add("Coop: " + r.TestedCoopVersion);
             if (r.DefaultRole is not null || r.ServerAuthoritative is not null)
-                lines.Add($"Defaults: role {r.DefaultRole?.ToString() ?? "-"}, server-only logic {(r.ServerAuthoritative is true ? "on" : r.ServerAuthoritative is false ? "off" : "-")}" +
+                lines.Add($"Defaults: role {RoleLabels.Describe(r.DefaultRole, r.ServerAuthoritative, "-")}" +
                           (r.ClientSideBehaviors.Count > 0 ? $", client-side: {string.Join(", ", r.ClientSideBehaviors)}" : ""));
             if (r.ServerExcludedFolders.Count > 0) lines.Add("Left out on the server: " + string.Join(", ", r.ServerExcludedFolders));
             if (!string.IsNullOrWhiteSpace(r.Url)) lines.Add(r.Url);
@@ -207,6 +254,19 @@ public partial class ModRow : ObservableObject
             return string.Join("\n", lines);
         }
     }
+}
+
+/// <summary>One entry of the Role drop-down: the choice the cell stores and the label it shows for it.</summary>
+public sealed record RoleChoiceItem(RoleChoice Choice)
+{
+    public string Label => RoleLabels.For(Choice);
+
+    /// <summary>
+    /// The label, not the record's own dump. A closed combo shows its selection through the theme's template, and the
+    /// first build of this showed "RoleChoiceItem { Choice = ..." in every Role cell because that template did not
+    /// pass DisplayMemberPath on. The template is fixed; this keeps the cell readable if another one forgets.
+    /// </summary>
+    public override string ToString() => Label;
 }
 
 public sealed record ConsoleLine(string Time, LogCategory Category, string Text);
@@ -304,9 +364,26 @@ public partial class MainViewModel : ObservableObject
     /// <summary>The experimental columns and buttons are shown only in Host mode with experimental compatibility on.</summary>
     public bool ShowExperimentalCompat => IsHost && ExperimentalCompat;
 
-    partial void OnExperimentalCompatChanged(bool value)
+    /// <summary>What the Role drop-down offers: "Server only" is there only while the experimental columns are.</summary>
+    public IReadOnlyList<RoleChoiceItem> RoleChoices => ModRow.RoleChoicesFor(ShowExperimentalCompat);
+
+    /// <summary>
+    /// Says <see cref="ShowExperimentalCompat"/> may have changed, and takes the rows and the Role drop-down with it.
+    /// The order is the point: a cell whose choice is not in the drop-down goes blank, so "Server only" is added to the
+    /// list before any row starts showing it, and taken out only after every row has stopped.
+    /// </summary>
+    private void ShowExperimentalCompatChanged()
     {
         OnPropertyChanged(nameof(ShowExperimentalCompat));
+        var show = ShowExperimentalCompat;
+        if (show) OnPropertyChanged(nameof(RoleChoices));
+        foreach (var row in Mods) row.ShowExperimental = show;
+        if (!show) OnPropertyChanged(nameof(RoleChoices));
+    }
+
+    partial void OnExperimentalCompatChanged(bool value)
+    {
+        ShowExperimentalCompatChanged();
         Host?.InvalidatePreview();
         RefreshPreview();
     }
@@ -317,7 +394,7 @@ public partial class MainViewModel : ObservableObject
         // running server. HostViewModel disposes nothing on the way out because nothing about it is per-session.
         if (value == AppMode.Host) Host ??= new HostViewModel(this);
         OnPropertyChanged(nameof(IsHost));
-        OnPropertyChanged(nameof(ShowExperimentalCompat));
+        ShowExperimentalCompatChanged();
         EditModFoldersCommand.NotifyCanExecuteChanged();
         Rescan();
         if (IsHost) Host?.OnProfileSelected();
@@ -368,6 +445,9 @@ public partial class MainViewModel : ObservableObject
         Mods.CollectionChanged += (_, e) =>
         {
             if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Move) IsDirty = true;
+            // Every row is told how its Role cell should read as it joins the list, whoever built it.
+            if (e.NewItems is not null)
+                foreach (ModRow row in e.NewItems) row.ShowExperimental = ShowExperimentalCompat;
         };
         if (!initialize) return;
         LoadProfileList();
@@ -382,7 +462,7 @@ public partial class MainViewModel : ObservableObject
         var changed = Mode != mode;
         Mode = mode;
         OnPropertyChanged(nameof(IsHost));
-        OnPropertyChanged(nameof(ShowExperimentalCompat));
+        ShowExperimentalCompatChanged();
         if (!changed)
         {
             Rescan();               // OnModeChanged did not fire, but the first scan still has to happen

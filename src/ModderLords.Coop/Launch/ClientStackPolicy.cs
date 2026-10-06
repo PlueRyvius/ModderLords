@@ -50,7 +50,7 @@ public static class ClientStackPolicy
         return $"{string.Join(", ", named)} {(named.Count == 1 ? "is" : "are")} set to load code on the server. " +
                "That stack is client-side: it needs Mono.Cecil and the MonoMod assemblies, which the DedicatedServer " +
                "package does not ship, and the engine dies during assembly load before any module starts. " +
-               $"Set {(named.Count == 1 ? "it" : "them")} to Dependency-only. If you need a mod whose setup runs " +
+               $"Set {(named.Count == 1 ? "it" : "them")} to Dependency-only {RoleLabels.OnModsTab(ServerRole.DependencyOnly)}. If you need a mod whose setup runs " +
                "through Harmony at campaign creation - RBM Campaign's economy pass, for instance - create that " +
                "campaign in the real game with the same load order and bring it across with Import client save.";
     }
@@ -63,6 +63,6 @@ public static class ClientStackPolicy
         return ui is null ? null
             : $"WARNING {Suspect} is set to load code on the server. It is part of the same client-side stack as " +
               "Harmony and ButterLib, which crash the engine in that state, and it extends the game's UI - which a " +
-              "headless server does not have. Dependency-only is almost certainly what you want.";
+              $"headless server does not have. Dependency-only {RoleLabels.OnModsTab(ServerRole.DependencyOnly)} is almost certainly what you want.";
     }
 }

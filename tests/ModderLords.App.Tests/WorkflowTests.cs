@@ -1080,4 +1080,329 @@ public class WorkflowTests
         Assert.Single(h.Opened);
         Assert.Contains("Export…", h.Vm.Status);
     });
+
+    // ---- the Role cell: plain-language choices over the stored role and Server-only logic tick ------------------
+
+    private static ModRow RoleRow(ServerRole role, bool tick, bool experimental) => new()
+    {
+        Module = new DiscoveredModule("RoleMod", "v1.0.0", "", ModuleSourceKind.Custom,
+            new Bannerlord.ModuleManager.ModuleInfoExtended { Id = "RoleMod", Name = "RoleMod" }),
+        Role = role, ServerAuthoritative = tick, ShowExperimental = experimental,
+    };
+
+    /// <summary>Every stored state, with the switch off and on, and what the Role cell says for it.</summary>
+    [Theory]
+    [InlineData(ServerRole.Run, false, false, RoleChoice.ServerAndClient)]
+    [InlineData(ServerRole.Run, true, false, RoleChoice.ServerAndClient)]      // the tick is hidden and a launch ignores it
+    [InlineData(ServerRole.DependencyOnly, false, false, RoleChoice.ClientOnly)]
+    [InlineData(ServerRole.DependencyOnly, true, false, RoleChoice.ClientOnly)]
+    [InlineData(ServerRole.AsShipped, false, false, RoleChoice.ModDecides)]
+    [InlineData(ServerRole.AsShipped, true, false, RoleChoice.ModDecides)]
+    [InlineData(ServerRole.Run, false, true, RoleChoice.ServerAndClient)]
+    [InlineData(ServerRole.Run, true, true, RoleChoice.ServerOnly)]
+    [InlineData(ServerRole.DependencyOnly, false, true, RoleChoice.ClientOnly)]
+    [InlineData(ServerRole.DependencyOnly, true, true, RoleChoice.ClientOnly)]  // a tick does not change what the role is
+    [InlineData(ServerRole.AsShipped, false, true, RoleChoice.ModDecides)]
+    [InlineData(ServerRole.AsShipped, true, true, RoleChoice.ModDecides)]
+    public void TheRoleCellShowsTheStoredRoleAndTick(ServerRole role, bool tick, bool experimental, RoleChoice shown)
+    {
+        Assert.Equal(shown, RoleRow(role, tick, experimental).RoleChoice);
+        Assert.Equal(shown, RoleLabels.Choice(role, tick, experimental));
+    }
+
+    /// <summary>
+    /// Every choice, made from every stored state, with the switch off and on. The role always follows the choice.
+    /// The tick moves only for the two choices that are about it, and only while its column is on screen.
+    /// </summary>
+    [Fact]
+    public void ChoosingARoleWritesTheStoredRoleAndOnlyTouchesAVisibleTick()
+    {
+        foreach (var experimental in new[] { false, true })
+        foreach (var role in Enum.GetValues<ServerRole>())
+        foreach (var tick in new[] { false, true })
+        foreach (var choice in Enum.GetValues<RoleChoice>())
+        {
+            var row = RoleRow(role, tick, experimental);
+            row.RoleChoice = choice;
+            var what = $"{role}, tick {tick}, switch {experimental}, chose {choice}";
+
+            if (choice == RoleChoice.ServerOnly && !experimental)
+            {
+                // Not in the drop-down with the switch off, so it changes nothing.
+                Assert.True(row.Role == role && row.ServerAuthoritative == tick, what);
+                continue;
+            }
+            var expectedRole = choice switch
+            {
+                RoleChoice.ClientOnly => ServerRole.DependencyOnly,
+                RoleChoice.ModDecides => ServerRole.AsShipped,
+                _ => ServerRole.Run,
+            };
+            var expectedTick = !experimental ? tick
+                : choice == RoleChoice.ServerOnly || (choice != RoleChoice.ServerAndClient && tick);
+            Assert.True(row.Role == expectedRole, what + $": role is {row.Role}");
+            Assert.True(row.ServerAuthoritative == expectedTick, what + $": tick is {row.ServerAuthoritative}");
+            // With the switch on the cell then shows exactly what was chosen.
+            if (experimental) Assert.True(row.RoleChoice == choice, what + $": cell shows {row.RoleChoice}");
+        }
+    }
+
+    /// <summary>
+    /// Switch off: a tick made earlier is still in the profile but its column is hidden and a launch ignores it. The
+    /// cell says what the launch will do, and picking roles must not quietly throw the tick away.
+    /// </summary>
+    [Fact]
+    public void AHiddenTickReadsAsServerAndClientAndSurvivesRoleChanges()
+    {
+        var row = RoleRow(ServerRole.Run, tick: true, experimental: false);
+        Assert.Equal(RoleChoice.ServerAndClient, row.RoleChoice);
+
+        row.RoleChoice = RoleChoice.ClientOnly;
+        row.RoleChoice = RoleChoice.ModDecides;
+        row.RoleChoice = RoleChoice.ServerAndClient;
+
+        Assert.Equal(ServerRole.Run, row.Role);
+        Assert.True(row.ServerAuthoritative);
+        Assert.Equal(RoleChoice.ServerAndClient, row.RoleChoice);
+        // And it is what it always was once the switch is back on.
+        row.ShowExperimental = true;
+        Assert.Equal(RoleChoice.ServerOnly, row.RoleChoice);
+    }
+
+    /// <summary>
+    /// Switch on: the Role cell and the Server-only logic checkbox are two views of one row, and each must hear
+    /// about a change made through the other or they disagree on screen.
+    /// </summary>
+    [Fact]
+    public void TheRoleCellAndTheServerOnlyCheckboxStayInStep()
+    {
+        var row = RoleRow(ServerRole.Run, tick: false, experimental: true);
+        var raised = new List<string?>();
+        row.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        // The checkbox moves the cell.
+        row.ServerAuthoritative = true;
+        Assert.Equal(RoleChoice.ServerOnly, row.RoleChoice);
+        Assert.Contains(nameof(ModRow.RoleChoice), raised);
+        raised.Clear();
+        row.ServerAuthoritative = false;
+        Assert.Equal(RoleChoice.ServerAndClient, row.RoleChoice);
+        Assert.Contains(nameof(ModRow.RoleChoice), raised);
+
+        // The cell moves the checkbox.
+        raised.Clear();
+        row.RoleChoice = RoleChoice.ServerOnly;
+        Assert.True(row.ServerAuthoritative);
+        Assert.Contains(nameof(ModRow.ServerAuthoritative), raised);
+        Assert.Contains(nameof(ModRow.RoleChoice), raised);
+        raised.Clear();
+        row.RoleChoice = RoleChoice.ServerAndClient;
+        Assert.False(row.ServerAuthoritative);
+        Assert.Contains(nameof(ModRow.ServerAuthoritative), raised);
+        Assert.Contains(nameof(ModRow.RoleChoice), raised);
+
+        // Anything that sets Role directly (a rescan, a record's defaults) moves the cell too.
+        raised.Clear();
+        row.Role = ServerRole.DependencyOnly;
+        Assert.Equal(RoleChoice.ClientOnly, row.RoleChoice);
+        Assert.Contains(nameof(ModRow.RoleChoice), raised);
+
+        // Ticking the checkbox on a row that is not Run is stored and leaves the role alone: the tick only moves
+        // the cell between Server + Client and Server only.
+        row.ServerAuthoritative = true;
+        Assert.Equal(ServerRole.DependencyOnly, row.Role);
+        Assert.Equal(RoleChoice.ClientOnly, row.RoleChoice);
+        row.Role = ServerRole.AsShipped;
+        Assert.True(row.ServerAuthoritative);
+        Assert.Equal(RoleChoice.ModDecides, row.RoleChoice);
+
+        // Server only from Client only: one visible step, never a flash of a third choice the host did not pick.
+        row.Role = ServerRole.DependencyOnly; row.ServerAuthoritative = false;
+        var seen = new List<RoleChoice>();
+        row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ModRow.RoleChoice)) seen.Add(row.RoleChoice); };
+        row.RoleChoice = RoleChoice.ServerOnly;
+        Assert.Equal([RoleChoice.ClientOnly, RoleChoice.ServerOnly], seen.Distinct());
+    }
+
+    /// <summary>
+    /// Server only is offered only with the experimental columns, and the list and the rows change in the order that
+    /// never leaves a cell holding a choice its drop-down does not list (which a ComboBox shows as blank).
+    /// </summary>
+    [Fact]
+    public void ServerOnlyIsOfferedOnlyWithExperimentalCompatibility() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("TestMod");
+        var vm = fixture.ViewModel(); vm.Rescan(); vm.Mode = AppMode.Host;
+        var row = vm.Mods.Single(m => m.Id == "TestMod");
+        row.Role = ServerRole.Run; row.ServerAuthoritative = true;
+
+        RoleChoice[] offered() => vm.RoleChoices.Select(c => c.Choice).ToArray();
+        Assert.Equal([RoleChoice.ServerAndClient, RoleChoice.ClientOnly, RoleChoice.ModDecides], offered());
+        Assert.Equal(["Server + Client", "Client only", "Mod decides"], vm.RoleChoices.Select(c => c.Label));
+        Assert.Equal(RoleChoice.ServerAndClient, row.RoleChoice);
+
+        // What a bound cell would see at each notification: its own choice must be in the list at that moment.
+        var orphaned = new List<string>();
+        void Check(string at) { if (!offered().Contains(row.RoleChoice)) orphaned.Add($"{at}: {row.RoleChoice}"); }
+        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.RoleChoices)) Check("list changed"); };
+        row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ModRow.RoleChoice)) Check("row changed"); };
+
+        vm.ExperimentalCompat = true;
+        Assert.Equal([RoleChoice.ServerAndClient, RoleChoice.ClientOnly, RoleChoice.ServerOnly, RoleChoice.ModDecides], offered());
+        Assert.Equal("Server only", vm.RoleChoices.Single(c => c.Choice == RoleChoice.ServerOnly).Label);
+        Assert.Equal(RoleChoice.ServerOnly, row.RoleChoice);
+
+        vm.ExperimentalCompat = false;
+        Assert.DoesNotContain(RoleChoice.ServerOnly, offered());
+        Assert.Equal(RoleChoice.ServerAndClient, row.RoleChoice);
+        Assert.True(row.ServerAuthoritative);
+        Assert.Empty(orphaned);
+
+        // Rows built by a later scan are told too, and Player mode never offers it whatever the switch says.
+        vm.ExperimentalCompat = true;
+        vm.Rescan();
+        Assert.All(vm.Mods, r => Assert.True(r.ShowExperimental));
+        vm.Mode = AppMode.Player;
+        Assert.DoesNotContain(RoleChoice.ServerOnly, offered());
+        Assert.All(vm.Mods, r => Assert.False(r.ShowExperimental));
+    });
+
+    /// <summary>
+    /// The Role column's own wiring, on a ComboBox set up the way the column sets up its cells: label shown, choice
+    /// stored, and the list swapped by the window when the view model says so. A cell must keep its selection
+    /// through both swaps, and a pick must reach the row.
+    /// </summary>
+    [Fact]
+    public void ABoundRoleCellKeepsItsSelectionWhenTheListChanges() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("TestMod");
+        var vm = fixture.ViewModel(); vm.Rescan(); vm.Mode = AppMode.Host;
+        var row = vm.Mods.Single(m => m.Id == "TestMod");
+        row.Role = ServerRole.Run; row.ServerAuthoritative = true;
+
+        var cell = new ComboBox { DataContext = row, DisplayMemberPath = "Label", SelectedValuePath = "Choice", ItemsSource = vm.RoleChoices };
+        cell.SetBinding(ComboBox.SelectedValueProperty,
+            new Binding(nameof(ModRow.RoleChoice)) { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.RoleChoices)) cell.ItemsSource = vm.RoleChoices; };
+        string? Shown() => (cell.SelectedItem as RoleChoiceItem)?.Label;
+        try
+        {
+            Assert.Equal("Server + Client", Shown());
+
+            vm.ExperimentalCompat = true;
+            Assert.Equal("Server only", Shown());
+            cell.SelectedValue = RoleChoice.ServerAndClient;      // the host picks from the drop-down
+            Assert.False(row.ServerAuthoritative);
+            Assert.Equal("Server + Client", Shown());
+            cell.SelectedValue = RoleChoice.ServerOnly;
+            Assert.True(row.ServerAuthoritative);
+            Assert.Equal(ServerRole.Run, row.Role);
+            row.ServerAuthoritative = false;                      // the checkbox in the next column
+            Assert.Equal("Server + Client", Shown());
+            row.ServerAuthoritative = true;
+            Assert.Equal("Server only", Shown());
+
+            vm.ExperimentalCompat = false;
+            Assert.Equal("Server + Client", Shown());
+            Assert.True(row.ServerAuthoritative);
+            cell.SelectedValue = RoleChoice.ClientOnly;
+            Assert.Equal(ServerRole.DependencyOnly, row.Role);
+            Assert.True(row.ServerAuthoritative);
+            Assert.Equal("Client only", Shown());
+        }
+        finally { BindingOperations.ClearAllBindings(cell); }
+    });
+
+    /// <summary>
+    /// The labels are a way of showing the row, not a new thing to store. A profile and a shared list written after
+    /// choosing from the drop-down hold the same role names and the same separate tick they always did.
+    /// </summary>
+    [Fact]
+    public void ChoicesMadeInTheRoleCellAreStoredAsTheRoleAndTheTick() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Module("Both"); fixture.Module("ClientSide"); fixture.Module("ServerSide"); fixture.Module("Decides");
+        var vm = fixture.ViewModel(); vm.Rescan(); vm.Mode = AppMode.Host; vm.ExperimentalCompat = true;
+        var path = ProfileStore.PathFor(vm.Profile.Name);
+        ModRow Row(string id) => vm.Mods.Single(m => m.Id == id);
+        try
+        {
+            Assert.False(vm.IsDirty);
+            foreach (var id in new[] { "Both", "ClientSide", "ServerSide", "Decides" }) Row(id).Enabled = true;
+            Row("Both").RoleChoice = RoleChoice.ServerAndClient;
+            Row("ClientSide").RoleChoice = RoleChoice.ClientOnly;
+            Row("ServerSide").RoleChoice = RoleChoice.ServerOnly;
+            Row("Decides").RoleChoice = RoleChoice.ModDecides;
+            Assert.True(vm.IsDirty);
+
+            vm.SaveProfileCommand.Execute(null);
+
+            void AssertStored(Profile profile)
+            {
+                (ServerRole, bool) Stored(string id) { var m = profile.Mods.Single(m => m.Id == id); return (m.Role, m.ServerAuthoritative); }
+                Assert.Equal((ServerRole.Run, false), Stored("Both"));
+                Assert.Equal((ServerRole.DependencyOnly, false), Stored("ClientSide"));
+                Assert.Equal((ServerRole.Run, true), Stored("ServerSide"));
+                Assert.Equal((ServerRole.AsShipped, false), Stored("Decides"));
+            }
+            AssertStored(vm.Profile);
+            AssertStored(ProfileStore.Load(vm.Profile.Name)!);
+
+            // The file itself: the stored names, and none of the labels or the display-only property.
+            var json = File.ReadAllText(path);
+            Assert.Contains("\"DependencyOnly\"", json);
+            Assert.Contains("\"AsShipped\"", json);
+            Assert.Contains("\"Run\"", json);
+            foreach (var label in new[] { "RoleChoice", "ServerOnly", "ClientOnly", "ModDecides", "Server only", "Client only", "Mod decides", "Server + Client" })
+                Assert.DoesNotContain(label, json, StringComparison.OrdinalIgnoreCase);
+
+            // The shared list a player imports says the same.
+            var export = ModderLords.Core.Export.ModListFile.From(ClientLaunchSession.Prepare(vm.Profile).Modules, vm.Profile, "ModderLords");
+            Assert.Contains(export.Mods, m => m.Id == "ServerSide" && m.Role == ServerRole.Run && m.ServerAuthoritative);
+            Assert.Contains(export.Mods, m => m.Id == "ClientSide" && m.Role == ServerRole.DependencyOnly && !m.ServerAuthoritative);
+
+            // And reading it back shows the choices that were made.
+            vm.Profile = ProfileStore.Load(vm.Profile.Name)!;
+            vm.Rescan();
+            Assert.Equal(RoleChoice.ServerAndClient, Row("Both").RoleChoice);
+            Assert.Equal(RoleChoice.ClientOnly, Row("ClientSide").RoleChoice);
+            Assert.Equal(RoleChoice.ServerOnly, Row("ServerSide").RoleChoice);
+            Assert.Equal(RoleChoice.ModDecides, Row("Decides").RoleChoice);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    });
+
+    /// <summary>The game's own modules and Host mode's Coop marker are built As-shipped; the cell must go on saying so.</summary>
+    [Fact]
+    public void GameModulesAndTheCoopMarkerKeepTheRoleTheyAreBuiltWith() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("CoopNightly");
+        var vm = fixture.ViewModel(); vm.Rescan(); vm.Mode = AppMode.Host;
+        foreach (var experimental in new[] { false, true })
+        {
+            vm.ExperimentalCompat = experimental;
+            var fixed_ = vm.Mods.Where(r => r.IsGameModule || r.IsCoopClientMarker).ToList();
+            Assert.Contains(fixed_, r => r.IsGameModule);
+            Assert.Contains(fixed_, r => r.IsCoopClientMarker);
+            Assert.All(fixed_, r => Assert.Equal(RoleChoice.ModDecides, r.RoleChoice));
+        }
+    });
+
+    /// <summary>The places a host reads a stored default: the Compat tooltip and the Record dialog use the tab's words.</summary>
+    [Fact]
+    public void StoredDefaultsAreDescribedInTheModsTabsWords()
+    {
+        Assert.Equal("Server only", RoleLabels.Describe(ServerRole.Run, true, "-"));
+        Assert.Equal("Server + Client, server-only logic off", RoleLabels.Describe(ServerRole.Run, false, "-"));
+        Assert.Equal("Client only, server-only logic -", RoleLabels.Describe(ServerRole.DependencyOnly, null, "-"));
+        Assert.Equal("Mod decides, server-only logic on", RoleLabels.Describe(ServerRole.AsShipped, true, "-"));
+        Assert.Equal("(unset), server-only logic on", RoleLabels.Describe(null, true, "(unset)"));
+        Assert.Equal("DependencyOnly (\"Client only\" on the Mods tab)", RoleLabels.InLog(ServerRole.DependencyOnly));
+
+        var row = RoleRow(ServerRole.Run, tick: false, experimental: false);
+        row.Compat = new CompatBadge(CompatVerdict.NeedsRecipe, false, CompatSource.Bundled,
+            new CompatRecord { Id = "RoleMod", DefaultRole = ServerRole.DependencyOnly, ServerAuthoritative = false });
+        Assert.Contains("Defaults: role Client only, server-only logic off", row.CompatTip);
+        Assert.DoesNotContain("DependencyOnly", row.CompatTip);
+    }
 }

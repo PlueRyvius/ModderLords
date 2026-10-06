@@ -72,7 +72,7 @@ public static class OverlayPlanner
                 ServerRole.DependencyOnly => mod.HasCode,
                 _ => false,
             };
-            if (sel.Role == ServerRole.DependencyOnly) notes.Add("dependency-only: kept in the module list for the handshake, no code loaded");
+            if (sel.Role == ServerRole.DependencyOnly) notes.Add($"dependency-only {RoleLabels.OnModsTab(ServerRole.DependencyOnly)}: kept in the module list for the handshake, no code loaded");
 
             string? headlessAssetPath = null;
             string? headlessMapPath = null;
@@ -174,8 +174,8 @@ public static class OverlayPlanner
             if (missing.Count > 0)
             {
                 notes.Add("WARNING: its manifest names server submodule class(es) " + string.Join(", ", missing)
-                          + " which are not in this mod's DLLs; Run would crash the server on load. "
-                          + "Falling back to DependencyOnly: data and load-order entry kept, code not loaded.");
+                          + $" which are not in this mod's DLLs; {RoleLabels.InLog(ServerRole.Run)} would crash the server on load. "
+                          + $"Falling back to {RoleLabels.InLog(ServerRole.DependencyOnly)}: data and load-order entry kept, code not loaded.");
                 return sel with { Role = ServerRole.DependencyOnly };
             }
         }
@@ -204,16 +204,16 @@ public static class OverlayPlanner
                       + string.Join(", ", sites.DeferredSites.Take(4)) + (sites.DeferredSites.Count > 4 ? ", ..." : "")
                       + " - code the server does not run while loading. Running it. If one of those methods is ever "
                       + "reached headless the server stops on the spot with no exception logged; set it to "
-                      + "DependencyOnly if that happens.");
+                      + RoleLabels.InLog(ServerRole.DependencyOnly) + " if that happens.");
         }
         else if (desktop.Count > 0)
         {
             notes.Add("WARNING: its code references " + string.Join(", ", desktop)
                       + ", which the dedicated server's runtime does not ship"
                       + (sites is { LoadSites.Count: > 0 } ? " (in " + string.Join(", ", sites.LoadSites.Take(3)) + (sites.LoadSites.Count > 3 ? ", ..." : "") + ")" : "")
-                      + " - Run would crash the server on load, "
-                      + "not only if the feature is used. Falling back to DependencyOnly: data and load-order entry "
-                      + "kept, code not loaded. Set it to AsShipped instead if you want the engine to decide.");
+                      + $" - {RoleLabels.InLog(ServerRole.Run)} would crash the server on load, "
+                      + $"not only if the feature is used. Falling back to {RoleLabels.InLog(ServerRole.DependencyOnly)}: data and load-order entry "
+                      + $"kept, code not loaded. Set it to {RoleLabels.InLog(ServerRole.AsShipped)} instead if you want the engine to decide.");
             return sel with { Role = ServerRole.DependencyOnly };
         }
 
@@ -234,7 +234,7 @@ public static class OverlayPlanner
             {
                 notes.Add("WARNING: it declares itself client-only and its code references "
                           + string.Join(", ", blockers) + (scanned.UiAssemblies.Count + scanned.StoryModeAssemblies.Count > blockers.Count ? ", ..." : "")
-                          + " - Run may crash the server. Consider DependencyOnly, which keeps its data and load-order entry without loading its code.");
+                          + $" - {RoleLabels.InLog(ServerRole.Run)} may crash the server. Consider {RoleLabels.InLog(ServerRole.DependencyOnly)}, which keeps its data and load-order entry without loading its code.");
                 foreach (var n in scanned.Notes) notes.Add("  " + n);
             }
         }

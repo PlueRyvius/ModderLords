@@ -407,6 +407,15 @@ is chasing specific solutions rather than general ones. Everything that changes 
   for ... is ignored`; the Settings-sync refusal does not fire for ignored ticks.
 - **Hidden when off:** the Server-only logic, Behaviours and Server verdict columns and the Behaviours… / Authority…
   buttons (`MainViewModel.ShowExperimentalCompat` = Host mode and the switch).
+- **The Role cell follows the switch (2026-10-05).** The Role column shows labels, not `ServerRole` names:
+  Server + Client (`Run`), Client only (`DependencyOnly`), Mod decides (`AsShipped`), and Server only (`Run` with the
+  Server-only logic tick), which is in the drop-down only while the switch is on. This is display only
+  (`ModRow.RoleChoice`, wording in `Core.Overlay.RoleLabels`); profiles, mod lists, the compat database, the CLI and
+  logs keep the role and the tick, and log notes name both (`DependencyOnly ("Client only" on the Mods tab)`). With
+  the switch off a ticked `Run` row reads Server + Client, as it launches, and choosing a role never clears the hidden
+  tick. With it on, Server + Client clears the tick and Server only sets it; a tick on a Client only or Mod decides row
+  is stored and leaves the role alone. `MainViewModel.ShowExperimentalCompatChanged` orders the list swap and the row
+  updates so no cell ever holds a choice its drop-down lacks (a ComboBox shows that as blank).
 - **Unchanged (general):** server guards, MCM settings sync, battle-scene exclusion, the Compat column and records.
 - Parked until the maintainer resumes it: Phase B (instance-field state through Coop's AutoSync) and the two-player gate.
   A first IG trace run on 2026-09-15 (Server-only logic on) showed gates holding (5,549 client skips, 0 runs), 8/8 relays

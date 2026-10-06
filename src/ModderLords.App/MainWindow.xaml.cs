@@ -76,6 +76,7 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.IsDirty)) Title = ViewModel.IsDirty ? "* " + _baseTitle : _baseTitle;
         if (e.PropertyName == nameof(MainViewModel.Host)) AttachHost();
+        if (e.PropertyName == nameof(MainViewModel.RoleChoices)) ApplyRoleChoices();
         if (e.PropertyName == nameof(MainViewModel.ExperimentalCompat))
         {
             ApplyModeToColumns(ViewModel.Mode == AppMode.Host);
@@ -131,6 +132,18 @@ public partial class MainWindow : Window
         var x = host && ViewModel.ExperimentalCompat ? Visibility.Visible : Visibility.Collapsed;
         foreach (var c in new System.Windows.Controls.DataGridColumn[] { ServerOnlyColumn, BehavioursColumn })
             c.Visibility = x;
+        ApplyRoleChoices();
+    }
+
+    /// <summary>
+    /// Gives the Role column the choices the view model offers right now. Set here for the same reason the columns
+    /// are hidden by name above: a column has no DataContext to bind through. The view model raises RoleChoices at
+    /// the moment it is safe to swap the list (see MainViewModel.ShowExperimentalCompatChanged), so no cell is ever
+    /// left showing a choice the list does not hold.
+    /// </summary>
+    private void ApplyRoleChoices()
+    {
+        if (!ReferenceEquals(RoleColumn.ItemsSource, ViewModel.RoleChoices)) RoleColumn.ItemsSource = ViewModel.RoleChoices;
     }
 
     private void UpdateModeButton()
