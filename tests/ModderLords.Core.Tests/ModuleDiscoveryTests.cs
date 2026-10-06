@@ -171,6 +171,136 @@ public class ModuleDiscoveryTests : IDisposable
         Assert.Equal(profile.Mods[0].SourcePath, picked.Module.FolderPath);
     }
 
+    // ---- copies at one version -------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The 1.2.5 report: the full mod in one place for the host's own game, and the same mod at the same version
+    /// minus RuntimeDataCache in another for the server. Nothing in either manifest tells them apart.
+    /// </summary>
+    private (string Full, string Stripped) FullAndStrippedCopies(string version = "v1.0.0", string strippedVersion = "v1.0.0")
+    {
+        var full = MakeModule(Path.Combine("game", "TwinMod"), "TwinMod", version);
+        var stripped = MakeModule(Path.Combine("server", "TwinMod"), "TwinMod", strippedVersion);
+        foreach (var dir in new[] { "ModuleData", "RuntimeDataCache" }) Directory.CreateDirectory(Path.Combine(full, dir));
+        Directory.CreateDirectory(Path.Combine(stripped, "ModuleData"));
+        return (full, stripped);
+    }
+
+    private ModuleCatalog ScanGameThenServer() =>
+        ModuleCatalog.Scan("", null, [], [Path.Combine(_root, "game"), Path.Combine(_root, "server")]);
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_pin_chooses_between_two_copies_at_the_same_version(bool pinStripped)
+    {
+        var (full, stripped) = FullAndStrippedCopies();
+        var pin = pinStripped ? stripped : full;
+        var profile = new Profile { Mods = { new ProfileMod { Id = "TwinMod", SourcePath = pin, LastVersion = "v1.0.0" } } };
+
+        var picked = Assert.Single(ModuleSelector.Select(profile, ScanGameThenServer(), []));
+
+        Assert.Equal(pin, picked.Module.FolderPath);
+    }
+
+    [Fact]
+    public void A_pin_outside_every_scanned_folder_is_still_the_copy_that_loads()
+    {
+        var (full, stripped) = FullAndStrippedCopies();
+        var profile = new Profile { Mods = { new ProfileMod { Id = "TwinMod", SourcePath = stripped } } };
+        var gameOnly = ModuleCatalog.Scan("", null, [], [Path.Combine(_root, "game")]);
+
+        var picked = Assert.Single(ModuleSelector.Select(profile, gameOnly, []));
+
+        Assert.Equal(stripped, picked.Module.FolderPath);
+        Assert.NotEqual(full, picked.Module.FolderPath);
+    }
+
+    [Fact]
+    public void A_pinned_folder_that_now_holds_a_different_mod_is_not_loaded_in_its_place()
+    {
+        // Only reachable for a folder outside the catalog: inside it, candidates are already matched by id.
+        var real = MakeModule(Path.Combine("game", "TwinMod"), "TwinMod");
+        var squatter = MakeModule(Path.Combine("elsewhere", "TwinMod"), "SomethingElse");
+        var profile = new Profile { Mods = { new ProfileMod { Id = "TwinMod", SourcePath = squatter } } };
+        var gameOnly = ModuleCatalog.Scan("", null, [], [Path.Combine(_root, "game")]);
+
+        var picked = Assert.Single(ModuleSelector.Select(profile, gameOnly, []));
+
+        Assert.Equal("TwinMod", picked.Module.Id);
+        Assert.Equal(real, picked.Module.FolderPath);
+    }
+
+    [Fact]
+    public void Copies_at_one_version_with_different_top_level_folders_are_separate_choices()
+    {
+        var (full, stripped) = FullAndStrippedCopies();
+        var copies = ScanGameThenServer().Candidates("TwinMod").ToList();
+
+        Assert.Equal([full, stripped], ModuleCopies.Distinct(copies, "TwinMod").Select(m => m.FolderPath));
+    }
+
+    [Fact]
+    public void Copies_at_one_version_with_the_same_top_level_folders_are_one_choice()
+    {
+        // The routine case: a mod in the game's Modules folder and in the workshop. It must not double every row.
+        var (full, stripped) = FullAndStrippedCopies();
+        Directory.CreateDirectory(Path.Combine(stripped, "RuntimeDataCache"));
+        var copies = ScanGameThenServer().Candidates("TwinMod").ToList();
+
+        Assert.Equal([full], ModuleCopies.Distinct(copies, "TwinMod").Select(m => m.FolderPath));
+        // ...and the copy a profile pins is the one left standing, whichever was scanned first.
+        Assert.Equal([stripped], ModuleCopies.Distinct(copies, "TwinMod", keep: copies[1]).Select(m => m.FolderPath));
+    }
+
+    [Fact]
+    public void Different_versions_are_separate_choices_whatever_they_contain()
+    {
+        var (full, stripped) = FullAndStrippedCopies(strippedVersion: "v2.0.0");
+        Directory.CreateDirectory(Path.Combine(stripped, "RuntimeDataCache"));
+        var copies = ScanGameThenServer().Candidates("TwinMod").ToList();
+
+        Assert.Equal([full, stripped], ModuleCopies.Distinct(copies, "TwinMod").Select(m => m.FolderPath));
+    }
+
+    // ---- the host's own game, launched against their server ---------------------------------------------------
+
+    [Fact]
+    public void The_hosts_game_is_not_handed_a_copy_cut_down_for_the_server()
+    {
+        var (full, stripped) = FullAndStrippedCopies();
+        var catalog = ScanGameThenServer();
+        var serverCopy = catalog.Candidates("TwinMod").Single(m => m.FolderPath == stripped);
+
+        Assert.Equal(full, ModderLords.Coop.Launch.ServerMatchedClient.ClientCopy(serverCopy, catalog).FolderPath);
+    }
+
+    [Fact]
+    public void The_hosts_game_keeps_the_servers_copy_when_no_other_is_known_to_be_fuller()
+    {
+        var (full, stripped) = FullAndStrippedCopies();
+        var catalog = ScanGameThenServer();
+        var copies = catalog.Candidates("TwinMod").ToList();
+
+        // The server runs the full copy: the stripped one is never an improvement on it.
+        Assert.Equal(full, ModderLords.Coop.Launch.ServerMatchedClient.ClientCopy(copies.Single(m => m.FolderPath == full), catalog).FolderPath);
+
+        // Same folders on both sides: nothing says the server's choice is wrong for a player, so it stands.
+        Directory.CreateDirectory(Path.Combine(stripped, "RuntimeDataCache"));
+        Assert.Equal(stripped, ModderLords.Coop.Launch.ServerMatchedClient.ClientCopy(copies.Single(m => m.FolderPath == stripped), catalog).FolderPath);
+    }
+
+    [Fact]
+    public void The_hosts_game_never_swaps_to_a_copy_at_another_version()
+    {
+        // Coop matches community modules on id AND version, so a fuller copy at another version is not a substitute.
+        var (_, stripped) = FullAndStrippedCopies(version: "v2.0.0");
+        var catalog = ScanGameThenServer();
+        var serverCopy = catalog.Candidates("TwinMod").Single(m => m.FolderPath == stripped);
+
+        Assert.Equal(stripped, ModderLords.Coop.Launch.ServerMatchedClient.ClientCopy(serverCopy, catalog).FolderPath);
+    }
+
     [Fact]
     public void An_ordinary_single_copy_mod_is_unaffected_by_the_side_preference()
     {
