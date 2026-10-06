@@ -26,6 +26,14 @@ public sealed class ProfileMod
     /// UI behaviour. Everything the scan finds and is not listed here is gated on clients.
     /// </summary>
     public List<string> ClientSideBehaviors { get; set; } = new();
+    /// <summary>
+    /// Top-level folders of this mod the dedicated server is not shown (see <see cref="ServerFolderExclusions"/>).
+    /// Three states, and the difference matters: null is "no opinion", so the compat record's list applies; an empty
+    /// list is "leave nothing out", which overrules a record that says otherwise; anything else replaces the record's
+    /// list. Opt-in per mod because nothing here is proven: a host suspected RuntimeDataCache (and earlier
+    /// AssetSources, EmAssetPackages, SceneEditData) of hanging the server, and that is still only a suspicion.
+    /// </summary>
+    public List<string>? ServerExcludedFolders { get; set; }
 }
 
 public sealed class ServerSettings

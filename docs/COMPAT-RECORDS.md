@@ -55,11 +55,13 @@ it does not know so that an old build can read a newer file, while a submission 
 - `EnsureLines`: `File` is a relative path that stays inside the mod's folder (no drive, no leading separator, no
   `..`, plain names only) and is a line-based config file (`.txt .ini .cfg .conf .toml .properties`); `Value` may
   only use the `{coopModuleId}` token;
-- `DefaultSettings`: settings id, then setting name, then the value as text, bounded at every level.
+- `DefaultSettings`: settings id, then setting name, then the value as text, bounded at every level;
+- `ServerExcludedFolders`: each entry is the name of a folder directly inside the mod, one the launcher would honour
+  (no path, no `..`, not `bin`).
 
-`EnsureLines` and `DefaultSettings` change what the launcher does on every host that has the mod. The checks only prove
-they are well-formed. The pull request shows both at the top, under "Review these first": read them before anything
-else.
+`ServerExcludedFolders`, `EnsureLines` and `DefaultSettings` change what the launcher does on every host that has the
+mod. The checks only prove they are well-formed. The pull request shows all three at the top, under "Review these
+first": read them before anything else.
 
 The same rules run in CI against the committed file (`check`, below), so a hand-edited record is held to them as well.
 If a legitimate record ever needs something the rules refuse, change the rule in `CompatIntake` in the same pull

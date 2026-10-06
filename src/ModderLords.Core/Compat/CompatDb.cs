@@ -39,6 +39,12 @@ public sealed class CompatRecord
     /// The dedicated server pins Coop after the community block regardless, so this only ever moves a client order.
     /// </summary>
     public bool? ClientLoadsAfterCoop { get; set; }
+    /// <summary>
+    /// Top-level folders of the mod the dedicated server is not shown: client-only content the headless engine has no
+    /// use for (RuntimeDataCache is the one that prompted this). A profile's own list for the mod, when it has one,
+    /// replaces this - including an empty one, which means "leave nothing out".
+    /// </summary>
+    public List<string> ServerExcludedFolders { get; set; } = new();
     /// <summary>Lines the mod's own config files must contain under Coop, applied to its folder before launch. See <see cref="EnsureLinesApplier"/>.</summary>
     public List<EnsureLine> EnsureLines { get; set; } = new();
     /// <summary>
@@ -57,7 +63,7 @@ public sealed class CompatRecord
         Id = Id, Verdict = Verdict, TestedVersions = TestedVersions.ToList(), TestedCoopVersion = TestedCoopVersion,
         DefaultRole = DefaultRole, ServerAuthoritative = ServerAuthoritative, ClientSideBehaviors = ClientSideBehaviors.ToList(),
         KeepSubModules = KeepSubModules.ToList(), SettingsTypes = SettingsTypes.ToList(), IgnoreSettingsTypes = IgnoreSettingsTypes.ToList(),
-        ClientLoadsAfterCoop = ClientLoadsAfterCoop,
+        ClientLoadsAfterCoop = ClientLoadsAfterCoop, ServerExcludedFolders = ServerExcludedFolders.ToList(),
         EnsureLines = EnsureLines.Select(l => new EnsureLine { File = l.File, Section = l.Section, Value = l.Value }).ToList(),
         DefaultSettings = DefaultSettings.ToDictionary(o => o.Key, o => new Dictionary<string, string>(o.Value, StringComparer.Ordinal), StringComparer.Ordinal),
         Notes = Notes, Url = Url, UpdatedAt = UpdatedAt,
@@ -148,7 +154,7 @@ public sealed class CompatDb
     /// the bundled verdict stands and each of the other three falls back on its own, like any other field.</item>
     /// <item><c>UpdatedAt</c>: local when set, else bundled. SaveLocal always stamps it, so it dates the user's part.</item>
     /// <item><c>DefaultRole</c>, <c>ServerAuthoritative</c>, <c>ClientLoadsAfterCoop</c>, <c>Url</c>: local when set, else bundled.</item>
-    /// <item><c>ClientSideBehaviors</c>, <c>KeepSubModules</c>, <c>SettingsTypes</c>, <c>IgnoreSettingsTypes</c>,
+    /// <item><c>ClientSideBehaviors</c>, <c>KeepSubModules</c>, <c>SettingsTypes</c>, <c>IgnoreSettingsTypes</c>, <c>ServerExcludedFolders</c>,
     /// <c>EnsureLines</c>: the local list when it has entries, else the bundled list. Replaced, not unioned: a user who
     /// states a list must be able to leave a bundled entry out of it.</item>
     /// <item><c>DefaultSettings</c>: merged per settingsId and per property; a local value wins, bundled values for other
@@ -191,6 +197,7 @@ public sealed class CompatDb
         if (l.KeepSubModules.Count > 0) m.KeepSubModules = l.KeepSubModules;
         if (l.SettingsTypes.Count > 0) m.SettingsTypes = l.SettingsTypes;
         if (l.IgnoreSettingsTypes.Count > 0) m.IgnoreSettingsTypes = l.IgnoreSettingsTypes;
+        if (l.ServerExcludedFolders.Count > 0) m.ServerExcludedFolders = l.ServerExcludedFolders;
         if (l.EnsureLines.Count > 0) m.EnsureLines = l.EnsureLines;
 
         foreach (var (settingsId, props) in l.DefaultSettings)
@@ -246,6 +253,7 @@ public sealed class CompatDb
         if (!e.KeepSubModules.SequenceEqual(bundled.KeepSubModules, StringComparer.Ordinal)) part.KeepSubModules = e.KeepSubModules;
         if (!e.SettingsTypes.SequenceEqual(bundled.SettingsTypes, StringComparer.Ordinal)) part.SettingsTypes = e.SettingsTypes;
         if (!e.IgnoreSettingsTypes.SequenceEqual(bundled.IgnoreSettingsTypes, StringComparer.Ordinal)) part.IgnoreSettingsTypes = e.IgnoreSettingsTypes;
+        if (!e.ServerExcludedFolders.SequenceEqual(bundled.ServerExcludedFolders, StringComparer.OrdinalIgnoreCase)) part.ServerExcludedFolders = e.ServerExcludedFolders;
         if (!e.EnsureLines.Select(LineKey).SequenceEqual(bundled.EnsureLines.Select(LineKey))) part.EnsureLines = e.EnsureLines;
 
         foreach (var (settingsId, props) in e.DefaultSettings)

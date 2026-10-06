@@ -272,6 +272,9 @@
                                     <Separator />
                                     <MenuItem Header="Open folder" Command="{Binding OpenModFolderCommand}" />
                                     <MenuItem Header="Set download link…" Command="{Binding SetSourceLinkCommand}" />
+                                    <MenuItem Header="Folders to leave out on the server…" Command="{Binding EditServerFoldersCommand}"
+                                              Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
+                                              ToolTip="Keep client-only folders of the selected mod (such as RuntimeDataCache) away from the dedicated server. The mod's own folder is not changed." />
                                 </ContextMenu>
                             </DataGrid.ContextMenu>
                             <DataGrid.RowStyle>

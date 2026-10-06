@@ -22,14 +22,18 @@ public sealed record OverlayEntry(
     string BinTarget,
     IReadOnlyList<string> Notes,
     string? HeadlessAssetPath = null,
-    string? HeadlessMapPath = null);
+    string? HeadlessMapPath = null,
+    // Top-level folders of the mod the shadow leaves out, as they are named on disk. Null or empty = none.
+    IReadOnlyList<string>? ExcludedFolders = null);
 
 public sealed record OverlayPlan(string OverlayRoot, string EngineModulesRoot, IReadOnlyList<OverlayEntry> Entries);
 
 /// <summary>
 /// Decides, per selected mod, how the engine gets to see it. Reads directory listings, plus - only for a Run mod that
 /// declares itself client-only - the IL metadata of its own submodule DLLs, to say whether overriding that declaration
-/// is likely to survive. Tests inject <paramref name="scan"/> to keep the planner off disk entirely.
+/// is likely to survive - and, only for a mod asked to leave folders out on the server, the names of its top-level
+/// folders. Tests inject <paramref name="scan"/> and <paramref name="topLevelFolders"/> to keep the planner off disk
+/// entirely.
 /// </summary>
 public static class OverlayPlanner
 {
@@ -37,11 +41,14 @@ public static class OverlayPlanner
         Func<DiscoveredModule, ScanResult>? scan = null, Func<string, CompatRecord?>? record = null,
         IReadOnlyDictionary<string, string>? headlessAssetPaths = null,
         IReadOnlyDictionary<string, string>? headlessMapPaths = null,
-        Func<DiscoveredModule, HashSet<string>>? typeNames = null)
+        Func<DiscoveredModule, HashSet<string>>? typeNames = null,
+        Func<string, IReadOnlyList<string>?>? profileExcludedFolders = null,
+        Func<DiscoveredModule, IEnumerable<string>>? topLevelFolders = null)
     {
         scan ??= AssemblyScan.Scan;
         record ??= CompatDb.Current.Find;
         typeNames ??= AssemblyScan.ModuleTypeNames;
+        topLevelFolders ??= TopLevelFolders;
         var entries = new List<OverlayEntry>();
         foreach (var original in selections)
         {
@@ -73,13 +80,69 @@ public static class OverlayPlanner
             headlessMapPaths?.TryGetValue(mod.Id, out headlessMapPath);
             if (headlessAssetPath is not null) notes.Add("server simulation assets prepared in the private launch overlay");
             if (headlessMapPath is not null) notes.Add("server map projection prepared in the private launch overlay");
-            var kind = (!manifestNeedsRewrite && headlessAssetPath is null && headlessMapPath is null &&
+            var excluded = ResolveExcludedFolders(mod, profileExcludedFolders?.Invoke(mod.Id) ?? record(mod.Id)?.ServerExcludedFolders,
+                headlessMapPath is not null, topLevelFolders, notes);
+
+            // A direct junction is the whole mod folder or nothing, so leaving a folder out forces a shadow - but only
+            // when there is something to leave out. A name that matches no folder must not cost the mod its direct
+            // junction: a record that lists RuntimeDataCache would otherwise shadow every copy that never had one.
+            var kind = (!manifestNeedsRewrite && headlessAssetPath is null && headlessMapPath is null && excluded.Count == 0 &&
                         (mod.HasServerBin || !mod.HasClientBin)) ? OverlayKind.DirectJunction : OverlayKind.Shadow;
             var shadow = kind == OverlayKind.Shadow ? Path.Combine(overlayRoot, mod.Id) : null;
-            entries.Add(new OverlayEntry(sel, kind, enginePath, shadow, binTarget, notes, headlessAssetPath, headlessMapPath));
+            entries.Add(new OverlayEntry(sel, kind, enginePath, shadow, binTarget, notes, headlessAssetPath, headlessMapPath, excluded));
         }
         return new OverlayPlan(overlayRoot, engineModulesRoot, entries);
     }
+
+    /// <summary>Starts the note that says which folders the server is not shown. The launch log repeats notes that begin with it.</summary>
+    public const string LeftOutNote = "left out on the server: ";
+
+    /// <summary>Starts the note for names that were asked for and matched nothing, so a typing mistake is not silent.</summary>
+    public const string NotLeftOutNote = "not left out on the server (this mod has no such folder): ";
+
+    /// <summary>
+    /// The folders of this mod that will really be left out, named as they are on disk, plus notes for everything
+    /// that was asked for and will not be. <paramref name="requested"/> is already the effective list: the profile's
+    /// when it has one (an empty one included), otherwise the compat record's.
+    /// </summary>
+    private static IReadOnlyList<string> ResolveExcludedFolders(DiscoveredModule mod, IReadOnlyList<string>? requested,
+        bool hasHeadlessMap, Func<DiscoveredModule, IEnumerable<string>> topLevelFolders, List<string> notes)
+    {
+        if (requested is null || requested.Count == 0) return [];
+        var (valid, rejected) = ServerFolderExclusions.Split(requested);
+        if (rejected.Count > 0)
+            notes.Add("WARNING: ignored " + string.Join(", ", rejected.Select(r => $"\"{r}\" ({ServerFolderExclusions.Problem(r)})"))
+                      + " in the folders to leave out on the server. Only the name of a folder directly inside the mod can be left out.");
+        if (valid.Count == 0) return [];
+
+        List<string> onDisk;
+        try { onDisk = topLevelFolders(mod).ToList(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { onDisk = []; }
+
+        var excluded = new List<string>();
+        var absent = new List<string>();
+        foreach (var name in valid)
+        {
+            // The prepared headless map is built from this mod's own SceneObj, so the two requests contradict each
+            // other. The map wins: without it a map mod's server has no map at all.
+            if (hasHeadlessMap && name.Equals("SceneObj", StringComparison.OrdinalIgnoreCase))
+            {
+                notes.Add("WARNING: SceneObj cannot be left out on the server for this mod; the prepared server map is built from it.");
+                continue;
+            }
+            var actual = onDisk.FirstOrDefault(d => d.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (actual is null) absent.Add(name); else excluded.Add(actual);
+        }
+        if (excluded.Count > 0) notes.Add(LeftOutNote + string.Join(", ", excluded));
+        if (absent.Count > 0) notes.Add(NotLeftOutNote + string.Join(", ", absent));
+        return excluded;
+    }
+
+    /// <summary>Names of the folders directly inside the mod. Only read for a mod that asks to leave something out.</summary>
+    private static IEnumerable<string> TopLevelFolders(DiscoveredModule mod) =>
+        Directory.Exists(mod.FolderPath)
+            ? Directory.EnumerateDirectories(mod.FolderPath).Select(d => Path.GetFileName(d)!).ToList()
+            : [];
 
     /// <summary>
     /// The role this mod will actually launch under, plus any notes explaining a change. Extracted so the decision is

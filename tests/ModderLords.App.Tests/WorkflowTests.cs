@@ -465,6 +465,122 @@ public class WorkflowTests
         Assert.False(vm.RemoveModCommand.CanExecute(null));
     });
 
+    /// <summary>
+    /// Rows are rebuilt from the profile on every Rescan and the profile is rebuilt from the rows on every save, so
+    /// a per-mod option that lives in only one of them is lost on the first round trip. The folders a host leaves
+    /// out on the server must survive both directions, in all three of their states.
+    /// </summary>
+    [Fact]
+    public void FoldersLeftOutOnTheServerSurviveCollectAndRescan() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Module("Named"); fixture.Module("Nothing"); fixture.Module("NoOpinion");
+        var vm = fixture.ViewModel(); vm.Rescan();
+        Assert.False(vm.IsDirty);
+        // None of the three is in the profile yet: setting the list has to create the entry, not drop the edit.
+        Assert.Null(vm.ServerExcludedFoldersFor(vm.Mods.Single(m => m.Id == "Named")));
+
+        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "Named"), ["RuntimeDataCache", "AssetSources"]);
+        Assert.True(vm.IsDirty);
+        Assert.Contains("RuntimeDataCache", vm.Status);
+        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "Nothing"), []);
+        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "NoOpinion"), null);
+
+        void AssertKept()
+        {
+            Assert.Equal(["RuntimeDataCache", "AssetSources"], vm.Profile.Mods.Single(m => m.Id == "Named").ServerExcludedFolders);
+            Assert.Empty(vm.Profile.Mods.Single(m => m.Id == "Nothing").ServerExcludedFolders!);
+            Assert.Null(vm.Profile.Mods.Single(m => m.Id == "NoOpinion").ServerExcludedFolders);
+            Assert.Equal(["RuntimeDataCache", "AssetSources"], vm.ServerExcludedFoldersFor(vm.Mods.Single(m => m.Id == "Named")));
+        }
+
+        AssertKept();
+        vm.CollectProfileFromRows(); AssertKept();
+        vm.Rescan(); AssertKept();
+        // An unrelated edit to the same row, then the save path's collect: the list must not be rewritten from the row.
+        vm.Mods.Single(m => m.Id == "Named").Enabled = true;
+        vm.CollectProfileFromRows(); AssertKept();
+        vm.Rescan(); vm.CollectProfileFromRows(); AssertKept();
+        // And through the file format the launch reads.
+        var saved = ProfileStore.Snapshot(vm.Profile);
+        Assert.Equal(["RuntimeDataCache", "AssetSources"], saved.Mods.Single(m => m.Id == "Named").ServerExcludedFolders);
+        Assert.Empty(saved.Mods.Single(m => m.Id == "Nothing").ServerExcludedFolders!);
+        Assert.Null(saved.Mods.Single(m => m.Id == "NoOpinion").ServerExcludedFolders);
+
+        // Clearing it again is an edit like any other.
+        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "Named"), null);
+        vm.Rescan();
+        Assert.Null(vm.Profile.Mods.Single(m => m.Id == "Named").ServerExcludedFolders);
+    });
+
+    /// <summary>A server-side option: offered for a mod in Host mode, never in Player mode or for the game's own modules.</summary>
+    [Fact]
+    public void FoldersLeftOutOnTheServerAreAHostModeChoiceForMods() => Sta(() =>
+    {
+        using var fixture = new Fixture(); fixture.Module("TestMod");
+        var vm = fixture.ViewModel(); vm.Rescan();
+        vm.SelectedMod = vm.Mods.Single(m => m.Id == "TestMod");
+        Assert.False(vm.EditServerFoldersCommand.CanExecute(null));
+
+        // Setting it for a game module is refused outright rather than writing Native into Profile.Mods.
+        vm.SetServerExcludedFolders(vm.Mods.Single(m => m.Id == "Native"), ["ModuleData"]);
+        Assert.DoesNotContain(vm.Profile.Mods, m => m.Id == "Native");
+    });
+
+    [Fact]
+    public void TheFoldersDialogTurnsItsTextIntoTheRightProfileValue()
+    {
+        // No record list to overrule: an empty box is "no opinion", not a pinned empty list.
+        Assert.Null(MainViewModel.ServerFoldersChoice("", useRecord: false, recordHasFolders: false));
+        Assert.Null(MainViewModel.ServerFoldersChoice("  \r\n ", useRecord: false, recordHasFolders: false));
+        Assert.Equal(["RuntimeDataCache", "AssetSources"],
+            MainViewModel.ServerFoldersChoice("RuntimeDataCache\r\n\r\n AssetSources \r\nruntimedatacache", useRecord: false, recordHasFolders: false));
+
+        // With a record list: ticked = follow it, unticked and empty = leave nothing out despite it.
+        Assert.Null(MainViewModel.ServerFoldersChoice("RuntimeDataCache", useRecord: true, recordHasFolders: true));
+        var nothing = MainViewModel.ServerFoldersChoice("", useRecord: false, recordHasFolders: true);
+        Assert.NotNull(nothing);
+        Assert.Empty(nothing!);
+        Assert.Equal(["AssetSources"], MainViewModel.ServerFoldersChoice("AssetSources", useRecord: false, recordHasFolders: true));
+
+        // The hint names what the launch would refuse, before the host presses OK.
+        var hint = MainViewModel.ServerFoldersHint("RuntimeDataCache\nbin\n..\\Other", useRecord: false, recordHasFolders: false);
+        Assert.Contains("bin", hint);
+        Assert.Contains("..\\Other", hint);
+        Assert.DoesNotContain("RuntimeDataCache", hint);
+    }
+
+    /// <summary>The dialog itself, never shown: its XAML loads and its three starting states give back what they were given.</summary>
+    [Fact]
+    public void TheFoldersDialogOpensOnTheProfilesCurrentState() => Sta(() =>
+    {
+        // No opinion, and a record with a list: the tick is on, the box shows the record's list and is locked.
+        var following = new ServerFoldersWindow("Mod", null, ["RuntimeDataCache"]);
+        Assert.True(following.UseRecordBox.IsChecked);
+        Assert.False(following.FoldersBox.IsEnabled);
+        Assert.Equal("RuntimeDataCache", following.FoldersBox.Text);
+        Assert.Null(following.Result);
+        // Unticking starts from the record's list, so overruling it is an edit rather than retyping.
+        following.UseRecordBox.IsChecked = false;
+        Assert.True(following.FoldersBox.IsEnabled);
+        Assert.Equal(["RuntimeDataCache"], following.Result);
+        following.FoldersBox.Text = "";
+        Assert.Empty(following.Result!);
+
+        // The profile already overrules the record with "nothing".
+        var nothing = new ServerFoldersWindow("Mod", [], ["RuntimeDataCache"]);
+        Assert.False(nothing.UseRecordBox.IsChecked);
+        Assert.Empty(nothing.Result!);
+
+        // No record list: no tick to offer, and the profile's own names come back unchanged.
+        var own = new ServerFoldersWindow("Mod", ["RuntimeDataCache", "AssetSources"], []);
+        Assert.Equal(System.Windows.Visibility.Collapsed, own.UseRecordBox.Visibility);
+        Assert.Equal(["RuntimeDataCache", "AssetSources"], own.Result);
+        own.FoldersBox.Text = "";
+        Assert.Null(own.Result);
+        Assert.Contains("RuntimeDataCache", own.PromptText.Text);
+    });
+
     [Fact]
     public void RemoveMissingClearsCommunityAndOfficialEntries() => Sta(() =>
     {

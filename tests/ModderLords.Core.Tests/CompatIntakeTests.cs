@@ -209,6 +209,17 @@ public sealed class CompatIntakeTests
     public void RepeatedProperty_IsRefused() =>
         Assert.Contains("more than once", Refusal("{ \"Id\": \"SomeMod\", \"Verdict\": \"Works\", \"Verdict\": \"Broken\" }"));
 
+    [Theory]
+    [InlineData("[\"..\\\\OtherMod\"]")]
+    [InlineData("[\"Sub/Folder\"]")]
+    [InlineData("[\"bin\"]")]
+    public void ServerExcludedFolders_ThatTheLauncherWouldIgnore_AreRefused(string valueJson) =>
+        Assert.Contains("cannot be left out", Refusal(With("ServerExcludedFolders", valueJson)));
+
+    [Fact]
+    public void ServerExcludedFolders_NamingATopLevelFolder_IsAccepted() =>
+        Assert.Empty(CompatIntake.ValidateSubmission(With("ServerExcludedFolders", "[\"RuntimeDataCache\"]"), "SomeMod").Problems);
+
     [Fact]
     public void OversizedInput_IsRefused()
     {
