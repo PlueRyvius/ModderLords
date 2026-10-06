@@ -1,5 +1,6 @@
 using System.Windows;
 using ModderLords.Core.Export;
+using ModderLords.Core.Overlay;
 
 namespace ModderLords.App;
 
@@ -24,8 +25,12 @@ public partial class ImportListWindow : Window
                       + (file.Coop is null ? "" : $", Coop {file.Coop.Version}");
         SourceLine.Text = $"{path}\nExported {file.ExportedAt.LocalDateTime:g}"
                           + (file.ExportedBy is null ? "" : $" by {file.ExportedBy}") + ". Listed in load order.";
+        // Roles in the Mods tab's words. Run with the tick is "Server only" there; a tick on any other role is kept
+        // beside it, because it does not change what that role is.
         Listing.Text = string.Join("\n", file.Mods.Select((m, i) =>
-            $"{i + 1,3}. {m.Id,-32} {m.Version,-14} {m.Role}{(m.ServerAuthoritative ? "  server-only logic" : "")}"));
+            $"{i + 1,3}. {m.Id,-32} {m.Version,-14} "
+            + (m.Role == ServerRole.Run && m.ServerAuthoritative ? RoleLabels.ServerOnly
+                : RoleLabels.For(m.Role) + (m.ServerAuthoritative ? "  server-only logic" : ""))));
 
         // Suggest a name that will not collide with a profile they already have.
         var suggested = string.IsNullOrWhiteSpace(file.Name) ? "shared" : file.Name!;

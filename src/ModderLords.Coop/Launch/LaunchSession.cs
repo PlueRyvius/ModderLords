@@ -260,9 +260,9 @@ public sealed class LaunchSession
             string xml;
             try { xml = File.ReadAllText(manifest); } catch (IOException) { continue; }
             if (!ManifestRewriter.IsExcludedFromDedicatedServer(xml)) continue;
-            messages.Add($"WARNING {selection.Module.Id} is As-shipped, and its manifest excludes it from dedicated " +
+            messages.Add($"WARNING {selection.Module.Id} is As-shipped {RoleLabels.OnModsTab(ServerRole.AsShipped)}, and its manifest excludes it from dedicated " +
                          "servers (DedicatedServerType=none), so the engine will load none of its code. The module " +
-                         "still appears in the load order and in any save header written here. Set it to Run to load " +
+                         $"still appears in the load order and in any save header written here. Set it to {RoleLabels.InLog(ServerRole.Run)} to load " +
                          "it anyway" + (willCreateWorld ? " - without it, whatever it would set up at campaign creation will be missing from this world." : "."));
         }
 
@@ -275,7 +275,7 @@ public sealed class LaunchSession
         {
             var silent = profile.EnabledMods.Where(m => m.Role == ServerRole.DependencyOnly).Select(m => m.Id).ToList();
             if (silent.Count > 0)
-                messages.Add($"note: {string.Join(", ", silent)} {(silent.Count == 1 ? "is" : "are")} Dependency-only, so " +
+                messages.Add($"note: {string.Join(", ", silent)} {(silent.Count == 1 ? "is" : "are")} Dependency-only {RoleLabels.OnModsTab(ServerRole.DependencyOnly)}, so " +
                              $"{(silent.Count == 1 ? "its" : "their")} code will not run while this world is generated. " +
                              "Anything one of them would set up at campaign creation will be missing from it, even though " +
                              "the save header lists the module.");

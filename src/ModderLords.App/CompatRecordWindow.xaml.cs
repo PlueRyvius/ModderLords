@@ -2,6 +2,7 @@
 using ModderLords.App.ViewModels;
 using ModderLords.Core.Compat;
 using ModderLords.Coop.Compat;
+using ModderLords.Core.Overlay;
 using ModderLords.Core.Saves;
 using ModderLords.Coop.Saves;
 
@@ -61,10 +62,11 @@ public partial class CompatRecordWindow : Window
     {
         if (_record.DefaultRole is null && _record.ServerAuthoritative is null && _record.ClientSideBehaviors.Count == 0)
         {
-            DefaultsLine.Text = "None: new profiles use Run, server-only logic off.";
+            DefaultsLine.Text = $"None: new profiles use {RoleLabels.Describe(ServerRole.Run, false, "(unset)")}.";
             return;
         }
-        DefaultsLine.Text = $"Role {_record.DefaultRole?.ToString() ?? "(unset)"}, server-only logic {(_record.ServerAuthoritative is true ? "on" : _record.ServerAuthoritative is false ? "off" : "(unset)")}"
+        // The Mods tab's words for the role, so the dialog and the Role column it copies from say the same thing.
+        DefaultsLine.Text = $"Role {RoleLabels.Describe(_record.DefaultRole, _record.ServerAuthoritative, "(unset)")}"
                             + (_record.ClientSideBehaviors.Count > 0 ? $"; client-side: {string.Join(", ", _record.ClientSideBehaviors)}" : "");
     }
 

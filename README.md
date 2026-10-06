@@ -437,16 +437,25 @@ Stock server modules and Coop itself are never listed.
 | Compat | Host mode only. The curated verdict from the compatibility database (see below): green **Works**, amber **Needs recipe** (works with Server-only logic and the recorded behaviours), red **Broken**, grey **Unknown**. `· untested version` means your copy is not one of the versions the record was checked with. Hover for notes, tested versions and where the record came from. Empty = no record yet. |
 | Settings | What the Mod settings tab will find for this mod: `MCM`, `own settings (N values)` (a plain settings class found by the scan), both, or `none found`. Hover for the class names. |
 | Server verdict | Host mode only. `server-safe`: no UI or client-only references. `guarded`: uses inquiries or screens that the server guards handle. `needs review`: constructs UI objects or references StoryMode; may still work (hover for details), test it. |
-| Notes | Host mode only. `version the game cannot read`: the manifest's version is not a form Bannerlord parses. `client-only tags`: its manifest asks servers to skip it (handled by the Run role). `data only`: XML content, no code. |
+| Notes | Host mode only. `version the game cannot read`: the manifest's version is not a form Bannerlord parses. `client-only tags`: its manifest asks servers to skip it (handled by the Server + Client role). `data only`: XML content, no code. |
 | Folder | Where the mod lives. A number as the folder name means a Steam Workshop item. |
 
 **Roles** (Host mode only)
 
-- **Run**: load the mod's code on the server. The default for gameplay mods.
-- **DependencyOnly**: keep the mod in the list so the Coop handshake matches players, but load none of its code. The
-  default for client-side frameworks: Harmony, ButterLib, UIExtenderEx, MCM (MCM's settings core is still loaded so
-  mods that read settings work).
-- **AsShipped**: hand the manifest to the engine unchanged and let it decide. Only for mods built for dedicated servers.
+The Role column says where a mod's code runs. The name in brackets is what profiles, shared mod lists, the launch log
+and the command line call the same thing.
+
+- **Server + Client** (`Run`): load the mod's code on the server as well as on players' games. The default for
+  gameplay mods.
+- **Client only** (`DependencyOnly`): keep the mod in the server's list so the Coop handshake matches players, but
+  load none of its code there; it runs on players' games only. The default for client-side frameworks: Harmony,
+  ButterLib, UIExtenderEx, MCM (MCM's settings core is still loaded so mods that read settings work).
+- **Mod decides** (`AsShipped`): hand the manifest to the engine unchanged and let the mod's own tags decide what the
+  server loads. Only for mods built for dedicated servers.
+- **Server only** (`Run` with **Server-only logic** ticked): the mod's behaviours run on the server and players' games
+  skip them. Experimental: it is offered only with **Experimental compatibility** on (Server tab → Advanced) and needs
+  Settings sync. See [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on). With the switch off, a mod
+  set this way shows as Server + Client, which is how it launches, and the tick is kept for when the switch is back on.
 
 **Order**: the right-hand panel shows the full engine order — what will actually be loaded, after dependencies are
 resolved. **Use engine order** sorts the list to match it. Messages about missing dependencies, duplicate versions and
@@ -460,7 +469,7 @@ unreadable version numbers appear under it.
 |---|---|---|
 | My order wins | off | Use the list exactly as you wrote it, even where a mod's manifest declares a different order. Conflicts are still listed under the order preview, so you can see what you are overriding. Leave it off unless a mod's declared order is wrong — which does happen; see [Hosting a map-replacing mod](#hosting-a-map-replacing-mod). |
 | Automatic validated contracts | on (Host mode) | Let a shipped compatibility contract activate itself when it fingerprint-matches the exact binaries you have installed **and** has passed offline and integration validation. Nothing activates on a guess. Turn it off to run with no automatic adapters at all. |
-| Server-only logic | off per mod | Only visible with **Experimental compatibility** on (Server tab → Advanced). See [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on). |
+| Server-only logic | off per mod | Only visible with **Experimental compatibility** on (Server tab → Advanced). Ticking it on a Server + Client mod is the same as choosing **Server only** in the Role column. See [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on). |
 Workshop update or after Steam re-downloaded the server.
 
 ### Saves *(Host mode)*
@@ -492,7 +501,7 @@ a backup of the previous file under `config-backups`; the rest change how the la
 | **Settings sync** (ModderLords.Compat) | **off** | Pushes the server's MCM settings to joining players, and enables the [Mod settings](#mod-settings-host-side-live-or-offline) tab. It adds the shared `ModderLords.Compat` module to the server **and to the player mod list**, so every player must install and enable it — see [Settings sync](#settings-sync-optional-players-install-one-extra-mod). Turn it on when you want mod settings decided by the host rather than by each player's local file. |
 | **Use a map mod's distance cache** | **off** | Required for any mod that replaces the campaign map. See [Hosting a map-replacing mod](#hosting-a-map-replacing-mod) — leave it off otherwise. |
 | **Generate a new world with the active mods** | **off** | Only applies when a **new** save has to be made. On, the launcher runs the engine once with your mods loaded and generates the campaign from them; off, it copies the vanilla `default_new_game.sav`, which lists only Native, SandBoxCore, Sandbox and Coop — so the world will not contain your mods, and the launch says so. An existing save is always loaded untouched, whatever this is set to. Generating costs one extra engine run before the server starts (up to 15 minutes with heavy mods). |
-| **Bannerlord.Harmony / ButterLib / MBOptionScreen role** | **Dependency-only** | The launcher refuses to start if any of these is set to Run or As-shipped. They are client-side infrastructure and need Mono.Cecil and the MonoMod assemblies, which the DedicatedServer package does not ship; the engine dies during assembly load about five seconds in. If you need a mod whose setup runs through Harmony at campaign creation, build that campaign in the real game and bring it over with **Import client save**. |
+| **Bannerlord.Harmony / ButterLib / MBOptionScreen role** | **Client only** (`DependencyOnly`) | The launcher refuses to start if any of these is set to Server + Client (`Run`) or Mod decides (`AsShipped`). They are client-side infrastructure and need Mono.Cecil and the MonoMod assemblies, which the DedicatedServer package does not ship; the engine dies during assembly load about five seconds in. If you need a mod whose setup runs through Harmony at campaign creation, build that campaign in the real game and bring it over with **Import client save**. |
 | **Warn if loading stalls** (seconds) | empty (5 minutes) | How long the launch console waits with no loading progress before saying so. `0` turns the warning off. Heavy mods can legitimately load for a very long time — TAOM's authors quote up to two hours — so raise it or set `0` for those rather than being nagged. |
 | Server log file | on | Also write the server's own `logs\coop-server-*.log`, separate from the launcher's per-launch log. |
 | Engine port / region | 7210 / EU | Internal engine values; leave them alone unless you know why you are changing them. |
@@ -659,7 +668,7 @@ Send the Share tab list again and have them run **Check my client** on their PC 
 tab shows it; a save from a different Bannerlord version may not load.
 
 **A mod crashes the server on start (red lines, then exit).** Look at the last red lines. If they mention UI or view
-types, the mod runs UI code at startup; set its role to **DependencyOnly** if players only need it locally, or leave it
+types, the mod runs UI code at startup; set its role to **Client only** (`DependencyOnly`) if players only need it locally, or leave it
 off. Mods shipping a `Win64_Shipping_Server` build are the safest.
 
 **"Not launched: UDP port 4200 is already in use" or "an engine ... is already running".** Another server (this tool,
@@ -730,7 +739,7 @@ Both bundled modules only ever load code from the launcher folder; nothing of Co
 **Experimental, off by default.** Turn it on under **Server tab → Advanced → Experimental compatibility**; until then the
 column is hidden and ticks are ignored at launch. It works for some behaviour-plus-settings mods only.
 
-On the Mods tab, tick **Server-only logic** for a mod whose gameplay should be decided by the host: garrison managers,
+On the Mods tab, set the Role to **Server only** (or tick **Server-only logic**, which is the same thing) for a mod whose gameplay should be decided by the host: garrison managers,
 economy tweaks, battle effects. The launcher scans the mod's DLL for its campaign behaviours and mission behaviours and
 writes a recipe into the shared `ModderLords.Compat` module. On the server everything runs as before. Joining players
 receive the recipe before their campaign loads and their copy of the mod stops registering those behaviours, so only
