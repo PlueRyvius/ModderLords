@@ -71,6 +71,8 @@ public sealed class CompatSubModule : MBSubModuleBase
         // census is a diagnostic, and unlike the headless map nothing downstream depends on either.
         try { MapPatchRestore.Install(Harmony); }
         catch (Exception ex) { Log.Warn("map patch restore not installed: " + ex.GetBaseException().Message); }
+        try { DistanceCacheMissProbe.Install(Harmony); }
+        catch (Exception ex) { Log.Warn("distance cache miss probe not installed: " + ex.GetBaseException().Message); }
         try { MapSceneCallCensus.Install(Harmony); }
         catch (Exception ex) { Log.Warn("map scene census not installed: " + ex.GetBaseException().Message); }
         try { SilentDefaultWatch.Install(Harmony); }
