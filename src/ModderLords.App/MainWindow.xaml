@@ -745,7 +745,7 @@
             <TabItem Header="Characters" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <DockPanel Margin="8">
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
-                               Text="Everyone with a character on the running server. Edit changes a character’s gold, attributes, skills, focus and traits on the server. Export saves a character to a file; Import brings one onto a player, cleaned of anything this world does not have. Kick disconnects a player; their character stays and they can rejoin. Ban disconnects them and refuses them from then on, by Steam id and by the address they connected from. The list updates when someone joins or leaves." />
+                               Text="Everyone with a character on the running server. Edit changes a character’s age, level, gold, attributes, skills, focus and traits on the server. Export saves a character to a file; Import brings one onto a player, cleaned of anything this world does not have. Kick disconnects a player; their character stays and they can rejoin. Ban disconnects them and refuses them from then on, by Steam id and by the address they connected from. The list updates when someone joins or leaves." />
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Content="Refresh" Command="{Binding Characters.RefreshCommand}" Padding="10,4" Margin="0,0,8,0" />
                         <Button Content="Edit…" Command="{Binding Characters.EditCommand}" Padding="10,4" Margin="0,0,8,0" />

@@ -41,7 +41,6 @@ public class CharacterEditWireTests
     [InlineData("=5")]
     [InlineData("gold=lots")]
     [InlineData("gold=1.5")]
-    [InlineData("level=30")]
     [InlineData("skill.=5")]
     [InlineData("perk.Duelist=1")]
     public void A_malformed_or_unknown_token_is_refused_with_a_reason(string token)
