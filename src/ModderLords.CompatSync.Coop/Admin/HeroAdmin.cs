@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Common.Messaging;
 using GameInterface;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Players;
 using GameInterface.Services.Players.Data;
+using GameInterface.Services.Heroes.Messages;
 using ModderLords.CompatSync;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
 using TaleWorlds.CampaignSystem.Extensions;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.Core;
@@ -107,6 +110,25 @@ internal static class HeroAdmin
         var v = edit.Value;
         switch (edit.Kind)
         {
+            case HeroEditKind.Age:
+                const int maxAge = 150;
+                if (v < 0 || v > maxAge) return $"Age must be 0 to {maxAge}.";
+                read = () => (int)hero.Age;
+                apply = () => hero.SetBirthDay(CampaignTime.YearsFromNow(-v));
+                return null;
+            case HeroEditKind.Level:
+                var maxLevel = MaximumLevel(model, dev);
+                if (v < 1 || v > maxLevel) return $"Level must be 1 to {maxLevel}.";
+                read = () => hero.Level;
+                apply = () =>
+                {
+                    // Keep the hero's XP threshold consistent with the explicit level, including when lowering it.
+                    dev.SetInitialLevel(v);
+                    hero.Level = v;
+                    // Coop relays level changes through this GameInterface event; a direct field write alone would stay server-side.
+                    MessageBroker.Instance.Publish(hero, new HeroLevelChanged(v, hero));
+                };
+                return null;
             case HeroEditKind.Gold:
                 if (v < 0) return "Gold cannot be negative.";
                 read = () => hero.Gold;
@@ -174,6 +196,14 @@ internal static class HeroAdmin
         }
     }
 
+    private static int MaximumLevel(CharacterDevelopmentModel model, HeroDeveloper dev)
+    {
+        var maxSkillPoint = model.GetMaxSkillPoint();
+        for (var level = 1; level < 1024; level++)
+            if (dev.GetXpRequiredForLevel(level + 1) == maxSkillPoint) return level;
+        return 1023;
+    }
+
     /// <summary>The hero as the editor shows it. Lists every attribute, skill and trait this world has, modded ones included.</summary>
     internal static Dictionary<string, object?> Describe(Player player, Hero hero, MobileParty? party)
     {
@@ -187,8 +217,10 @@ internal static class HeroAdmin
             ["name"] = hero.Name?.ToString() ?? "",
             ["culture"] = hero.Culture?.Name?.ToString() ?? "",
             ["age"] = (int)hero.Age,
+            ["maxAge"] = 150,
             ["female"] = hero.IsFemale,
             ["level"] = hero.Level,
+            ["maxLevel"] = MaximumLevel(model, dev),
             ["gold"] = hero.Gold,
             ["hp"] = hero.HitPoints,
             ["maxHp"] = hero.MaxHitPoints,

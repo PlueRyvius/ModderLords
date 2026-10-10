@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
+using GameInterface;
+using GameInterface.Services.Chat;
 using ModderLords.CompatSync;
 using TaleWorlds.Library;
 using TaleWorlds.Localization;
@@ -47,7 +49,8 @@ internal sealed class LeSettingsGuardComponent : ILeComponent
         }
         foreach (var type in new[] { "BetterEconomy.Config.SettingsLoader", "BetterEconomy.Config.RegionalProfiles", "BetterEconomy.Config.ClassConsumptionProfiles" })
             if (context.Method(type, "LoadOrLog", 0) is { } m) _reloads.Add(m);
-        return _reloads.Count == 0 ? "Living Economy changed; its settings loaders were not found" : null;
+        _hotkeyTick = context.Method("BetterEconomy.UI.HotkeyHandler", "Tick", 0);
+        return _reloads.Count == 0 && _hotkeyTick == null ? "Living Economy changed; its settings loaders and ledger hotkey were not found" : null;
     }
 
     public string Install(LeContext context)
@@ -56,7 +59,8 @@ internal sealed class LeSettingsGuardComponent : ILeComponent
         if (!context.IsServer)
         {
             foreach (var m in _reloads) h.Patch(m, prefix: new HarmonyMethod(typeof(LeSettingsGuardComponent), nameof(ReloadPrefix)));
-            return "players cannot reload Living Economy's XML over the host's settings during co-op";
+            if (_hotkeyTick != null) h.Patch(_hotkeyTick, prefix: new HarmonyMethod(typeof(LeSettingsGuardComponent), nameof(LedgerHotkeyPrefix)));
+            return "players cannot reload Living Economy's XML over the host's settings during co-op; its ledger hotkey yields to Coop chat";
         }
         var parts = new List<string>();
         if (_hotkeyTick != null)
@@ -75,6 +79,15 @@ internal sealed class LeSettingsGuardComponent : ILeComponent
     }
 
     private static bool Skip() => false;
+
+    /// <summary>Keep Living Economy's M hotkey from opening its ledger on top of Coop's active chat input.</summary>
+    private static bool LedgerHotkeyPrefix() => !LivingEconomyLayer.IsCoopClient || !IsCoopChatOpen();
+
+    private static bool IsCoopChatOpen()
+    {
+        try { return ContainerProvider.TryResolve<IChatService>(out var chat) && chat.IsTyping; }
+        catch { return false; }
+    }
 
     private static bool ReloadPrefix()
     {
