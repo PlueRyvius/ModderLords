@@ -14,6 +14,7 @@ public partial class MetricRow : ObservableObject
 {
     private readonly BaselineTracker _tracker;
     private readonly Func<double, string> _format;
+    private readonly bool _watched;
 
     public string Title { get; }
     public string Explanation { get; }
@@ -27,12 +28,21 @@ public partial class MetricRow : ObservableObject
     [ObservableProperty] private double _bandHigh;
     [ObservableProperty] private bool _hasBand;
 
-    public MetricRow(string title, string explanation, BaselineTracker tracker, Func<double, string> format)
+    /// <param name="watched">False for a metric that is shown but never raises the "outside its normal range" warning.</param>
+    public MetricRow(string title, string explanation, BaselineTracker tracker, Func<double, string> format, bool watched = true)
     {
         Title = title;
         Explanation = explanation;
         _tracker = tracker;
         _format = format;
+        _watched = watched;
+    }
+
+    /// <summary>Shows a reading that says nothing about normal running (nobody connected), without recording it.</summary>
+    public void Idle(double v, string status)
+    {
+        Value = _format(v);
+        Status = status;
     }
 
     public void Add(double v)
@@ -45,7 +55,7 @@ public partial class MetricRow : ObservableObject
     {
         Value = _tracker.Latest is { } v ? _format(v) : "—";
         Status = _tracker.Status(_format);
-        Departed = _tracker.IsDeparted;
+        Departed = _watched && _tracker.IsDeparted;
         History = _tracker.Samples();
         if (_tracker.Band() is { } band)
         {
@@ -75,22 +85,36 @@ public partial class PerformanceViewModel : ObservableObject
     public MetricRow Memory { get; } = new("Engine memory", "Working set of the server process. The number that gave the game away when the launcher ran away with 20 GB.",
         new BaselineTracker("workingSetMb", lowIsBad: false), v => v >= 1024 ? $"{v / 1024:0.00} GB" : $"{v:0} MB");
 
+    // Not watched: traffic follows how many players are on and what they are doing, so a rise is not a fault.
+    public MetricRow Upload { get; } = new("Upload", "Data the server sends to players, all of them together. This is the figure to hold against your connection's upload speed. Read from the network library's own running totals, so measuring it costs the server nothing.",
+        new BaselineTracker("uploadKbps", lowIsBad: false), FormatRate, watched: false);
+
+    public MetricRow Download { get; } = new("Download", "Data the server receives from players, all of them together.",
+        new BaselineTracker("downloadKbps", lowIsBad: false), FormatRate, watched: false);
+
     public IReadOnlyList<MetricRow> Metrics { get; }
+
+    /// <summary>A rate in kilobits per second, as people read connection speeds: 850 kbit/s, 1.25 Mbit/s.</summary>
+    internal static string FormatRate(double kbps) => kbps >= 1000 ? $"{kbps / 1000:0.00} Mbit/s" : $"{kbps:0} kbit/s";
+
+    internal static string FormatData(double megabytes) => megabytes >= 1000 ? $"{megabytes / 1000:0.00} GB" : $"{megabytes:0.0} MB";
 
     [ObservableProperty] private string _campaignMode = "—";
     [ObservableProperty] private string _players = "—";
     [ObservableProperty] private string _playersNote = "Enable Settings sync to see the player count.";
     [ObservableProperty] private string _sessionState = "Not running.";
+    [ObservableProperty] private string _dataTotals = "—";
 
     private DateTimeOffset? _sessionStart;
     private readonly List<string> _departures = [];
 
-    public PerformanceViewModel() => Metrics = [TickRate, WorstFrame, Cpu, Memory];
+    public PerformanceViewModel() => Metrics = [TickRate, WorstFrame, Cpu, Memory, Upload, Download];
 
     public void SessionStarted()
     {
         _sessionStart = DateTimeOffset.Now;
         _departures.Clear();
+        DataTotals = "—";
         SessionState = "Warming up — the first samples after a launch are world load, not normal running.";
     }
 
@@ -118,8 +142,30 @@ public partial class PerformanceViewModel : ObservableObject
                     PlayersNote = n == 0 ? "Nobody connected — a quiet server ticks differently to a busy one." : "";
                 }
                 break;
+            case PerfKind.Net:
+                ApplyNet(sample);
+                break;
         }
         UpdateSessionState();
+    }
+
+    private void ApplyNet(PerfSample sample)
+    {
+        var peers = sample.Count("peers");
+        if (peers is { } n)
+        {
+            Players = n.ToString();
+            PlayersNote = n == 0 ? "Nobody connected — a quiet server ticks differently to a busy one." : "";
+        }
+        // With nobody connected the rates are zero. Recording that would make zero the normal range.
+        foreach (var (row, key) in new[] { (Upload, "upKbps"), (Download, "downKbps") })
+        {
+            if (sample.Number(key) is not { } rate) continue;
+            if (peers == 0) row.Idle(rate, "Nobody connected.");
+            else Track(row, rate);
+        }
+        if (sample.Number("sentMb") is { } sent && sample.Number("receivedMb") is { } received)
+            DataTotals = $"{FormatData(sent)} sent, {FormatData(received)} received";
     }
 
     public void Apply(ResourceSample sample)

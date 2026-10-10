@@ -8,6 +8,8 @@ public enum PerfKind
     Tick,
     /// <summary>Connected players, from the Coop adapter when Settings sync is on.</summary>
     Players,
+    /// <summary>Network traffic of the session, from the Coop adapter when Settings sync is on.</summary>
+    Net,
     /// <summary>Unrecognised kind; kept rather than dropped so a newer module can talk to an older launcher.</summary>
     Unknown,
 }
@@ -50,6 +52,7 @@ public static class PerfLineParser
         {
             "tick" => PerfKind.Tick,
             "players" => PerfKind.Players,
+            "net" => PerfKind.Net,
             _ => PerfKind.Unknown,
         };
 

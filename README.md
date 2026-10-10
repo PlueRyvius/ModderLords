@@ -343,7 +343,8 @@ you can check what Launch client would do without launching anything.
 ## Performance
 
 The **Performance** tab shows how the server is running: tick rate, the worst single frame in each window, the
-engine process's CPU share and memory, plus whether campaign time is actually moving.
+engine process's CPU share and memory, how much data the server sends and receives, plus whether campaign time is
+actually moving.
 
 ![The Performance tab: tick rate, worst frame, engine CPU and memory, each judged against this session's own normal range rather than fixed thresholds](docs/images/performance-tab.png)
 
@@ -357,6 +358,17 @@ Measuring is deliberately cheap. The server counts frames in a few variables and
 CPU and memory are read by the launcher watching the process, which costs the server nothing at all. Those two are
 the numbers that would have shown v0.8.3's runaway long before the stutter was noticeable. Tick rate needs the
 compat guards module (on by default); the player count needs Settings sync, and the tab says so when it is missing.
+
+**Upload** and **Download** are the server's traffic with all players together, in kbit/s or Mbit/s, and the line
+above the meters adds how much data the session has moved in total. Upload is the one to hold against your
+connection's upload speed. They also need Settings sync.
+
+- Nothing inspects packets. Coop's network library keeps running totals of what it sends and receives; the server
+  reads those every ten seconds and prints one line.
+- The figures include an allowance for each packet's IP and UDP headers, so they are close to what a router shows.
+- They cover Coop's game traffic only, not Steam or anything else the machine is doing.
+- Traffic follows how many players are on and what they are doing, so these two meters show their usual range but
+  never raise the "outside the normal range" warning. With nobody connected they read zero and are not recorded.
 
 Each session's summary is written to `%LOCALAPPDATA%\ModderLords\perf\` so real thresholds can be worked out later
 from real data.
