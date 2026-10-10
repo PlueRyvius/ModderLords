@@ -240,6 +240,8 @@ public partial class CharacterEditorViewModel : ObservableObject
         foreach (var v in Values.Where(v => v.IsChanged))
             yield return v.Id switch
             {
+                "age" => HeroEdits.Age(v.Value),
+                "level" => HeroEdits.Level(v.Value),
                 "gold" => HeroEdits.Gold(v.Value),
                 "hp" => HeroEdits.HitPoints(v.Value),
                 "unspent_attr" => HeroEdits.UnspentAttributePoints(v.Value),
@@ -266,6 +268,8 @@ public partial class CharacterEditorViewModel : ObservableObject
         PerkCount = hero.Perks;
 
         Values.Clear();
+        Values.Add(new EditValue("age", "Age", hero.Age, 0, hero.MaxAge));
+        Values.Add(new EditValue("level", "Level", hero.Level, 1, hero.MaxLevel));
         Values.Add(new EditValue("gold", "Gold", hero.Gold, 0, int.MaxValue));
         Values.Add(new EditValue("hp", "Hit points", hero.HitPoints, 1, Math.Max(1, hero.MaxHitPoints)));
         Values.Add(new EditValue("unspent_attr", "Unspent attribute points", hero.UnspentAttributePoints, 0, 1000));

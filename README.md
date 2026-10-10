@@ -539,7 +539,7 @@ server again.
 in a battle or a siege), their Steam id and the address they connected from. The list updates by itself when someone
 joins or leaves.
 
-- **Edit…** opens the selected player's character: name, gold, hit points, unspent attribute and focus points,
+- **Edit…** opens the selected player's character: name, age, level, gold, hit points, unspent attribute and focus points,
   every attribute, skill (level and focus) and trait this world has, modded ones included. Type new values and press
   **Apply**; only what you changed is sent, the server checks every value against the game's own limits before it
   changes any, and the player's game picks the change up through Coop's own sync. Skills are set to exactly the value
