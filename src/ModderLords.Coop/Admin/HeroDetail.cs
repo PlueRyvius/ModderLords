@@ -15,8 +15,10 @@ public sealed record HeroDetail
     public string Name { get; init; } = "";
     public string Culture { get; init; } = "";
     public int Age { get; init; }
+    public int MaxAge { get; init; }
     public bool Female { get; init; }
     public int Level { get; init; }
+    public int MaxLevel { get; init; }
     public int Gold { get; init; }
     public int HitPoints { get; init; }
     public int MaxHitPoints { get; init; }
@@ -45,8 +47,10 @@ public sealed record HeroDetail
             Name = Str(r, "name"),
             Culture = Str(r, "culture"),
             Age = Int(r, "age"),
+            MaxAge = Int(r, "maxAge"),
             Female = r.TryGetProperty("female", out var f) && f.ValueKind == JsonValueKind.True,
             Level = Int(r, "level"),
+            MaxLevel = Int(r, "maxLevel"),
             Gold = Int(r, "gold"),
             HitPoints = Int(r, "hp"),
             MaxHitPoints = Int(r, "maxHp"),
@@ -82,6 +86,8 @@ public sealed record HeroDetail
 /// </summary>
 public static class HeroEdits
 {
+    public static string Age(int value) => "age=" + N(value);
+    public static string Level(int value) => "level=" + N(value);
     public static string Gold(int value) => "gold=" + N(value);
     public static string HitPoints(int value) => "hp=" + N(value);
     public static string UnspentAttributePoints(int value) => "unspent_attr=" + N(value);

@@ -16,7 +16,7 @@
     <DockPanel Margin="10">
         <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,4" />
         <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
-                   Text="Changes are made on the running server and reach the player's game through Coop's own sync. Skills are set to exactly the value typed and do not change the character's level. Edits are refused while the player is in a battle or a siege." />
+                   Text="Changes are made on the running server and reach the player's game through Coop's own sync. Skill values do not change the character's level; set Level separately if needed. Edits are refused while the player is in a battle or a siege." />
         <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="Reload" Command="{Binding ReloadCommand}" MinWidth="80" Margin="4,0" />

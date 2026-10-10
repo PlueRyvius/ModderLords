@@ -6,6 +6,8 @@ namespace ModderLords.CompatSync.Coop.Admin;
 /// <summary>What one edit changes.</summary>
 public enum HeroEditKind
 {
+    Age,
+    Level,
     Gold,
     HitPoints,
     UnspentAttributePoints,
@@ -30,7 +32,7 @@ public sealed class HeroEdit
 
 /// <summary>
 /// The edits <c>modderlords.edit &lt;req&gt; &lt;steam id&gt; &lt;token&gt;...</c> takes, one token each:
-/// <c>gold=N</c>, <c>hp=N</c>, <c>unspent_attr=N</c>, <c>unspent_focus=N</c>, <c>attr.&lt;id&gt;=N</c>,
+/// <c>age=N</c>, <c>level=N</c>, <c>gold=N</c>, <c>hp=N</c>, <c>unspent_attr=N</c>, <c>unspent_focus=N</c>, <c>attr.&lt;id&gt;=N</c>,
 /// <c>focus.&lt;skill id&gt;=N</c>, <c>skill.&lt;skill id&gt;=N</c>, <c>trait.&lt;id&gt;=N</c>. Every value is the new value,
 /// never a difference, so sending the same edit twice does the same thing.
 /// <para>No game types here: the launcher's tests compile this file to check both ends agree.</para>
@@ -42,6 +44,8 @@ public static class HeroEditWire
         var v = value.ToString(CultureInfo.InvariantCulture);
         return kind switch
         {
+            HeroEditKind.Age => "age=" + v,
+            HeroEditKind.Level => "level=" + v,
             HeroEditKind.Gold => "gold=" + v,
             HeroEditKind.HitPoints => "hp=" + v,
             HeroEditKind.UnspentAttributePoints => "unspent_attr=" + v,
@@ -70,6 +74,8 @@ public static class HeroEditWire
 
         switch (key)
         {
+            case "age": edit = new HeroEdit(HeroEditKind.Age, "", value); return true;
+            case "level": edit = new HeroEdit(HeroEditKind.Level, "", value); return true;
             case "gold": edit = new HeroEdit(HeroEditKind.Gold, "", value); return true;
             case "hp": edit = new HeroEdit(HeroEditKind.HitPoints, "", value); return true;
             case "unspent_attr": edit = new HeroEdit(HeroEditKind.UnspentAttributePoints, "", value); return true;
