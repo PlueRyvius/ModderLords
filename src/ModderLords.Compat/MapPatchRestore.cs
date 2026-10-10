@@ -80,6 +80,11 @@ internal static class MapPatchRestore
                  || raw.Equals("no", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Whether the native index-map read is attempted for this map mod: TAOM's map, or any map when forced.</summary>
+    internal static bool ReadsIndexMapFor(string mapModuleId, string? variable) =>
+        mapModuleId.Equals("TAOM_Map", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(variable?.Trim(), "force", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Called on the tick. The index map cannot be read at install time: the native scene has to have finished
     /// loading its terrain first, which is well after modules are set up.
@@ -102,6 +107,18 @@ internal static class MapPatchRestore
             {
                 _armed = true;
                 Log.Info("map patch restore: the stock map is being served; nothing to restore");
+                return;
+            }
+
+            // Measured 2026-10-10: it does not return on Empires of Europe 1100's map either. One core spun for ten
+            // minutes on this line during world creation and the loading step never advanced. TAOM's map is the only
+            // one it has been seen to return on, so it is the only one read unless the switch asks for it by name.
+            if (!ReadsIndexMapFor(HeadlessMapExperiment.MapModuleId, Environment.GetEnvironmentVariable(Variable)))
+            {
+                _armed = true;
+                Log.Warn($"map patch restore: not reading the battle scene index map for {HeadlessMapExperiment.MapModuleId}'s map. " +
+                         "The engine call that reads it is only known to return on TAOM's map and hangs the server on others. " +
+                         "Every field battle will load the same battle terrain. Set " + Variable + "=force to try the read anyway.");
                 return;
             }
 

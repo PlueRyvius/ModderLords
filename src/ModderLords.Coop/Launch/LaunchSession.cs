@@ -331,11 +331,7 @@ public sealed class LaunchSession
         }
 
         var extraEnv = new Dictionary<string, string>();
-        if (headlessMaps.TryGetValue("TAOM_Map", out var mapPath))
-        {
-            extraEnv["MODDERLORDS_HEADLESS_MAP"] = Path.Combine(mapPath, "modderlords-map.xml");
-            extraEnv["MODDERLORDS_HEADLESS_MAP_MODULE"] = "TAOM_Map";
-        }
+        foreach (var kv in HeadlessMapEnvironment(headlessMaps)) extraEnv[kv.Key] = kv.Value;
         if (selections.Count > 0)
         {
             var hook = HookSetup.LocateHook();
@@ -480,9 +476,13 @@ public sealed class LaunchSession
     {
         var assets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var maps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (!applySideEffects || !TaomLaunchPolicy.IsTaom(selections.Select(s => s.Module.Id)))
-            return new HeadlessContent(assets, maps);
+        if (!applySideEffects) return new HeadlessContent(assets, maps);
         var generatedRoot = Path.Combine(overlayRoot, ".generated");
+        if (!TaomLaunchPolicy.IsTaom(selections.Select(s => s.Module.Id)))
+        {
+            PrepareMapModScene(generatedRoot, selections, maps, messages);
+            return new HeadlessContent(assets, maps);
+        }
         try
         {
             foreach (var selection in selections.Where(s => TaomLaunchPolicy.NeedsPreparation(s.Module.Id)))
@@ -515,6 +515,55 @@ public sealed class LaunchSession
             throw new InvalidOperationException("TAOM server preparation failed: " + ex.Message, ex);
         }
         return new HeadlessContent(assets, maps);
+    }
+
+    /// <summary>Selected mods that replace the campaign map: they ship their own <c>SceneObj\Main_map</c> scene.</summary>
+    public static IReadOnlyList<ModSelection> MapMods(IEnumerable<ModSelection> selections) =>
+        selections.Where(s => !s.Module.IsStock
+            && !s.Module.FolderName.Equals("SandBox", StringComparison.OrdinalIgnoreCase)
+            && File.Exists(Path.Combine(s.Module.FolderPath, "SceneObj", "Main_map", "scene.xscene"))).ToList();
+
+    /// <summary>
+    /// The same render-free map TAOM gets, for any other mod that replaces the campaign map. Without it the server
+    /// simulates that mod's world on the vanilla map: 848 x 848 terrain, vanilla borders and navmesh. Measured
+    /// 2026-10-10 with Empires of Europe 1100 (1696 x 1696): every party past 848 threw IndexOutOfRangeException in
+    /// DefaultMapWeatherModel.GetWeatherEventInPosition on each movement tick, tens of thousands of times.
+    ///
+    /// A scene this cannot prepare is a warning, not a refusal: the launch is then no worse than it was before.
+    /// </summary>
+    private static void PrepareMapModScene(string generatedRoot, IReadOnlyList<ModSelection> selections,
+        Dictionary<string, string> maps, List<string> messages)
+    {
+        var mapMods = MapMods(selections);
+        if (mapMods.Count == 0) return;
+        // Last in the list wins, as it does for the distance cache: the engine serves one Main_map.
+        var map = mapMods[^1];
+        if (mapMods.Count > 1)
+            messages.Add($"map: {mapMods.Count} mods ship a campaign map ({string.Join(", ", mapMods.Select(m => m.Module.Id))}); the server uses {map.Module.Id}'s");
+        try
+        {
+            var source = Path.Combine(map.Module.FolderPath, "SceneObj", "Main_map");
+            var projection = HeadlessMapProjection.Prepare(source, Path.Combine(generatedRoot, map.Module.Id, "Main_map"));
+            maps[map.Module.Id] = projection.OutputPath;
+            messages.Add($"map: {(projection.Reused ? "reusing the prepared" : "prepared a")} server copy of {map.Module.Id}'s campaign map");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Xml.XmlException or FormatException)
+        {
+            messages.Add($"WARNING {map.Module.Id} replaces the campaign map but its map could not be prepared for the server ({ex.Message}). "
+                + "The server will run this world on the vanilla map's size and paths, and parties outside that area will fail to move.");
+        }
+    }
+
+    /// <summary>What tells the server-side module which prepared map to serve. Empty when no mod replaces the map.</summary>
+    public static IReadOnlyDictionary<string, string> HeadlessMapEnvironment(IReadOnlyDictionary<string, string> mapPaths)
+    {
+        var env = new Dictionary<string, string>();
+        foreach (var kv in mapPaths)
+        {
+            env["MODDERLORDS_HEADLESS_MAP"] = Path.Combine(kv.Value, "modderlords-map.xml");
+            env["MODDERLORDS_HEADLESS_MAP_MODULE"] = kv.Key;
+        }
+        return env;
     }
 
     /// <summary>Creates the first phase of an automatic TAOM launch. It generates the campaign and exits; the caller

@@ -514,11 +514,7 @@ switch (cmd)
         }
 
         var extraEnv = new Dictionary<string, string>();
-        if (headlessContent.MapPaths.TryGetValue("TAOM_Map", out var headlessMapPath))
-        {
-            extraEnv["MODDERLORDS_HEADLESS_MAP"] = Path.Combine(headlessMapPath, "modderlords-map.xml");
-            extraEnv["MODDERLORDS_HEADLESS_MAP_MODULE"] = "TAOM_Map";
-        }
+        foreach (var kv in LaunchSession.HeadlessMapEnvironment(headlessContent.MapPaths)) extraEnv[kv.Key] = kv.Value;
         if (createWorld is not null)
         {
             try { SavePreparer.ValidateSaveName(createWorld); }
