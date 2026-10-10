@@ -45,6 +45,9 @@ internal static class FbEffects
         (typeof(ChangeKingdomAction), "ApplyInternal", 7, true),
         (typeof(Hero), "AddSkillXp", 2, false),
         (typeof(Alley), "SetOwner", 1, false),
+        // Fourberie also sets a relation outright ("now 50 with this gang leader"). Coop neither blocks nor sends that on
+        // a player's game, so the player saw a value the server never had, until the next change for that pair replaced it.
+        (typeof(CharacterRelationManager), "SetHeroRelation", 3, false),
     };
 
     /// <summary>Fourberie's own helper for the player's trait XP; replayed whole (Hero.MainHero is the player in scope).</summary>
@@ -83,7 +86,7 @@ internal static class FbEffects
         if (__originalMethod.Name == "Apply" && __originalMethod.DeclaringType == typeof(DestroyPartyAction) && ReferenceEquals(__args[0], PartyBase.MainParty)) return true;
         if (!FbRecordGate.TryEnter()) return true;
         __state = true;
-        if (EncodeCall(__originalMethod, __instance, __args) is not { } op) return true;
+        if (EncodeCall(__originalMethod, __instance, AsThisPlayer(__originalMethod, __args, Hero.MainHero)) is not { } op) return true;
         Pending.Add(op);
         _recorded++;
         return !entry.SkipLocally;
@@ -134,6 +137,25 @@ internal static class FbEffects
         if (!FbRecordGate.TryEnter()) return;
         FbRecordGate.Leave();
         Roster.Items(rosterElement.Item.StringId, rosterElement.ItemModifier?.StringId ?? "", number);
+    }
+
+    /// <summary>
+    /// The arguments to send for a call recorded on a player's game. Only a relation change with nobody named as its
+    /// first hero differs from what was passed: that hero becomes this player.
+    ///
+    /// Almost every Fourberie reward is ChangeRelationAction.ApplyPlayerRelation(gangLeader, n). Coop 0.1.6 rewrites that
+    /// call as ApplyInternal(ResolvedMainHero, gangLeader, n), and ResolvedMainHero is only ever set on the server, so on
+    /// a player's game the first hero arrives here as null. It was sent as null, and the server's Coop skips a relation
+    /// change it cannot name both heroes for, with one warning per pair. Gold and XP from the same task carried
+    /// Hero.MainHero and arrived, which is how a task could pay and still not improve the relation.
+    /// </summary>
+    internal static object?[] AsThisPlayer(MethodBase method, object?[] values, object? mainHero)
+    {
+        if (method.DeclaringType != typeof(ChangeRelationAction) || method.Name != "ApplyInternal") return values;
+        if (values.Length == 0 || values[0] != null || mainHero == null) return values;
+        var named = (object?[])values.Clone();
+        named[0] = mainHero;
+        return named;
     }
 
     /// <summary>A call as an op, the way the player's game sends it; null when an argument cannot be written.</summary>
@@ -283,7 +305,9 @@ internal static class FbEffects
         switch (method.DeclaringType?.Name, method.Name)
         {
             case ("GiveGoldAction", _): return values[4] is int gold && gold >= 0 && gold <= 10_000_000;
-            case ("ChangeRelationAction", _): return values[2] is int relation && Math.Abs(relation) <= 100;
+            // Both heroes or it is refused here and counted: Coop would skip it and this would still call it applied.
+            case ("ChangeRelationAction", _): return values[0] is Hero && values[1] is Hero && values[2] is int relation && Math.Abs(relation) <= 100;
+            case ("CharacterRelationManager", _): return values[0] is Hero && values[1] is Hero && values[2] is int value && Math.Abs(value) <= 100;
             case ("Hero", "AddSkillXp"): return values[1] is float xp && xp >= 0 && xp <= 100_000;
             case ("GainRenownAction", _): return values[1] is float renown && Math.Abs(renown) <= 10_000;
             case ("KillCharacterAction", _): return values[0] is Hero { IsAlive: true };

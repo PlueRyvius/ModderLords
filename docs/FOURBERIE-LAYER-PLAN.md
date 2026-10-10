@@ -234,6 +234,10 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
      player's own party destroying, which Coop already sends), war, teleports, renown, kingdom changes, skill XP,
      alley ownership, and Fourberie's trait helper. Renown and kingdom changes are not guarded by Coop on a player's
      game, so they are sent and skipped locally.
+   - **Relations name the player.** Fourberie pays most relation rewards through `ApplyPlayerRelation`, which Coop
+     rewrites to use a hero it only knows on the server. On a player's game that hero is null, so the recorded call
+     is sent with this player as its first hero. A relation change that reaches the server naming nobody is refused
+     and counted. Relations Fourberie sets outright (`CharacterRelationManager.SetHeroRelation`) are carried too.
    - **Deltas:** settlement security, loyalty, prosperity, food and militia; clan influence.
    - **The player's own party:** troops and items, netted per troop and item and sent only outside missions, so
      Fourberie's take-out-and-put-back around a fight sends nothing.

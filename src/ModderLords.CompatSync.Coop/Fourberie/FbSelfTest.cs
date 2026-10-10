@@ -230,8 +230,15 @@ internal static class FbSelfTest
         var (gold, relation, xp, security) = (a.Gold, a.GetRelation(other), a.GetSkillValue(roguery) * 0 + a.HeroDeveloper.GetSkillXpProgress(roguery), town.Town.Security);
         var troops = party.MemberRoster.GetTroopCount(troop);
         var grainBefore = party.ItemRoster.GetItemNumber(grain);
+        // Two more lords, for the relation rewards: one changed the way a task pays, one set outright.
+        var others = Hero.AllAliveHeroes.Where(h => h.IsLord && h != a && h != other && h.Clan != a.Clan && h.Clan != other.Clan).Take(2).ToList();
+        var (paid, set) = (others[0], others[1]);
+        var paidBefore = a.GetRelation(paid);
 
         MethodBase Key(string key) => FbEffects.MethodFor(key) ?? throw new InvalidOperationException(key + " not bound");
+        var relationCall = Key("TaleWorlds.CampaignSystem.Actions.ChangeRelationAction::ApplyInternal");
+        // What a player's game has in hand for ApplyPlayerRelation: Coop passes nobody as the first hero there.
+        var asPaid = new object?[] { null, paid, -3, false, default(ChangeRelationAction.ChangeRelationDetail) };
         var ops = new List<FbEffectWire.Op?>
         {
             FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Actions.GiveGoldAction::ApplyInternal"), null, new object?[] { other, null, a, null, 500, false, "" }),
@@ -244,6 +251,10 @@ internal static class FbSelfTest
             new FbEffectWire.Op { Kind = "troops", Key = "m", Target = troop.StringId, Amount = 6 },
             new FbEffectWire.Op { Kind = "items", Target = grain.StringId, Amount = 9 },
             FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.Actions.GiveGoldAction::ApplyInternal"), null, new object?[] { other, null, a, null, 20_000_000, false, "" }),
+            FbEffects.EncodeCall(relationCall, null, FbEffects.AsThisPlayer(relationCall, asPaid, a)),
+            FbEffects.EncodeCall(Key("TaleWorlds.CampaignSystem.CharacterRelationManager::SetHeroRelation"), null, new object?[] { a, set, 37 }),
+            // Sent with nobody named, as it was before: refused and counted, never called applied.
+            FbEffects.EncodeCall(relationCall, null, asPaid),
         };
         Expect(ops.All(o => o != null), "every recorded change could be written for the wire");
         var refusedBefore = FbEffects.Refused;
@@ -255,7 +266,9 @@ internal static class FbSelfTest
         Expect(Math.Abs(town.Town.Security - (security - 4)) < 0.01f, $"{town.StringId}'s security dropped by the recorded amount ({security} -> {town.Town.Security})");
         Expect(party.MemberRoster.GetTroopCount(troop) - troops == 6, "troops the player gained reached their party on the server");
         Expect(party.ItemRoster.GetItemNumber(grain) - grainBefore == 9, "loot reached their party on the server");
-        Expect(FbEffects.Refused - refusedBefore == 1 && a.Gold - gold == 500, "a 20,000,000 gold transfer was refused, the rest applied");
+        Expect(a.GetRelation(paid) == Math.Max(-100, paidBefore - 3), $"a relation paid to \"the player\" reached the server as this player's ({paidBefore} -> {a.GetRelation(paid)})");
+        Expect(CharacterRelationManager.GetHeroRelation(a, set) == 37, $"a relation Fourberie sets outright reached the server ({CharacterRelationManager.GetHeroRelation(a, set)})");
+        Expect(FbEffects.Refused - refusedBefore == 2 && a.Gold - gold == 500, "a 20,000,000 gold transfer and a relation change naming nobody were refused, the rest applied");
     }
 
     // ---- models (phase 5) ----------------------------------------------------------------------------------------
