@@ -73,8 +73,9 @@ public partial class SkillEdit : ObservableObject
 }
 
 /// <summary>
-/// The character editor: one player's hero, read from the running server and changed there. Only the values the host
-/// actually changed are sent, as new values, and the server checks every one before applying any.
+/// The character editor: one hero (a player's own, or a companion or family member of a player's clan), read from the
+/// running server and changed there. Only the values the host actually changed are sent, as new values, and the server
+/// checks every one before applying any.
 /// </summary>
 public partial class CharacterEditorViewModel : ObservableObject
 {
@@ -83,17 +84,37 @@ public partial class CharacterEditorViewModel : ObservableObject
     private readonly AdminClient _admin;
     private readonly Func<bool> _serving;
 
-    public CharacterEditorViewModel(AdminClient admin, string steamId, string name, Func<bool> serving)
+    /// <param name="target">A player's Steam id, or <see cref="HeroTargets.Hero"/> for any other hero of a player's clan.</param>
+    public CharacterEditorViewModel(AdminClient admin, string target, string name, Func<bool> serving)
     {
         _admin = admin;
         _serving = serving;
-        SteamId = steamId;
+        Target = target;
         _title = "Edit " + name;
         TraitsView = CollectionViewSource.GetDefaultView(Traits);
         TraitsView.Filter = o => ShowHiddenTraits || o is not EditValue t || t.Detail.Length == 0;
     }
 
-    public string SteamId { get; }
+    public string Target { get; }
+
+    /// <summary>Asks before taking every perk away. Replaced in tests, which have no message box.</summary>
+    public Func<string, bool> Confirm { get; set; } = message =>
+        System.Windows.MessageBox.Show(message, "Reset perks", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Warning) == System.Windows.MessageBoxResult.OK;
+
+    /// <summary>The hero's name as typed here; sent only when it differs from <see cref="OriginalName"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNameChanged))]
+    private string _name = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNameChanged))]
+    private string _originalName = "";
+
+    public bool IsNameChanged => Name.Trim() != OriginalName;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ResetPerksCommand))]
+    private int _perkCount;
 
     public ObservableCollection<EditValue> Values { get; } = new();
     public ObservableCollection<EditValue> Attributes { get; } = new();
@@ -109,10 +130,12 @@ public partial class CharacterEditorViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
     [NotifyCanExecuteChangedFor(nameof(ReloadCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResetPerksCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResetPerksCommand))]
     private bool _loaded;
 
     partial void OnShowHiddenTraitsChanged(bool value) => TraitsView.Refresh();
@@ -126,7 +149,7 @@ public partial class CharacterEditorViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var reply = await _admin.RequestAsync("hero", [SteamId], ReplyTimeout);
+            var reply = await _admin.RequestAsync("hero", [Target], ReplyTimeout);
             if (!reply.Ok) { Status = "The server could not read this hero: " + reply.Error; return; }
             Show(HeroDetail.From(reply));
             Status = "Change any value, then Apply. Values are sent as new values; the server checks every one before changing any.";
@@ -146,19 +169,66 @@ public partial class CharacterEditorViewModel : ObservableObject
             .ToList();
         if (outOfRange.Count > 0) { Status = "Not sent: " + string.Join("; ", outOfRange) + "."; return; }
 
+        var rename = IsNameChanged ? Name.Trim() : null;
+        if (rename is not null && HeroNames.Problem(rename) is { } problem) { Status = "Not sent: " + problem; return; }
         var tokens = Tokens().ToList();
-        if (tokens.Count == 0) { Status = "Nothing has changed."; return; }
+        if (tokens.Count == 0 && rename is null) { Status = "Nothing has changed."; return; }
         if (!_serving()) { Status = "The server is not running."; return; }
         IsBusy = true;
         try
         {
-            var reply = await _admin.RequestAsync("edit", new[] { SteamId }.Concat(tokens), ReplyTimeout);
-            if (!reply.Ok) { Status = "Nothing was changed: " + reply.Error; return; }
+            // The values first: they are checked as a whole, so a refusal leaves the name as it was too.
+            var applied = 0;
+            var refused = new List<string>();
+            if (tokens.Count > 0)
+            {
+                var reply = await _admin.RequestAsync("edit", new[] { Target }.Concat(tokens), ReplyTimeout);
+                if (!reply.Ok) { Status = "Nothing was changed: " + reply.Error; return; }
+                var detail = HeroDetail.From(reply);
+                applied += detail.Changes.Count;
+                refused.AddRange(detail.NotApplied);
+                Show(detail);
+            }
+            if (rename is not null)
+            {
+                var reply = await _admin.RequestAsync("rename", [Target, HeroNames.Encode(rename)], ReplyTimeout);
+                if (!reply.Ok)
+                {
+                    Name = rename;
+                    Status = (applied > 0 ? $"Applied {applied} change(s), but the name was not changed: " : "The name was not changed: ") + reply.Error;
+                    return;
+                }
+                var detail = HeroDetail.From(reply);
+                applied += detail.Changes.Count;
+                Show(detail);
+            }
+            Status = refused.Count > 0
+                ? $"Applied {applied}; the game refused {refused.Count}: {string.Join("; ", refused)}"
+                : $"Applied {applied} change(s). The player's game picks them up through Coop's own sync.";
+        }
+        catch (Exception ex) { Status = ex.Message; }
+        finally { IsBusy = false; }
+    }
+
+    private bool CanResetPerks() => Loaded && !IsBusy && PerkCount > 0;
+
+    /// <summary>Takes away every perk the hero has chosen, so they can be chosen again in the game's character screen.</summary>
+    [RelayCommand(CanExecute = nameof(CanResetPerks))]
+    private async Task ResetPerks()
+    {
+        if (!_serving()) { Status = "The server is not running."; return; }
+        if (!Confirm($"Take away all {PerkCount} perk(s) {OriginalName} has chosen?\n\nSkills, focus and attributes stay as they are. "
+                + "The perks can be chosen again in the game's character screen. Values changed here and not yet applied are discarded.")) return;
+        IsBusy = true;
+        try
+        {
+            var reply = await _admin.RequestAsync("resetperks", [Target], ReplyTimeout);
+            if (!reply.Ok) { Status = "No perk was taken away: " + reply.Error; return; }
             var detail = HeroDetail.From(reply);
             Show(detail);
             Status = detail.NotApplied.Count > 0
-                ? $"Applied {detail.Changes.Count}; the game refused {detail.NotApplied.Count}: {string.Join("; ", detail.NotApplied)}"
-                : $"Applied {detail.Changes.Count} change(s). The player's game picks them up through Coop's own sync.";
+                ? "Perks were reset, but " + string.Join("; ", detail.NotApplied) + "."
+                : "All perks were taken away. They can be chosen again in the game's character screen.";
         }
         catch (Exception ex) { Status = ex.Message; }
         finally { IsBusy = false; }
@@ -188,8 +258,12 @@ public partial class CharacterEditorViewModel : ObservableObject
     internal void Show(HeroDetail hero)
     {
         Title = $"Edit {hero.Name}";
-        Summary = $"{hero.Name}: level {hero.Level}, {(hero.Female ? "female" : "male")}, {hero.Age}, {hero.Culture}. {hero.Perks} perk(s). Steam id {hero.SteamId}."
+        Summary = $"{hero.Name}: level {hero.Level}, {(hero.Female ? "female" : "male")}, {hero.Age}, {hero.Culture}. {hero.Perks} perk(s)."
+            + (hero.SteamId.Length > 0 ? $" Steam id {hero.SteamId}." : "")
             + (hero.Busy.Length > 0 ? $" Now {hero.Busy}: edits are refused until that is over." : "");
+        OriginalName = hero.Name;
+        Name = hero.Name;
+        PerkCount = hero.Perks;
 
         Values.Clear();
         Values.Add(new EditValue("gold", "Gold", hero.Gold, 0, int.MaxValue));

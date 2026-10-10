@@ -66,6 +66,54 @@ public class CharacterEditorTests
     });
 
     [Fact]
+    public void A_new_name_is_sent_as_its_own_command_after_the_values() => Sta(() =>
+    {
+        var server = new FakeServer();
+        var vm = new CharacterEditorViewModel(server.Client, "7656", "Aldric", () => true);
+        vm.ReloadCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("Aldric", vm.Name);
+        Assert.False(vm.IsNameChanged);
+
+        vm.Name = " Aldric the Bold ";
+        vm.Values.Single(v => v.Id == "gold").Value = 5000;
+        vm.ApplyCommand.ExecuteAsync(null).Pump();
+
+        Assert.Equal("modderlords.edit r2 7656 gold=5000", server.Sent[^2]);
+        Assert.Equal("modderlords.rename r3 7656 " + HeroNames.Encode("Aldric the Bold"), server.Sent[^1]);
+    });
+
+    [Fact]
+    public void A_name_the_game_could_not_show_is_not_sent() => Sta(() =>
+    {
+        var server = new FakeServer();
+        var vm = new CharacterEditorViewModel(server.Client, "7656", "Aldric", () => true);
+        vm.ReloadCommand.ExecuteAsync(null).Pump();
+
+        vm.Name = "   ";
+        vm.ApplyCommand.ExecuteAsync(null).Pump();
+        Assert.Single(server.Sent); // just the load
+        Assert.Contains("cannot be empty", vm.Status);
+    });
+
+    [Fact]
+    public void Perks_are_reset_only_after_the_host_confirms_and_a_companion_is_named_by_hero_id() => Sta(() =>
+    {
+        var server = new FakeServer();
+        var vm = new CharacterEditorViewModel(server.Client, HeroTargets.Hero("wanderer_3"), "Bera", () => true);
+        vm.ReloadCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("modderlords.hero r1 hero:wanderer_3", server.Sent[^1]);
+        Assert.Equal(7, vm.PerkCount);
+
+        vm.Confirm = _ => false;
+        vm.ResetPerksCommand.ExecuteAsync(null).Pump();
+        Assert.Single(server.Sent);
+
+        vm.Confirm = _ => true;
+        vm.ResetPerksCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("modderlords.resetperks r2 hero:wanderer_3", server.Sent[^1]);
+    });
+
+    [Fact]
     public void A_value_out_of_range_is_not_sent() => Sta(() =>
     {
         var server = new FakeServer();

@@ -12,6 +12,7 @@ using TaleWorlds.CampaignSystem.Extensions;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
+using TaleWorlds.Localization;
 
 namespace ModderLords.CompatSync.Coop.Admin;
 
@@ -30,25 +31,28 @@ namespace ModderLords.CompatSync.Coop.Admin;
 /// </summary>
 internal static class HeroAdmin
 {
-    /// <summary><c>modderlords.hero &lt;req&gt; &lt;steam id&gt;</c>: everything the editor shows for that player's hero.</summary>
+    /// <summary>
+    /// <c>modderlords.hero &lt;req&gt; &lt;target&gt;</c>: everything the editor shows for that hero. The target is a player's
+    /// Steam id, or <c>hero:&lt;id&gt;</c> for a companion or family member of a player's clan (<see cref="HeroTargetWire"/>).
+    /// </summary>
     [CommandLineFunctionality.CommandLineArgumentFunction("hero", AdminWire.CommandGroup)]
     public static string HeroCommand(List<string> args) => PlayerAdmin.Run("hero", args, req =>
     {
-        if (args.Count < 2) return AdminWire.Reply("hero", req, "Usage: modderlords.hero <request id> <steam id>");
-        if (Find(args[1], out var player, out var hero, out var party) is { } missing) return AdminWire.Reply("hero", req, missing);
-        return AdminWire.Reply("hero", req, null, Describe(player!, hero!, party));
+        if (args.Count < 2) return AdminWire.Reply("hero", req, "Usage: modderlords.hero <request id> <steam id | hero:id>");
+        if (FindTarget(args[1], out var steamId, out var hero, out var party) is { } missing) return AdminWire.Reply("hero", req, missing);
+        return AdminWire.Reply("hero", req, null, Describe(steamId, hero!, party));
     });
 
     /// <summary>
-    /// <c>modderlords.edit &lt;req&gt; &lt;steam id&gt; &lt;token&gt;...</c> (<see cref="HeroEditWire"/>). Every token is checked
+    /// <c>modderlords.edit &lt;req&gt; &lt;target&gt; &lt;token&gt;...</c> (<see cref="HeroEditWire"/>). Every token is checked
     /// before any is applied, so a bad one changes nothing. Refused while the player's party is in a battle or a siege,
     /// where a mission holds its own copy of the hero.
     /// </summary>
     [CommandLineFunctionality.CommandLineArgumentFunction("edit", AdminWire.CommandGroup)]
     public static string EditCommand(List<string> args) => PlayerAdmin.Run("edit", args, req =>
     {
-        if (args.Count < 3) return AdminWire.Reply("edit", req, "Usage: modderlords.edit <request id> <steam id> <key=value>...");
-        if (Find(args[1], out var player, out var hero, out var party) is { } missing) return AdminWire.Reply("edit", req, missing);
+        if (args.Count < 3) return AdminWire.Reply("edit", req, "Usage: modderlords.edit <request id> <steam id | hero:id> <key=value>...");
+        if (FindTarget(args[1], out var steamId, out var hero, out var party) is { } missing) return AdminWire.Reply("edit", req, missing);
         var busy = PlayerAdmin.BusyReason(party);
         if (busy.Length > 0) return AdminWire.Reply("edit", req, $"{hero!.Name} is {busy}. Edit them once it is over.");
 
@@ -72,15 +76,138 @@ internal static class HeroAdmin
             if (after == edit.Value) changes.Add(line);
             else notApplied.Add($"{line} (asked for {edit.Value})");
         }
-        Log.Info($"host edit of {hero!.Name} ({player!.ControllerId}): "
+        Log.Info($"host edit of {hero!.Name} ({args[1]}): "
             + (changes.Count == 0 ? "nothing to change" : string.Join("; ", changes.Cast<string>()))
             + (notApplied.Count > 0 ? "; NOT applied: " + string.Join("; ", notApplied.Cast<string>()) : ""));
 
-        var data = Describe(player, hero, party);
+        var data = Describe(steamId, hero, party);
         data["changes"] = changes;
         data["notApplied"] = notApplied;
         return AdminWire.Reply("edit", req, null, data);
     });
+
+    /// <summary>
+    /// <c>modderlords.rename &lt;req&gt; &lt;target&gt; &lt;name&gt;</c> (<see cref="HeroNameWire"/>). Hero.SetName writes the
+    /// name fields inside Hero, where Coop intercepts both stores and sends them to every client.
+    /// </summary>
+    [CommandLineFunctionality.CommandLineArgumentFunction("rename", AdminWire.CommandGroup)]
+    public static string RenameCommand(List<string> args) => PlayerAdmin.Run("rename", args, req =>
+    {
+        if (args.Count < 3) return AdminWire.Reply("rename", req, "Usage: modderlords.rename <request id> <steam id | hero:id> <encoded name>");
+        if (!HeroNameWire.TryDecode(args[2], out var name, out var error)) return AdminWire.Reply("rename", req, error);
+        if (FindTarget(args[1], out var steamId, out var hero, out var party) is { } missing) return AdminWire.Reply("rename", req, missing);
+        var busy = PlayerAdmin.BusyReason(party);
+        if (busy.Length > 0) return AdminWire.Reply("rename", req, $"{hero!.Name} is {busy}. Rename them once it is over.");
+
+        var before = hero!.Name?.ToString() ?? "";
+        var changes = new List<object?>();
+        if (before != name)
+        {
+            hero.SetName(new TextObject(name), new TextObject(name));
+            changes.Add($"Name {before} -> {hero.Name}");
+            Log.Info($"host renamed {before} ({args[1]}) to {hero.Name}");
+        }
+        var data = Describe(steamId, hero, party);
+        data["changes"] = changes;
+        data["notApplied"] = new List<object?>();
+        return AdminWire.Reply("rename", req, null, data);
+    });
+
+    /// <summary>
+    /// <c>modderlords.resetperks &lt;req&gt; &lt;target&gt;</c>: takes away every perk the hero has chosen, so they can be
+    /// chosen again in the game's character screen. Skills, focus and attributes are left as they are.
+    /// </summary>
+    [CommandLineFunctionality.CommandLineArgumentFunction("resetperks", AdminWire.CommandGroup)]
+    public static string ResetPerksCommand(List<string> args) => PlayerAdmin.Run("resetperks", args, req =>
+    {
+        if (args.Count < 2) return AdminWire.Reply("resetperks", req, "Usage: modderlords.resetperks <request id> <steam id | hero:id>");
+        if (FindTarget(args[1], out var steamId, out var hero, out var party) is { } missing) return AdminWire.Reply("resetperks", req, missing);
+        var busy = PlayerAdmin.BusyReason(party);
+        if (busy.Length > 0) return AdminWire.Reply("resetperks", req, $"{hero!.Name} is {busy}. Reset their perks once it is over.");
+        if (CharacterTransfer.SetPerkValueInternal is not { } setPerk)
+            return AdminWire.Reply("resetperks", req, "This game version has no Hero.SetPerkValueInternal, so a perk cannot be taken away.");
+
+        var taken = 0;
+        foreach (var perk in PerkObject.All.Where(p => hero!.GetPerkValue(p)).ToList())
+        {
+            setPerk.Invoke(hero, new object[] { perk, false });
+            if (!hero!.GetPerkValue(perk)) taken++;
+        }
+        // Perks can raise maximum hit points; without them the hero must not keep more than the new maximum.
+        if (hero!.HitPoints > hero.MaxHitPoints) hero.HitPoints = hero.MaxHitPoints;
+        var left = PerkObject.All.Count(p => hero.GetPerkValue(p));
+        Log.Info($"host reset the perks of {hero.Name} ({args[1]}): {taken} taken away, {left} left");
+
+        var data = Describe(steamId, hero, party);
+        data["changes"] = new List<object?> { $"Perks {taken + left} -> {left}" };
+        data["notApplied"] = left > 0 ? new List<object?> { $"{left} perk(s) could not be taken away" } : new List<object?>();
+        return AdminWire.Reply("resetperks", req, null, data);
+    });
+
+    /// <summary>
+    /// <c>modderlords.companions &lt;req&gt;</c>: every living hero of a player's clan other than the players themselves,
+    /// companions and family alike. Each can be edited as <c>hero:&lt;heroId&gt;</c>.
+    /// </summary>
+    [CommandLineFunctionality.CommandLineArgumentFunction("companions", AdminWire.CommandGroup)]
+    public static string CompanionsCommand(List<string> args) => PlayerAdmin.Run("companions", args, req =>
+    {
+        if (!ContainerProvider.TryResolve<IPlayerManager>(out var players)) return AdminWire.Reply("companions", req, "Coop's player registry is not available yet.");
+        var leads = PlayerLeads(players);
+        var playerHeroes = new HashSet<Hero>(leads);
+        var seen = new HashSet<Hero>();
+        var list = new List<object?>();
+        foreach (var lead in leads)
+        {
+            if (lead.Clan is not { } clan) continue;
+            foreach (var hero in clan.Heroes.Concat(clan.Companions))
+            {
+                if (hero is null || !hero.IsAlive || playerHeroes.Contains(hero) || !seen.Add(hero)) continue;
+                list.Add(new Dictionary<string, object?>
+                {
+                    ["heroId"] = hero.StringId,
+                    ["name"] = hero.Name?.ToString() ?? "",
+                    ["kind"] = hero.CompanionOf is not null ? "companion" : "family",
+                    ["owner"] = lead.Name?.ToString() ?? "",
+                    ["clan"] = clan.Name?.ToString() ?? "",
+                    ["level"] = hero.Level,
+                    ["age"] = (int)hero.Age,
+                    ["where"] = hero.PartyBelongedTo?.Name?.ToString() ?? hero.CurrentSettlement?.Name?.ToString() ?? (hero.IsPrisoner ? "prisoner" : ""),
+                    ["busy"] = PlayerAdmin.BusyReason(hero.PartyBelongedTo),
+                });
+            }
+        }
+        return AdminWire.Reply("companions", req, null, new Dictionary<string, object?> { ["list"] = list });
+    });
+
+    /// <summary>The heroes the registered players play.</summary>
+    internal static List<Hero> PlayerLeads(IPlayerManager players) =>
+        players.Players.Where(p => p.ControllerId != "Server").Select(p => PlayerHeroes.HeroFor(p.HeroId)).Where(h => h is not null).Select(h => h!).ToList();
+
+    /// <summary>
+    /// The hero a command names: a player's own (by Steam id), or with <c>hero:&lt;id&gt;</c> another living hero of a
+    /// player's clan. <paramref name="steamId"/> is empty for the second kind.
+    /// </summary>
+    internal static string? FindTarget(string target, out string steamId, out Hero? hero, out MobileParty? party)
+    {
+        steamId = "";
+        if (!HeroTargetWire.IsHero(target, out var heroStringId))
+        {
+            var missing = Find(target, out var player, out hero, out party);
+            if (missing is null) steamId = player!.ControllerId;
+            return missing;
+        }
+
+        hero = null;
+        party = null;
+        if (!ContainerProvider.TryResolve<IPlayerManager>(out var players)) return "Coop's player registry is not available yet.";
+        var clans = new HashSet<Clan>(PlayerLeads(players).Where(h => h.Clan is not null).Select(h => h.Clan));
+        var found = clans.SelectMany(c => c.Heroes.Concat(c.Companions)).FirstOrDefault(h => h is not null && h.StringId == heroStringId);
+        if (found is null) return $"No hero \"{heroStringId}\" is in a player's clan.";
+        if (!found.IsAlive) return $"{found.Name} is dead.";
+        hero = found;
+        party = found.PartyBelongedTo;
+        return null;
+    }
 
     /// <summary>The player, hero and party behind a Steam id, or why they cannot be had.</summary>
     internal static string? Find(string steamId, out Player? player, out Hero? hero, out MobileParty? party)
@@ -175,15 +302,18 @@ internal static class HeroAdmin
     }
 
     /// <summary>The hero as the editor shows it. Lists every attribute, skill and trait this world has, modded ones included.</summary>
-    internal static Dictionary<string, object?> Describe(Player player, Hero hero, MobileParty? party)
+    internal static Dictionary<string, object?> Describe(Player player, Hero hero, MobileParty? party) => Describe(player.ControllerId, hero, party);
+
+    /// <summary>As above; <paramref name="steamId"/> is empty for a hero no player plays.</summary>
+    internal static Dictionary<string, object?> Describe(string steamId, Hero hero, MobileParty? party)
     {
         var model = Campaign.Current.Models.CharacterDevelopmentModel;
         var dev = hero.HeroDeveloper;
         var personality = new HashSet<TraitObject>(DefaultTraits.Personality);
         return new Dictionary<string, object?>
         {
-            ["steamId"] = player.ControllerId,
-            ["heroId"] = player.HeroId,
+            ["steamId"] = steamId,
+            ["heroId"] = hero.StringId,
             ["name"] = hero.Name?.ToString() ?? "",
             ["culture"] = hero.Culture?.Name?.ToString() ?? "",
             ["age"] = (int)hero.Age,

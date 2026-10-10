@@ -35,7 +35,7 @@ internal static class CharacterTransfer
     public static readonly string[] Parts = { "stats", "gold", "look", "gear", "name" };
 
     private static readonly Regex FileToken = new Regex("^[A-Za-z0-9_-]{1,64}$");
-    private static readonly MethodInfo? SetPerkValueInternal = AccessTools.Method(typeof(Hero), "SetPerkValueInternal");
+    internal static readonly MethodInfo? SetPerkValueInternal = AccessTools.Method(typeof(Hero), "SetPerkValueInternal");
 
     /// <summary>Where the launcher drops a file to import: under the server's user folder, next to the ban list.</summary>
     internal static string? ImportsDir =>

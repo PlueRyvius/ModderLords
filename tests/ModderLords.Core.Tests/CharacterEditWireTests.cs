@@ -59,6 +59,88 @@ public class CharacterEditWireTests
         Assert.Throws<ArgumentException>(() => HeroEdits.Attribute("", 1));
     }
 
+    [Theory]
+    [InlineData("Aldric")]
+    [InlineData("  Aldric the Bold  ")]
+    [InlineData("Ærinndís of Sköll")]
+    [InlineData("李雷")]
+    public void A_name_the_launcher_sends_is_read_back_as_the_same_name(string name)
+    {
+        var sent = HeroNames.Encode(name);
+        Assert.DoesNotContain(' ', sent);
+        Assert.Equal(sent, HeroNameWire.Encode(name));
+        Assert.True(HeroNameWire.TryDecode(sent, out var read, out var error), error);
+        Assert.Equal(name.Trim(), read);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("A{b}")]
+    [InlineData("two\nlines")]
+    [InlineData("A name that is far too long to be a hero's name")]
+    public void A_name_the_game_could_not_show_is_refused_at_both_ends(string name)
+    {
+        Assert.NotNull(HeroNames.Problem(name));
+        Assert.Equal(HeroNames.Problem(name), HeroNameWire.Problem(name));
+        Assert.Throws<ArgumentException>(() => HeroNames.Encode(name));
+        Assert.False(HeroNameWire.TryDecode(HeroNameWire.Encode(name), out _, out _));
+    }
+
+    [Theory]
+    [InlineData("zz")]
+    [InlineData("abc")]
+    [InlineData("ff")]
+    public void An_argument_that_is_not_an_encoded_name_is_refused(string argument) =>
+        Assert.False(HeroNameWire.TryDecode(argument, out _, out _));
+
+    [Fact]
+    public void A_companion_is_named_by_hero_id_and_a_player_by_steam_id()
+    {
+        Assert.True(HeroTargetWire.IsHero(HeroTargets.Hero("CharacterObject_1234"), out var id));
+        Assert.Equal("CharacterObject_1234", id);
+        Assert.Equal(HeroTargetWire.ForHero("x"), HeroTargets.Hero("x"));
+        Assert.False(HeroTargetWire.IsHero("76561198000000001", out _));
+        Assert.Throws<ArgumentException>(() => HeroTargets.Hero("two words"));
+    }
+
+    [Fact]
+    public void Companion_and_holdings_replies_shaped_like_the_modules_are_read_whole()
+    {
+        var companions = AdminCompanion.From(AdminClient.Parse(AdminWire.Reply("companions", "r1", null, new Dictionary<string, object?>
+        {
+            ["list"] = new List<object?>
+            {
+                new Dictionary<string, object?>
+                {
+                    ["heroId"] = "wanderer_3", ["name"] = "Bera the Swift", ["kind"] = "companion", ["owner"] = "Aldric", ["clan"] = "dey Tihr",
+                    ["level"] = 9, ["age"] = 31, ["where"] = "Aldric's Party", ["busy"] = "",
+                },
+            },
+        }))!);
+        Assert.Equal(new AdminCompanion("wanderer_3", "Bera the Swift", "companion", "Aldric", "dey Tihr", 9, 31, "Aldric's Party", ""), Assert.Single(companions));
+
+        var holdings = HoldingsList.From(AdminClient.Parse(AdminWire.Reply("setowner", "r2", null, new Dictionary<string, object?>
+        {
+            ["changed"] = "Pravend: dey Meroc -> dey Tihr",
+            ["settlements"] = new List<object?>
+            {
+                new Dictionary<string, object?>
+                {
+                    ["id"] = "town_V1", ["name"] = "Pravend", ["type"] = "town", ["clanId"] = "clan_1", ["clan"] = "dey Tihr",
+                    ["kingdom"] = "Vlandia", ["villages"] = 3, ["busy"] = "",
+                },
+            },
+            ["clans"] = new List<object?>
+            {
+                new Dictionary<string, object?> { ["id"] = "clan_1", ["name"] = "dey Tihr", ["kingdom"] = "Vlandia", ["leader"] = "Aldric", ["player"] = true },
+            },
+        }))!);
+        Assert.Equal("Pravend: dey Meroc -> dey Tihr", holdings.Changed);
+        Assert.Equal(new Holding("town_V1", "Pravend", "town", "clan_1", "dey Tihr", "Vlandia", 3, ""), Assert.Single(holdings.Settlements));
+        Assert.Equal(new HoldingClan("clan_1", "dey Tihr", "Vlandia", "Aldric", true), Assert.Single(holdings.Clans));
+    }
+
     [Fact]
     public void A_hero_reply_shaped_like_the_modules_is_read_whole()
     {
