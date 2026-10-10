@@ -164,6 +164,23 @@ public sealed class FourberieSurfaceTests
         Assert.True(unhandled.Count == 0, "Fourberie makes parties where the layer does not handle it: " + string.Join("; ", unhandled));
     }
 
+    /// <summary>
+    /// FbEscape sends the server a release whenever Fourberie's code calls PlayerCaptivity.EndCaptivity on a player's
+    /// game, and holds Coop's cleanup back for the mission that follows. That is right for "Break free" only.
+    /// </summary>
+    [Fact]
+    public void OnlyBreakFreeEndsThePlayersCaptivityDirectly()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        var callers = AllBodies(module)
+            .Where(m => m.Body.Instructions.Any(i => i.Operand is MethodReference r && r.DeclaringType.FullName == "TaleWorlds.CampaignSystem.PlayerCaptivity" && r.Name == "EndCaptivity"))
+            .ToList();
+        var breakFree = Assert.Single(callers);
+        Assert.StartsWith("Fourberie.FourbEscapeBehavior", breakFree.DeclaringType.FullName);
+        Assert.Contains(breakFree.Body.Instructions, i => i.Operand is MethodReference r && r.Name == "StartDisguiseMission");
+    }
+
     [Fact]
     public void OnlyTheSendRaidersLambdaInSabotageMakesABanditParty()
     {
