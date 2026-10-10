@@ -996,6 +996,16 @@ public class WorkflowTests
             Vm.ConfirmCompatSubmit = message => { Asked.Add(message); return Answer; };
             Vm.OpenCompatSubmitPage = Opened.Add;
             Vm.CopyCompatSubmitText = text => { Copied.Add(text); return ClipboardWorks; };
+            // This PC's own proofs must neither help nor hinder a test.
+            Vm.CompatProofPath = Path.Combine(_dir, CompatProofStore.FileName);
+        }
+
+        /// <summary>What a hosted session leaves behind once a player is on the map, for the fixture's mods as they are set now.</summary>
+        public void PlayerJoined(params string[] modIds)
+        {
+            Vm.CollectProfileFromRows();
+            Vm.RecordSessionProof(ProfileStore.Snapshot(Vm.Profile), modIds.Select(id => (id, (string?)"v1.0.0")), CompatDb.Empty(),
+                new DateTime(2026, 10, 6, 12, 0, 0, DateTimeKind.Utc));
         }
 
         public void Submit(string? modId, params CompatRecord[] local)
@@ -1047,7 +1057,9 @@ public class WorkflowTests
         Assert.Equal("Select a mod first", h.Vm.Status);
 
         h.Submit("PlainMod");
-        Assert.Contains("press Record… first", h.Vm.Status);
+        Assert.Contains("nothing to submit yet", h.Vm.Status);
+        Assert.Contains("have a player reach the campaign map", h.Vm.Status);
+        Assert.Contains("Record…", h.Vm.Status);
 
         // The maintainer wrote the bundled record; sending it back says nothing.
         h.Submit("BundledMod");
@@ -1080,6 +1092,75 @@ public class WorkflowTests
         Assert.Single(h.Opened);
         Assert.Contains("Export…", h.Vm.Status);
     });
+
+    [Fact]
+    public void SubmitSendsTheModsTabSettingsOnceAPlayerHasJoinedWithThem() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+        var row = h.Vm.Mods.Single(m => m.Id == "PlainMod");
+        row.Enabled = true;
+        row.Role = ServerRole.DependencyOnly;
+        h.Vm.SetModFolders(row, ["RuntimeDataCache"], ["DsData"]);
+        h.PlayerJoined("PlainMod", "Native");
+
+        // No Record… step: the hosted session is the record.
+        h.Submit("PlainMod");
+        var sent = Uri.UnescapeDataString(Assert.Single(h.Opened));
+        var record = CompatIntake.ValidateSubmission(Field(h.Opened[0], "record"), "PlainMod").Record!;
+        Assert.Equal(CompatVerdict.Works, record.Verdict);
+        Assert.Equal(["v1.0.0"], record.TestedVersions);
+        Assert.Equal(ServerRole.DependencyOnly, record.DefaultRole);
+        Assert.Equal(["RuntimeDataCache"], record.ServerExcludedFolders);
+        Assert.Equal(["DsData"], record.ClientExcludedFolders);
+        Assert.Contains("a player reached the campaign map", Field(h.Opened[0], "notes"));
+        Assert.Contains("2026-10-06", Field(h.Opened[0], "notes"));
+        Assert.Contains("client-only folders: RuntimeDataCache", h.Asked[0]);
+        Assert.Contains("server-only folders: DsData", h.Asked[0]);
+        Assert.DoesNotContain(h.Vm.Profile.Name, sent);
+        Assert.DoesNotContain(Path.GetFileName(fixture.Root), sent);
+
+        // Proof is of the settings that were hosted. Change one and it is proof of something else.
+        h.Vm.SetModFolders(row, ["RuntimeDataCache", "AssetSources"], ["DsData"]);
+        h.Submit("PlainMod");
+        Assert.Single(h.Opened);
+        Assert.Contains("no longer counts", h.Vm.Status);
+    });
+
+    [Fact]
+    public void SubmitAddsTheFolderChoicesToARecordTheUserWrote() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+        h.Vm.SetModFolders(h.Vm.Mods.Single(m => m.Id == "TestMod"), ["RuntimeDataCache"], null);
+
+        h.Submit("TestMod", new CompatRecord { Id = "TestMod", Verdict = CompatVerdict.NeedsRecipe, Notes = "leave the cache out" });
+
+        var record = CompatIntake.ValidateSubmission(Field(Assert.Single(h.Opened), "record"), "TestMod").Record!;
+        Assert.Equal(CompatVerdict.NeedsRecipe, record.Verdict);
+        Assert.Equal("leave the cache out", record.Notes);
+        Assert.Equal(["RuntimeDataCache"], record.ServerExcludedFolders);
+        // Nobody watched this work, and the form must not say otherwise.
+        Assert.Empty(record.TestedVersions);
+        Assert.DoesNotContain("&notes=", h.Opened[0]);
+        Assert.Contains("has not watched a player join", h.Asked[0]);
+    });
+
+    [Fact]
+    public void SubmitAfterAJoinHasNothingNewWhenTheBundledRecordAlreadySaysIt() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+        h.Vm.Mods.Single(m => m.Id == "BundledMod").Enabled = true;
+        h.PlayerJoined("BundledMod");
+
+        // Bundled says Works with no version; the join adds this version, which is news.
+        h.Submit("BundledMod");
+        Assert.Equal(["v1.0.0"], CompatIntake.ValidateSubmission(Field(Assert.Single(h.Opened), "record"), "BundledMod").Record!.TestedVersions);
+    });
+
+    private static string Field(string url, string name) =>
+        Uri.UnescapeDataString(url[(url.IndexOf('?') + 1)..].Split('&').Select(p => p.Split('=', 2)).Single(p => p[0] == name)[1]);
 
     // ---- the Role cell: plain-language choices over the stored role and Server-only logic tick ------------------
 

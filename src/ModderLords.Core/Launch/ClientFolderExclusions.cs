@@ -1,3 +1,4 @@
+using ModderLords.Core.Compat;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Overlay;
 using ModderLords.Core.Profiles;
@@ -26,12 +27,14 @@ public static class ClientFolderExclusions
     /// has no entry, which is what lets it stay a single junction (or need no private view at all).
     /// </summary>
     public static IReadOnlyDictionary<string, IReadOnlyList<string>> Resolve(
-        IEnumerable<DiscoveredModule> mods, Profile profile, List<string> messages)
+        IEnumerable<DiscoveredModule> mods, Profile profile, List<string> messages, CompatDb? compatDb = null)
     {
         var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var mod in mods)
         {
-            var requested = profile.Mods.FirstOrDefault(m => m.Id.Equals(mod.Id, StringComparison.OrdinalIgnoreCase))?.ClientExcludedFolders;
+            // The profile's list when it has one (an empty one means "none"), otherwise the compat record's.
+            var requested = profile.Mods.FirstOrDefault(m => m.Id.Equals(mod.Id, StringComparison.OrdinalIgnoreCase))?.ClientExcludedFolders
+                            ?? compatDb?.Find(mod.Id)?.ClientExcludedFolders;
             if (requested is null || requested.Count == 0) continue;
 
             var (valid, rejected) = ServerFolderExclusions.Split(requested);

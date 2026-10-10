@@ -242,7 +242,7 @@
                                     Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Export…" Command="{Binding ExportCompatCommand}" ToolTip="Write the selected mod's record (or all your local records) to a file you can share"
                                     Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
-                            <Button Content="Submit…" Command="{Binding SubmitCompatCommand}" ToolTip="Send the selected mod's record to the maintainer: opens a prefilled GitHub issue in your browser. Nothing is posted until you press Submit there."
+                            <Button Content="Submit…" Command="{Binding SubmitCompatCommand}" ToolTip="Send the selected mod's settings (role and folders) to the maintainer as a compatibility record: opens a prefilled GitHub issue in your browser. Works once a player has joined a server hosted with them, or for a record you wrote with Record…. Nothing is posted until you press Submit there."
                                     Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
                             <Button Content="Import…" Command="{Binding ImportCompatCommand}" ToolTip="Merge a shared record file into your local compat database (newer records win)"
                                     Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />

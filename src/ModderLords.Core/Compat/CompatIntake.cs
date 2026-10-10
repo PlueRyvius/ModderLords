@@ -88,7 +88,8 @@ public static partial class CompatIntake
         nameof(CompatRecord.Id), nameof(CompatRecord.Verdict), nameof(CompatRecord.TestedVersions), nameof(CompatRecord.TestedCoopVersion),
         nameof(CompatRecord.DefaultRole), nameof(CompatRecord.ServerAuthoritative), nameof(CompatRecord.ClientSideBehaviors),
         nameof(CompatRecord.KeepSubModules), nameof(CompatRecord.SettingsTypes), nameof(CompatRecord.IgnoreSettingsTypes),
-        nameof(CompatRecord.ClientLoadsAfterCoop), nameof(CompatRecord.ServerExcludedFolders), nameof(CompatRecord.EnsureLines),
+        nameof(CompatRecord.ClientLoadsAfterCoop), nameof(CompatRecord.ServerExcludedFolders), nameof(CompatRecord.ClientExcludedFolders),
+        nameof(CompatRecord.EnsureLines),
         nameof(CompatRecord.DefaultSettings),
         nameof(CompatRecord.Notes), nameof(CompatRecord.Url), nameof(CompatRecord.UpdatedAt),
     ];
@@ -297,6 +298,7 @@ public static partial class CompatIntake
                     CheckStringList(p.Name, v, MaxListItems, MaxTypeNameLength, problems);
                     break;
                 case nameof(CompatRecord.ServerExcludedFolders):
+                case nameof(CompatRecord.ClientExcludedFolders):
                     CheckStringList(p.Name, v, MaxListItems, MaxTypeNameLength, problems);
                     // The launcher ignores a name it cannot honour and says so in the launch log; a curated record
                     // should not ship one for every host to be warned about.

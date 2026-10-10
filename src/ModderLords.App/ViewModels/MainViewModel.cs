@@ -248,6 +248,7 @@ public partial class ModRow : ObservableObject
                 lines.Add($"Defaults: role {RoleLabels.Describe(r.DefaultRole, r.ServerAuthoritative, "-")}" +
                           (r.ClientSideBehaviors.Count > 0 ? $", client-side: {string.Join(", ", r.ClientSideBehaviors)}" : ""));
             if (r.ServerExcludedFolders.Count > 0) lines.Add("Left out on the server: " + string.Join(", ", r.ServerExcludedFolders));
+            if (r.ClientExcludedFolders.Count > 0) lines.Add("Left out of the game: " + string.Join(", ", r.ClientExcludedFolders));
             if (!string.IsNullOrWhiteSpace(r.Url)) lines.Add(r.Url);
             lines.Add("Source: " + (Compat.Source != CompatSource.Local ? "bundled with the launcher"
                 : "your local record (compat-db.local.json)" + (Compat.OverBundled ? ", over the one bundled with the launcher" : "")));
@@ -392,7 +393,7 @@ public partial class MainViewModel : ObservableObject
     {
         // Built once and kept: switching back to Host must not lose the console scrollback or, far worse, orphan a
         // running server. HostViewModel disposes nothing on the way out because nothing about it is per-session.
-        if (value == AppMode.Host) Host ??= new HostViewModel(this);
+        if (value == AppMode.Host) Host ??= NewHost();
         OnPropertyChanged(nameof(IsHost));
         ShowExperimentalCompatChanged();
         EditModFoldersCommand.NotifyCanExecuteChanged();
@@ -458,7 +459,7 @@ public partial class MainViewModel : ObservableObject
     /// wrong half of itself.</summary>
     public void ApplyMode(AppMode mode)
     {
-        if (mode == AppMode.Host) Host ??= new HostViewModel(this);
+        if (mode == AppMode.Host) Host ??= NewHost();
         var changed = Mode != mode;
         Mode = mode;
         OnPropertyChanged(nameof(IsHost));
@@ -1124,21 +1125,62 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void SubmitCompat() => SubmitCompatFrom(CompatDb.Current);
 
+    /// <summary>Where the proofs of a working set-up are kept. Replaceable so tests never touch this PC's own file.</summary>
+    internal string CompatProofPath { get; set; } = CompatProofStore.DefaultPath;
+
     /// <summary>
-    /// Opens a prefilled GitHub issue for the selected mod's local record. Only a record the user made is offered:
-    /// the bundled one came from the maintainer, so sending it back says nothing new.
+    /// Opens a prefilled GitHub issue for the selected mod. What is sent is the mod's record with its settings on the
+    /// Mods tab (role, server-only logic, the two folder lists) written into it: those live in the profile, so a
+    /// record on its own never carried them.
+    ///
+    /// No Record… step is needed once ModderLords has watched the set-up work: a server hosted with this version and
+    /// these settings, and a player on the campaign map (<see cref="RecordSessionProof"/>). Without that, only a
+    /// record the user wrote themselves is offered - the bundled one came from the maintainer, and settings nobody
+    /// has seen working are not something to send to every host.
     /// </summary>
     internal void SubmitCompatFrom(CompatDb db)
     {
-        if (SelectedMod is null) { Status = "Select a mod first"; return; }
-        var record = db.Find(SelectedMod.Id);
-        if (record is null) { Status = $"{SelectedMod.Id} has no record to submit: press Record… first"; return; }
-        if (db.SourceOf(record.Id) != CompatSource.Local) { Status = $"{record.Id} shows the bundled record, which the maintainer already has: press Record… to make your own first"; return; }
+        if (SelectedMod is not { } row) { Status = "Select a mod first"; return; }
+        // The Role cell and the tick are edited on the row; the profile entry only has them once collected.
+        CollectProfileFromRows();
+        var pm = row.IsGameModule ? null : Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
+        var effective = db.Find(row.Id);
+        var settings = pm is null ? null : ModSettings.From(pm, effective);
+        var proof = settings is null ? null : CompatProofStore.Find(CompatProofPath, row.Id);
+        var proven = proof is not null && proof.Covers(row.Version, CoopVersion, settings!);
+        if (!proven && db.SourceOf(row.Id) != CompatSource.Local)
+        {
+            const string how = "host a server with it and have a player reach the campaign map (the Smoke test tab does both), then press Submit… again";
+            Status = proof is not null
+                ? $"{row.Id}: its version, Coop's version or its settings changed since a player last joined with it, so that no longer counts. To submit it, {how}."
+                : effective is not null
+                    ? $"{row.Id} shows the bundled record, which the maintainer already has. To send your own settings for it, {how}. Or press Record… to write a record by hand."
+                    : $"{row.Id} has nothing to submit yet: {how}. Or press Record… to write a record by hand.";
+            return;
+        }
 
-        var link = CompatSubmission.Build(record, SelectedMod.Version, CoopVersion);
-        var message = $"This opens a GitHub issue form in your browser, filled in with your {record.Id} record: verdict {record.Verdict}, "
-                    + "the versions it was tested with, the defaults you stored and your notes, plus this mod's version and Coop's. "
-                    + "Nothing else about this PC or your other mods is included.\n\n"
+        var record = settings?.Over(row.Id, effective) ?? effective!;
+        if (proven)
+        {
+            // A join says the set-up runs; it does not overrule a verdict somebody chose.
+            if (record.Verdict == CompatVerdict.Unknown) record.Verdict = CompatVerdict.Works;
+            if (!record.IsVersionTested(row.Version)) record.TestedVersions.Add(row.Version);
+            if (CoopVersion is not null) record.TestedCoopVersion = CoopVersion;
+        }
+        if (db.FindBundled(row.Id) is { } bundled && CompatSubmission.SameContent(bundled, record))
+        {
+            Status = $"{record.Id}: the bundled record already says exactly this, so there is nothing new to send";
+            return;
+        }
+
+        var link = CompatSubmission.Build(record, row.Version, CoopVersion, proven ? CompatSubmission.ProofNote(proof!.ProvenAtUtc) : null);
+        var message = $"This opens a GitHub issue form in your browser, filled in with a compatibility record for {record.Id}: verdict {record.Verdict}, "
+                    + (settings is null ? "" : $"its settings on the Mods tab ({settings.Describe()}), ")
+                    + "the versions it was tested with, the defaults and notes in the record, plus this mod's version and Coop's. "
+                    + (proven
+                        ? $"It also says that a server hosted this way started and a player reached the campaign map on {proof!.ProvenAtUtc:yyyy-MM-dd}. "
+                        : "ModderLords has not watched a player join with these settings, so the form does not claim they were tried. ")
+                    + "Nothing else about this PC, your profile or your other mods is included.\n\n"
                     + "Nothing is sent by pressing OK here. Once you press Submit on GitHub it becomes a public issue posted from your own GitHub account."
                     + (link.RecordInUrl ? "" : "\n\nThis record is too large to put in a link, so it will be copied to the clipboard (replacing what is there) for you to paste into the form.");
         if (!ConfirmCompatSubmit(message)) return;
@@ -1155,6 +1197,55 @@ public partial class MainViewModel : ObservableObject
                 : $"The {record.Id} record is too large for a link, so it was copied to the clipboard: paste it into the Record field of the GitHub form that just opened, then press Submit there";
         }
         catch (Exception ex) { Status = "Could not open the GitHub form: " + ex.Message; }
+    }
+
+    // ---- proof that a set-up works -----------------------------------------------------------------
+
+    private JoinWatch _joinWatch = new();
+
+    /// <summary>The Server tab's view model, wired so that a player reaching the map is remembered for Submit….</summary>
+    private HostViewModel NewHost()
+    {
+        var host = new HostViewModel(this);
+        // Any thread, once per server line; the watch does nothing after its first hit, and the write waits its turn
+        // on the dispatcher like everything else that reads the profile.
+        host.ServerLineObserved += line =>
+        {
+            if (_joinWatch.Observe(line)) Application.Current?.Dispatcher.BeginInvoke(() => OnPlayerJoined(host));
+        };
+        host.ServerExited += _ => _joinWatch = new JoinWatch();
+        return host;
+    }
+
+    private void OnPlayerJoined(HostViewModel host)
+    {
+        try
+        {
+            var mods = host.ClientTarget?.Selections.Select(s => (s.Module.Id, (string?)s.Module.Version)).ToList() ?? [];
+            var count = RecordSessionProof(host.ClientProfile, mods, CompatDb.Current, DateTime.UtcNow);
+            if (count > 0)
+                host.AddLine(LogCategory.Tool, $"[ModderLords] a player reached the campaign map: Submit… on the Mods tab can now send the settings of the {count} mod(s) hosted here as compatibility records");
+        }
+        catch (Exception ex) { Log(LogCategory.Tool, "[ModderLords] could not note that this set-up worked: " + ex.Message); }
+    }
+
+    /// <summary>
+    /// Remembers, for every community mod of the profile the server was launched with, the version and settings it
+    /// was hosted at when a player reached the map. Returns how many were noted.
+    /// </summary>
+    internal int RecordSessionProof(Profile launched, IEnumerable<(string Id, string? Version)> hosted, CompatDb db, DateTime nowUtc)
+    {
+        var proofs = new List<CompatProof>();
+        foreach (var (id, version) in hosted)
+        {
+            if (OfficialModules.IsGameModule(id) || ClientManifest.CoopClientModuleIds.Contains(id)) continue;
+            // The launcher's own modules ride along in the selection without a profile entry; they are not a mod's settings.
+            var pm = launched.Mods.FirstOrDefault(m => m.Enabled && m.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (pm is null) continue;
+            proofs.Add(new CompatProof(pm.Id, version, CoopVersion, nowUtc, ModSettings.From(pm, db.Find(id))));
+        }
+        CompatProofStore.Add(CompatProofPath, proofs);
+        return proofs.Count;
     }
 
     [RelayCommand]
@@ -1362,7 +1453,8 @@ public partial class MainViewModel : ObservableObject
     {
         var pm = Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
         return new ModFolderChoices(ModFolderChoices.FoldersIn(row.Folder), pm?.ServerExcludedFolders,
-            CompatDb.Current.Find(row.Id)?.ServerExcludedFolders ?? [], pm?.ClientExcludedFolders);
+            CompatDb.Current.Find(row.Id)?.ServerExcludedFolders ?? [], pm?.ClientExcludedFolders,
+            CompatDb.Current.Find(row.Id)?.ClientExcludedFolders);
     }
 
     /// <summary>
@@ -1372,7 +1464,7 @@ public partial class MainViewModel : ObservableObject
     /// is reused by id), which is how the download link is kept too.
     /// </summary>
     /// <param name="serverExcluded">"Client only" folders: null = no opinion (the compat record decides), empty = none.</param>
-    /// <param name="clientExcluded">"Server only" folders: null or empty = none.</param>
+    /// <param name="clientExcluded">"Server only" folders, the same way. With no record behind the list the two mean the same and null is stored.</param>
     internal void SetModFolders(ModRow row, List<string>? serverExcluded, List<string>? clientExcluded)
     {
         if (row.IsGameModule) return;
@@ -1380,9 +1472,11 @@ public partial class MainViewModel : ObservableObject
         CollectProfileFromRows();
         var pm = Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
         if (pm is null) return;
-        if (clientExcluded is { Count: 0 }) clientExcluded = null;
+        var recordHasServerOnly = CompatDb.Current.Find(row.Id)?.ClientExcludedFolders.Count > 0;
+        if (clientExcluded is { Count: 0 } && !recordHasServerOnly) clientExcluded = null;
         // OK on an untouched dialog is not an edit, and must not ask for a save.
         if ((serverExcluded is null) == (pm.ServerExcludedFolders is null)
+            && (clientExcluded is null) == (pm.ClientExcludedFolders is null)
             && ModFolderChoices.SameNames(serverExcluded, pm.ServerExcludedFolders)
             && ModFolderChoices.SameNames(clientExcluded, pm.ClientExcludedFolders))
             return;
@@ -1395,7 +1489,12 @@ public partial class MainViewModel : ObservableObject
             { Count: 0 } => "no folder is client only",
             _ => "client only: " + string.Join(", ", serverExcluded),
         };
-        var serverOnly = clientExcluded is null ? "no folder is server only" : "server only: " + string.Join(", ", clientExcluded);
+        var serverOnly = clientExcluded switch
+        {
+            null when recordHasServerOnly => "server-only folders follow the compatibility database",
+            null or { Count: 0 } => "no folder is server only",
+            _ => "server only: " + string.Join(", ", clientExcluded),
+        };
         Status = $"{row.Id}: {clientOnly}; {serverOnly}. Applies from the next launch. Save to keep it.";
         // The preview's messages are where a host sees what the launch will do with the lists (and a rejected name).
         RefreshPreview();

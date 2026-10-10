@@ -81,7 +81,7 @@ public static class ClientLaunchSession
 
         // "Server only" folders. Community mods only: the profile has no entry for an official module, and hiding
         // part of the game's own modules from the game is not something a tick box should be able to do.
-        var excludedFolders = ClientFolderExclusions.Resolve(mods, profile, messages);
+        var excludedFolders = ClientFolderExclusions.Resolve(mods, profile, messages, CompatDb.Current);
 
         var plan = new ClientLaunchPlan
         {
