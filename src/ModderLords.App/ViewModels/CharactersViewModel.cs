@@ -23,8 +23,44 @@ public sealed record PlayerRow(AdminPlayer Player)
     public string Ip => Player.Ip;
 }
 
+/// <summary>One row of the Companions list: a hero of a player's clan who is not a player.</summary>
+public sealed record CompanionRow(AdminCompanion Companion)
+{
+    public string Name => Companion.Name;
+    public string Kind => Companion.Kind == "companion" ? "Companion" : "Family";
+    public string Owner => Companion.Owner;
+    public string Clan => Companion.Clan;
+    public int Level => Companion.Level;
+    public int Age => Companion.Age;
+    public string Where => Companion.Busy.Length > 0 ? $"{Companion.Where} ({Companion.Busy})" : Companion.Where;
+    public string HeroId => Companion.HeroId;
+}
+
+/// <summary>One row of the Holdings list: a town or castle and its owner.</summary>
+public sealed record HoldingRow(Holding Holding)
+{
+    public string Name => Holding.Name;
+    public string Type => Holding.Type == "town" ? "Town" : "Castle";
+    public string Clan => Holding.Clan;
+    public string Kingdom => Holding.Kingdom;
+    public int Villages => Holding.Villages;
+    public string State => Holding.Busy;
+    public string Id => Holding.Id;
+}
+
+/// <summary>A clan in the Holdings tab's "new owner" list. Players' clans come first.</summary>
+public sealed record ClanChoice(HoldingClan Clan)
+{
+    public string Id => Clan.Id;
+    public string Display => Clan.Name
+        + (Clan.Kingdom.Length > 0 ? $" ({Clan.Kingdom})" : " (no kingdom)")
+        + (Clan.Player ? ", player" : "");
+    public override string ToString() => Display;
+}
+
 /// <summary>
-/// The Characters tab: the players registered on the running server, and the ban list. Kick and the list go through
+/// The Characters tab: the players registered on the running server, their companions and family, who owns each town
+/// and castle, and the ban list. Kick and the list go through
 /// the server's admin commands (<see cref="AdminClient"/>); bans are a file the server rereads
 /// (<see cref="BanStore"/>), so they can be managed while it is stopped too.
 /// </summary>
@@ -48,7 +84,29 @@ public partial class CharactersViewModel : ObservableObject
     }
 
     public ObservableCollection<PlayerRow> Players { get; } = new();
+    public ObservableCollection<CompanionRow> Companions { get; } = new();
+    public ObservableCollection<HoldingRow> Holdings { get; } = new();
+    public ObservableCollection<ClanChoice> Clans { get; } = new();
     public ObservableCollection<BanRecord> Bans { get; } = new();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(EditCompanionCommand))]
+    private CompanionRow? _selectedCompanion;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SetOwnerCommand))]
+    private HoldingRow? _selectedHolding;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SetOwnerCommand))]
+    private ClanChoice? _newOwner;
+
+    [ObservableProperty] private string _companionStatus = "";
+    [ObservableProperty] private string _holdingStatus = "";
+
+    /// <summary>Asks before a town or castle changes hands. Replaced in tests, which have no message box.</summary>
+    public Func<string, bool> ConfirmOwner { get; set; } = message =>
+        MessageBox.Show(message, "Change owner", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(KickCommand))]
@@ -72,14 +130,22 @@ public partial class CharactersViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(KickCommand))]
     [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SetOwnerCommand))]
     private bool _isBusy;
 
     private bool Serving => _host.IsServing;
 
     private bool CanRefresh() => Serving && !IsBusy;
 
+    /// <summary>Reads all three lists: players, their companions and family, and the holdings.</summary>
     [RelayCommand(CanExecute = nameof(CanRefresh))]
-    private async Task Refresh()
+    private Task Refresh() => RefreshLists(holdings: true);
+
+    /// <summary>
+    /// Players and companions change when someone joins or leaves; the holdings list is long and changes with the
+    /// campaign, so it is read only when asked for, when the server comes up, and after an owner is changed here.
+    /// </summary>
+    private async Task RefreshLists(bool holdings)
     {
         IsBusy = true;
         try
@@ -87,9 +153,79 @@ public partial class CharactersViewModel : ObservableObject
             var reply = await _admin.RequestAsync("players", [], ReplyTimeout);
             if (!reply.Ok) { Headline = "The server could not list its players: " + reply.Error; return; }
             ShowPlayers(AdminClient.Players(reply));
+
+            reply = await _admin.RequestAsync("companions", [], ReplyTimeout);
+            if (reply.Ok) ShowCompanions(AdminCompanion.From(reply));
+            else CompanionStatus = "The server could not list companions: " + reply.Error;
+
+            if (!holdings) return;
+            reply = await _admin.RequestAsync("holdings", [], ReplyTimeout);
+            if (reply.Ok) ShowHoldings(HoldingsList.From(reply));
+            else HoldingStatus = "The server could not list the holdings: " + reply.Error;
         }
         catch (Exception ex) { Headline = ex.Message; }
         finally { IsBusy = false; }
+    }
+
+    private bool CanEditCompanion() => Serving && SelectedCompanion is not null;
+
+    /// <summary>Opens the same editor as for a player, on a companion or family member.</summary>
+    [RelayCommand(CanExecute = nameof(CanEditCompanion))]
+    private void EditCompanion()
+    {
+        if (SelectedCompanion is not { } row) return;
+        var editor = new CharacterEditorViewModel(_admin, HeroTargets.Hero(row.HeroId), row.Name, () => Serving);
+        var window = new CharacterEditorWindow(editor) { Owner = Application.Current.MainWindow };
+        window.Closed += async (_, _) => await RefreshIfServing();
+        window.Show();
+    }
+
+    private bool CanSetOwner() => Serving && !IsBusy && SelectedHolding is not null && NewOwner is not null && SelectedHolding.Holding.ClanId != NewOwner.Id;
+
+    /// <summary>Gives the selected town or castle, and the villages bound to it, to the chosen clan.</summary>
+    [RelayCommand(CanExecute = nameof(CanSetOwner))]
+    private async Task SetOwner()
+    {
+        if (SelectedHolding is not { } row || NewOwner is not { } clan) return;
+        if (!ConfirmOwner($"Give {row.Name} to {clan.Display}?\n\nIt belongs to {row.Clan}{(row.Kingdom.Length > 0 ? $" ({row.Kingdom})" : "")} now. "
+                + (row.Villages > 0 ? $"Its {row.Villages} village(s) go with it. " : "")
+                + "The game replaces the garrison's owner and removes the governor, as it does when a fief is granted.")) return;
+        IsBusy = true;
+        try
+        {
+            var reply = await _admin.RequestAsync("setowner", [row.Id, clan.Id], ReplyTimeout);
+            if (!reply.Ok) { HoldingStatus = $"{row.Name} was not changed: {reply.Error}"; return; }
+            var holdings = HoldingsList.From(reply);
+            ShowHoldings(holdings);
+            HoldingStatus = holdings.Changed.Length > 0 ? "Changed " + holdings.Changed + "." : $"{row.Name} already belonged to {clan.Clan.Name}.";
+        }
+        catch (Exception ex) { HoldingStatus = ex.Message; }
+        finally { IsBusy = false; }
+    }
+
+    internal void ShowCompanions(IReadOnlyList<AdminCompanion> companions)
+    {
+        var selected = SelectedCompanion?.HeroId;
+        Companions.Clear();
+        foreach (var c in companions.OrderBy(c => c.Owner, StringComparer.CurrentCultureIgnoreCase).ThenBy(c => c.Kind).ThenBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase))
+            Companions.Add(new CompanionRow(c));
+        SelectedCompanion = Companions.FirstOrDefault(r => r.HeroId == selected);
+        CompanionStatus = $"{companions.Count(c => c.Kind == "companion")} companion(s) and {companions.Count(c => c.Kind != "companion")} family member(s) in the players' clans. Updated {DateTime.Now:HH:mm:ss}.";
+    }
+
+    internal void ShowHoldings(HoldingsList holdings)
+    {
+        var selected = SelectedHolding?.Id;
+        var owner = NewOwner?.Id;
+        Holdings.Clear();
+        foreach (var s in holdings.Settlements.OrderBy(s => s.Kingdom, StringComparer.CurrentCultureIgnoreCase).ThenBy(s => s.Clan, StringComparer.CurrentCultureIgnoreCase).ThenBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase))
+            Holdings.Add(new HoldingRow(s));
+        Clans.Clear();
+        foreach (var c in holdings.Clans.OrderByDescending(c => c.Player).ThenBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase))
+            Clans.Add(new ClanChoice(c));
+        SelectedHolding = Holdings.FirstOrDefault(r => r.Id == selected);
+        NewOwner = Clans.FirstOrDefault(c => c.Id == owner);
+        HoldingStatus = $"{holdings.Settlements.Count(s => s.Type == "town")} town(s) and {holdings.Settlements.Count(s => s.Type != "town")} castle(s). Updated {DateTime.Now:HH:mm:ss}.";
     }
 
     private bool CanKick() => Serving && !IsBusy && SelectedPlayer?.Player.Online == true;
@@ -288,7 +424,7 @@ public partial class CharactersViewModel : ObservableObject
         ListStatus = $"{players.Count} player(s) registered, {online} online. Updated {DateTime.Now:HH:mm:ss}.";
     }
 
-    private Task RefreshIfServing() => Serving ? Refresh() : Task.CompletedTask;
+    private Task RefreshIfServing() => Serving ? RefreshLists(holdings: false) : Task.CompletedTask;
 
     /// <summary>Stream-reader thread. A join or leave (the server's own players event) refreshes the list once.</summary>
     private void OnServerLine(string line)
@@ -301,7 +437,7 @@ public partial class CharactersViewModel : ObservableObject
             // Coop registers a joining player after the connection event, so give it a moment.
             await Task.Delay(TimeSpan.FromSeconds(2));
             Interlocked.Exchange(ref _refreshQueued, 0);
-            if (CanRefresh()) await Refresh();
+            if (CanRefresh()) await RefreshLists(holdings: false);
         });
     }
 
@@ -311,6 +447,8 @@ public partial class CharactersViewModel : ObservableObject
         RefreshCommand.NotifyCanExecuteChanged();
         KickCommand.NotifyCanExecuteChanged();
         EditCommand.NotifyCanExecuteChanged();
+        EditCompanionCommand.NotifyCanExecuteChanged();
+        SetOwnerCommand.NotifyCanExecuteChanged();
         ExportCommand.NotifyCanExecuteChanged();
         ImportCommand.NotifyCanExecuteChanged();
         if (Serving) _ = Refresh();
@@ -323,5 +461,6 @@ public partial class CharactersViewModel : ObservableObject
         Players.Clear();
         foreach (var p in last) Players.Add(new PlayerRow(p));
         ListStatus = "The server stopped. The list is as it was last seen; bans can still be managed.";
+        CompanionStatus = HoldingStatus = "The server stopped. The list is as it was last seen.";
     }
 }

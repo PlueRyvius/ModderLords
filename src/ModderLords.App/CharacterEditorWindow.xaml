@@ -19,6 +19,8 @@
                    Text="Changes are made on the running server and reach the player's game through Coop's own sync. Skill values do not change the character's level; set Level separately if needed. Edits are refused while the player is in a battle or a siege." />
         <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="Reset perks…" Command="{Binding ResetPerksCommand}" MinWidth="100" Margin="4,0,16,0"
+                        ToolTip="Take away every perk this character has chosen, so they can be chosen again in the game. Skills, focus and attributes stay." />
                 <Button Content="Reload" Command="{Binding ReloadCommand}" MinWidth="80" Margin="4,0" />
                 <Button Content="Apply" Command="{Binding ApplyCommand}" MinWidth="80" Margin="4,0" IsDefault="True" />
                 <Button Content="Close" IsCancel="True" MinWidth="80" Margin="4,0,0,0" />
@@ -40,7 +42,20 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="Character" FontWeight="Bold" Margin="0,0,0,4" />
+                <DockPanel Grid.Row="0" Margin="0,0,0,4">
+                    <TextBlock DockPanel.Dock="Left" Text="Name" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="40">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsNameChanged}" Value="True">
+                                        <Setter Property="FontWeight" Value="Bold" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </DockPanel>
                 <DataGrid Grid.Row="1" ItemsSource="{Binding Values}" AutoGenerateColumns="False" RowHeaderWidth="0" CanUserAddRows="False" CanUserDeleteRows="False" RowStyle="{StaticResource ChangedRow}">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Value" Binding="{Binding Name}" IsReadOnly="True" Width="*" />

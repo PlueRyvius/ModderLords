@@ -532,14 +532,20 @@ shuts down). **Logs folder** opens the launcher's own per-launch logs.
 
 ### Characters *(Host mode)*
 
-Everyone with a character on the running server: name, clan, level, gold, whether they are online (and in a battle or a
-siege), their Steam id and the address they connected from. The list updates by itself when someone joins or leaves.
+Three sub tabs: **Players**, **Companions** and **Holdings**. **Refresh**, above them, reads all three from the running
+server again.
 
-- **Edit…** opens the selected player's character: gold, hit points, unspent attribute and focus points,
+**Players** is everyone with a character on the running server: name, clan, level, gold, whether they are online (and
+in a battle or a siege), their Steam id and the address they connected from. The list updates by itself when someone
+joins or leaves.
+
+- **Edit…** opens the selected player's character: name, age, level, gold, hit points, unspent attribute and focus points,
   every attribute, skill (level and focus) and trait this world has, modded ones included. Type new values and press
   **Apply**; only what you changed is sent, the server checks every value against the game's own limits before it
   changes any, and the player's game picks the change up through Coop's own sync. Skills are set to exactly the value
   typed and do not change the character's level. Edits are refused while the player is in a battle or a siege.
+  **Reset perks…** in the same window takes away every perk the character has chosen, so they can be chosen again in
+  the game's character screen; skills, focus and attributes stay.
 - **Export…** saves the selected player's character to a `.mlchar` file: name, look (face, body, gender,
   age), gold, attributes, skills, focus, traits, perks and battle and civilian gear, all by game id, plus the mod list of
   the world it came from. Nothing tied to that world comes with it (party, clan, fiefs, relations, quests).
@@ -552,6 +558,15 @@ siege), their Steam id and the address they connected from. The list updates by 
 - **Ban** disconnects them and refuses them from then on, by Steam id and by the address they connected from (an
   address ban also refuses anyone else joining from that network). **Reason** is kept with the ban.
 - **Unban** removes the selected ban.
+
+**Companions** lists the other heroes of the players' clans, companions and family, with the player they belong to.
+**Edit…** opens the same editor on one of them, perk reset and rename included.
+
+**Holdings** lists every town and castle with the clan and kingdom that own it. Select one, pick a clan under **New
+owner** (players' clans are listed first) and press **Give…**. The villages bound to it go with it and it joins the new
+owner's kingdom. The change is the game's own, the one a granted fief goes through, so the garrison changes owner and
+the governor is removed. It is refused while the settlement is under siege or in a battle. This list is read when the
+server starts and on **Refresh**, not on every join.
 
 Bans are a file, not a server setting, so they can be managed while the server is stopped and hold for every profile
 this PC hosts. A game started without Steam has no id of its own, and a game on this PC connects from this PC's own

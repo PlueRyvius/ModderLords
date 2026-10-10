@@ -98,3 +98,65 @@ public static class HeroEditWire
         return true;
     }
 }
+
+/// <summary>
+/// Which hero a command is about: a player's Steam id (their own hero), or <c>hero:&lt;hero string id&gt;</c> for any
+/// other hero of a player's clan (a companion or a family member).
+/// </summary>
+public static class HeroTargetWire
+{
+    public const string HeroPrefix = "hero:";
+
+    public static string ForHero(string heroStringId) => HeroPrefix + heroStringId;
+
+    /// <summary>True, with the hero's string id, when the target names a hero rather than a player.</summary>
+    public static bool IsHero(string target, out string heroStringId)
+    {
+        var yes = target.StartsWith(HeroPrefix, StringComparison.Ordinal) && target.Length > HeroPrefix.Length;
+        heroStringId = yes ? target.Substring(HeroPrefix.Length) : "";
+        return yes;
+    }
+}
+
+/// <summary>
+/// A hero's new name as one console argument for <c>modderlords.rename</c>. The console splits its arguments on
+/// spaces, so the name travels as the hex of its UTF-8 bytes.
+/// </summary>
+public static class HeroNameWire
+{
+    public const int MaxLength = 40;
+
+    /// <summary>Why this name cannot be used, or null when it can. Braces are the game's own text markup.</summary>
+    public static string? Problem(string name)
+    {
+        if (name.Trim().Length == 0) return "A name cannot be empty.";
+        if (name.Trim().Length > MaxLength) return $"A name can be at most {MaxLength} characters.";
+        foreach (var c in name)
+            if (char.IsControl(c) || c == '{' || c == '}') return "A name cannot contain line breaks, tabs or { }.";
+        return null;
+    }
+
+    public static string Encode(string name)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(name.Trim());
+        var text = new System.Text.StringBuilder(bytes.Length * 2);
+        foreach (var b in bytes) text.Append(b.ToString("x2", CultureInfo.InvariantCulture));
+        return text.ToString();
+    }
+
+    /// <summary>Reads an encoded name. False, with the reason, when it is not hex of valid UTF-8 or not a usable name.</summary>
+    public static bool TryDecode(string hex, out string name, out string error)
+    {
+        name = "";
+        error = "That is not a name the launcher sent.";
+        if (hex.Length == 0 || hex.Length % 2 != 0) return false;
+        var bytes = new byte[hex.Length / 2];
+        for (var i = 0; i < bytes.Length; i++)
+            if (!byte.TryParse(hex.Substring(i * 2, 2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out bytes[i])) return false;
+        try { name = new System.Text.UTF8Encoding(false, throwOnInvalidBytes: true).GetString(bytes); }
+        catch (ArgumentException) { return false; }
+        if (Problem(name) is { } problem) { error = problem; name = ""; return false; }
+        error = "";
+        return true;
+    }
+}

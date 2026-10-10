@@ -740,14 +740,23 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- CHARACTERS: the running server's players, and the ban list. Kick and the list are server commands;
-                 bans are a file the server rereads, so they work while it is stopped too. -->
+            <!-- CHARACTERS: everything the host can change about the running world's people and places, one sub tab
+                 each. Players: the list, the editor, export/import, kick and the ban list (bans are a file the server
+                 rereads, so they work while it is stopped too). Companions: the same editor for the other heroes of
+                 the players' clans. Holdings: who owns each town and castle. -->
             <TabItem Header="Characters" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <DockPanel Margin="8">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <Button DockPanel.Dock="Left" Content="Refresh" Command="{Binding Characters.RefreshCommand}" Padding="10,4" Margin="0,0,10,0"
+                                ToolTip="Read the players, companions and holdings from the running server again" />
+                        <TextBlock Text="{Binding Characters.Headline}" FontWeight="Bold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <TabControl>
+                    <TabItem Header="Players">
+                <DockPanel Margin="8">
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
-                               Text="Everyone with a character on the running server. Edit changes a character’s age, level, gold, attributes, skills, focus and traits on the server. Export saves a character to a file; Import brings one onto a player, cleaned of anything this world does not have. Kick disconnects a player; their character stays and they can rejoin. Ban disconnects them and refuses them from then on, by Steam id and by the address they connected from. The list updates when someone joins or leaves." />
+                               Text="Everyone with a character on the running server. Edit changes a character’s name, age, level, gold, attributes, skills, focus and traits on the server, and can reset their perks. Export saves a character to a file; Import brings one onto a player, cleaned of anything this world does not have. Kick disconnects a player; their character stays and they can rejoin. Ban disconnects them and refuses them from then on, by Steam id and by the address they connected from. The list updates when someone joins or leaves." />
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Button Content="Refresh" Command="{Binding Characters.RefreshCommand}" Padding="10,4" Margin="0,0,8,0" />
                         <Button Content="Edit…" Command="{Binding Characters.EditCommand}" Padding="10,4" Margin="0,0,8,0" />
                         <Button Content="Export…" Command="{Binding Characters.ExportCommand}" Padding="10,4" Margin="0,0,8,0"
                                 ToolTip="Save this character to a file: attributes, skills, perks, traits, gold, look and gear" />
@@ -758,7 +767,6 @@
                         <TextBox Text="{Binding Characters.BanReason, UpdateSourceTrigger=PropertyChanged}" Width="220" Margin="0,0,8,0" />
                         <Button Content="Ban…" Command="{Binding Characters.BanCommand}" Padding="10,4" />
                     </StackPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="{Binding Characters.Headline}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,6" />
                     <TextBlock DockPanel.Dock="Top" Text="{Binding Characters.ListStatus}" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,6" />
                     <Grid>
                         <Grid.RowDefinitions>
@@ -791,6 +799,52 @@
                             </DataGrid.Columns>
                         </DataGrid>
                     </Grid>
+                </DockPanel>
+                    </TabItem>
+                    <TabItem Header="Companions">
+                        <DockPanel Margin="8">
+                            <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
+                                       Text="The other heroes of the players’ clans: companions and family. Edit opens the same editor as for a player: name, gold, attributes, skills, focus, traits and a perk reset. Edits are refused while the party they travel with is in a battle or a siege." />
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Edit…" Command="{Binding Characters.EditCompanionCommand}" Padding="10,4" />
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="{Binding Characters.CompanionStatus}" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                            <DataGrid ItemsSource="{Binding Characters.Companions}" SelectedItem="{Binding Characters.SelectedCompanion}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Character" Binding="{Binding Name}" Width="200" />
+                                    <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="90" />
+                                    <DataGridTextColumn Header="Player" Binding="{Binding Owner}" Width="160" />
+                                    <DataGridTextColumn Header="Clan" Binding="{Binding Clan}" Width="140" />
+                                    <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="50" />
+                                    <DataGridTextColumn Header="Age" Binding="{Binding Age}" Width="50" />
+                                    <DataGridTextColumn Header="Where" Binding="{Binding Where}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Header="Holdings">
+                        <DockPanel Margin="8">
+                            <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
+                                       Text="Who owns each town and castle. Pick one, pick the clan that should have it, then Give. Villages go with the town or castle they belong to, and the settlement joins the new owner’s kingdom. The change is the game’s own, the one a granted fief goes through, and reaches every player through Coop. It is refused while the settlement is under siege or in a battle. This list is read when the server starts and when you press Refresh." />
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="New owner:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <ComboBox ItemsSource="{Binding Characters.Clans}" SelectedItem="{Binding Characters.NewOwner}" DisplayMemberPath="Display" Width="320" Margin="0,0,8,0" />
+                                <Button Content="Give…" Command="{Binding Characters.SetOwnerCommand}" Padding="10,4" />
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="{Binding Characters.HoldingStatus}" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                            <DataGrid ItemsSource="{Binding Characters.Holdings}" SelectedItem="{Binding Characters.SelectedHolding}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Settlement" Binding="{Binding Name}" Width="200" />
+                                    <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="70" />
+                                    <DataGridTextColumn Header="Owner" Binding="{Binding Clan}" Width="180" />
+                                    <DataGridTextColumn Header="Kingdom" Binding="{Binding Kingdom}" Width="180" />
+                                    <DataGridTextColumn Header="Villages" Binding="{Binding Villages}" Width="70" />
+                                    <DataGridTextColumn Header="State" Binding="{Binding State}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    </TabControl>
                 </DockPanel>
             </TabItem>
 
