@@ -112,6 +112,7 @@ public partial class HostViewModel : ObservableObject
     private MapIdentityCheck _mapIdentity = new();
     /// <summary>Per launch: keeps an endlessly repeated engine line from burying the console. The log keeps them all.</summary>
     private RepeatCollapser _repeats = new();
+    private StartupNoiseFolder _startupNoise = new();
     private long _totalDropped;
     private EngineProcess? _creationEngine;
     private readonly System.Windows.Threading.DispatcherTimer _creationTimer;
@@ -483,6 +484,7 @@ public partial class HostViewModel : ObservableObject
             _totalDropped = 0;
             _mapIdentity = new MapIdentityCheck();
             _repeats = new RepeatCollapser();
+            _startupNoise = new StartupNoiseFolder();
             if (rotated > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotated} old launch log(s)");
             if (rotatedCrashes > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedCrashes} old engine crash report(s)");
             if (rotatedEngineLogs > 0) AddLine(LogCategory.Tool, $"[ModderLords] removed {rotatedEngineLogs} old engine error log(s)");
@@ -617,6 +619,14 @@ public partial class HostViewModel : ObservableObject
             _engine.LineReceived += line =>
             {
                 ServerLineObserved?.Invoke(line.Text);
+                // Two load-time bursts from Coop that say nothing about the session become one counted line each
+                // (StartupNoiseFolder says which, why, and until when). The launch log still gets every line.
+                var noise = _startupNoise.Observe(line.Text);
+                foreach (var folded in noise.Summaries)
+                {
+                    _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {LogCategory.Tool,-10} {folded}");
+                    _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), LogCategory.Tool, folded));
+                }
                 var c = LogClassifier.Classify(line.Text);
                 c = AttributeToCommand(c);
                 _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
@@ -626,7 +636,7 @@ public partial class HostViewModel : ObservableObject
                 //
                 // The console also collapses a line the server repeats without end -- the launch log above keeps
                 // every one, so nothing is lost for diagnosis; this is only about what a person can read.
-                if (_repeats.Filter(line.Text) is { } shown)
+                if (!noise.Folded && _repeats.Filter(line.Text) is { } shown)
                     _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, shown));
                 // Parse here (cheap, off the UI thread) but apply on the flush tick, so a perf line is no more
                 // able to touch the UI per line than any other.
@@ -658,6 +668,8 @@ public partial class HostViewModel : ObservableObject
             _resources?.Dispose(); _resources = null;
             if (Performance.WriteSessionSummary(launchProfile.Name) is { } summary)
                 AddLine(LogCategory.Tool, "[ModderLords] performance summary written to " + summary);
+            // A launch that never reached serving still says what was folded.
+            foreach (var folded in _startupNoise.Report()) AddLine(LogCategory.Tool, folded);
             // What was collapsed, so a quietened console still ends with the honest totals.
             foreach (var (message, count) in _repeats.Totals.Take(5).Select(kv => (kv.Key, kv.Value)))
                 AddLine(LogCategory.Warning, $"[ModderLords] repeated {count:N0} times: {message}");

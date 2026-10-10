@@ -116,6 +116,15 @@ public sealed class LaunchPlan
             if (planned.ContainsKey(name)) continue;   // already listed above, with the value actually being passed
             sb.AppendLine($"env : {name}={entry.Value} (inherited)");
         }
+        if (FirstChanceSwitchOn(planned))
+            sb.AppendLine($"note: {FirstChanceVariable}=1 is set, so the server prints every exception thrown, including the ones its code catches and handles "
+                + "(lines marked \"first-chance\"). They are not failures. Remove the variable unless you are hunting a crash that leaves no other trace.");
         return sb.ToString();
     }
+
+    /// <summary>The startup hook's diagnostic firehose (ModderLords.Hook). Easy to leave set after a debugging session.</summary>
+    public const string FirstChanceVariable = "MODDERLORDS_HOOK_FIRSTCHANCE";
+
+    private static bool FirstChanceSwitchOn(IReadOnlyDictionary<string, string> planned) =>
+        (planned.TryGetValue(FirstChanceVariable, out var passed) ? passed : System.Environment.GetEnvironmentVariable(FirstChanceVariable)) == "1";
 }

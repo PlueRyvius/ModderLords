@@ -93,8 +93,10 @@ internal static class StartupHook
             {
                 try
                 {
-                    var ex = e.Exception;
-                    Write("first-chance " + Describe(e.Exception));
+                    // One Write per line, each marked: a handled exception's stack frames arriving bare read as an
+                    // error to anything classifying the console by line, the launcher's own Console tab included.
+                    foreach (var line in Describe(e.Exception).Split((char)10))
+                        Write("first-chance " + line.TrimEnd((char)13));
                 }
                 catch { }
             };
