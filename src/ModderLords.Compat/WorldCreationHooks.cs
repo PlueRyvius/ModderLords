@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using System.Linq;
@@ -117,8 +118,54 @@ internal static class WorldCreationHooks
         foreach (var c in Clan.All.Take(8)) Log.Info($"worldcreate: clan id={c.StringId} culture={c.Culture?.StringId} leader={c.Leader?.StringId}");
         var invalid = Settlement.All.Where(s => s.OwnerClan == null).ToList();
         Log.Info($"worldcreate: settlements missing owner clan={invalid.Count}: {string.Join(",", invalid.Take(8).Select(s => s.StringId))}");
+        try { RehomeFactionsWhoseHomeIsNotOnThisMap(); }
+        catch (Exception ex) { Log.Warn("worldcreate: could not check faction home settlements: " + ex.GetBaseException().Message); }
         var template = MBObjectManager.Instance.GetObject<CharacterObject>("spc_ghilman_leader_0");
         Log.Info($"worldcreate: ghilman template culture={template?.Culture?.StringId} hero={template?.IsHero} battle={template?.Culture?.DefaultBattleEquipmentRoster?.StringId} stealth={template?.Culture?.DefaultStealthEquipmentRoster?.StringId}; registered default stealth={MBObjectManager.Instance.GetObject<MBEquipmentRoster>("default_stealth_equipment_roster")?.StringId}");
+    }
+
+    /// <summary>
+    /// Gives a clan or kingdom a real home when the settlement its XML names does not exist on the map being created.
+    ///
+    /// <para>The game does not refuse such a reference: it keeps an empty settlement of that id, at (0, 0) with no
+    /// navmesh face, registered nowhere. New-game setup then asks for the distance from it to every other faction
+    /// (CharacterRelationCampaignBehavior.UpdateFriendshipAndEnemies). The distance cache has no entry for a
+    /// settlement that is not on the map, so the game paths it on the navmesh from face -1, and the server dies in
+    /// native code.</para>
+    ///
+    /// <para>Measured 2026-10-10 creating an Empires of Europe 1100 world: Coop's own mercenary clan
+    /// <c>coop_team</c> is homed at <c>town_S1</c> (Varcheg), a vanilla town that map does not have. A map that keeps
+    /// the vanilla ids, as TAOM's does, never shows this.</para>
+    /// </summary>
+    private static void RehomeFactionsWhoseHomeIsNotOnThisMap()
+    {
+        var onMap = new HashSet<Settlement>(Settlement.All);
+        var towns = Settlement.All.Where(s => s.IsTown).ToList();
+        if (towns.Count == 0) return;
+        Settlement TownFor(CultureObject? culture) => towns.FirstOrDefault(t => t.Culture == culture) ?? towns[0];
+
+        var moved = new List<string>();
+        foreach (var clan in Clan.All)
+        {
+            var home = clan.InitialHomeSettlement;
+            if (home == null || onMap.Contains(home)) continue;
+            var town = TownFor(clan.Culture);
+            clan.SetInitialHomeSettlement(town);
+            clan.CalculateMidSettlement();
+            moved.Add($"clan {clan.StringId}: {home.StringId} -> {town.StringId}");
+        }
+        var kingdomHome = AccessTools.PropertySetter(typeof(Kingdom), nameof(Kingdom.InitialHomeSettlement));
+        foreach (var kingdom in Kingdom.All)
+        {
+            var home = kingdom.InitialHomeSettlement;
+            if (home == null || onMap.Contains(home) || kingdomHome == null) continue;
+            var town = kingdom.Settlements.FirstOrDefault(s => s.IsTown) ?? TownFor(kingdom.Culture);
+            kingdomHome.Invoke(kingdom, new object[] { town });
+            kingdom.CalculateMidSettlement();
+            moved.Add($"kingdom {kingdom.StringId}: {home.StringId} -> {town.StringId}");
+        }
+        if (moved.Count > 0)
+            Log.Warn($"worldcreate: {moved.Count} faction(s) were homed at a settlement this map does not have and were given a town on it: " + string.Join("; ", moved));
     }
 
     private static bool KeepCreating(bool value) => !value;

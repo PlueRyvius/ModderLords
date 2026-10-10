@@ -29,6 +29,9 @@ internal static class HeadlessMapExperiment
     /// <summary>True when a mod's campaign map is being served in place of the stock one.</summary>
     internal static bool IsInstalled => _installed;
 
+    /// <summary>The module whose campaign map is being served; only meaningful when <see cref="IsInstalled"/>.</summary>
+    internal static string MapModuleId => _mapModuleId;
+
     internal static void Install()
     {
         if (_installed) return;
