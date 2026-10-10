@@ -44,6 +44,10 @@ public static partial class LogClassifier
         // logs a "Messagebox [ERROR] ... Cannot load:" for each miss, then resolves it properly later. Noise, not an error.
         if (t.Contains("Cannot load:", StringComparison.Ordinal) || (t.StartsWith("ERROR:", StringComparison.Ordinal) && t.Contains("Could not load file or assembly", StringComparison.Ordinal)))
             return new(line, LogCategory.Probe);
+        // The same miss as the engine prints it on the dedicated server, with its own timestamp in front. Only the
+        // bare-name guess in the engine's own bin folder ("cannot find the file"): a DLL that fails to load from a
+        // module's folder, or for any other reason, is a real problem and keeps its category.
+        if (EngineBinProbeRx().IsMatch(t)) return new(line, LogCategory.Probe);
 
         // A crash the mod swallowed. TAOM's handler answers its own inquiry and lets the tick return, so the run keeps
         // going with the failure invisible; without this the line's category depends on which exception type it names.
@@ -83,6 +87,9 @@ public static partial class LogClassifier
 
     [GeneratedRegex(@"(^|\s)(System(\.\w+)+Exception|\w+Exception:|   at .+\(.*\)|Unhandled exception|NullReferenceException)")]
     private static partial Regex ExceptionRx();
+
+    [GeneratedRegex(@"^\[[\d:.]+\]\s*ERROR: [^:]+: Could not load file or assembly '(?![^']*\\Modules\\)[^']*\\bin\\Win64_Shipping_\w+\\[^\\']+'\. The system cannot find the file specified")]
+    private static partial Regex EngineBinProbeRx();
 
     [GeneratedRegex(@"\[(VRB|DBG|INF|WRN|ERR|FTL)\]")]
     private static partial Regex SerilogRx();

@@ -197,6 +197,11 @@ public class LogClassifierTests
 {
     [Theory]
     [InlineData("[00:58:26.728] Messagebox [ERROR] message: Cannot load: Coop.Steam.dll", LogCategory.Probe)]
+    // The engine's bare-name guess in its own bin folder, as the dedicated server prints it (real line, 2026-10-10).
+    [InlineData(@"[15:56:34.034] ERROR: RBMAI.dll: Could not load file or assembly 'D:\Program Files (x86)\Steam\steamapps\workshop\content\261550\3770450698\DedicatedServer\engine\bin\Win64_Shipping_Server\RBMAI.dll'. The system cannot find the file specified. ", LogCategory.Probe)]
+    // The same words about a module's own folder, or another reason, are not a guess that missed.
+    [InlineData(@"[15:56:34.034] ERROR: RBMAI.dll: Could not load file or assembly 'D:\engine\Modules\RBM\bin\Win64_Shipping_Server\RBMAI.dll'. The system cannot find the file specified. ", LogCategory.Engine)]
+    [InlineData(@"[15:56:34.034] ERROR: RBMAI.dll: Could not load file or assembly 'D:\engine\bin\Win64_Shipping_Server\RBMAI.dll'. An attempt was made to load a program with an incorrect format. ", LogCategory.Engine)]
     [InlineData("[DedicatedServer] SERVING — coop server up, waiting for clients", LogCategory.Milestone)]
     [InlineData("[00:54:15.234] Loader Exceptions: Could not load file or assembly 'SandBox.View'", LogCategory.Error)]
     [InlineData("[DedicatedServer] FATAL during A: System.TypeInitializationException", LogCategory.Error)]
