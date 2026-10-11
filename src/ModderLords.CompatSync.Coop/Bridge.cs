@@ -24,6 +24,7 @@ public static class Bridge
         Steps.Run("EncounterOptionGate.Tick", () => EncounterOptionGate.Tick());
         Steps.Run("BattleScenePick.EnsureInstalled", () => BattleScenePick.EnsureInstalled());
         Steps.Run("BellumThreadSafety.EnsureInstalled", () => BellumThreadSafety.EnsureInstalled());
+        Steps.Run("BellumPeaceInCoop.EnsureInstalled", () => BellumPeaceInCoop.EnsureInstalled());
         Steps.Run("KingdomVoteTimeoutAi.EnsureInstalled", () => KingdomVoteTimeoutAi.EnsureInstalled());
         Steps.Run("InventoryExchangeEvent.EnsureInstalled", () => InventoryExchangeEvent.EnsureInstalled());
         Steps.Run("ModKingdomDecisions.EnsureInstalled", () => ModKingdomDecisions.EnsureInstalled());
@@ -67,7 +68,8 @@ public static class Bridge
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
     public static string VerificationSummary() => BehaviorGate.VerificationSummary() + "; " + Operations.OperationRuntime.Report()
-        + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary() + Operations.BellumPrompts.Summary() + "; " + InventoryExchangeEvent.Summary() + "; " + Steps.Summary();
+        + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary() + Operations.BellumPrompts.Summary() + "; " + InventoryExchangeEvent.Summary()
+        + (BellumPeaceInCoop.Answered > 0 ? $"; Bellum parley steps answered {BellumPeaceInCoop.Answered}" : "") + "; " + Steps.Summary();
 
     /// <summary>Both sides, every 30 s and at unload: writes the ground-truth trace counters. Returns how many methods were written (0 when not tracing).</summary>
     public static int TraceFlush() => BehaviorGate.TraceFlush();

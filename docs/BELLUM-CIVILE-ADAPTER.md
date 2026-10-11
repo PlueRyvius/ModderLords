@@ -172,6 +172,20 @@ are attached at runtime (`CouncilAssignmentRuntimePatches`, compatibility patche
 - `Guard*ScorePatch` (diplomacy model queries): set `Kingdom.RulingClan` inside a query.
 - Ten `TargetMethods` patches: targets chosen at runtime, so only the runtime shared-patch dump shows them.
 
+## Peace on a player's game (`BellumPeaceInCoop`, always on when Bellum is loaded)
+
+Peace in co-op is made by vanilla's kingdom vote, which Coop runs as a timed round and applies on the server. Bellum's
+war-and-peace revamp replaces that on whichever game it runs in: it retires the vanilla vote, opens its own Peace Parley,
+and Sign Treaty ends in `MakePeaceAction`, which Coop refuses from a player's game. Reported 2026-10-11 (two players of
+one kingdom): a forced parley neither could leave, a war still on after signing twice, and the kingdom screen reopening
+on a peace vote (Bellum's "stale vanilla peace decision" fallback hides the vote and removes the decision; Coop refuses
+the removal on a player's game, so the screen finds it again).
+
+On a co-op player's game the parley's entry points answer "not opened" and Bellum's six patches on the vanilla peace
+vote, courier offer and diplomacy button are skipped, so the vote is what the player sees (`BellumPeaceTargets`, 15
+methods in Bellum 1.3.1). The server is untouched. Players lose Bellum's treaty terms for their own realm; routing the
+parley to the ruling player and applying it on the server is still to do. Not exercised in play: there was no save with
+a peace vote pending to test against.
 ## The "player" on a dedicated server
 
 Bellum asks "is this the player's clan?" in about 900 places. On a dedicated server `Clan.PlayerClan` is the
