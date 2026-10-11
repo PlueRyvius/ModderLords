@@ -39,4 +39,20 @@ public sealed class SupportGameLogsTests : IDisposable
     {
         Assert.Empty(SupportReportService.GameLogs(Path.Combine(_dir, "absent"), 4));
     }
+
+    [Fact]
+    public void Mods_own_recent_logs_are_taken_and_ours_the_games_and_old_ones_are_not()
+    {
+        var bellum = Log("BellumCivile_2026-10-11.log", 30);
+        var yearly = Log("bellumcivile_yearlyreports.txt", 90);
+        Log("BellumCivile_2026-09-01.log", 60 * 24 * 40);
+        Log("ModderLords.Compat-client.log", 1);
+        Log("rgl_log_300.txt", 1);
+        Log("watchdog_log_300.txt", 1);
+        Log("settings.json", 1);
+
+        Assert.Equal(new[] { bellum, yearly }, SupportReportService.ModLogs(_dir, 8, DateTime.UtcNow));
+        Assert.Equal(new[] { bellum }, SupportReportService.ModLogs(_dir, 1, DateTime.UtcNow));
+        Assert.Empty(SupportReportService.ModLogs(Path.Combine(_dir, "absent"), 8, DateTime.UtcNow));
+    }
 }

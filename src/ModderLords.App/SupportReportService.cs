@@ -203,6 +203,8 @@ internal static class SupportReportService
         {
             AddRecent(result, Path.Combine(bannerlordRoot, "logs"), "rgl_log_errors_*.txt", 2, "engine error logs", 90);
             result.AddRange(GameLogs(Path.Combine(bannerlordRoot, "logs"), GameLogCount).Select(f => new SupportTextSource(GameLogCategory, f, 88)));
+            // Some mods log beside the game's own logs rather than in ModLogs.
+            result.AddRange(ModLogs(Path.Combine(bannerlordRoot, "logs"), 4, DateTime.UtcNow).Select(f => new SupportTextSource(ModLogCategory, f, 70)));
         }
         // Coop's own log from the player's game. It is rewritten each launch and only complete after a normal exit.
         if (!string.IsNullOrWhiteSpace(gameRoot))
@@ -224,6 +226,7 @@ internal static class SupportReportService
         var modLogs = Path.Combine(docs, "Mount and Blade II Bannerlord", "Configs", "ModLogs");
         AddRecent(result, modLogs, "ModderLords.Compat-trace-*.jsonl", 2, "compatibility traces", 80);
         AddRecent(result, modLogs, "ModderLords*.log", 3, "compatibility traces", 80);
+        result.AddRange(ModLogs(modLogs, 8, DateTime.UtcNow).Select(f => new SupportTextSource(ModLogCategory, f, 70)));
         AddIfFile(result, Path.Combine(AppContext.BaseDirectory, "compat", LaunchSession.SyncModuleId, RecipeSet.FileName), "compatibility recipes", 90);
         return result.DistinctBy(s => Normalize(s.Path), StringComparer.OrdinalIgnoreCase).ToList();
     }
@@ -245,6 +248,35 @@ internal static class SupportReportService
         {
             return new DirectoryInfo(logsDirectory).EnumerateFiles("rgl_log_*.txt", SearchOption.TopDirectoryOnly)
                 .Where(f => !f.Name.StartsWith("rgl_log_errors_", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(f => f.LastWriteTimeUtc).Take(count).Select(f => f.FullName).ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
+    }
+
+    public const string ModLogCategory = "mod logs";
+
+    /// <summary>Logs older than this say nothing about the session being reported.</summary>
+    public static readonly TimeSpan ModLogMaxAge = TimeSpan.FromDays(3);
+
+    /// <summary>
+    /// What the mods themselves wrote lately: the newest <c>.log</c> and <c>.txt</c> files in a folder mods log to,
+    /// newest first. ModderLords' own files, the game's <c>rgl_log</c> files and the crash watchdog's are left out
+    /// because they are collected under their own headings.
+    ///
+    /// <para>Bellum Civile writes every treaty it queues, signs or rejects to <c>BellumCivile*.log</c> in ModLogs.
+    /// A report on 2026-10-11 turned on what the server's Bellum had decided about one war, and that file was the
+    /// only place it was written.</para>
+    /// </summary>
+    public static IReadOnlyList<string> ModLogs(string directory, int count, DateTime nowUtc)
+    {
+        try
+        {
+            return new DirectoryInfo(directory).EnumerateFiles("*", SearchOption.TopDirectoryOnly)
+                .Where(f => f.Extension.Equals(".log", StringComparison.OrdinalIgnoreCase) || f.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !f.Name.StartsWith("ModderLords", StringComparison.OrdinalIgnoreCase)
+                            && !f.Name.StartsWith("rgl_log_", StringComparison.OrdinalIgnoreCase)
+                            && !f.Name.StartsWith("watchdog_log_", StringComparison.OrdinalIgnoreCase))
+                .Where(f => nowUtc - f.LastWriteTimeUtc <= ModLogMaxAge)
                 .OrderByDescending(f => f.LastWriteTimeUtc).Take(count).Select(f => f.FullName).ToList();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
@@ -349,6 +381,7 @@ internal static class SupportReportService
         "world creation diagnostics" => "World creation diagnostics",
         "engine crash metadata" => "Crash metadata",
         "compatibility traces" or "compatibility recipes" => "Compatibility diagnostics",
+        ModLogCategory => "Mod logs",
         "configuration" => "Configuration files",
         _ => value,
     };
@@ -358,6 +391,7 @@ internal static class SupportReportService
         "ModderLords logs" => "Recent launcher, resolver, client-launch and application-error logs",
         "Server and engine logs" => "Recent Coop server output, the game's own logs from the last few starts, and Bannerlord error logs",
         "Crash metadata" => "Text/JSON/XML from the newest crash folder; never minidumps",
+        "Mod logs" => "Logs your mods wrote in the last three days (ModLogs and the game's log folder)",
         "Configuration files" => "Server and gameplay configuration, passed through secret redaction",
         _ => "Recent relevant text diagnostics",
     };
