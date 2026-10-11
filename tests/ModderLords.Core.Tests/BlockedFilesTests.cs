@@ -58,4 +58,38 @@ public class BlockedFilesTests : IDisposable
         Assert.Empty(BlockedFiles.Find(null));
         Assert.Equal(0, BlockedFiles.UnblockFolder(Path.Combine(_dir, "nope")));
     }
+
+    private static ModderLords.Core.Launch.ClientLaunchPlan PlanWith(params (string Id, string Folder)[] mods) => new()
+    {
+        GameRoot = "G", ModuleIds = mods.Select(m => m.Id).ToList(),
+        SelectedModules = mods.Select(m => new DiscoveredModule(m.Id, "v1.0.0", m.Folder, ModuleSourceKind.Custom,
+            new Bannerlord.ModuleManager.ModuleInfoExtended { Id = m.Id, Name = m.Id })).ToList(),
+    };
+
+    [Fact]
+    public void A_launch_unblocks_the_mods_it_is_about_to_load_and_says_which()
+    {
+        if (!StreamsWork()) return;
+        // The copy the launch uses, somewhere the player unzipped it. The game would name it by its path inside the
+        // launch view, which is a link to this folder.
+        var dll = Make(Path.Combine("Unzipped", "SomeMod", "bin", "Win64_Shipping_Client", "SomeMod.dll"), blocked: true);
+        var clean = Make(Path.Combine("Unzipped", "Other", "bin", "Win64_Shipping_Client", "Other.dll"), blocked: false);
+
+        var said = ModderLords.Core.Launch.ClientLaunchSession.Unblock(PlanWith(
+            ("SomeMod", Path.Combine(_dir, "Unzipped", "SomeMod")), ("Other", Path.Combine(_dir, "Unzipped", "Other"))));
+
+        Assert.False(BlockedFiles.IsBlocked(dll));
+        Assert.Equal("x", File.ReadAllText(dll));
+        Assert.True(File.Exists(clean));
+        Assert.Contains("unblocked 1 file(s)", said);
+        Assert.Contains("SomeMod", said);
+        Assert.DoesNotContain("Other", said);
+    }
+
+    [Fact]
+    public void A_launch_with_nothing_blocked_says_nothing()
+    {
+        Make(Path.Combine("Mod", "bin", "Win64_Shipping_Client", "Mod.dll"), blocked: false);
+        Assert.Null(ModderLords.Core.Launch.ClientLaunchSession.Unblock(PlanWith(("Mod", Path.Combine(_dir, "Mod")), ("Gone", Path.Combine(_dir, "nope")))));
+    }
 }

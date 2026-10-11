@@ -113,13 +113,15 @@ public static class ClientLaunchSession
     /// Starts the game detached, exactly as <see cref="ClientLauncher.Start"/> does: no job object, because closing
     /// ModderLords must never close the player's game.
     /// </summary>
-    public static System.Diagnostics.Process Start(ClientLaunchPlan plan)
+    /// <param name="note">Told what the launch did on the way that a player may need to know. Optional.</param>
+    public static System.Diagnostics.Process Start(ClientLaunchPlan plan, Action<string>? note = null)
     {
         if (plan.MissingModules.Count > 0)
             throw new InvalidOperationException("Missing selected mods: " + string.Join(", ", plan.MissingModules) +
                 ". Download them and Rescan, or untick them to launch without them. The imported list has been kept.");
         var errors = plan.Validate().ToList();
         if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+        if (Unblock(plan) is { } unblocked) note?.Invoke(unblocked);
         if (plan.UsesIsolatedView && OperatingSystem.IsWindows())
             plan = plan with { GameRoot = ClientModuleView.Create(plan, Path.Combine(Profiles.ProfileStore.RootDir, "client-launches")) };
         var psi = new System.Diagnostics.ProcessStartInfo
@@ -143,5 +145,31 @@ public static class ClientLaunchSession
         }
         foreach (var argument in plan.Arguments) psi.ArgumentList.Add(argument);
         return System.Diagnostics.Process.Start(psi) ?? throw new InvalidOperationException("Windows did not start " + plan.Exe);
+    }
+
+    /// <summary>
+    /// Takes Windows' "downloaded from the internet" mark off the assemblies of every mod about to load, and says
+    /// what it did, or null when nothing was marked.
+    ///
+    /// A marked DLL is refused by the game ("An attempt was made to load an assembly from a network location") and
+    /// the mod then does nothing. The Mods tab offers a button for it, but a player who launches from Host mode never
+    /// sees that list, and the game names the file by its path inside the launch view, which is a link: the marked
+    /// file is the mod's own, wherever it was unzipped. Reported 2026-10-11 by a player who had checked the copy in
+    /// the game folder, found no Unblock box on it, and had no way to tell that the launch used another copy.
+    /// </summary>
+    public static string? Unblock(ClientLaunchPlan plan)
+    {
+        var blocked = plan.SelectedModules
+            .Select(m => (m.Id, Files: BlockedFiles.Find(m.FolderPath)))
+            .Where(m => m.Files.Count > 0).ToList();
+        if (blocked.Count == 0) return null;
+        foreach (var mod in blocked) BlockedFiles.UnblockAll(mod.Files);
+        var refused = blocked.Select(m => (m.Id, Count: m.Files.Count(BlockedFiles.IsBlocked))).Where(m => m.Count > 0).ToList();
+        var mods = string.Join(", ", blocked.Select(m => m.Id));
+        return refused.Count == 0
+            ? $"unblocked {blocked.Sum(m => m.Files.Count)} file(s) Windows had marked as downloaded, in {mods}"
+            : $"Windows has marked files in {mods} as downloaded and {refused.Sum(m => m.Count)} could not be unblocked " +
+              $"({string.Join(", ", refused.Select(m => m.Id))}). The game will not load them. Close Bannerlord and its launcher and try again, " +
+              "or run ModderLords as administrator once.";
     }
 }

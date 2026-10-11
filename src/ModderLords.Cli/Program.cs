@@ -122,7 +122,7 @@ if (cmd == "play")
     if (opts.ContainsKey("dry-run")) return 0;
 
     if (ClientLauncher.IsClientRunning()) { Console.Error.WriteLine("Bannerlord (or its launcher) is already running."); return 2; }
-    var started = ClientLaunchSession.Start(prepared.Plan);
+    var started = ClientLaunchSession.Start(prepared.Plan, note => Console.WriteLine("[ModderLords] " + note));
     Console.WriteLine($"started pid {started.Id}");
     return 0;
 }

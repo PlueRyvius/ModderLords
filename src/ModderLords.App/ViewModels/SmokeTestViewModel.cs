@@ -129,7 +129,7 @@ public partial class SmokeTestViewModel : ObservableObject
             _host.EnsureClientModule(HostViewModel.ServerCarriesSyncModule(target));
             var client = _host.PrepareClientLaunch();
             foreach (var message in client.Messages) Progress.Add($"{DateTime.Now:HH:mm:ss}  {message}");
-            return ClientLaunchSession.Start(client.Plan with { ExtraArguments = extraArguments });
+            return ClientLaunchSession.Start(client.Plan with { ExtraArguments = extraArguments }, note => Progress.Add($"{DateTime.Now:HH:mm:ss}  {note}"));
         });
     }
 
