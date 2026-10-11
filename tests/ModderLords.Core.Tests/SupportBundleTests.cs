@@ -45,6 +45,13 @@ public sealed class SupportBundleTests : IDisposable
         Assert.DoesNotContain("api/webhooks", text);
     }
 
+    [Theory]
+    [InlineData("[17:29:28.893] Computer: ARC User: A", "[17:29:28.893] Computer: [REDACTED] User: [REDACTED]")]
+    [InlineData("[05:48:21.925] Computer: DESKTOP-7QK2 User: John Smith\r\n[05:48:21.925] Build Version: 119303",
+                "[05:48:21.925] Computer: [REDACTED] User: [REDACTED]\r\n[05:48:21.925] Build Version: 119303")]
+    public void The_game_logs_computer_and_user_line_is_redacted_however_short_the_names(string line, string expected) =>
+        Assert.Equal(expected, new SupportRedactor(new Dictionary<string, string>(), []).Redact(line));
+
     [Fact]
     public async Task Bundle_contains_redacted_head_and_tail_plus_a_complete_manifest()
     {
