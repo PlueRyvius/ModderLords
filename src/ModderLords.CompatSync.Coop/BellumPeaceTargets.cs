@@ -35,6 +35,12 @@ public static class BellumPeaceTargets
     public const string Treaty = "BellumCivile.Behaviors.ForeignTreatyBehavior";
     private const string Patches = "BellumCivile.Patches.";
 
+    /// <summary>Bellum's mark for a peace it makes itself, and the counter behind it. See BellumVotePeace.</summary>
+    public const string TreatyMark = "BellumCivile.BellumPeaceResolutionContext";
+    public const string TreatyMarkDepth = "_bellumPeaceDepth";
+    /// <summary>Bellum's guard on <c>MakePeaceAction</c>, which lets a marked peace through.</summary>
+    public const string PeaceGuard = Patches + "CivilWarMakePeacePatch";
+
     public static readonly IReadOnlyList<Target> All = new[]
     {
         new Target(Treaty, "TryQueuePlayerParley", BellumPeaceAnswer.No),

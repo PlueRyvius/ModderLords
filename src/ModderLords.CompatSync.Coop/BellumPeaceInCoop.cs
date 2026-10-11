@@ -25,7 +25,8 @@ namespace ModderLords.CompatSync.Coop;
 /// finds the same decision again.</para>
 ///
 /// <para>What players lose: Bellum's treaty terms (reparations, fiefs, marriages) for their own realm. The server's
-/// Bellum is untouched; no kingdom there is "the player's", so nothing here applies to it.</para>
+/// Bellum keeps its parley code as it is; no kingdom there is "the player's", so nothing here applies to it. Its guard
+/// on peace it did not make is a separate matter: see <see cref="BellumVotePeace"/>.</para>
 /// </summary>
 public static class BellumPeaceInCoop
 {
