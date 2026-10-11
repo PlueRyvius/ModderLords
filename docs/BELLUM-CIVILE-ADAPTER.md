@@ -255,6 +255,23 @@ pinned in `bellum-civile.commands`, now 59 surfaces. `CecilSurface.Find` now mat
 `<`-cut normalisation made every compiler-made nested type look like its parent, so the capture tool had silently
 found the first one.
 
+## Kingdoms on a player's game (`BellumClientKingdoms`, always on when Bellum is loaded)
+
+Bellum runs its politics on a player's game as well as on the server. When its own copy of a rebellion, feud or
+grant reaches the point of founding a realm, it calls the game's `Kingdom.CreateKingdom` there. Coop then refuses
+that game every write that follows (the ID, name, banner and ruling clan), but the empty kingdom is already in the
+campaign's list. The Kingdom screen builds a diplomacy row for it and throws, which shows as a black screen, and
+Bellum's own daily audit throws on its missing ID on every campaign tick.
+
+On a player's game in a co-op session:
+
+- Bellum's one kingdom maker (`KingdomCreationSafetyHelper.CreateKingdom`) returns null, the answer it already
+  gives for a founder who cannot rule. All nine callers handle that. The server's kingdoms arrive through Coop.
+- Every 3 seconds, a kingdom with no ID is taken out of the campaign's kingdom and faction lists and logged. Coop
+  sets the ID on every kingdom it creates, so one without an ID exists only on that game.
+
+Reported 2026-10-11. Not yet seen working in a live session. The report's client log was cut across the minutes
+in which the empty kingdom appeared, so the founding path that ran is inferred from the code, not read from a log.
 ## Deliberately not claimed
 
 The adapter is not full playable compatibility yet. The first simulation-authority and full read-model tiers are

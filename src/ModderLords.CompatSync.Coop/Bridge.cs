@@ -33,6 +33,8 @@ public static class Bridge
         Steps.Run("Admin.PlayerAdmin.ServerTick", () => Admin.PlayerAdmin.ServerTick());
         Steps.Run("NetMeter.ServerTick", () => NetMeter.ServerTick());
         Steps.Run("SessionCheck.ClientTick", () => SessionCheck.ClientTick());
+        Steps.Run("BellumClientKingdoms.EnsureInstalled", () => BellumClientKingdoms.EnsureInstalled());
+        Steps.Run("BellumClientKingdoms.ClientTick", () => BellumClientKingdoms.ClientTick());
         Steps.Run("SmokeCharacterCreation.ClientTick", () => SmokeCharacterCreation.ClientTick());
         Steps.Run("Taom.TaomLayer.Tick", () => Taom.TaomLayer.Tick());
         Steps.Run("Taom.TaomStateMirror.ServerTick", () => Taom.TaomStateMirror.ServerTick());

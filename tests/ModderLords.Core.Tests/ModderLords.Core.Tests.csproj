@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -50,6 +50,7 @@
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\SerializedState.cs" Link="Module\SerializedState.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\BellumPeaceTargets.cs" Link="Module\BellumPeaceTargets.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\BattleScenePolicy.cs" Link="Module\BattleScenePolicy.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\BellumClientKingdomTargets.cs" Link="Module\BellumClientKingdomTargets.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RootTracer.cs" Link="Module\RootTracer.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\PlayerComparisonRewriter.cs" Link="Module\PlayerComparisonRewriter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayGates.cs" Link="Module\RelayGates.cs" />
