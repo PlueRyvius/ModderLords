@@ -41,6 +41,62 @@ public static class BellumPeaceTargets
     /// <summary>Bellum's guard on <c>MakePeaceAction</c>, which lets a marked peace through.</summary>
     public const string PeaceGuard = Patches + "CivilWarMakePeacePatch";
 
+    // ---- what BellumTreatyVote reads by name on the server (checked against the installed Bellum in tests) ----
+
+    public const string Proposal = "BellumCivile.TreatyProposalRecord";
+    public const string Term = "BellumCivile.TreatyTermRecord";
+    /// <summary>Bellum's rule that a war must last a set number of days before peace: <c>TryGetPeaceProposalBlock</c>.</summary>
+    public const string MinimumDuration = "BellumCivile.WarPeaceMinimumDurationHelper";
+    public const string MinimumDurationCheck = "TryGetPeaceProposalBlock";
+
+    /// <summary>Where the server's Bellum ratifies a pending treaty: both councils are asked, then it is applied or rejected.</summary>
+    public const string Resolve = "ResolvePendingParley";
+    /// <summary>The councils' verdicts; its out parameters are bound by name.</summary>
+    public const string Ratify = "EvaluateRatification";
+    public const string Apply = "ApplyTreaty";
+    public const string Summary = "BuildTreatyTermsSummary";
+
+    public static readonly IReadOnlyList<string> ResolveParameters = new[] { "war", "proposal", "allowPlayerVassal" };
+    public static readonly IReadOnlyList<string> RatifyParameters = new[]
+        { "proposal", "winner", "loser", "winnerAccepts", "loserAccepts", "winnerUsesOverride", "loserUsesOverride" };
+    public static readonly IReadOnlyList<string> ApplyParameters = new[] { "proposal", "winner", "loser" };
+    public static readonly IReadOnlyList<string> ProposalMembers = new[]
+        { "ProposalId", "WarKey", "WinnerKingdomId", "LoserKingdomId", "IsForced", "State", "Terms" };
+    public static readonly IReadOnlyList<string> TermMembers = new[] { "Type", "FromKingdomId", "ToKingdomId", "DailyGold", "DurationDays" };
+
+    /// <summary>The state name of a proposal that is still waiting to be ratified.</summary>
+    public const string PendingState = "ParleyPending";
+    public const string TributeTerm = "Tribute";
+    public const string WhitePeaceTerm = "WhitePeace";
+
+    /// <summary>One tribute term of a treaty: who pays whom, how much a day, for how long.</summary>
+    public readonly struct Tribute
+    {
+        public Tribute(string from, string to, int daily, int days) { From = from; To = to; Daily = daily; Days = days; }
+        public string From { get; }
+        public string To { get; }
+        public int Daily { get; }
+        public int Days { get; }
+    }
+
+    /// <summary>
+    /// What a kingdom pays a day under a treaty's tribute terms (negative: it is paid), and for how many days. The
+    /// vote shown to that kingdom's players carries these numbers, the way a vanilla peace vote does.
+    /// </summary>
+    public static (int Daily, int Days) TributePaidBy(string kingdomId, IEnumerable<Tribute> tributes)
+    {
+        int daily = 0, days = 0;
+        foreach (var t in tributes)
+        {
+            if (t.Daily <= 0 || t.Days <= 0) continue;
+            if (t.From == kingdomId) daily += t.Daily;
+            else if (t.To == kingdomId) daily -= t.Daily;
+            else continue;
+            if (t.Days > days) days = t.Days;
+        }
+        return daily == 0 ? (0, 0) : (daily, days);
+    }
+
     public static readonly IReadOnlyList<Target> All = new[]
     {
         new Target(Treaty, "TryQueuePlayerParley", BellumPeaceAnswer.No),

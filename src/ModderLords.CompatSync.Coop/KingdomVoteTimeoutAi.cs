@@ -63,6 +63,9 @@ public static class KingdomVoteTimeoutAi
             var finalVotes = (IDictionary)_finalVotes!.GetValue(state, null);
             if (decision?.Kingdom == null || election == null) return;
 
+            // A vote standing in for a Bellum treaty: with no answer from the ruler, Bellum's council decides instead.
+            if (BellumTreatyVote.Installed && BellumTreatyVote.OnDeadline(decision, RulerVoted(__instance, decision, finalVotes))) return;
+
             var decided = new List<string>();
             foreach (var clanId in (IEnumerable<string>)_eligible!.GetValue(state, null))
             {
@@ -82,6 +85,16 @@ public static class KingdomVoteTimeoutAi
             Log.Info($"kingdom vote timeout: AI decided for {string.Join(", ", decided)} on {decision.GetType().Name} in {decision.Kingdom.StringId}");
         }
         catch (Exception ex) { Log.Warn("kingdom vote timeout: could not let the AI decide: " + ex.GetBaseException().Message); }
+    }
+
+    private static bool RulerVoted(object manager, KingdomDecision decision, IDictionary finalVotes)
+    {
+        foreach (var clanId in finalVotes.Keys)
+        {
+            var args = new object?[] { clanId, decision.Kingdom, null };
+            if ((bool)_tryGetClan!.Invoke(manager, args) && args[2] is Clan clan && clan == decision.Kingdom.RulingClan) return true;
+        }
+        return false;
     }
 
     // Not ModInformation.IsServer: the first ticks run before Coop sets it, and the install is only tried once.

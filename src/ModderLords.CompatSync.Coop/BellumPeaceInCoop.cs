@@ -24,9 +24,10 @@ namespace ModderLords.CompatSync.Coop;
 /// fallback: it hides the vote and removes the decision, Coop refuses the removal on a player's game, and the screen
 /// finds the same decision again.</para>
 ///
-/// <para>What players lose: Bellum's treaty terms (reparations, fiefs, marriages) for their own realm. The server's
-/// Bellum keeps its parley code as it is; no kingdom there is "the player's", so nothing here applies to it. Its guard
-/// on peace it did not make is a separate matter: see <see cref="BellumVotePeace"/>.</para>
+/// <para>What players lose: drafting a treaty's terms themselves. The server's Bellum keeps its parley code as it is;
+/// no kingdom there is "the player's", so nothing here applies to it. Two things on the server complete this: its
+/// guard on peace it did not make lets a voted peace through (<see cref="BellumVotePeace"/>), and a treaty Bellum
+/// drafts for a realm a player rules is put to that realm as a vote (<see cref="BellumTreatyVote"/>).</para>
 /// </summary>
 public static class BellumPeaceInCoop
 {

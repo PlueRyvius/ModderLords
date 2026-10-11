@@ -29,6 +29,7 @@ public static class BellumVotePeace
     private static readonly Harmony Harmony = new Harmony("ModderLords.Compat.BellumVotePeace");
     private static bool _installTried;
     private static FieldInfo? _depth;
+    private static MethodInfo? _tooEarly;
     private static int _marked;
 
     /// <summary>How many vote outcomes were applied inside Bellum's mark this session, for the verification line.</summary>
@@ -51,6 +52,13 @@ public static class BellumVotePeace
                 Log.Warn("Bellum vote peace: Bellum's treaty mark has changed shape; a peace voted in a players' kingdom may still be blocked by Bellum");
                 return;
             }
+            var minimum = AccessTools.TypeByName(BellumPeaceTargets.MinimumDuration);
+            _tooEarly = minimum == null ? null : AccessTools.Method(minimum, BellumPeaceTargets.MinimumDurationCheck);
+            if (_tooEarly == null || _tooEarly.GetParameters().Length != 5)
+            {
+                _tooEarly = null;
+                Log.Warn("Bellum vote peace: Bellum's minimum war duration check was not found; a voted peace is not held to it");
+            }
             Harmony.Patch(target,
                 prefix: new HarmonyMethod(typeof(BellumVotePeace), nameof(Prefix)) { priority = Priority.First },
                 finalizer: new HarmonyMethod(typeof(BellumVotePeace), nameof(Finalizer)));
@@ -59,20 +67,40 @@ public static class BellumVotePeace
         catch (Exception ex) { Log.Warn("Bellum vote peace not installed: " + ex.GetBaseException().Message); }
     }
 
-    private static void Prefix(MakePeaceKingdomDecision __instance, out bool __state)
+    private static void Prefix(MakePeaceKingdomDecision __instance, DecisionOutcome chosenOutcome, out bool __state)
     {
         __state = false;
         try
         {
+            // A vote that stands in for a Bellum treaty applies nothing itself; Bellum applies its own terms afterwards.
+            if (BellumTreatyVote.OnOutcome(__instance, chosenOutcome)) return;
+            if (chosenOutcome is not MakePeaceKingdomDecision.MakePeaceDecisionOutcome { ShouldPeaceBeDeclared: true }) return;
             if (!HasPlayers(__instance?.Kingdom)) return;
+            var other = __instance!.FactionToMakePeaceWith;
+            if (TooEarly(__instance.Kingdom, other as Kingdom, out var reason))
+            {
+                Log.Info($"Bellum vote peace: the peace vote of {__instance.Kingdom.StringId} with {other?.StringId} is left to Bellum, which refuses it: {reason}");
+                BellumTreatyVote.Tell(__instance.Kingdom, $"The vote for peace with {other?.Name} passed, but the war is too young to end: {reason}");
+                return;
+            }
             _depth!.SetValue(null, (int)_depth.GetValue(null) + 1);
             __state = true;
             _marked++;
-            Log.Info($"Bellum vote peace: applying the peace vote of {__instance!.Kingdom.StringId} with {__instance.FactionToMakePeaceWith?.StringId} as a Bellum treaty");
+            Log.Info($"Bellum vote peace: applying the peace vote of {__instance.Kingdom.StringId} with {other?.StringId} as a Bellum treaty");
         }
         catch (Exception ex) { Log.Warn("Bellum vote peace: could not mark the vote: " + ex.GetBaseException().Message); }
     }
 
+    /// <summary>Bellum's own rule that a war lasts a minimum number of days before peace, which its parley enforced for the player.</summary>
+    private static bool TooEarly(Kingdom realm, Kingdom? other, out string reason)
+    {
+        reason = "";
+        if (other == null || _tooEarly == null) return false;
+        var args = new object?[] { realm, other, null, 0, 0 };
+        if (_tooEarly.Invoke(null, args) is not true) return false;
+        reason = args[2]?.ToString() ?? "";
+        return true;
+    }
     private static void Finalizer(bool __state)
     {
         if (!__state) return;

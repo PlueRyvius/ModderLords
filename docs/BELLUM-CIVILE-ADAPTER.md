@@ -183,9 +183,45 @@ the removal on a player's game, so the screen finds it again).
 
 On a co-op player's game the parley's entry points answer "not opened" and Bellum's six patches on the vanilla peace
 vote, courier offer and diplomacy button are skipped, so the vote is what the player sees (`BellumPeaceTargets`, 15
-methods in Bellum 1.3.1). The server is untouched. Players lose Bellum's treaty terms for their own realm; routing the
-parley to the ruling player and applying it on the server is still to do. Not exercised in play: there was no save with
-a peace vote pending to test against.
+methods in Bellum 1.3.1). Not exercised in play: there was no save with a peace vote pending to test against.
+
+## Peace on the server (`BellumVotePeace`, `BellumTreatyVote`, always on when Bellum is loaded)
+
+A host's logs of 2026-10-11 showed what the client-side change left open. On the server, where peace is actually made:
+
+- **Bellum blocks peace it did not make.** While its war-and-peace revamp is on, its prefixes on
+  `MakePeaceAction.Apply` and `ApplyByKingdomDecision` refuse every peace between two ordinary kingdoms that does not
+  come from Bellum's own treaty code (`Blocked non-Bellum international peace`). A kingdom vote for peace therefore ran,
+  passed, and was discarded. This covers a player's own proposal and the peace offers Coop mirrors into a players'
+  kingdom when an AI kingdom wants peace.
+- **A realm of players refuses every Bellum treaty.** On a dedicated server no kingdom is "the player's", so Bellum
+  ratifies treaties with its AI councils. A player's clan is a minor faction with no council seat, so the council of a
+  realm of players is empty (`yay=0, nay=0, quorum=0/0`) and counts as a refusal. The log shows a draft refused about
+  once a game day, until the war score reached 100 and Bellum forced terms.
+
+`BellumVotePeace`: the outcome of a peace vote in a kingdom with at least one player's clan is applied inside the mark
+Bellum puts on its own treaties (`BellumPeaceResolutionContext`), which its guard lets through after its claim-feud and
+civil-war checks. Bellum's minimum war duration is still honoured: a vote that passes too early is left to the guard,
+and the players are told why. Bellum closes its war score, active-war record and pressure records from the game's
+peace event, as for its own treaties; a treaty draft still pending for that war is cancelled by Bellum on its next
+daily tick ("war or treaty realm no longer active").
+
+`BellumTreatyVote`: when Bellum is about to ratify a treaty that is not forced (`ResolvePendingParley`) and the ruler of
+one of its realms is a connected player, ratification is held and that realm gets a peace vote through Coop's voting
+round. The vote is a vanilla `MakePeaceKingdomDecision` with `applyResults` off, carrying the treaty's tribute; Bellum's
+own sentence for the terms is sent to the realm's players as a message. The result replaces that realm's verdict in
+`EvaluateRatification`, and Bellum then applies or rejects its own treaty, terms and all. If the ruler does not vote,
+Bellum's council decides, as for a lord's realm. After a refusal or no answer the realm is not asked again about that
+war for 14 days. Players of both realms are told the terms of every Bellum treaty that is applied, forced ones included.
+
+Left to Bellum as before: forced treaties, realms a lord rules (a player vassal there has no say in a Bellum treaty),
+and realms whose ruling player is not connected.
+
+Still not possible: a player drafting a treaty's terms. Coop's barter peace with an enemy lord goes through
+`MakePeaceAction.Apply` outside any vote and is still refused by Bellum's guard.
+
+Checked: the patches install on a dedicated server with Bellum 1.3.1 (headless, no player). Not exercised in play:
+everything that needs a connected player, which is all of the behaviour above.
 ## The "player" on a dedicated server
 
 Bellum asks "is this the player's clan?" in about 900 places. On a dedicated server `Clan.PlayerClan` is the
