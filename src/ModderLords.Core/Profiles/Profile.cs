@@ -198,6 +198,35 @@ public static class ProfileStore
         return JsonSerializer.Deserialize<Profile>(File.ReadAllText(p), Json);
     }
 
+    /// <summary>
+    /// <see cref="Load"/> for callers that must carry on when a profile cannot be read. A profile saved by a newer
+    /// ModderLords can hold a value this one does not know, and one such file must not stop the app from starting:
+    /// the update that could read it is offered only once the window is up. Null with no problem means there is no
+    /// such profile. Null with a problem means the file is there and must be left alone, never saved over.
+    /// </summary>
+    public static Profile? TryLoad(string name, out string? problem) => TryLoadFile(PathFor(name), name, out problem);
+
+    public static Profile? TryLoadFile(string path, string name, out string? problem)
+    {
+        problem = null;
+        if (!File.Exists(path)) return null;
+        try
+        {
+            if (JsonSerializer.Deserialize<Profile>(File.ReadAllText(path), Json) is { } profile) return profile;
+            problem = Unreadable(name, "the file is empty");
+        }
+        catch (JsonException ex) { problem = Unreadable(name, Detail(ex)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { problem = Unreadable(name, ex.Message); }
+        return null;
+    }
+
+    private static string Unreadable(string name, string detail) =>
+        $"Profile “{name}” cannot be opened by this version of ModderLords. It was probably saved by a newer one: update ModderLords to open it. The profile has not been changed. ({detail})";
+
+    /// <summary>Where in the file it went wrong, without the .NET type names around it.</summary>
+    private static string Detail(JsonException ex) =>
+        string.IsNullOrEmpty(ex.Path) ? $"line {ex.LineNumber + 1}" : $"{ex.Path}, line {ex.LineNumber + 1}";
+
     public static void Save(Profile profile)
     {
         Directory.CreateDirectory(ProfilesDir);
