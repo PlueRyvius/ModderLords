@@ -52,6 +52,7 @@ public partial class MainWindow : Window
         // After the first frame: the check is a network call, and the window must never wait on the network to appear.
         ContentRendered += async (_, _) =>
         {
+            ShowProfileProblem();
             await ViewModel.EnsureClientModuleAtStartupAsync();
             try { if (ViewModel.Update is { } update) await update.CheckOnStartupAsync(); }
             catch (Exception) { }
@@ -67,6 +68,15 @@ public partial class MainWindow : Window
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;
 
+    /// <summary>Says once why a profile did not open. Posted, not shown inline: the update check must not wait on it.</summary>
+    private void ShowProfileProblem()
+    {
+        if (ViewModel.ProfileProblem is not { } problem) return;
+        ViewModel.ProfileProblem = null;
+        ViewModel.Status = problem;
+        Dispatcher.BeginInvoke(() => MessageBox.Show(this, problem, "ModderLords", MessageBoxButton.OK, MessageBoxImage.Information));
+    }
+
     // ---- mode ------------------------------------------------------------------------------------------
 
     /// <summary>The title without the unsaved-changes marker, so the marker can be added and taken away.</summary>
@@ -76,6 +86,7 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.IsDirty)) Title = ViewModel.IsDirty ? "* " + _baseTitle : _baseTitle;
         if (e.PropertyName == nameof(MainViewModel.Host)) AttachHost();
+        if (e.PropertyName == nameof(MainViewModel.ProfileProblem) && IsLoaded) ShowProfileProblem();
         if (e.PropertyName == nameof(MainViewModel.RoleChoices)) ApplyRoleChoices();
         if (e.PropertyName == nameof(MainViewModel.ExperimentalCompat))
         {

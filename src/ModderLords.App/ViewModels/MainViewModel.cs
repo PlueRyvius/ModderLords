@@ -540,11 +540,51 @@ public partial class MainViewModel : ObservableObject
 
     public void LoadProfile(string name)
     {
-        Profile = ProfileStore.Load(name) ?? new Profile { Name = name };
+        var profile = ProfileStore.TryLoad(name, out var problem);
+        if (problem is not null)
+        {
+            if (_profileOpened && ProfileStore.Exists(Profile.Name))
+            {
+                // Stay on the profile that is open. The dropdown is mid-update and ignores a change made now.
+                var current = Profile.Name;
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() => SelectedProfileName = current);
+                ProfileProblem = problem;
+                Status = problem;
+                return;
+            }
+            // Nothing is open yet (startup, or the open profile was just deleted): open another one instead. Never
+            // a blank profile under the unreadable one's name, which the next Save would write over it.
+            profile = FirstReadableProfile() ?? new Profile { Name = UnusedProfileName() };
+            if (!ProfileNames.Contains(profile.Name)) ProfileNames.Add(profile.Name);
+        }
+        Profile = profile ?? new Profile { Name = name };
+        _profileOpened = true;
+        if (problem is not null) ProfileProblem = problem;
         SelectedProfileName = Profile.Name;
         Rescan();
         if (IsHost) Host?.OnProfileSelected();
         IsDirty = false;
+    }
+
+    /// <summary>False until a profile has been opened, so a failure at startup falls back instead of staying put.</summary>
+    private bool _profileOpened;
+
+    /// <summary>The last profile that could not be read, for the window to tell the user about once. Status alone is
+    /// replaced by the next thing that happens.</summary>
+    [ObservableProperty] private string? _profileProblem;
+
+    private static Profile? FirstReadableProfile()
+    {
+        foreach (var candidate in ProfileStore.List())
+            if (ProfileStore.TryLoad(candidate, out _) is { } readable) return readable;
+        return null;
+    }
+
+    private static string UnusedProfileName()
+    {
+        if (!ProfileStore.Exists("default")) return "default";
+        for (var n = 2; ; n++)
+            if (!ProfileStore.Exists($"default {n}")) return $"default {n}";
     }
 
     [RelayCommand]
