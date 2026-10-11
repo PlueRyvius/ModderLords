@@ -463,6 +463,13 @@ and the command line call the same thing.
 - **Client only** (`DependencyOnly`): keep the mod in the server's list so the Coop handshake matches players, but
   load none of its code there; it runs on players' games only. The default for client-side frameworks: Harmony,
   ButterLib, UIExtenderEx, MCM (MCM's settings core is still loaded so mods that read settings work).
+- **Client optional** (`ClientOptional`): the mod is not on the server at all, and each player chooses whether to run
+  it. For mods that only change what one player sees: overlays, camera and interface mods. The server is told which
+  mods these are and leaves them out of its join check, so players with and without them can both join; every other
+  mod is still matched exactly. Your own **Launch client** runs the ones you have ticked. A shared mod list marks them,
+  and a player who does not have one is not asked to get it. Needs Settings sync, because the join check is relaxed
+  inside the ModderLords module the server loads. Do not use it for a mod that changes gameplay: players would be out
+  of step with each other and with the server.
 - **Mod decides** (`AsShipped`): hand the manifest to the engine unchanged and let the mod's own tags decide what the
   server loads. Only for mods built for dedicated servers.
 - **Server only** (`Run` with **Server-only logic** ticked): the mod's behaviours run on the server and players' games

@@ -15,6 +15,19 @@ public sealed record ModuleSelectionResult(
     IReadOnlyList<ModSelection> Selections,
     LoadOrder.Result Order)
 {
+    /// <summary>
+    /// Mods the profile marks <see cref="ServerRole.ClientOptional"/>: never among <see cref="Selections"/>, because
+    /// the server does not load or list them, but part of what a player may run and of any list handed to players.
+    /// </summary>
+    public IReadOnlyList<ModSelection> ClientOptional { get; init; } = [];
+
+    /// <summary>Their ids, for anything that must leave a player's own choice alone.</summary>
+    public IReadOnlySet<string> ClientOptionalIds =>
+        ClientOptional.Select(s => s.Module.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Everything a player's game may load: the selections, then the optional mods.</summary>
+    public IEnumerable<ModSelection> ForPlayers => Selections.Concat(ClientOptional);
+
     /// <summary>Version of each selected mod, for comparing against a save's header or another player's list.</summary>
     public IReadOnlyDictionary<string, string> Versions =>
         Selections.ToDictionary(s => s.Module.Id, s => s.Module.Version, StringComparer.OrdinalIgnoreCase);

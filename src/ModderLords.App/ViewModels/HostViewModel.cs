@@ -725,7 +725,7 @@ public partial class HostViewModel : ObservableObject
         Main.RefreshPreview();
         var path = ClientManifest.DefaultLauncherDataPath();
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase),
-            installedVersions: Main.InstalledClientVersions());
+            installedVersions: Main.InstalledClientVersions(), clientOptional: target.Modules.ClientOptionalIds);
         var win = new LauncherSyncWindow(plan, path, LauncherDataSync.DefaultBackupRoot(), launching: false) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         try
@@ -787,7 +787,7 @@ public partial class HostViewModel : ObservableObject
         Main.RefreshPreview();
 
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase),
-            installedVersions: Main.InstalledClientVersions());
+            installedVersions: Main.InstalledClientVersions(), clientOptional: target.Modules.ClientOptionalIds);
         foreach (var b in plan.Blockers) AddLine(LogCategory.Warning, $"[ModderLords] mod list: {b.Id} — {b.Detail}");
         if (!plan.HasChanges)
         {

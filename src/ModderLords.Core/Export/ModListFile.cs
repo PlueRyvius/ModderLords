@@ -106,7 +106,7 @@ public sealed record ModListFile
             .ToDictionary(m => m.Id, m => m.DownloadUrl!, StringComparer.OrdinalIgnoreCase);
 
         var coop = ClientOrder.Coop(prepared);
-        var exported = prepared.Selections.Select(s => s.Module)
+        var exported = prepared.ForPlayers.Select(s => s.Module)
             .Where(m => !ClientManifest.IsServerOnly(m.Id))   // the launcher's own server module means nothing to anyone else
             .ToList();
         // Host mode keeps Coop as server stock, so it is not in the selections — but its client position is the
@@ -197,8 +197,14 @@ public sealed record ModListFile
     /// it, so an entry here would only produce a version mismatch it cannot act on.
     /// </summary>
     public IReadOnlyList<ClientManifest.Entry> ToClientEntries() =>
-        Mods.Where(m => !ClientManifest.CoopClientModuleIds.Contains(m.Id))
+        // Client optional mods are left out as well: nothing here may enable one, version-check it or report it
+        // missing, because whether to run it is each player's own choice.
+        Mods.Where(m => !ClientManifest.CoopClientModuleIds.Contains(m.Id) && m.Role != ServerRole.ClientOptional)
             .Select(m => new ClientManifest.Entry(m.Id, m.Version, m.Source)).ToList();
+
+    /// <summary>The mods each player may run or not (<see cref="ServerRole.ClientOptional"/>), which no sync may tick or untick.</summary>
+    public IReadOnlySet<string> ClientOptionalIds =>
+        Mods.Where(m => m.Role == ServerRole.ClientOptional).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The shared CLIENT load order, in the shape the sync expects. From format 2 Coop is in it.</summary>
     public LoadOrder.Result ToOrder() => new(Mods.Select(m => m.Id).ToList(), []);

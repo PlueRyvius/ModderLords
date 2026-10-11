@@ -34,6 +34,7 @@ public static class ClientManifest
     /// them looking for a mod that does not exist.
     /// </summary>
     public static IReadOnlyList<Entry> From(ModuleSelectionResult p) =>
+        // Required mods only: a Client optional mod is nobody's to match, so it is not in what a player must enable.
         p.Selections.Where(s => !IsServerOnly(s.Module.Id))
                     .Select(s => new Entry(s.Module.Id, s.Module.Version, WorkshopUrl(s.Module.FolderPath))).ToList();
 

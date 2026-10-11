@@ -1,6 +1,7 @@
 using ModderLords.Core.Export;
 using ModderLords.Core.Launch;
 using ModderLords.Core.Modules;
+using ModderLords.Core.Overlay;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
 
@@ -15,10 +16,14 @@ public static class ServerMatchedClient
     public static ClientLaunchSession.Prepared Prepare(LaunchSession.Prepared target, Profile clientProfile)
     {
         var client = ProfileStore.Snapshot(clientProfile);
-        client.Mods = target.Selections.Where(s => !ClientManifest.IsServerOnly(s.Module.Id))
+        // The host's own game runs the Client optional mods ticked in the profile, like any other player who chose them.
+        client.Mods = target.Selections.Where(s => !ClientManifest.IsServerOnly(s.Module.Id)).Concat(target.ClientOptional)
             .Select(s => ClientEntry(s.Module, target.Catalog, clientProfile)).ToList();
+        // One that is not installed on this PC is simply not run; it is not a missing mod.
+        var notHere = clientProfile.EnabledMods.Where(pm => pm.Role == ServerRole.ClientOptional
+            && !client.Mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase))).Select(pm => pm.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var missing in clientProfile.EnabledMods.Where(pm => !client.Mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
-                     !ClientManifest.IsServerOnly(pm.Id) && !ClientManifest.CoopClientModuleIds.Contains(pm.Id)))
+                     !ClientManifest.IsServerOnly(pm.Id) && !ClientManifest.CoopClientModuleIds.Contains(pm.Id) && !notHere.Contains(pm.Id)))
             client.Mods.Add(missing);
 
         // The selections come out in the SERVER's order, which says nothing about where these mods go on a player's

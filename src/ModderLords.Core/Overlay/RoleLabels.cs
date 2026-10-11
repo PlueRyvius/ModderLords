@@ -11,6 +11,8 @@ public enum RoleChoice
     ServerAndClient,
     /// <summary><see cref="ServerRole.DependencyOnly"/>: listed on the server for the handshake, code on players' games only.</summary>
     ClientOnly,
+    /// <summary><see cref="ServerRole.ClientOptional"/>: not on the server, and each player decides whether to run it.</summary>
+    ClientOptional,
     /// <summary><see cref="ServerRole.Run"/> with Server-only logic ticked. Experimental compatibility only.</summary>
     ServerOnly,
     /// <summary><see cref="ServerRole.AsShipped"/>: the mod's own manifest decides what the server loads.</summary>
@@ -27,6 +29,7 @@ public static class RoleLabels
 {
     public const string ServerAndClient = "Server + Client";
     public const string ClientOnly = "Client only";
+    public const string ClientOptional = "Client optional";
     public const string ServerOnly = "Server only";
     public const string ModDecides = "Mod decides";
 
@@ -34,6 +37,7 @@ public static class RoleLabels
     {
         RoleChoice.ServerAndClient => ServerAndClient,
         RoleChoice.ClientOnly => ClientOnly,
+        RoleChoice.ClientOptional => ClientOptional,
         RoleChoice.ServerOnly => ServerOnly,
         _ => ModDecides,
     };
@@ -49,6 +53,7 @@ public static class RoleLabels
     {
         ServerRole.Run => serverOnlyLogic && experimental ? RoleChoice.ServerOnly : RoleChoice.ServerAndClient,
         ServerRole.DependencyOnly => RoleChoice.ClientOnly,
+        ServerRole.ClientOptional => RoleChoice.ClientOptional,
         _ => RoleChoice.ModDecides,
     };
 
@@ -56,6 +61,7 @@ public static class RoleLabels
     public static ServerRole Role(RoleChoice choice) => choice switch
     {
         RoleChoice.ClientOnly => ServerRole.DependencyOnly,
+        RoleChoice.ClientOptional => ServerRole.ClientOptional,
         RoleChoice.ModDecides => ServerRole.AsShipped,
         _ => ServerRole.Run,
     };

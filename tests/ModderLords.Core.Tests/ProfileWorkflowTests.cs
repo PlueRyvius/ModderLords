@@ -216,4 +216,62 @@ public class ProfileWorkflowTests
     [Fact]
     public void Renaming_something_that_is_not_there_says_so()
         => Assert.Throws<InvalidOperationException>(() => ProfileStore.Rename("mbc-absent-" + Guid.NewGuid().ToString("N"), "mbc-x"));
+    // ---- Client optional in a shared list and at launch -------------------------------------------------------
+
+    private static DiscoveredModule Installed(string id, string version = "v1.0.0") =>
+        new(id, version, "unused", ModuleSourceKind.Custom, new Bannerlord.ModuleManager.ModuleInfoExtended { Id = id, Name = id });
+
+    [Fact]
+    public void An_optional_mod_is_in_the_list_players_get_but_not_in_what_they_must_match()
+    {
+        var profile = new Profile { Mods = [new() { Id = "Gameplay" }, new() { Id = "Overlay", Role = ServerRole.ClientOptional }] };
+        var catalog = ModuleCatalog.Scan("", null, [], []);
+        var prepared = new ModuleSelectionResult(catalog, [new ModSelection(Installed("Gameplay"), ServerRole.Run)], new LoadOrder.Result(["Gameplay"], []))
+        {
+            ClientOptional = [new ModSelection(Installed("Overlay", "v2.3.0"), ServerRole.ClientOptional)],
+        };
+
+        var list = ModListFile.From(prepared, profile);
+        var path = Path.GetTempFileName();
+        try
+        {
+            ModListFile.Write(path, list);
+            var read = ModListFile.Read(path);
+
+            var overlay = read.Mods.Single(m => m.Id == "Overlay");
+            Assert.Equal(ServerRole.ClientOptional, overlay.Role);
+            Assert.Equal("v2.3.0", overlay.Version);
+            // What a player's launcher enables, version-checks and reports missing: the required mod only.
+            Assert.Equal(["Gameplay"], read.ToClientEntries().Select(e => e.Id));
+            Assert.Empty(read.NotInstalled(new HashSet<string>(["Gameplay"], StringComparer.OrdinalIgnoreCase)));
+            // Another host importing it keeps the role.
+            Assert.Equal(ServerRole.ClientOptional, read.ToProfile("copy").Mods.Single(m => m.Id == "Overlay").Role);
+            // And the server's own required list never had it.
+            Assert.Equal(["Gameplay"], ClientManifest.From(prepared).Select(e => e.Id));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void A_player_without_an_optional_mod_is_not_told_it_is_missing()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var root = Path.Combine(Path.GetTempPath(), "ModderLords-optional-" + Guid.NewGuid().ToString("N"));
+        var game = Path.Combine(root, "game");
+        Directory.CreateDirectory(GamePaths.ClientBin(game));
+        File.WriteAllText(Path.Combine(GamePaths.ClientBin(game), "Bannerlord.exe"), "fixture");
+        var present = Path.Combine(game, "Modules", "Present");
+        Directory.CreateDirectory(present);
+        File.WriteAllText(Path.Combine(present, "SubModule.xml"), "<Module><Id value='Present'/><Name value='Present'/><Version value='v1.0.0'/><SubModules/></Module>");
+        try
+        {
+            var profile = new Profile
+            {
+                GameRoot = game, ClientOfficialModules = [],
+                Mods = [new() { Id = "Present" }, new() { Id = "Overlay", Role = ServerRole.ClientOptional }, new() { Id = "Required" }],
+            };
+            Assert.Equal(["Required"], ClientLaunchSession.Prepare(profile).Plan.MissingModules);
+        }
+        finally { Directory.Delete(root, true); }
+    }
 }

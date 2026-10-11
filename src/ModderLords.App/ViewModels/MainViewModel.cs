@@ -195,10 +195,11 @@ public partial class ModRow : ObservableObject
 
     private static readonly RoleChoiceItem ServerAndClientItem = new(RoleChoice.ServerAndClient);
     private static readonly RoleChoiceItem ClientOnlyItem = new(RoleChoice.ClientOnly);
+    private static readonly RoleChoiceItem ClientOptionalItem = new(RoleChoice.ClientOptional);
     private static readonly RoleChoiceItem ModDecidesItem = new(RoleChoice.ModDecides);
-    private static readonly IReadOnlyList<RoleChoiceItem> StandardRoleChoices = [ServerAndClientItem, ClientOnlyItem, ModDecidesItem];
+    private static readonly IReadOnlyList<RoleChoiceItem> StandardRoleChoices = [ServerAndClientItem, ClientOnlyItem, ClientOptionalItem, ModDecidesItem];
     private static readonly IReadOnlyList<RoleChoiceItem> ExperimentalRoleChoices =
-        [ServerAndClientItem, ClientOnlyItem, new(RoleChoice.ServerOnly), ModDecidesItem];
+        [ServerAndClientItem, ClientOnlyItem, ClientOptionalItem, new(RoleChoice.ServerOnly), ModDecidesItem];
 
     private ModderLords.Core.Compat.ScanResult? _scan;
 
@@ -2013,7 +2014,8 @@ public partial class MainViewModel : ObservableObject
         // A format 2 list knows where Coop loads on a player, so the sync may place it. Format 1 does not.
         var plan = LauncherDataSync.ComputePlan(file.ToClientEntries(), file.ToOrder(), path, InstalledClientSide(),
             file.ClientOfficialModules?.ToHashSet(StringComparer.OrdinalIgnoreCase),
-            orderIncludesCoopPosition: file.FormatVersion >= 2, installedVersions: InstalledClientVersions());
+            orderIncludesCoopPosition: file.FormatVersion >= 2, installedVersions: InstalledClientVersions(),
+            clientOptional: file.ClientOptionalIds);
         if (file.CoopPositionUnknown)
             Log(LogCategory.Warning, "[ModderLords] shared list: written by an older ModderLords and does not record where Coop loads. "
                                    + "Coop has been left where it is; if you use mods that patch Coop, drag it above them.");
