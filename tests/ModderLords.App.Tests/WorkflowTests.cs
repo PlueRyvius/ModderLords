@@ -1216,6 +1216,7 @@ public class WorkflowTests
             var expectedRole = choice switch
             {
                 RoleChoice.ClientOnly => ServerRole.DependencyOnly,
+                RoleChoice.ClientOptional => ServerRole.ClientOptional,
                 RoleChoice.ModDecides => ServerRole.AsShipped,
                 _ => ServerRole.Run,
             };
@@ -1318,8 +1319,8 @@ public class WorkflowTests
         row.Role = ServerRole.Run; row.ServerAuthoritative = true;
 
         RoleChoice[] offered() => vm.RoleChoices.Select(c => c.Choice).ToArray();
-        Assert.Equal([RoleChoice.ServerAndClient, RoleChoice.ClientOnly, RoleChoice.ModDecides], offered());
-        Assert.Equal(["Server + Client", "Client only", "Mod decides"], vm.RoleChoices.Select(c => c.Label));
+        Assert.Equal([RoleChoice.ServerAndClient, RoleChoice.ClientOnly, RoleChoice.ClientOptional, RoleChoice.ModDecides], offered());
+        Assert.Equal(["Server + Client", "Client only", "Client optional", "Mod decides"], vm.RoleChoices.Select(c => c.Label));
         Assert.Equal(RoleChoice.ServerAndClient, row.RoleChoice);
 
         // What a bound cell would see at each notification: its own choice must be in the list at that moment.
@@ -1329,7 +1330,7 @@ public class WorkflowTests
         row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ModRow.RoleChoice)) Check("row changed"); };
 
         vm.ExperimentalCompat = true;
-        Assert.Equal([RoleChoice.ServerAndClient, RoleChoice.ClientOnly, RoleChoice.ServerOnly, RoleChoice.ModDecides], offered());
+        Assert.Equal([RoleChoice.ServerAndClient, RoleChoice.ClientOnly, RoleChoice.ClientOptional, RoleChoice.ServerOnly, RoleChoice.ModDecides], offered());
         Assert.Equal("Server only", vm.RoleChoices.Single(c => c.Choice == RoleChoice.ServerOnly).Label);
         Assert.Equal(RoleChoice.ServerOnly, row.RoleChoice);
 

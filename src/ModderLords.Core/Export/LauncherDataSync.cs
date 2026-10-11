@@ -109,7 +109,8 @@ public static class LauncherDataSync
     public static SyncPlan ComputePlan(IReadOnlyList<ClientManifest.Entry> serverMods, LoadOrder.Result order, string launcherDataPath,
                                        IReadOnlySet<string>? installedClientSide = null, IReadOnlySet<string>? officialSelection = null,
                                        bool orderIncludesCoopPosition = false,
-                                       IReadOnlyDictionary<string, IReadOnlyList<string>>? installedVersions = null)
+                                       IReadOnlyDictionary<string, IReadOnlyList<string>>? installedVersions = null,
+                                       IReadOnlySet<string>? clientOptional = null)
     {
         var changes = new List<PlannedChange>();
         if (!File.Exists(launcherDataPath))
@@ -185,6 +186,8 @@ public static class LauncherDataSync
             if (officialSelection is not null && OfficialModules.IsGameModule(c.Id)) continue;
             if (ClientManifest.OfficialModuleIds.Contains(c.Id) || ClientManifest.CoopClientModuleIds.Contains(c.Id)) continue;
             if (wantedIds.Contains(c.Id)) continue;
+            // A Client optional mod is the player's own choice: it is neither ticked nor unticked for them.
+            if (clientOptional?.Contains(c.Id) == true) continue;
             changes.Add(new PlannedChange(c.Id, SyncAction.Disable,
                 OfficialModules.IsDlc(c.Id) ? "DLC must be off to join" : "the server does not run it"));
         }

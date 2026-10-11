@@ -57,6 +57,26 @@ public class LauncherDataSyncTests : IDisposable
     }
 
     [Fact]
+    public void A_client_optional_mod_is_left_exactly_as_the_player_set_it()
+    {
+        // One optional mod ticked, one not, and an ordinary extra the server does not run.
+        var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("CoopNightly", "v0.1.4", true), Mod("ImprovedGarrisons", "v1.2.3", true),
+                             Mod("NiceOverlay", "v1.0", true), Mod("OtherOverlay", "v1.0", false), Mod("BetterPatrols", "v2.0", true));
+        var optional = new HashSet<string>(["NiceOverlay", "OtherOverlay"], StringComparer.OrdinalIgnoreCase);
+        var plan = LauncherDataSync.ComputePlan([E("ImprovedGarrisons", "v1.2.3")], Order("ImprovedGarrisons", "NiceOverlay", "OtherOverlay"), path,
+            clientOptional: optional);
+
+        Assert.DoesNotContain(plan.Changes, c => c.Id is "NiceOverlay" or "OtherOverlay" &&
+            c.Action is LauncherDataSync.SyncAction.Enable or LauncherDataSync.SyncAction.Disable or LauncherDataSync.SyncAction.Unfixable);
+        Assert.Contains(plan.Changes, c => c.Id == "BetterPatrols" && c.Action == LauncherDataSync.SyncAction.Disable);
+
+        LauncherDataSync.Apply(plan, path, BackupRoot);
+        var after = Read(path);
+        Assert.Contains(("NiceOverlay", true), after);
+        Assert.Contains(("OtherOverlay", false), after);
+        Assert.Contains(("BetterPatrols", false), after);
+    }
+    [Fact]
     public void Ticks_a_server_mod_and_unticks_an_extra()
     {
         var path = WriteFile(Mod("Native", "v1.4.8", true), Mod("CoopNightly", "v0.1.4", true),

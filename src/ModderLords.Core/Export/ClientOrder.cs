@@ -25,7 +25,7 @@ public static class ClientOrder
     public static IReadOnlyList<string> For(ModuleSelectionResult prepared, Profile profile,
                                             IReadOnlyCollection<string>? knownToFollowCoop = null)
     {
-        var mods = prepared.Selections.Select(s => s.Module)
+        var mods = prepared.ForPlayers.Select(s => s.Module)
             .Where(m => !ClientManifest.IsServerOnly(m.Id))
             .ToList();
 

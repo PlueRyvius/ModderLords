@@ -322,7 +322,7 @@ switch (cmd)
         Console.WriteLine("server mods   : " + string.Join(", ", ClientManifest.From(prepared.Modules).Select(e => $"{e.Id} {e.Version}")));
         Console.WriteLine("client-visible: " + string.Join(", ", installed.OrderBy(x => x)));
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(prepared.Modules), prepared.Order, launcherData, installed,
-            installedVersions: LauncherDataSync.ClientSideVersions(prepared.Catalog.Modules));
+            installedVersions: LauncherDataSync.ClientSideVersions(prepared.Catalog.Modules), clientOptional: prepared.Modules.ClientOptionalIds);
         Console.WriteLine("target order  : " + string.Join(", ", plan.TargetOrder));
         Console.WriteLine(plan.Changes.Count == 0 ? "no changes" : "changes:");
         foreach (var ch in plan.Changes) Console.WriteLine("  " + ch);
@@ -472,6 +472,11 @@ switch (cmd)
             if (compat is null) { Console.Error.WriteLine("[ModderLords] required compatibility module not found under compat\\ next to the CLI"); return 2; }
             else selections.Add(new ModSelection(compat, ServerRole.AsShipped));
         }
+        // Client optional mods are never on the server; it only needs their ids, to leave out of the join check.
+        var optionalIds = ClientOptionalMods.Ids(selections.Where(s => s.Role == ServerRole.ClientOptional).Select(s => s.Module.Id));
+        selections.RemoveAll(s => s.Role == ServerRole.ClientOptional);
+        if (optionalIds.Count > 0)
+            Console.WriteLine("[ModderLords] client optional: " + string.Join(", ", optionalIds) + " not loaded or listed on the server (needs --settings-sync for the join check)");
         foreach (var s in selections)
         {
             var scan = ModderLords.Core.Compat.AssemblyScan.Scan(s.Module);
@@ -515,6 +520,7 @@ switch (cmd)
 
         var extraEnv = new Dictionary<string, string>();
         foreach (var kv in LaunchSession.HeadlessMapEnvironment(headlessContent.MapPaths)) extraEnv[kv.Key] = kv.Value;
+        if (optionalIds.Count > 0) extraEnv[ClientOptionalMods.Variable] = ClientOptionalMods.Format(optionalIds);
         if (createWorld is not null)
         {
             try { SavePreparer.ValidateSaveName(createWorld); }
@@ -690,7 +696,7 @@ static List<ModSelection> ParseSelections(string? spec, ModuleCatalog catalog, o
         var parts = item.Split(':', 2);
         var id = parts[0];
         var role = ServerRole.Run;
-        if (parts.Length == 2 && !Enum.TryParse(parts[1], ignoreCase: true, out role)) { errors.Add($"{item}: unknown role '{parts[1]}' (Run|DependencyOnly|AsShipped)"); continue; }
+        if (parts.Length == 2 && !Enum.TryParse(parts[1], ignoreCase: true, out role)) { errors.Add($"{item}: unknown role '{parts[1]}' (Run|DependencyOnly|AsShipped|ClientOptional)"); continue; }
         var candidates = catalog.Candidates(id).ToList();
         if (candidates.Count == 0) { errors.Add($"{id}: not found in game Modules, workshop, or custom sources"); continue; }
         // Prefer a folder named after the id (a real install) over workshop-id-named copies, then the highest version.

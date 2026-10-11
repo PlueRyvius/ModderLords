@@ -25,6 +25,7 @@ public static class Bridge
         Steps.Run("BattleScenePick.EnsureInstalled", () => BattleScenePick.EnsureInstalled());
         Steps.Run("BellumThreadSafety.EnsureInstalled", () => BellumThreadSafety.EnsureInstalled());
         Steps.Run("BellumPeaceInCoop.EnsureInstalled", () => BellumPeaceInCoop.EnsureInstalled());
+        Steps.Run("ClientOptionalJoin.EnsureInstalled", () => ClientOptionalJoin.EnsureInstalled());
         Steps.Run("KingdomVoteTimeoutAi.EnsureInstalled", () => KingdomVoteTimeoutAi.EnsureInstalled());
         Steps.Run("InventoryExchangeEvent.EnsureInstalled", () => InventoryExchangeEvent.EnsureInstalled());
         Steps.Run("ModKingdomDecisions.EnsureInstalled", () => ModKingdomDecisions.EnsureInstalled());

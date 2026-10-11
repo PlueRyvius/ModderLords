@@ -41,8 +41,11 @@ public sealed class LaunchSession
         LaunchPlan Plan,
         IReadOnlyList<string> Messages)
     {
+        /// <summary>Mods each player may run or not; never on the server (<see cref="ServerRole.ClientOptional"/>).</summary>
+        public IReadOnlyList<ModSelection> ClientOptional { get; init; } = [];
+
         /// <summary>The engine-agnostic half of this launch, for the code shared with the client path.</summary>
-        public ModuleSelectionResult Modules => new(Catalog, Selections, Order);
+        public ModuleSelectionResult Modules => new(Catalog, Selections, Order) { ClientOptional = ClientOptional };
         public ModderLords.Analysis.CompatibilityPlan? OperationPlan { get; init; }
     }
 
@@ -68,7 +71,17 @@ public sealed class LaunchSession
     /// <summary>Picks a concrete folder for each enabled profile mod. Shared with the client launch path.</summary>
     public static IReadOnlyList<ModSelection> Select(Profile profile, ModuleCatalog catalog, List<string> messages)
         => ModuleSelector.Select(profile, catalog, messages, ModuleSelector.ModuleSide.Server)
-            .Where(s => !ClientManifest.CoopClientModuleIds.Contains(s.Module.Id) &&
+            .Where(s => s.Role != ServerRole.ClientOptional && !ClientManifest.CoopClientModuleIds.Contains(s.Module.Id) &&
+                !catalog.Modules.Any(m => m.IsStock && m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase))).ToList();
+
+    /// <summary>
+    /// The profile's Client optional mods that are installed on this PC, as a player's game would load them. The
+    /// server takes no copy of them: only their ids, to leave out of the join check (<see cref="ClientOptionalMods"/>).
+    /// </summary>
+    public static IReadOnlyList<ModSelection> SelectClientOptional(Profile profile, ModuleCatalog catalog)
+        => ModuleSelector.Select(profile, catalog, new List<string>(), ModuleSelector.ModuleSide.Client)
+            .Where(s => s.Role == ServerRole.ClientOptional && !ClientManifest.CoopClientModuleIds.Contains(s.Module.Id) &&
+                !ClientManifest.IsServerOnly(s.Module.Id) &&
                 !catalog.Modules.Any(m => m.IsStock && m.Id.Equals(s.Module.Id, StringComparison.OrdinalIgnoreCase))).ToList();
 
     public const string CompatModuleId = "DedicatedServer.ModderLordsCompat";
@@ -172,19 +185,40 @@ public sealed class LaunchSession
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));
         // Decided from the profile's own enabled ids, before selections resolve, because the answer changes which
         // modules are selected: a generated world needs the compat module in the list.
-        var requestedIds = profile.EnabledMods.Select(m => m.Id).ToList();
+        var requestedIds = profile.EnabledMods.Where(m => m.Role != ServerRole.ClientOptional).Select(m => m.Id).ToList();
         var requestedCreation = allowWorldCreation && WorldCreationPolicy
             .Decide(requestedIds, profile.SaveName, name => SavePreparer.Exists(paths, name), profile.GenerateWorldWithActiveMods)
             .ShouldCreate && !string.IsNullOrWhiteSpace(profile.SaveName);
         var selections = WithCompat(profile, Select(profile, catalog, messages), messages, requireCompat: requestedCreation);
         if (applySideEffects)
         {
-            var missing = profile.EnabledMods.Where(pm => !ClientManifest.CoopClientModuleIds.Contains(pm.Id) &&
+            // A Client optional mod that is not installed here is not missing: the server never loads it.
+            var missing = profile.EnabledMods.Where(pm => pm.Role != ServerRole.ClientOptional &&
+                !ClientManifest.CoopClientModuleIds.Contains(pm.Id) &&
                 !selections.Any(s => s.Module.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)) &&
                 !catalog.Modules.Any(m => m.IsStock && m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)))
                 .Select(pm => pm.Id).ToList();
             if (missing.Count > 0) throw new InvalidOperationException("Missing selected mods: " + string.Join(", ", missing) +
                 ". Download them and Rescan, or untick them. The imported list has been kept.");
+        }
+
+        // Client optional: by id, from the profile, so a mod the host has not installed still counts for the players
+        // who have. The join check is relaxed inside ModderLords.Compat, so without that module on the server a
+        // player running one of these would simply be refused.
+        var optionalIds = ClientOptionalMods.Ids(profile.EnabledMods.Where(m => m.Role == ServerRole.ClientOptional).Select(m => m.Id));
+        var clientOptional = SelectClientOptional(profile, catalog);
+        if (optionalIds.Count > 0)
+        {
+            messages.Add($"client optional: {string.Join(", ", optionalIds)} {(optionalIds.Count == 1 ? "is" : "are")} not loaded or listed on the server; "
+                + "players may join with or without " + (optionalIds.Count == 1 ? "it" : "them"));
+            if (!selections.Any(s => s.Module.Id.Equals(SyncModuleId, StringComparison.OrdinalIgnoreCase)))
+            {
+                var problem = $"{RoleLabels.ClientOptional} mods need Settings sync on: the server leaves them out of its join check inside the "
+                    + $"{SyncModuleId} module, which it loads only with Settings sync. Turn it on in the Server tab, or give "
+                    + $"{string.Join(", ", optionalIds)} another role.";
+                if (applySideEffects) throw new InvalidOperationException(problem);
+                messages.Add("WARNING " + problem);
+            }
         }
 
         // A curated "Broken" verdict has to reach the console before the engine starts. It was only ever a badge on
@@ -332,6 +366,7 @@ public sealed class LaunchSession
 
         var extraEnv = new Dictionary<string, string>();
         foreach (var kv in HeadlessMapEnvironment(headlessMaps)) extraEnv[kv.Key] = kv.Value;
+        if (optionalIds.Count > 0) extraEnv[ClientOptionalMods.Variable] = ClientOptionalMods.Format(optionalIds);
         if (selections.Count > 0)
         {
             var hook = HookSetup.LocateHook();
@@ -428,9 +463,18 @@ public sealed class LaunchSession
         var mapModuleIds = new HashSet<string>(
             selections.Where(s => Directory.Exists(Path.Combine(s.Module.FolderPath, "SceneObj", "Main_map"))).Select(s => s.Module.Id),
             StringComparer.OrdinalIgnoreCase);
-        messages.AddRange(SaveModuleCheck.MessagesForLaunch(
+        var saveMessages = SaveModuleCheck.MessagesForLaunch(
             paths.SavesDir, profile.SaveName, PlannedCommunityVersions(selections),
-            willCreateWorld ? null : SavePreparer.FindTemplate(paths), mapModuleIds));
+            willCreateWorld ? null : SavePreparer.FindTemplate(paths), mapModuleIds);
+        messages.AddRange(saveMessages);
+        // The warning above is true and stays, but a host who has just made a mod Client optional would read it as
+        // something having gone wrong. Say which of the named mods are missing on purpose.
+        var optionalInSave = optionalIds.Where(id => saveMessages.Any(m => m.Contains("not in this launch", StringComparison.Ordinal)
+            && System.Text.RegularExpressions.Regex.IsMatch(m, @"(?<![\w.])" + System.Text.RegularExpressions.Regex.Escape(id) + @"(?![\w.])"))).ToList();
+        if (optionalInSave.Count > 0)
+            messages.Add($"note: {string.Join(", ", optionalInSave)} {(optionalInSave.Count == 1 ? "was" : "were")} on the server when this save was made and "
+                + $"{(optionalInSave.Count == 1 ? "is" : "are")} now {RoleLabels.ClientOptional}, so the save names {(optionalInSave.Count == 1 ? "it" : "them")}. "
+                + "A mod that only changes what a player sees keeps nothing in a save; if this one does keep something, give it its old role back.");
 
         ModderLords.Analysis.CompatibilityPlan? operationPlan = null;
         // Full operation analysis is explicit in the UI. Launch performs it when an approved managed adapter
@@ -466,7 +510,7 @@ public sealed class LaunchSession
             Visibility = profile.Server.Visibility,
             ExtraEnvironment = extraEnv,
         };
-        return new Prepared(paths, catalog, selections, order, overlayPlan, plan, messages) { OperationPlan = operationPlan };
+        return new Prepared(paths, catalog, selections, order, overlayPlan, plan, messages) { OperationPlan = operationPlan, ClientOptional = clientOptional };
     }
 
     /// <summary>Stages safe server assets and a render-free map under the profile overlay. It never writes into an

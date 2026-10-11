@@ -11,6 +11,12 @@ public enum ServerRole
     DependencyOnly,
     /// <summary>Leave the manifest exactly as shipped; the engine decides (it will skip client-only submodules).</summary>
     AsShipped,
+    /// <summary>
+    /// Not on the server at all, and each player chooses whether to run it: the server is told its id and leaves it
+    /// out of the join check. For mods that only change what one player sees (overlays, UI, camera). Last in the
+    /// enum so the stored values of the others never move.
+    /// </summary>
+    ClientOptional,
 }
 
 /// <summary>

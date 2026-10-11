@@ -88,7 +88,8 @@ public static class ClientLaunchSession
             GameRoot = gameRoot, ModuleIds = order.ModuleIds,
             ExcludedFolders = excludedFolders,
             SelectedModules = officials.Concat(mods).ToList(),
-            MissingModules = profile.EnabledMods.Where(pm => !mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)))
+            // A Client optional mod this player does not have is not missing: the game starts without it.
+            MissingModules = profile.EnabledMods.Where(pm => pm.Role != Overlay.ServerRole.ClientOptional && !mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)))
                 .Select(pm => pm.Id).Concat(profile.ClientOfficialModules.Where(id => !officials.Any(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             RequiresIsolatedView = excludedFolders.Count > 0 || mods.Any(m => m.Source == ModuleSourceKind.Custom ||
