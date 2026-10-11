@@ -99,7 +99,7 @@ internal static class SupportReportService
         }
 
         var tokens = PathTokens(profile, gameRoot, serverPaths);
-        var sources = FindSources(serverPaths);
+        var sources = FindSources(serverPaths, gameRoot);
         var generated = new List<SupportGeneratedText>();
         var warnings = new List<string>();
         try
@@ -181,7 +181,7 @@ internal static class SupportReportService
         };
     }
 
-    private static List<SupportTextSource> FindSources(ServerPaths? paths)
+    private static List<SupportTextSource> FindSources(ServerPaths? paths, string? gameRoot)
     {
         var result = new List<SupportTextSource>();
         var launcherLogs = Path.Combine(ProfileStore.RootDir, "logs");
@@ -200,7 +200,13 @@ internal static class SupportReportService
 
         var bannerlordRoot = Path.GetDirectoryName(ServerPaths.CrashesDir);
         if (bannerlordRoot is not null)
+        {
             AddRecent(result, Path.Combine(bannerlordRoot, "logs"), "rgl_log_errors_*.txt", 2, "engine error logs", 90);
+            result.AddRange(GameLogs(Path.Combine(bannerlordRoot, "logs"), GameLogCount).Select(f => new SupportTextSource(GameLogCategory, f, 88)));
+        }
+        // Coop's own log from the player's game. It is rewritten each launch and only complete after a normal exit.
+        if (!string.IsNullOrWhiteSpace(gameRoot))
+            AddIfFile(result, Path.Combine(ClientLauncher.ClientBin(gameRoot), "Coop_client.log"), GameLogCategory, 88);
 
         try
         {
@@ -220,6 +226,28 @@ internal static class SupportReportService
         AddRecent(result, modLogs, "ModderLords*.log", 3, "compatibility traces", 80);
         AddIfFile(result, Path.Combine(AppContext.BaseDirectory, "compat", LaunchSession.SyncModuleId, RecipeSet.FileName), "compatibility recipes", 90);
         return result.DistinctBy(s => Normalize(s.Path), StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public const string GameLogCategory = "game logs";
+
+    /// <summary>The server writes one too, and a player usually restarts the game before reporting: four covers both.</summary>
+    public const int GameLogCount = 4;
+
+    /// <summary>
+    /// The newest of the game's own logs, <c>rgl_log_&lt;pid&gt;.txt</c>, newest first. These are the only record of
+    /// what a player's game was doing: which screen opened, and the exception behind a screen that went blank. A
+    /// freeze on 2026-10-11 arrived with two bundles and neither could say what the players had been looking at,
+    /// because only <c>rgl_log_errors_*.txt</c> was collected and it had nothing in it.
+    /// </summary>
+    public static IReadOnlyList<string> GameLogs(string logsDirectory, int count)
+    {
+        try
+        {
+            return new DirectoryInfo(logsDirectory).EnumerateFiles("rgl_log_*.txt", SearchOption.TopDirectoryOnly)
+                .Where(f => !f.Name.StartsWith("rgl_log_errors_", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(f => f.LastWriteTimeUtc).Take(count).Select(f => f.FullName).ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
     }
 
     private static void AddStructuredConfiguration(ServerPaths? paths, List<SupportGeneratedText> generated,
@@ -317,7 +345,7 @@ internal static class SupportReportService
     private static string FriendlyCategory(string value) => value switch
     {
         "ModderLords launch logs" or "resolver hook logs" or "client launch logs" or "application errors" => "ModderLords logs",
-        "Coop server logs" or "engine error logs" => "Server and engine logs",
+        "Coop server logs" or "engine error logs" or GameLogCategory => "Server and engine logs",
         "world creation diagnostics" => "World creation diagnostics",
         "engine crash metadata" => "Crash metadata",
         "compatibility traces" or "compatibility recipes" => "Compatibility diagnostics",
@@ -328,7 +356,7 @@ internal static class SupportReportService
     private static string DetailFor(string category) => category switch
     {
         "ModderLords logs" => "Recent launcher, resolver, client-launch and application-error logs",
-        "Server and engine logs" => "Recent Coop server output and Bannerlord error logs",
+        "Server and engine logs" => "Recent Coop server output, the game's own logs from the last few starts, and Bannerlord error logs",
         "Crash metadata" => "Text/JSON/XML from the newest crash folder; never minidumps",
         "Configuration files" => "Server and gameplay configuration, passed through secret redaction",
         _ => "Recent relevant text diagnostics",

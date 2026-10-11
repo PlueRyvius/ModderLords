@@ -606,6 +606,9 @@ public sealed class SupportRedactor
     private static readonly Regex Ipv4 = new(@"(?<![\d.])(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}(?![\d.])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     // At least three colon-separated groups, so ordinary log timestamps such as 12:34:56 survive.
     private static readonly Regex ColonAddress = new(@"(?i)(?<![\w:])[0-9a-f:]{3,}(?![\w:])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    // The second line of every game log: "Computer: NAME User: NAME". Exact-value replacement skips names shorter
+    // than four characters, so a PC called ARC with a user called A went out in full. The line's shape is fixed.
+    private static readonly Regex EngineIdentity = new(@"(?m)(?<a>\bComputer:[ \t]*)(?<pc>[^\r\n]*?)(?<b>[ \t]+User:[ \t]*)(?<user>[^\r\n]*)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly IReadOnlyList<KeyValuePair<string, string>> _paths;
     private readonly IReadOnlyList<string> _secrets;
 
@@ -631,6 +634,7 @@ public sealed class SupportRedactor
             // after serialization as an additional defence.
             text = text.Replace(path.Replace("\\", "\\\\"), pair.Value, StringComparison.OrdinalIgnoreCase);
         }
+        text = EngineIdentity.Replace(text, m => m.Groups["a"].Value + "[REDACTED]" + m.Groups["b"].Value + "[REDACTED]");
         text = WebhookUrl.Replace(text, "[REDACTED-WEBHOOK]");
         text = AuthorizationHeader.Replace(text, m => m.Groups["key"].Value + "[REDACTED]");
         text = SecretAssignment.Replace(text, m => m.Groups["key"].Value + m.Groups["separator"].Value + "[REDACTED]");
