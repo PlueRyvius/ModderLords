@@ -185,6 +185,9 @@ switch (cmd)
             foreach (var w in r.Warnings) Console.WriteLine("[ModderLords] WARNING " + w);
             Console.WriteLine($"[ModderLords] imported {r.SourcePath}");
             Console.WriteLine($"[ModderLords]       -> {r.SavePath}");
+            Console.WriteLine(r.SessionCopied
+                ? $"[ModderLords] co-op session file copied with it: {r.SessionPlayers?.ToString() ?? "an unreadable number of"} player character(s)"
+                : "[ModderLords] no co-op session file beside that save; it carries no player characters");
             Console.WriteLine($"[ModderLords] host it with: launch --mods ... --save {target}");
         }
         catch (Exception ex) { Console.Error.WriteLine("[ModderLords] import failed: " + ex.Message); return 2; }

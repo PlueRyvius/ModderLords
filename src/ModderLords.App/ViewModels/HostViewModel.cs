@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.ComponentModel;
@@ -308,6 +308,7 @@ public partial class HostViewModel : ObservableObject
             var r = SavePreparer.ImportFrom(SelectedClientSave.Header.Path, paths, name, overwrite: exists);
             foreach (var w in r.Warnings) AddLine(LogCategory.Warning, "[ModderLords] " + w);
             AddLine(LogCategory.Tool, $"[ModderLords] imported '{name}' into {paths.SavesDir}");
+            AddLine(LogCategory.Tool, "[ModderLords] " + SessionLine(r));
             RefreshSaves(paths);
             SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             Status = $"Imported save '{name}'";
@@ -318,6 +319,15 @@ public partial class HostViewModel : ObservableObject
             Status = "Import failed: " + ex.Message;
         }
     }
+
+    /// <summary>What an import says about the players' characters, so a host knows before anyone joins.</summary>
+    internal static string SessionLine(SavePreparer.ImportResult r) => r switch
+    {
+        { SessionCopied: false } => "no co-op session file was beside that save, so it carries no player characters: everyone makes a new one on joining",
+        { SessionPlayers: null } => "the co-op session file came with it",
+        { SessionPlayers: 0 } => "the co-op session file came with it; it lists no player characters",
+        _ => $"the co-op session file came with it: {r.SessionPlayers} player character(s) carried over",
+    };
 
     // ---- drift / resync / gameplay --------------------------------------------------------------------
 
