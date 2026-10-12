@@ -165,8 +165,8 @@ public sealed class FourberieSurfaceTests
     }
 
     /// <summary>
-    /// FbEscape sends the server a release whenever Fourberie's code calls PlayerCaptivity.EndCaptivity on a player's
-    /// game, and holds Coop's cleanup back for the mission that follows. That is right for "Break free" only.
+    /// FbEscape refuses, on a player's game in co-op, every method of FourbEscapeBehavior that calls
+    /// PlayerCaptivity.EndCaptivity. That is right only while "Break free" is the one place Fourberie does that.
     /// </summary>
     [Fact]
     public void OnlyBreakFreeEndsThePlayersCaptivityDirectly()
@@ -179,6 +179,17 @@ public sealed class FourberieSurfaceTests
         var breakFree = Assert.Single(callers);
         Assert.StartsWith("Fourberie.FourbEscapeBehavior", breakFree.DeclaringType.FullName);
         Assert.Contains(breakFree.Body.Instructions, i => i.Operand is MethodReference r && r.Name == "StartDisguiseMission");
+    }
+
+    /// <summary>FbEscape greys the option out through its condition, which hands back the menu arguments to change.</summary>
+    [Fact]
+    public void BreakFreeStillHasTheConditionTheLayerGreysOut()
+    {
+        if (FourberieDll() is not { } dll) return;
+        using var module = Module(dll);
+        var condition = Assert.Single(module.GetType("Fourberie.FourbEscapeBehavior").Methods, m => m.Name == "breakFree_cond");
+        Assert.Equal("System.Boolean", condition.ReturnType.FullName);
+        Assert.Equal("TaleWorlds.CampaignSystem.GameMenus.MenuCallbackArgs", Assert.Single(condition.Parameters).ParameterType.FullName);
     }
 
     [Fact]
