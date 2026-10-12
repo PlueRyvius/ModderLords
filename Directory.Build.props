@@ -7,7 +7,7 @@
     cannot drift apart.
   -->
   <PropertyGroup>
-    <VersionPrefix>1.2.10</VersionPrefix>
+    <VersionPrefix>1.2.11</VersionPrefix>
   </PropertyGroup>
 
   <!--
