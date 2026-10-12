@@ -269,6 +269,17 @@ internal static class FbSelfTest
         Expect(a.GetRelation(paid) == Math.Max(-100, paidBefore - 3), $"a relation paid to \"the player\" reached the server as this player's ({paidBefore} -> {a.GetRelation(paid)})");
         Expect(CharacterRelationManager.GetHeroRelation(a, set) == 37, $"a relation Fourberie sets outright reached the server ({CharacterRelationManager.GetHeroRelation(a, set)})");
         Expect(FbEffects.Refused - refusedBefore == 2 && a.Gold - gold == 500, "a 20,000,000 gold transfer and a relation change naming nobody were refused, the rest applied");
+
+        // The player written with an id this server cannot find: taken from who sent the batch instead.
+        var goldNow = a.Gold;
+        var none = Newtonsoft.Json.Linq.JValue.CreateNull();
+        var toMe = FbEffectWire.Call("TaleWorlds.CampaignSystem.Actions.GiveGoldAction::ApplyInternal",
+            new Newtonsoft.Json.Linq.JArray(none, none, "no-such-hero-here", none, 40, false, ""));
+        FbEffects.Apply(a, party, new[] { FbEffectWire.Pack(new[] { FbEffectWire.Me("no-such-hero-here"), toMe }) });
+        Expect(a.Gold - goldNow == 40, $"gold for a player whose id this server cannot find reached the sender ({goldNow} -> {a.Gold})");
+        var refusedNow = FbEffects.Refused;
+        FbEffects.Apply(a, party, new[] { FbEffectWire.Pack(new[] { toMe }) });
+        Expect(FbEffects.Refused - refusedNow == 1 && a.Gold - goldNow == 40, "the same change with nobody saying who the player is was refused, with its reason logged");
     }
 
     // ---- models (phase 5) ----------------------------------------------------------------------------------------

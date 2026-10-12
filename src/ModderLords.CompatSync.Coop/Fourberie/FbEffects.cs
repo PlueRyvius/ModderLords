@@ -65,6 +65,7 @@ internal static class FbEffects
     private static readonly List<FbEffectWire.Op> Pending = new List<FbEffectWire.Op>();
     private static readonly FbRosterNet Roster = new FbRosterNet();
     private static readonly HashSet<string> Warned = new HashSet<string>(StringComparer.Ordinal);
+    private static readonly FbRefusals Refusals = new FbRefusals();
     private static long _recorded, _sent, _applied, _refused;
 
     internal static string KeyOf(MethodBase m) => m.DeclaringType?.FullName + "::" + m.Name;
@@ -112,7 +113,7 @@ internal static class FbEffects
             Pending.Add(FbEffectWire.Delta(kind, property, id, change));
             _recorded++;
         }
-        catch (Exception ex) { _refused++; WarnOnce("delta", ex); }
+        catch (Exception ex) { WarnOnce("delta", ex); }
         finally { FbRecordGate.Leave(); }
     }
 
@@ -190,10 +191,12 @@ internal static class FbEffects
         if (Pending.Count == 0 || TaomActions.Send == null) return;
         while (Pending.Count > 0)
         {
-            var batch = Pending.Take(FbEffectWire.MaxOps).ToList();
+            var batch = Pending.Take(FbEffectWire.MaxOps - 1).ToList();
             Pending.RemoveRange(0, batch.Count);
-            TaomActions.Send(FourberieLayer.Feature, "effects", new[] { FbEffectWire.Pack(batch) });
             _sent += batch.Count;
+            // Who "this player" is in the ops that follow, so the server need not find them again by id.
+            if (Hero.MainHero?.StringId is { Length: > 0 } me) batch.Insert(0, FbEffectWire.Me(me));
+            TaomActions.Send(FourberieLayer.Feature, "effects", new[] { FbEffectWire.Pack(batch) });
         }
     }
 
@@ -203,24 +206,25 @@ internal static class FbEffects
     internal static TaomActionOutcome Apply(Hero hero, MobileParty? party, IList<string> args)
     {
         var ops = args.Count == 1 ? FbEffectWire.Unpack(args[0]) : null;
-        if (ops == null) { _refused++; return TaomActionOutcome.Fail(""); }
+        if (ops == null) { Refuse("the batch could not be read"); return TaomActionOutcome.Fail(""); }
         var running = TaomActions.Running;
         TaomActions.Running = false;   // what the replay shows reaches the player through the notice forwarder
         try
         {
             using var scope = FbBooks.Enter(hero, party);
             party ??= hero.PartyBelongedTo;
+            string? me = null;
             foreach (var op in ops)
             {
+                if (op.Kind == "me") { me = op.Target; continue; }
                 try
                 {
-                    if (ApplyOne(op, party)) _applied++;
-                    else _refused++;
+                    if (ApplyOne(op, hero, party, me) is { } why) Refuse(Named(op) + ": " + why);
+                    else _applied++;
                 }
                 catch (Exception ex)
                 {
-                    _refused++;
-                    WarnOnce("apply|" + op.Kind + op.Key, ex);
+                    Refuse(Named(op) + ": failed: " + ex.GetBaseException().Message);
                 }
             }
         }
@@ -228,26 +232,58 @@ internal static class FbEffects
         return new TaomActionOutcome(true, "");
     }
 
-    private static bool ApplyOne(FbEffectWire.Op op, MobileParty? party)
+    /// <summary>The op as the log names it: the action's short name, or the kind of party or settlement change.</summary>
+    private static string Named(FbEffectWire.Op op) => op.Kind switch
+    {
+        "call" => op.Key.Substring(op.Key.LastIndexOf('.') + 1),
+        "delta" => op.Key + " of " + op.Target,
+        _ => op.Kind + " " + op.Target,
+    };
+
+    /// <summary>
+    /// Counts a change that was not applied and logs the reason the first time it is seen. Reported 2026-10-11: a
+    /// server refused 126 of 143 changes in one session (quest gold, pickpocket gold, relations) and its log said
+    /// nothing about why, because only a change that threw was ever explained.
+    /// </summary>
+    private static void Refuse(string why)
+    {
+        _refused++;
+        if (Refusals.Add(why)) Log.Warn($"{FourberieLayer.Tag}effects: a player's change was not applied: {why} (said once per reason)");
+    }
+
+    /// <summary>
+    /// One argument of a replayed call. The sending player's own hero is taken from who sent the batch when the id it
+    /// was written with is theirs, so a reward for "the player" never depends on finding that id here.
+    /// </summary>
+    private static bool Decode(Type type, JToken token, Hero hero, string? me, string where, List<string> problems, out object? value)
+    {
+        if (type == typeof(Hero) && me != null && token.Type == JTokenType.String && (string?)token == me) { value = hero; return true; }
+        return FbBookCodec.TryDecodeValue(type, token, FbGameRefs.Instance, problems, where, out value)
+            && (value != null || token.Type == JTokenType.Null);
+    }
+
+    /// <summary>Null when the op was applied; otherwise why it was not.</summary>
+    private static string? ApplyOne(FbEffectWire.Op op, Hero hero, MobileParty? party, string? me)
     {
         switch (op.Kind)
         {
             case "call":
             {
-                if (!ByKey.TryGetValue(op.Key, out var method)) return false;
+                if (!ByKey.TryGetValue(op.Key, out var method)) return "this server does not replay that action";
                 var parameters = method.GetParameters();
                 var offset = method.IsStatic ? 0 : 1;
-                if (op.Args.Count != parameters.Length + offset) return false;
+                if (op.Args.Count != parameters.Length + offset) return $"{op.Args.Count} value(s) sent, {parameters.Length + offset} expected";
                 var problems = new List<string>();
+                string Unread(string where, JToken token) =>
+                    where + " could not be read (" + (problems.Count > 0 ? problems[problems.Count - 1] : "sent as " + FbRefusals.Short(token.ToString(Newtonsoft.Json.Formatting.None))) + ")";
                 object? instance = null;
-                if (offset == 1 && (!FbBookCodec.TryDecodeValue(method.DeclaringType!, op.Args[0], FbGameRefs.Instance, problems, "this", out instance) || instance == null)) return false;
+                if (offset == 1 && (!Decode(method.DeclaringType!, op.Args[0], hero, me, "this", problems, out instance) || instance == null)) return Unread("its target", op.Args[0]);
                 var values = new object?[parameters.Length];
                 for (var i = 0; i < parameters.Length; i++)
-                    if (!FbBookCodec.TryDecodeValue(parameters[i].ParameterType, op.Args[i + offset], FbGameRefs.Instance, problems, parameters[i].Name, out values[i])
-                        || (values[i] == null && op.Args[i + offset].Type != JTokenType.Null)) return false;
-                if (!Plausible(method, values)) return false;
+                    if (!Decode(parameters[i].ParameterType, op.Args[i + offset], hero, me, parameters[i].Name, problems, out values[i])) return Unread(parameters[i].Name, op.Args[i + offset]);
+                if (!Plausible(method, values)) return "not believable (" + FbRefusals.Short(op.Args.ToString(Newtonsoft.Json.Formatting.None)) + ")";
                 method.Invoke(instance, values);
-                return true;
+                return null;
             }
             case "delta":
             {
@@ -262,15 +298,17 @@ internal static class FbEffects
                     _ => null,
                 };
                 var prop = target?.GetType().GetProperty(property);
-                if (target == null || prop == null) return false;
+                if (target == null || prop == null) return target == null ? "not found on the server" : "no such number";
                 prop.SetValue(target, Convert.ToSingle(prop.GetValue(target)) + op.Amount);
-                return true;
+                return null;
             }
             case "troops":
             {
                 var roster = op.Key == "m" ? party?.MemberRoster : party?.PrisonRoster;
                 var character = MBObjectManager.Instance.GetObject<CharacterObject>(op.Target);
-                if (roster == null || character == null || character.IsHero) return false;
+                if (roster == null) return "the player has no party on the server";
+                if (character == null) return "no such troop on the server";
+                if (character.IsHero) return "a hero, not a troop";
                 // TroopRosterElement.WoundedNumber dereferences its character, so a missing troop is never read.
                 var index = roster.FindIndexOfTroop(character);
                 var haveCount = index >= 0 ? roster.GetElementNumber(index) : 0;
@@ -278,24 +316,25 @@ internal static class FbEffects
                 var count = (int)op.Amount;
                 if (count < 0) count = Math.Max(count, -haveCount);   // never below none
                 var wounded = Math.Max(op.Wounded, -haveWounded);
-                if (count == 0 && wounded == 0 && op.Xp == 0) return true;
-                if (index < 0 && count <= 0) return true;              // nothing to take away or give XP to
+                if (count == 0 && wounded == 0 && op.Xp == 0) return null;
+                if (index < 0 && count <= 0) return null;              // nothing to take away or give XP to
                 roster.AddToCounts(character, count, false, wounded, Math.Max(op.Xp, 0));
-                return true;
+                return null;
             }
             case "items":
             {
                 var item = MBObjectManager.Instance.GetObject<ItemObject>(op.Target);
-                if (party == null || item == null) return false;
+                if (party == null) return "the player has no party on the server";
+                if (item == null) return "no such item on the server";
                 var modifier = op.Modifier.Length > 0 ? MBObjectManager.Instance.GetObject<ItemModifier>(op.Modifier) : null;
                 var element = new EquipmentElement(item, modifier);
                 var amount = (int)op.Amount;
                 if (amount < 0) amount = Math.Max(amount, -party.ItemRoster.GetElementNumber(party.ItemRoster.FindIndexOfElement(element)));
                 if (amount != 0) party.ItemRoster.AddToCounts(element, amount);
-                return true;
+                return null;
             }
             default:
-                return false;
+                return "unknown kind of change";
         }
     }
 
@@ -321,7 +360,7 @@ internal static class FbEffects
     }
 
     internal static string Summary() => FourberieLayer.IsServer
-        ? $"player changes applied {_applied}, refused {_refused}"
+        ? $"player changes applied {_applied}, refused {_refused}{Refusals.Summary()}"
         : $"changes recorded {_recorded}, sent {_sent}";
 }
 

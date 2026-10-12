@@ -138,6 +138,32 @@ public sealed class FbEffectWireTests
     public void AnyBadOpRefusesTheWholeBatch(string payload) => Assert.Null(FbEffectWire.Unpack(payload));
 
     [Fact]
+    public void ABatchSaysWhoThePlayerIs()
+    {
+        var back = FbEffectWire.Unpack(FbEffectWire.Pack(new[] { FbEffectWire.Me("Player3125"), FbEffectWire.Delta("town", "Security", "town_A6", -5f) }))!;
+        Assert.Equal(("me", "Player3125"), (back[0].Kind, back[0].Target));
+        Assert.Equal("delta", back[1].Kind);
+        Assert.Null(FbEffectWire.Unpack("""[{"k":"me","t":""}]"""));   // nobody named
+    }
+
+    [Fact]
+    public void EachRefusalReasonIsSaidOnceAndTheCommonestIsShown()
+    {
+        var refusals = new FbRefusals();
+        Assert.Equal("", refusals.Summary());
+        Assert.True(refusals.Add("ApplyInternal: recipientHero could not be read"));
+        Assert.False(refusals.Add("ApplyInternal: recipientHero could not be read"));
+        Assert.True(refusals.Add("items grain: no such item on the server"));
+        Assert.False(refusals.Add("ApplyInternal: recipientHero could not be read"));
+        Assert.Equal(" (most often: ApplyInternal: recipientHero could not be read x3)", refusals.Summary());
+
+        // A sender cannot grow the table without bound; reasons past the cap are counted by the caller but not kept.
+        for (var i = 0; i < FbRefusals.MaxReasons * 2; i++) refusals.Add("reason " + i);
+        Assert.False(refusals.Add("one more"));
+        Assert.Equal(120, FbRefusals.Short(new string('x', 500)).Length);
+    }
+
+    [Fact]
     public void TroopsTakenOutForAMissionAndPutBackNetToNothing()
     {
         var net = new FbRosterNet();
