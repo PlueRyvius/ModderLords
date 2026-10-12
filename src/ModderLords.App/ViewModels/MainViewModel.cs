@@ -2186,7 +2186,7 @@ public partial class MainViewModel : ObservableObject
                 var client = Host.PrepareClientLaunch();
                 AppendClientLaunchLog(clientLog, client.Plan.Describe());
                 foreach (var message in client.Messages) AppendClientLaunchLog(clientLog, message);
-                var process = ClientLaunchSession.Start(client.Plan);
+                var process = ClientLaunchSession.Start(client.Plan, note => { Log(LogCategory.Tool, "[ModderLords] " + note); AppendClientLaunchLog(clientLog, note); });
                 Status = $"Client started for server profile '{Host.ClientProfile.Name}' (pid {process.Id}).";
                 AppendClientLaunchLog(clientLog, $"started pid={process.Id}");
                 return;
@@ -2201,7 +2201,7 @@ public partial class MainViewModel : ObservableObject
             foreach (var m in prepared.Messages) Log(LogCategory.Tool, "[ModderLords] " + m);
             AppendClientLaunchLog(clientLog, prepared.Plan.Describe());
             foreach (var message in prepared.Messages) AppendClientLaunchLog(clientLog, message);
-            var p = ClientLaunchSession.Start(prepared.Plan);
+            var p = ClientLaunchSession.Start(prepared.Plan, note => { Log(LogCategory.Tool, "[ModderLords] " + note); AppendClientLaunchLog(clientLog, note); });
             Status = $"Bannerlord started with {prepared.Order.ModuleIds.Count} modules (pid {p.Id}).";
             Log(LogCategory.Tool, $"[ModderLords] Play: {prepared.Plan.Exe} (pid {p.Id})");
             AppendClientLaunchLog(clientLog, $"started pid={p.Id}");
