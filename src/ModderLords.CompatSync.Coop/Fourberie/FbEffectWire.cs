@@ -44,6 +44,9 @@ public static class FbEffectWire
     public static Op Call(string key, JArray args) => new Op { Kind = "call", Key = key, Args = args };
     public static Op Delta(string targetKind, string property, string id, float amount) => new Op { Kind = "delta", Key = targetKind + ":" + property, Target = id, Amount = amount };
 
+    /// <summary>The sending player's own hero id, first in a batch: a hero written with this id is the sender.</summary>
+    public static Op Me(string heroId) => new Op { Kind = "me", Target = heroId };
+
     public static string Pack(IEnumerable<Op> ops)
     {
         var array = new JArray();
@@ -101,10 +104,42 @@ public static class FbEffectWire
                     && Math.Abs(op.Wounded) <= MaxTroopChange && Math.Abs(op.Xp) <= 10_000_000 && op.Amount == Math.Round(op.Amount);
             case "items":
                 return op.Target.Length > 0 && Math.Abs(op.Amount) <= MaxItemChange && op.Amount == Math.Round(op.Amount);
+            case "me":
+                return op.Target.Length is > 0 and < 200;
             default:
                 return false;
         }
     }
+}
+
+/// <summary>
+/// Why the server did not apply changes a player's game sent: each distinct reason counted, so the log can name a
+/// reason once and the verification line can show the commonest. Reasons are capped so a hostile or broken sender
+/// cannot grow the table without bound.
+/// </summary>
+public sealed class FbRefusals
+{
+    public const int MaxReasons = 40;
+    private readonly Dictionary<string, long> _counts = new(StringComparer.Ordinal);
+
+    /// <summary>Counts the reason; true the first time it is seen (the caller logs it then).</summary>
+    public bool Add(string reason)
+    {
+        if (_counts.TryGetValue(reason, out var n)) { _counts[reason] = n + 1; return false; }
+        if (_counts.Count >= MaxReasons) return false;
+        _counts[reason] = 1;
+        return true;
+    }
+
+    /// <summary>" (most often: reason x12)", or nothing when nothing was refused.</summary>
+    public string Summary()
+    {
+        if (_counts.Count == 0) return "";
+        var top = _counts.OrderByDescending(p => p.Value).ThenBy(p => p.Key, StringComparer.Ordinal).First();
+        return $" (most often: {top.Key} x{top.Value})";
+    }
+
+    public static string Short(string text) => text.Length <= 120 ? text : text.Substring(0, 117) + "...";
 }
 
 /// <summary>
