@@ -84,6 +84,61 @@ public class SaveImportTests : IDisposable
     }
 
     [Fact]
+    public void The_coop_session_file_beside_the_save_comes_with_it()
+    {
+        // Reported 2026-10-11: a world moved from the in-game Coop host kept its characters and lost their owners,
+        // because only the .sav was copied. The "Players" list lives in <name>.json beside it.
+        var src = ClientSave("save006", "Native;SandBoxCore;Sandbox;Coop");
+        var session = "{\"UniqueGameId\":\"save006\",\"Players\":[{\"ControllerId\":\"a\",\"HeroId\":\"Hero_Player\"},{\"ControllerId\":\"b\",\"HeroId\":\"Hero_Player2913\"}]}";
+        File.WriteAllText(Path.ChangeExtension(src, ".json"), session);
+
+        var r = SavePreparer.ImportFrom(src, _paths, "world");
+
+        Assert.True(r.SessionCopied);
+        Assert.Equal(2, r.SessionPlayers);
+        Assert.Empty(r.Warnings);
+        // Byte for byte: Coop reads it with its own serializer, so nothing here rewrites it.
+        Assert.Equal(session, File.ReadAllText(Path.Combine(_paths.SavesDir, "world.json")));
+    }
+
+    [Fact]
+    public void A_save_with_no_session_file_says_so_and_copies_none()
+    {
+        var src = ClientSave("MyCampaign", "Native;Coop");
+        var r = SavePreparer.ImportFrom(src, _paths, "world");
+        Assert.False(r.SessionCopied);
+        Assert.False(File.Exists(Path.Combine(_paths.SavesDir, "world.json")));
+    }
+
+    [Fact]
+    public void A_replaced_worlds_session_file_does_not_stay_paired_with_the_new_world()
+    {
+        var first = ClientSave("First", "Native;Coop");
+        File.WriteAllText(Path.ChangeExtension(first, ".json"), "{\"Players\":[{\"ControllerId\":\"old\"}]}");
+        SavePreparer.ImportFrom(first, _paths, "world");
+
+        // The second world has no session of its own. The first one's must not be left to load with it.
+        var second = ClientSave("Second", "Native;Coop");
+        var r = SavePreparer.ImportFrom(second, _paths, "world", overwrite: true);
+
+        Assert.False(r.SessionCopied);
+        Assert.False(File.Exists(Path.Combine(_paths.SavesDir, "world.json")));
+        Assert.Contains("old", File.ReadAllText(Assert.Single(Directory.GetFiles(_paths.SavesDir, "world.json.replaced-*"))));
+    }
+
+    [Fact]
+    public void An_unreadable_session_file_is_still_copied_and_warned_about()
+    {
+        var src = ClientSave("MyCampaign", "Native;Coop");
+        File.WriteAllText(Path.ChangeExtension(src, ".json"), "not json");
+        var r = SavePreparer.ImportFrom(src, _paths, "world");
+        Assert.True(r.SessionCopied);
+        Assert.Null(r.SessionPlayers);
+        Assert.Contains(r.Warnings, w => w.Contains("could not be read"));
+        Assert.True(File.Exists(Path.Combine(_paths.SavesDir, "world.json")));
+    }
+
+    [Fact]
     public void A_missing_source_names_the_path_rather_than_half_importing()
     {
         var missing = Path.Combine(_client, "nope.sav");

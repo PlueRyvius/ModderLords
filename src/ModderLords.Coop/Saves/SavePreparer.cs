@@ -57,7 +57,17 @@ public static class SavePreparer
         return new Result(target, true, template);
     }
 
-    public sealed record ImportResult(string SavePath, string SourcePath, bool Overwrote, IReadOnlyList<string> Warnings);
+    /// <param name="SessionCopied">Coop's session file was beside the save and came across with it.</param>
+    /// <param name="SessionPlayers">How many player characters that file lists, or null when it could not be read.</param>
+    public sealed record ImportResult(string SavePath, string SourcePath, bool Overwrote, IReadOnlyList<string> Warnings,
+        bool SessionCopied = false, int? SessionPlayers = null);
+
+    /// <summary>
+    /// Coop keeps what the save itself cannot hold in &lt;name&gt;.json beside &lt;name&gt;.sav: which player owns which
+    /// hero, party and clan, and each player's workshops, caravans and crafting. A save loaded without it has every
+    /// character still in the world and no player attached to any of them, so everyone is sent to make a new one.
+    /// </summary>
+    public static string SessionPath(string savePath) => Path.ChangeExtension(savePath, ".json");
 
     /// <summary>
     /// Copies a save made by the real game into the server's Game Saves.
@@ -71,6 +81,10 @@ public static class SavePreparer
     /// Unlike <see cref="EnsureExists"/> this is an explicit act, so it <b>does</b> replace an existing save when told
     /// to — but never silently: <paramref name="overwrite"/> has to be asked for, and the existing file is kept as a
     /// .replaced-&lt;stamp&gt; sibling rather than destroyed.
+    ///
+    /// Coop's session file (<see cref="SessionPath"/>) travels with the save. Reported 2026-10-11 by a host who moved
+    /// a world from the in-game Coop host to the dedicated server: only the .sav was copied, so the players' characters
+    /// stood in the world unowned until the "Players" list was pasted back by hand.
     /// </summary>
     public static ImportResult ImportFrom(string clientSavePath, ServerPaths paths, string saveName, bool overwrite = false)
     {
@@ -97,17 +111,49 @@ public static class SavePreparer
             throw new InvalidOperationException($"Save '{saveName}' already exists at '{target}'. Pass overwrite to replace it.");
 
         Directory.CreateDirectory(paths.SavesDir);
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
         if (overwrote)
         {
-            var kept = target + ".replaced-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var kept = target + ".replaced-" + stamp;
             File.Move(target, kept);
             warnings.Add("the save that was there has been kept as " + Path.GetFileName(kept));
         }
+        // A session file already under this name belongs to the world being replaced, or to one deleted earlier.
+        // Left in place it would hand the new world's players the old world's characters.
+        var targetSession = SessionPath(target);
+        if (File.Exists(targetSession)) File.Move(targetSession, targetSession + ".replaced-" + stamp);
+
         // Same write-then-move as EnsureExists: a save half-copied over is worse than one that is missing.
         var tmp = target + ".modderlords-tmp";
         File.Copy(clientSavePath, tmp, overwrite: true);
         File.Move(tmp, target);
-        return new ImportResult(target, clientSavePath, overwrote, warnings);
+
+        int? players = null;
+        var sourceSession = SessionPath(clientSavePath);
+        var copied = File.Exists(sourceSession);
+        if (copied)
+        {
+            var tmpSession = targetSession + ".modderlords-tmp";
+            File.Copy(sourceSession, tmpSession, overwrite: true);
+            File.Move(tmpSession, targetSession);
+            players = CountPlayers(targetSession);
+            if (players is null)
+                warnings.Add($"the co-op session file {Path.GetFileName(sourceSession)} was copied but could not be read; the players' characters may not be restored");
+        }
+        return new ImportResult(target, clientSavePath, overwrote, warnings, copied, players);
+    }
+
+    /// <summary>The number of entries in the session file's "Players" list, or null when the file is not readable JSON.</summary>
+    private static int? CountPlayers(string sessionPath)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(sessionPath));
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            return doc.RootElement.TryGetProperty("Players", out var list) && list.ValueKind == System.Text.Json.JsonValueKind.Array
+                ? list.GetArrayLength() : 0;
+        }
+        catch (Exception) { return null; }
     }
 
     /// <summary>The saves the real game has, newest first, for an import to choose from.</summary>
