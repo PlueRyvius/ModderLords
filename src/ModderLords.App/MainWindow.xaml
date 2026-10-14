@@ -456,6 +456,9 @@
                         <TextBox Grid.Row="2" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
                     <DataGrid Grid.Row="0" ItemsSource="{Binding Saves}" SelectedItem="{Binding SelectedSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
                         <!-- A save's backups open under it with the + in the first column. -->
+                        <!-- The toggle's binding names UpdateSourceTrigger on purpose: inside a DataGrid cell a binding is
+                             otherwise held until the row commits an edit, which a read-only grid never does, so the click
+                             checked the button and the row stayed shut. -->
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
                                 <Setter Property="DetailsVisibility" Value="{Binding IsExpanded, Converter={StaticResource BoolToVis}}" />
@@ -491,7 +494,7 @@
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <ToggleButton Width="20" Height="20" Padding="0" FontWeight="Bold" Content="{Binding ExpandGlyph}"
-                                                      IsChecked="{Binding IsExpanded}" ToolTip="{Binding BackupsTip}"
+                                                      IsChecked="{Binding IsExpanded, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding BackupsTip}"
                                                       Visibility="{Binding HasBackups, Converter={StaticResource BoolToVis}}" />
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
