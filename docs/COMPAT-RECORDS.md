@@ -53,8 +53,8 @@ The rules live in `CompatIntake`, next to `CompatDb`, and the record is finally 
 gate and the launcher share one schema. The gate is stricter than the launcher on purpose: the launcher ignores what
 it does not know so that an old build can read a newer file, while a submission is refused for it.
 
-- exactly one record; `Id` not empty, made of letters, digits, `.`, `_` and `-` (at most 64), and equal to the
-  *Module id* field;
+- exactly one record; `Id` not empty, made of letters, digits, `.`, `_` and `-` with single spaces between them (at
+  most 64), and equal to the *Module id* field;
 - only known properties, spelt with their exact case, each at most once;
 - `Verdict` and `DefaultRole` by name only (a number is refused, although the launcher's converter would take one);
 - size: the record at most 32 KB, and every text and list has its own limit (see the constants in `CompatIntake`);
