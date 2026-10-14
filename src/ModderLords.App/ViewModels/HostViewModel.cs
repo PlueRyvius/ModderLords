@@ -359,7 +359,10 @@ public partial class HostViewModel : ObservableObject
                     $"Host the backup of '{row.Backup.SaveName}' taken {row.Backup.Label} (day {row.Day})?\n\n"
                     + $"It is copied into your saves as '{planned}' and selected to host. Press Launch afterwards to start the server on it.\n\n"
                     + $"'{row.Backup.SaveName}' itself is not changed, and you can switch back to it on this tab at any time."))
+            {
+                Status = "Backup not restored; nothing was changed.";
                 return;
+            }
             var name = SaveBackups.Restore(paths, row.Backup, DateTime.Now);
             AddLine(LogCategory.Tool, $"[ModderLords] restored the {row.Backup.Label} backup of '{row.Backup.SaveName}' as the new save '{name}'"
                 + (row.Backup.SessionPath is null ? "; it had no Coop session file, so players will be asked to make new characters" : ""));

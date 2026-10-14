@@ -467,7 +467,10 @@
                         <DataGrid.RowDetailsTemplate>
                             <DataTemplate>
                                 <DockPanel Margin="28,2,4,6">
-                                    <!-- Row details are measured with unlimited width, so text only wraps with a width of its own. -->
+                                    <!-- Row details are measured with unlimited width, so text only wraps with a width of its own.
+                                         The button below reaches the command through the outer grid (level 2; level 1 is the backups
+                                         grid): a tab's content is not inside its TabItem in the visual tree, so finding the TabItem
+                                         gave no command at all and the click did nothing. -->
                                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" MaxWidth="730" HorizontalAlignment="Left" Margin="0,0,0,4" Foreground="{DynamicResource MutedForeground}"
                                                Text="Copies ModderLords took of this save: when the server started, every hour while it ran, and when it stopped, each with Coop's record of which player owns which character. To go back to one, press Host this backup: it is copied into your saves as a new save and selected, and Launch then hosts it. This save is left as it is. Clicking a row on its own does nothing." />
                                     <DataGrid ItemsSource="{Binding Backups}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0" HeadersVisibility="Column" MaxHeight="200" HorizontalAlignment="Left">
@@ -481,7 +484,7 @@
                                                     <DataTemplate>
                                                         <Button Content="Host this backup" HorizontalAlignment="Left" Padding="10,1"
                                                                 ToolTip="Copy this backup into your saves as a new save and select it to host. The save it came from is not changed."
-                                                                Command="{Binding DataContext.RestoreSaveBackupCommand, RelativeSource={RelativeSource AncestorType=TabItem}}"
+                                                                Command="{Binding DataContext.RestoreSaveBackupCommand, RelativeSource={RelativeSource AncestorType=DataGrid, AncestorLevel=2}}"
                                                                 CommandParameter="{Binding}" />
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
