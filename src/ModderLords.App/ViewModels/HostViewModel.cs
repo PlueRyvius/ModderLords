@@ -80,6 +80,8 @@ public partial class HostViewModel : ObservableObject
     /// </summary>
     private readonly BoundedQueue<PerfSample> _pendingPerf = new(1000);
     private ProcessResourceSampler? _resources;
+    /// <summary>Takes a running backup of the hosted save now and then while the server runs (see <see cref="SaveBackups"/>).</summary>
+    private System.Threading.Timer? _backupTimer;
     private DateTime _lastPerfSave = DateTime.MinValue;
     /// <summary>Raised on the UI thread after a batch of console lines was added (the view scrolls once per batch).</summary>
     public event Action? ConsoleFlushed;
@@ -245,7 +247,17 @@ public partial class HostViewModel : ObservableObject
     internal void RefreshSaves(ServerPaths paths)
     {
         Saves.Clear();
-        foreach (var h in SaveHeaderReader.ReadAll(paths.SavesDir)) Saves.Add(new SaveRow { Header = h });
+        var headers = SaveHeaderReader.ReadAll(paths.SavesDir).ToList();
+        var names = new HashSet<string>(headers.Select(h => h.Name), StringComparer.OrdinalIgnoreCase);
+        foreach (var h in headers)
+        {
+            // Coop's own previous copies (<save>.backup1, .backup2) are listed inside their save, not beside it.
+            if (SaveBackups.IsCoopCopy(h.Name, out var owner) && names.Contains(owner)) continue;
+            var row = new SaveRow { Header = h };
+            LoadVersions(row, paths);
+            row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SaveRow.ChosenVersion)) OnVersionChosen(row); };
+            Saves.Add(row);
+        }
         SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(Profile.SaveName, StringComparison.OrdinalIgnoreCase));
         RefreshClientSaves();
     }
@@ -281,6 +293,109 @@ public partial class HostViewModel : ObservableObject
         }
         foreach (var d in r.VersionChanges) lines.Add($"  {d.ModuleId}: version changed (save {d.SaveVersion ?? "-"}, now {d.CurrentVersion ?? "-"})");
         SaveDiff = string.Join("\n", lines);
+    }
+
+    // ---- save backups ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Copies the hosted save aside. Any thread. A failed backup is reported and never stops a launch: losing the
+    /// copy is bad, losing the session because of it would be worse.
+    /// </summary>
+    internal void BackUpSave(ServerPaths paths, string? saveName, SaveBackups.Kind kind, bool serverRunning)
+    {
+        if (string.IsNullOrWhiteSpace(saveName)) return;
+        try
+        {
+            if (SaveBackups.Take(paths, saveName, kind, DateTime.Now, serverRunning) is { } b)
+                Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    AddLine(LogCategory.Tool, $"[ModderLords] backed up save '{saveName}' ({b.Label}) to {Path.GetDirectoryName(b.SavePath)}");
+                    if (Saves.FirstOrDefault(r => r.Name.Equals(saveName, StringComparison.OrdinalIgnoreCase)) is { } row) LoadVersions(row, paths);
+                });
+        }
+        catch (Exception ex)
+        {
+            Application.Current?.Dispatcher.BeginInvoke(() =>
+                AddLine(LogCategory.Warning, $"[ModderLords] could not back up save '{saveName}': {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Checks every few minutes and copies the save once <see cref="SaveBackups.RunningInterval"/> has passed since the
+    /// last copy. A save the server wrote moments ago is left for the next check rather than copied half-written.
+    /// </summary>
+    private void StartRunningBackups(ServerPaths paths, string? saveName)
+    {
+        _backupTimer?.Dispose();
+        if (string.IsNullOrWhiteSpace(saveName)) return;
+        var last = DateTime.Now;
+        var check = TimeSpan.FromMinutes(5);
+        _backupTimer = new System.Threading.Timer(_ =>
+        {
+            // A timer callback that throws ends the process, so nothing may escape it.
+            try
+            {
+                if (DateTime.Now - last < SaveBackups.RunningInterval) return;
+                var save = SavePreparer.SavePath(paths, saveName);
+                if (File.Exists(save) && DateTime.Now.ToUniversalTime() - File.GetLastWriteTimeUtc(save) < SaveBackups.Settled) return;
+                BackUpSave(paths, saveName, SaveBackups.Kind.Running, serverRunning: true);
+                last = DateTime.Now;
+            }
+            catch (Exception) { /* BackUpSave reports its own failures; a missed check is retried in five minutes */ }
+        }, null, check, check);
+    }
+
+    private bool _loadingVersions;
+
+    /// <summary>Fills a save's version list, shown under it on the Saves tab. Must run on the UI thread.</summary>
+    private void LoadVersions(SaveRow row, ServerPaths paths)
+    {
+        var keep = row.ChosenVersion?.Version.SavePath;
+        _loadingVersions = true;
+        try
+        {
+            row.Versions.Clear();
+            try { foreach (var v in SaveBackups.Versions(paths, row.Name)) row.Versions.Add(SaveVersionRow.From(v)); }
+            catch (Exception ex) { AddLine(LogCategory.Tool, $"[ModderLords] could not list the versions of '{row.Name}': " + ex.Message); }
+            row.VersionsChanged(keep);
+        }
+        finally { _loadingVersions = false; }
+    }
+
+    /// <summary>
+    /// The host picked a version under a save: that save becomes the one to host, and the status bar says what the
+    /// next launch will do, so the click visibly registers.
+    /// </summary>
+    private void OnVersionChosen(SaveRow row)
+    {
+        if (_loadingVersions || row.ChosenVersion is not { } chosen) return;
+        if (!ReferenceEquals(SelectedSave, row)) SelectedSave = row;
+        Status = chosen.Version.IsCurrent
+            ? $"'{row.Name}': the next launch loads the save as it is now."
+            : $"'{row.Name}': the next launch loads the version from {chosen.Taken}. The save as it is now is backed up first, so you can come back to it."
+              + (chosen.Version.SessionPath is null ? " That version has no player file, so players will make new characters." : "");
+    }
+
+    /// <summary>
+    /// Before a launch: when an older version of the save to host was chosen, puts it in the save's place (after
+    /// backing the save up) and goes back to "newest". Any thread. Throws when it could not, so the launch stops rather
+    /// than hosting something other than what was chosen.
+    /// </summary>
+    internal void ApplyChosenVersion(ServerPaths paths, string saveName, SaveBackups.SaveVersion? chosen)
+    {
+        if (chosen is null || chosen.IsCurrent) return;
+        var kept = SaveBackups.LoadVersion(paths, saveName, chosen, DateTime.Now);
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            AddLine(LogCategory.Tool, $"[ModderLords] loading the version of '{saveName}' from {chosen.Label}"
+                + (kept is null ? "" : $"; the save as it was is backed up ({kept.Label})")
+                + (chosen.SessionPath is null ? "; that version has no player file, so players will make new characters" : ""));
+            if (Saves.FirstOrDefault(r => r.Name.Equals(saveName, StringComparison.OrdinalIgnoreCase)) is { } row)
+            {
+                row.ChosenVersion = null;   // the chosen state is now the save itself
+                LoadVersions(row, paths);
+            }
+        });
     }
 
     /// <summary>The player's own saves, for seeding the server with a world built by the real game (see SavePreparer.ImportFrom).</summary>
@@ -469,6 +584,20 @@ public partial class HostViewModel : ObservableObject
                 return;
             }
 
+            var chosenVersion = Saves.FirstOrDefault(r => r.Name.Equals(launchProfile.SaveName, StringComparison.OrdinalIgnoreCase))?.ChosenVersion?.Version;
+            if (chosenVersion is { IsCurrent: false })
+            {
+                Status = "Loading the chosen version of the save…";
+                try { await Task.Run(() => ApplyChosenVersion(LaunchSession.ResolvePaths(launchProfile), launchProfile.SaveName, chosenVersion)); }
+                catch (Exception ex)
+                {
+                    AddLine(LogCategory.Error, $"[ModderLords] could not load the chosen version of '{launchProfile.SaveName}': {ex.Message}");
+                    Status = "Not launched: the chosen version of the save could not be loaded (" + ex.Message + ")";
+                    IsRunning = false;
+                    return;
+                }
+            }
+
             Status = "Preparing…";
             var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowWorldCreation: autoCreateWorld, experimentalCompat: experimentalCompat));
             _prepared = prepared;
@@ -614,8 +743,14 @@ public partial class HostViewModel : ObservableObject
                 ReportPrepared(prepared);
             }
 
+            // Before the engine can write to it: this is the copy to go back to if the session ruins the world.
+            var backupPaths = prepared.Paths;
+            var backupSave = launchProfile.SaveName;
+            await Task.Run(() => BackUpSave(backupPaths, backupSave, SaveBackups.Kind.Start, serverRunning: false));
+
             _engine = EngineProcess.Start(prepared.Plan);
             RecordRunningSession(prepared, launchProfile);
+            StartRunningBackups(backupPaths, backupSave);
             Performance.SessionStarted();
             // CPU and working set come from the launcher watching the process, so they cost the server nothing and
             // work even when the compat module is not loaded. Its own timer; never the dispatcher.
@@ -680,6 +815,10 @@ public partial class HostViewModel : ObservableObject
             var code = await _engine.Exited;
             IsRunning = false;
             IsServing = false;
+            _backupTimer?.Dispose(); _backupTimer = null;
+            // The stop writes the save one last time; keep that state too. Skipped when nothing changed, so a server
+            // that crashes while loading does not push good copies out.
+            await Task.Run(() => BackUpSave(backupPaths, backupSave, SaveBackups.Kind.Running, serverRunning: false));
             ServerExited?.Invoke(code);
             _resources?.Dispose(); _resources = null;
             if (Performance.WriteSessionSummary(launchProfile.Name) is { } summary)
@@ -1081,5 +1220,24 @@ public partial class HostViewModel : ObservableObject
     public async Task OnClosingAsync()
     {
         if (_engine is { IsRunning: true }) await _engine.StopAsync(TimeSpan.FromSeconds(20));
+    }
+}
+
+/// <summary>One version of a save, as the Saves tab lists it under the save.</summary>
+public sealed class SaveVersionRow
+{
+    public required SaveBackups.SaveVersion Version { get; init; }
+    public string Taken => Version.Label;
+    public string Day { get; init; } = "";
+    public string Size { get; init; } = "";
+    /// <summary>Coop's record of which player owns which character; without it players make new characters.</summary>
+    public string Players => Version.SessionPath is null ? "missing" : "included";
+
+    public static SaveVersionRow From(SaveBackups.SaveVersion v)
+    {
+        var header = SaveHeaderReader.TryRead(v.SavePath, out _);
+        long length = 0;
+        try { length = new FileInfo(v.SavePath).Length; } catch (IOException) { }
+        return new SaveVersionRow { Version = v, Day = header?.DayLong.ToString("0") ?? "?", Size = $"{length / (1024.0 * 1024):0.0} MB" };
     }
 }

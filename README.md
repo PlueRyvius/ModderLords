@@ -501,6 +501,21 @@ The engine loads such a save anyway and logs *module mismatch ... Forcing load a
 A save started with **Campaign** (Story Mode) instead of **Sandbox** cannot be hosted: the server has no StoryMode
 module and crashes while loading it. The box and the launch log say so when the selected save is one.
 
+**Backups.** The server autosaves and saves on stop over the one file it hosts, so ModderLords keeps copies of it in
+`CoopData\DedicatedServer\ModderLords\save-backups\<save>\`: one when the server starts, one an hour while it runs (a
+save written in the last 30 seconds waits for the next check), and one after it stops. Coop's session file, which
+records which player owns which character, is copied with each one. A copy is only taken when the save changed, so a
+server that crashes on every boot does not replace the good copies with the broken one. The last 5 start copies and the
+last 8 others are kept, separately, so a long session cannot push out the copy from before it began. Budget for 13
+copies of the save on disk (plus up to 5 taken when an older version is loaded).
+
+Each save is listed once. A save with older versions has a **+**: it opens them under the save, the save as it is now
+first, then Coop's own two previous saves (`<save>.backup1`/`.backup2`, which no longer clutter the list) and the
+copies above. Click the version the next **Launch** should load; the **Loads** column shows the choice ("newest" unless
+you picked another). Choosing changes nothing on disk. At Launch, the save as it is now is backed up (with its player
+file) and the chosen version takes its place, so you can always come back from the same list. A version without a
+player file loads without one, and players make new characters.
+
 Typing a name that does not exist starts a **vanilla** world from the official `default_new_game.sav`. When the selected
 modules include TAOM, TAOM_Map and LOTRLOME_Armory and the name is new, the launcher creates that campaign in a
 private preparation phase before hosting it. The launcher does not ask users to copy `AssetPackages`, `DsAssetPackages`,
