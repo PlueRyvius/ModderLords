@@ -7,7 +7,7 @@
 #   - The body is fetched into a file and read as data by tools/CompatRecordIntake, which is built from the default
 #     branch. Nothing from the issue is ever executed, sourced, eval'd or used to build a command line.
 #   - The branch name is built from the issue number alone. The commit message and the pull request title contain the
-#     module id only after CompatIntake held it to [A-Za-z0-9._-]. Every other text the workflow publishes is written
+#     module id only after CompatIntake held it to [A-Za-z0-9._-] and single spaces. Every other text the workflow publishes is written
 #     to a file by the tool and passed to gh as a file.
 #   - Actions are pinned to a commit. The token is the built-in one, limited to the three permissions below.
 name: Compat record intake
