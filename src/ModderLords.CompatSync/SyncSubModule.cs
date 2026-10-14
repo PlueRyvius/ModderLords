@@ -148,6 +148,9 @@ public sealed class SyncSubModule : MBSubModuleBase
             _adapterTraceFlush = bridge?.GetMethod("TraceFlush", BindingFlags.Public | BindingFlags.Static);
             _beforeCampaign = bridge?.GetMethod("BeforeCampaign", BindingFlags.Public | BindingFlags.Static);
             bridge?.GetMethod("InitializeOperations", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null);
+            // Before any campaign loads: a stored menu is reopened the moment a save finishes loading.
+            try { if (bridge?.GetMethod("InstallLoadGuards", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null) is string guards) Log.Info(guards); }
+            catch (Exception ex) { Log.Warn("load guards failed to install: " + ex.GetBaseException().Message); }
             var typeCount = asm.GetTypes().Length;   // forces the type load now, inside our try, not in some other mod's scan
             Log.Info($"coop adapter loaded ({typeCount} types); handlers will arm when a session starts");
         }

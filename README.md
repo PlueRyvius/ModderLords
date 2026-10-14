@@ -702,6 +702,15 @@ Send the Share tab list again and have them run **Check my client** on their PC 
 **The server exits with code 2 or hangs at "loading... state=<none>".** The save could not be loaded. Check the Saves
 tab shows it; a save from a different Bannerlord version may not load.
 
+**Players crash while joining, or the server crashes a few seconds after loading the map, after someone was in a town.**
+The save remembers the menu that was open for the player whose character the campaign was started with, and the game
+reopens it on load. Under Coop that menu can be a town's while the party loading it is in no town (a joining player
+is on the map; once Coop has parked a disconnected player's party it can be in none), and the game then crashes
+reading the town (`NullReferenceException` in
+`encounter_menu_ui_castle_on_init`). The compat module drops such a menu and opens on the campaign map instead,
+and the server log says `load menu guard: the stored menu 'town_outside' ...` when it does. Players need the compat
+module too (Settings sync) for their side of it.
+
 **A mod crashes the server on start (red lines, then exit).** Look at the last red lines. If they mention UI or view
 types, the mod runs UI code at startup; set its role to **Client only** (`DependencyOnly`) if players only need it locally, or leave it
 off. Mods shipping a `Win64_Shipping_Server` build are the safest.

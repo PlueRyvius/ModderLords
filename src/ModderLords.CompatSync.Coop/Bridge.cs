@@ -9,6 +9,8 @@ public static class Bridge
     public static void InitializeOperations() => Operations.OperationRuntime.InitializeFromEnvironment();
     public static void BeforeCampaign() => Operations.OperationRuntime.BeforeCampaign();
     public static void EndOperations() => Operations.OperationRuntime.EndSession();
+    /// <summary>Guards that must be in place before any save loads; called once when the adapter loads. Returns log lines.</summary>
+    public static string InstallLoadGuards() => LoadMenuGuard.Install();
 
     private static readonly TickSteps Steps = new TickSteps(Log.Warn);
 
