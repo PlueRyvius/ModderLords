@@ -455,7 +455,7 @@
                         <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,2" />
                         <TextBox Grid.Row="2" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
                     <DataGrid Grid.Row="0" ItemsSource="{Binding Saves}" SelectedItem="{Binding SelectedSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
-                        <!-- A save's backups open under it with the + in the first column. -->
+                        <!-- A save's versions open under it with the + in the first column; the one chosen there is what Launch loads. -->
                         <!-- The toggle's binding names UpdateSourceTrigger on purpose: inside a DataGrid cell a binding is
                              otherwise held until the row commits an edit, which a read-only grid never does, so the click
                              checked the button and the row stayed shut. -->
@@ -467,28 +467,19 @@
                         <DataGrid.RowDetailsTemplate>
                             <DataTemplate>
                                 <DockPanel Margin="28,2,4,6">
-                                    <!-- Row details are measured with unlimited width, so text only wraps with a width of its own.
-                                         The button below reaches the command through the outer grid (level 2; level 1 is the backups
-                                         grid): a tab's content is not inside its TabItem in the visual tree, so finding the TabItem
-                                         gave no command at all and the click did nothing. -->
+                                    <!-- Row details are measured with unlimited width, so text only wraps with a width of its own. -->
                                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" MaxWidth="730" HorizontalAlignment="Left" Margin="0,0,0,4" Foreground="{DynamicResource MutedForeground}"
-                                               Text="Copies ModderLords took of this save: when the server started, every hour while it ran, and when it stopped, each with Coop's record of which player owns which character. To go back to one, press Host this backup: it is copied into your saves as a new save and selected, and Launch then hosts it. This save is left as it is. Clicking a row on its own does nothing." />
-                                    <DataGrid ItemsSource="{Binding Backups}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0" HeadersVisibility="Column" MaxHeight="200" HorizontalAlignment="Left">
+                                               Text="Click the version the next Launch should load. The top one, the save as it is now, is used unless you pick another. Choosing an older one changes nothing until you press Launch; then the save as it is now is backed up and the chosen version takes its place." />
+                                    <!-- SelectedItem names UpdateSourceTrigger: inside a DataGrid row a binding otherwise waits for the
+                                         row to commit an edit, which a read-only grid never does. -->
+                                    <DataGrid ItemsSource="{Binding Versions}" SelectedItem="{Binding ChosenVersion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0" HeadersVisibility="Column" SelectionMode="Single"
+                                              MaxHeight="220" HorizontalAlignment="Left">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Taken" Binding="{Binding Taken}" Width="240" />
+                                            <DataGridTextColumn Header="Version" Binding="{Binding Taken}" Width="330" />
                                             <DataGridTextColumn Header="Day" Binding="{Binding Day}" Width="70" />
                                             <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90" />
-                                            <DataGridTextColumn Header="Player file" Binding="{Binding Players}" Width="150" />
-                                            <DataGridTemplateColumn Width="170">
-                                                <DataGridTemplateColumn.CellTemplate>
-                                                    <DataTemplate>
-                                                        <Button Content="Host this backup" HorizontalAlignment="Left" Padding="10,1"
-                                                                ToolTip="Copy this backup into your saves as a new save and select it to host. The save it came from is not changed."
-                                                                Command="{Binding DataContext.RestoreSaveBackupCommand, RelativeSource={RelativeSource AncestorType=DataGrid, AncestorLevel=2}}"
-                                                                CommandParameter="{Binding}" />
-                                                    </DataTemplate>
-                                                </DataGridTemplateColumn.CellTemplate>
-                                            </DataGridTemplateColumn>
+                                            <DataGridTextColumn Header="Player file" Binding="{Binding Players}" Width="110" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </DockPanel>
@@ -499,12 +490,13 @@
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <ToggleButton Width="20" Height="20" Padding="0" FontWeight="Bold" Content="{Binding ExpandGlyph}"
-                                                      IsChecked="{Binding IsExpanded, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding BackupsTip}"
-                                                      Visibility="{Binding HasBackups, Converter={StaticResource BoolToVis}}" />
+                                                      IsChecked="{Binding IsExpanded, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding VersionsTip}"
+                                                      Visibility="{Binding HasVersions, Converter={StaticResource BoolToVis}}" />
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Save" Binding="{Binding Name}" Width="200" />
+                            <DataGridTextColumn Header="Loads" Binding="{Binding Loads}" Width="170" />
                             <DataGridTextColumn Header="Character" Binding="{Binding Character}" Width="120" />
                             <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="50" />
                             <DataGridTextColumn Header="Day" Binding="{Binding Day}" Width="60" />

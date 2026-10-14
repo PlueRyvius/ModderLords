@@ -103,20 +103,71 @@ public class SaveBackupsTests : IDisposable
     }
 
     [Fact]
-    public void Restoring_makes_a_new_save_and_leaves_the_hosted_one_alone()
+    public void Loading_an_older_version_backs_up_the_save_first_and_puts_the_version_in_its_place()
     {
         WriteSave("World", "good", T0);
-        var good = SaveBackups.Take(_paths, "World", SaveBackups.Kind.Start, T0.AddMinutes(1))!;
+        SaveBackups.Take(_paths, "World", SaveBackups.Kind.Start, T0.AddMinutes(1));
         WriteSave("World", "broken", T0.AddHours(2));
+        var good = SaveBackups.Versions(_paths, "World").Single(v => v.Kind == SaveBackups.VersionKind.Backup);
 
-        var name = SaveBackups.Restore(_paths, good, T0.AddHours(3));
-        var again = SaveBackups.Restore(_paths, good, T0.AddHours(3));
+        var kept = SaveBackups.LoadVersion(_paths, "World", good, T0.AddHours(3))!;
 
-        Assert.Equal("World_restored_20261013-190100", name);
-        Assert.Equal(name + "_2", again);
-        Assert.Equal("good", File.ReadAllText(SavePreparer.SavePath(_paths, name)));
-        Assert.Equal("{\"Players\":[\"good\"]}", File.ReadAllText(SavePreparer.SessionPath(SavePreparer.SavePath(_paths, name))));
-        Assert.Equal("broken", File.ReadAllText(SavePreparer.SavePath(_paths, "World")));
+        // The save the server hosts now holds the chosen version, player file included.
+        Assert.Equal("good", File.ReadAllText(SavePreparer.SavePath(_paths, "World")));
+        Assert.Equal("{\"Players\":[\"good\"]}", File.ReadAllText(SavePreparer.SessionPath(SavePreparer.SavePath(_paths, "World"))));
+        // And the state it replaced is one of the versions, so going back is never one-way.
+        Assert.Equal(SaveBackups.Kind.Replaced, kept.Kind);
+        Assert.Equal("broken", File.ReadAllText(kept.SavePath));
+        Assert.Equal("{\"Players\":[\"broken\"]}", File.ReadAllText(kept.SessionPath!));
+        Assert.Contains(SaveBackups.Versions(_paths, "World"), v => v.SavePath == kept.SavePath);
+    }
+
+    [Fact]
+    public void A_version_without_a_player_file_does_not_inherit_the_current_one()
+    {
+        WriteSave("World", "no players yet", T0, session: false);
+        SaveBackups.Take(_paths, "World", SaveBackups.Kind.Start, T0.AddMinutes(1));
+        WriteSave("World", "later", T0.AddHours(2));
+        var old = SaveBackups.Versions(_paths, "World").Single(v => v.Kind == SaveBackups.VersionKind.Backup);
+
+        var kept = SaveBackups.LoadVersion(_paths, "World", old, T0.AddHours(3))!;
+
+        // The later world's owners would be handed characters this world does not hold.
+        Assert.False(File.Exists(SavePreparer.SessionPath(SavePreparer.SavePath(_paths, "World"))));
+        Assert.Equal("{\"Players\":[\"later\"]}", File.ReadAllText(kept.SessionPath!));
+    }
+
+    [Fact]
+    public void The_current_save_is_first_then_older_versions_including_coops_own_copies()
+    {
+        WriteSave("World", "ours", T0.AddHours(1));
+        SaveBackups.Take(_paths, "World", SaveBackups.Kind.Start, T0.AddHours(1).AddMinutes(1));
+        WriteSave("World.backup1", "coop previous", T0.AddHours(2));
+        WriteSave("World.backup2", "coop before that", T0);
+        WriteSave("World", "now", T0.AddHours(3));
+
+        var versions = SaveBackups.Versions(_paths, "World");
+
+        Assert.True(versions[0].IsCurrent);
+        Assert.Equal("now", File.ReadAllText(versions[0].SavePath));
+        Assert.Equal(["coop previous", "ours", "coop before that"], versions.Skip(1).Select(v => File.ReadAllText(v.SavePath)));
+        Assert.Equal(new[] { SaveBackups.VersionKind.CoopPrevious, SaveBackups.VersionKind.Backup, SaveBackups.VersionKind.CoopPrevious },
+            versions.Skip(1).Select(v => v.Kind));
+        Assert.Contains("Coop's previous save", versions[1].Label);
+
+        Assert.True(SaveBackups.IsCoopCopy("World.backup1", out var owner));
+        Assert.Equal("World", owner);
+        Assert.False(SaveBackups.IsCoopCopy("World", out _));
+        Assert.False(SaveBackups.IsCoopCopy("World.backupX", out _));
+    }
+
+    [Fact]
+    public void Loading_the_current_version_changes_nothing()
+    {
+        WriteSave("World", "now", T0);
+        Assert.Null(SaveBackups.LoadVersion(_paths, "World", SaveBackups.Versions(_paths, "World")[0], T0.AddHours(1)));
+        Assert.Equal("now", File.ReadAllText(SavePreparer.SavePath(_paths, "World")));
+        Assert.Empty(SaveBackups.List(_paths, "World"));
     }
 
     [Fact]
@@ -125,9 +176,7 @@ public class SaveBackupsTests : IDisposable
         WriteSave("World", "no players yet", T0, session: false);
         var b = SaveBackups.Take(_paths, "World", SaveBackups.Kind.Start, T0.AddMinutes(1))!;
         Assert.Null(b.SessionPath);
-
-        var name = SaveBackups.Restore(_paths, b, T0.AddMinutes(2));
-        Assert.False(File.Exists(SavePreparer.SessionPath(SavePreparer.SavePath(_paths, name))));
+        Assert.Equal("no players yet", File.ReadAllText(b.SavePath));
     }
 
     [Fact]

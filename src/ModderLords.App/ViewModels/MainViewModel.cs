@@ -277,10 +277,13 @@ public sealed partial class SaveRow : ObservableObject
 {
     public required SaveHeader Header { get; init; }
 
-    /// <summary>The launcher's copies of this save, shown under it when the row is expanded. Server saves only.</summary>
-    public ObservableCollection<SaveBackupRow> Backups { get; } = new();
-    public bool HasBackups => Backups.Count > 0;
-    public string BackupsTip => $"Show the {Backups.Count} backup(s) ModderLords took of this save";
+    /// <summary>
+    /// The versions of this save the next launch can load, shown under it when the row is expanded: the save as it is
+    /// now first, then Coop's previous copies and the launcher's backups. Server saves only.
+    /// </summary>
+    public ObservableCollection<SaveVersionRow> Versions { get; } = new();
+    public bool HasVersions => Versions.Count > 1;
+    public string VersionsTip => $"Choose which of the {Versions.Count} versions of this save the next launch loads";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ExpandGlyph))]
@@ -288,12 +291,22 @@ public sealed partial class SaveRow : ObservableObject
 
     public string ExpandGlyph => IsExpanded ? "\u2212" : "+";
 
-    /// <summary>Call after <see cref="Backups"/> was refilled; a save left with none closes.</summary>
-    public void BackupsChanged()
+    /// <summary>The version the next launch loads. The first (current) one unless the host picked an older one.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Loads))]
+    private SaveVersionRow? _chosenVersion;
+
+    /// <summary>What the main list says the next launch loads.</summary>
+    public string Loads => ChosenVersion is null || ChosenVersion.Version.IsCurrent ? "newest" : ChosenVersion.Taken;
+
+    /// <summary>Call after <see cref="Versions"/> was refilled: keeps the choice when it is still there, else the newest.</summary>
+    public void VersionsChanged(string? keepPath)
     {
-        if (!HasBackups) IsExpanded = false;
-        OnPropertyChanged(nameof(HasBackups));
-        OnPropertyChanged(nameof(BackupsTip));
+        ChosenVersion = Versions.FirstOrDefault(v => keepPath is not null && v.Version.SavePath.Equals(keepPath, StringComparison.OrdinalIgnoreCase))
+                        ?? Versions.FirstOrDefault();
+        if (!HasVersions) IsExpanded = false;
+        OnPropertyChanged(nameof(HasVersions));
+        OnPropertyChanged(nameof(VersionsTip));
     }
 
     public string Name => Header.Name;

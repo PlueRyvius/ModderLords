@@ -14,22 +14,25 @@ namespace ModderLords.Coop.Saves;
 /// Each backup is the .sav and Coop's session file beside it (<see cref="SavePreparer.SessionPath"/>): without the
 /// session file a restored world has every player's character in it and no player attached to any of them.
 ///
-/// Two kinds, pruned separately so a long session cannot push out the copy taken before it started:
+/// Three kinds, pruned separately so a long session cannot push out the copy taken before it started:
 /// <list type="bullet">
 /// <item><see cref="Kind.Start"/>: the save as it was when the server was launched.</item>
 /// <item><see cref="Kind.Running"/>: taken while the server runs, at most once per <see cref="RunningInterval"/>, and
 /// once more after it exits.</item>
+/// <item><see cref="Kind.Replaced"/>: the save as it was just before an older version was loaded in its place
+/// (<see cref="LoadVersion"/>), so going back is never one-way.</item>
 /// </list>
 /// A copy is only taken when the save changed since the newest backup, so a server that crashes on every boot does
 /// not rotate the good copies out with copies of the broken one.
 ///
 /// Backups live under the server's data folder (ModderLords\save-backups\&lt;save&gt;), not in Game Saves, so the
-/// Saves tab and the server never mistake one for a world to host. Restoring copies one into Game Saves under a new
-/// name; nothing here ever writes to a save the server uses.
+/// Saves tab and the server never mistake one for a world to host. The Saves tab lists them under their save, next to
+/// the two older copies Coop itself keeps beside it (&lt;save&gt;.backup1/.backup2), and <see cref="LoadVersion"/> puts
+/// a chosen one in the save's place before a launch.
 /// </summary>
 public static class SaveBackups
 {
-    public enum Kind { Start, Running }
+    public enum Kind { Start, Running, Replaced }
 
     public const int KeepStart = 5;
     public const int KeepRunning = 8;
@@ -46,7 +49,12 @@ public static class SaveBackups
     public sealed record Backup(string SavePath, string SaveName, DateTime TakenAt, Kind Kind)
     {
         public string? SessionPath => File.Exists(SavePreparer.SessionPath(SavePath)) ? SavePreparer.SessionPath(SavePath) : null;
-        public string Label => $"{TakenAt:yyyy-MM-dd HH:mm} {(Kind == Kind.Start ? "server start" : "while running")}";
+        public string Label => $"{TakenAt:yyyy-MM-dd HH:mm} " + Kind switch
+        {
+            Kind.Start => "server start",
+            Kind.Running => "while running",
+            _ => "before an older version was loaded",
+        };
     }
 
     public static string Root(ServerPaths paths) => Path.Combine(paths.DataDir, "ModderLords", "save-backups");
@@ -70,7 +78,9 @@ public static class SaveBackups
     /// null when there was nothing to copy: no save, an unchanged one, or (<paramref name="serverRunning"/>) one the
     /// server wrote too recently to be sure it has finished.
     /// </summary>
-    public static Backup? Take(ServerPaths paths, string saveName, Kind kind, DateTime now, bool serverRunning = false)
+    /// <param name="always">Copy even when the save looks unchanged: for <see cref="Kind.Replaced"/>, where the save is
+    /// about to be overwritten and its session file may have changed on its own.</param>
+    public static Backup? Take(ServerPaths paths, string saveName, Kind kind, DateTime now, bool serverRunning = false, bool always = false)
     {
         SavePreparer.ValidateSaveName(saveName);
         var source = new FileInfo(SavePreparer.SavePath(paths, saveName));
@@ -79,7 +89,7 @@ public static class SaveBackups
 
         // File.Copy keeps the modification time, so an unchanged save is recognised by length and time alone, without
         // reading tens of megabytes to compare them.
-        if (List(paths, saveName).FirstOrDefault() is { } newest
+        if (!always && List(paths, saveName).FirstOrDefault() is { } newest
             && new FileInfo(newest.SavePath) is { Exists: true } last
             && last.Length == source.Length && last.LastWriteTimeUtc == source.LastWriteTimeUtc)
             return null;
@@ -105,35 +115,93 @@ public static class SaveBackups
         return Parse(target, saveName);
     }
 
-    /// <summary>
-    /// Copies a backup into Game Saves as a new save, with its session file, and returns the new save's name. The
-    /// save it came from is not touched.
-    /// </summary>
-    public static string Restore(ServerPaths paths, Backup backup, DateTime now)
-    {
-        var name = RestoreName(paths, backup);
+    // ---- versions: what the Saves tab offers to load ---------------------------------------------------------------
 
-        Directory.CreateDirectory(paths.SavesDir);
-        var target = SavePreparer.SavePath(paths, name);
-        // Session first: a .sav that appears without its session file, even briefly, is a world with unowned players.
-        if (backup.SessionPath is { } session) CopyAtomically(session, SavePreparer.SessionPath(target));
-        CopyAtomically(backup.SavePath, target);
-        return name;
+    public enum VersionKind { Current, CoopPrevious, Backup }
+
+    /// <summary>
+    /// One loadable state of a save: the save itself, one of Coop's own previous copies beside it, or one of ours.
+    /// <see cref="Day"/> and the label are for display; <see cref="SavePath"/> is what <see cref="LoadVersion"/> copies.
+    /// </summary>
+    public sealed record SaveVersion(string SavePath, VersionKind Kind, DateTime WrittenAt, string Label, Backup? Backup = null)
+    {
+        public string? SessionPath => File.Exists(SavePreparer.SessionPath(SavePath)) ? SavePreparer.SessionPath(SavePath) : null;
+        public bool IsCurrent => Kind == VersionKind.Current;
     }
 
-    /// <summary>The name <see cref="Restore"/> will give this backup now: &lt;save&gt;_restored_&lt;when&gt;, numbered on a clash.</summary>
-    public static string RestoreName(ServerPaths paths, Backup backup)
+    private static readonly System.Text.RegularExpressions.Regex CoopCopyName = new(@"^(?<save>.+)\.backup(?<n>[0-9]+)$");
+
+    /// <summary>
+    /// True for Coop's own previous copy of a save (&lt;save&gt;.backupN), which the Saves tab shows inside that save
+    /// rather than as a save of its own. <paramref name="baseName"/> is the save it belongs to.
+    /// </summary>
+    public static bool IsCoopCopy(string name, out string baseName)
     {
-        var name = $"{backup.SaveName}_restored_{backup.TakenAt.ToString(StampFormat, CultureInfo.InvariantCulture)}";
-        for (var i = 2; SavePreparer.Exists(paths, name); i++)
-            name = $"{backup.SaveName}_restored_{backup.TakenAt.ToString(StampFormat, CultureInfo.InvariantCulture)}_{i}";
-        SavePreparer.ValidateSaveName(name);
-        return name;
+        var m = CoopCopyName.Match(name);
+        baseName = m.Success ? m.Groups["save"].Value : "";
+        return m.Success;
+    }
+
+    /// <summary>
+    /// Every version of a save the Saves tab can load: the save as it is now first, then Coop's two previous copies
+    /// and the launcher's backups, newest first. Empty when the save does not exist.
+    /// </summary>
+    public static IReadOnlyList<SaveVersion> Versions(ServerPaths paths, string saveName)
+    {
+        var current = new FileInfo(SavePreparer.SavePath(paths, saveName));
+        if (!current.Exists) return [];
+        var older = new List<SaveVersion>();
+        for (var n = 1; n <= 9; n++)
+        {
+            var copy = new FileInfo(Path.Combine(paths.SavesDir, $"{saveName}.backup{n}.sav"));
+            if (!copy.Exists) continue;
+            var at = copy.LastWriteTime;
+            older.Add(new SaveVersion(copy.FullName, VersionKind.CoopPrevious, at,
+                $"{at:yyyy-MM-dd HH:mm} Coop's {(n == 1 ? "previous save" : n == 2 ? "save before that" : $"copy {n}")}"));
+        }
+        older.AddRange(List(paths, saveName).Select(b => new SaveVersion(b.SavePath, VersionKind.Backup, b.TakenAt, b.Label, b)));
+        var versions = new List<SaveVersion>
+        {
+            new(current.FullName, VersionKind.Current, current.LastWriteTime, $"{current.LastWriteTime:yyyy-MM-dd HH:mm} current save (newest)"),
+        };
+        versions.AddRange(older.OrderByDescending(v => v.WrittenAt));
+        return versions;
+    }
+
+    /// <summary>
+    /// Puts an older version in the save's place, for the next launch to host. The save as it is now is backed up
+    /// first (<see cref="Kind.Replaced"/>, with its session file), so this can always be undone from the same list.
+    ///
+    /// The session file travels with the version: copied over when the version has one, and removed when it has none,
+    /// because the current one describes a later world and would hand players characters it does not hold. Returns
+    /// the backup of the save as it was, or null when <paramref name="version"/> is the current save (nothing to do).
+    /// </summary>
+    public static Backup? LoadVersion(ServerPaths paths, string saveName, SaveVersion version, DateTime now)
+    {
+        SavePreparer.ValidateSaveName(saveName);
+        if (version.IsCurrent) return null;
+        if (!File.Exists(version.SavePath)) throw new FileNotFoundException($"The chosen version of '{saveName}' is no longer there.", version.SavePath);
+        var target = SavePreparer.SavePath(paths, saveName);
+        if (Path.GetFullPath(version.SavePath).Equals(Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase)) return null;
+
+        var kept = File.Exists(target)
+            ? Take(paths, saveName, Kind.Replaced, now, always: true)
+              ?? throw new IOException($"Could not back up '{saveName}' before replacing it; nothing was changed.")
+            : null;
+
+        var targetSession = SavePreparer.SessionPath(target);
+        // Session first: a .sav paired with the wrong session file, even briefly, is a world with the wrong owners.
+        if (version.SessionPath is { } session) CopyAtomically(session, targetSession);
+        else if (File.Exists(targetSession)) File.Delete(targetSession);   // its copy is in the backup taken above
+        CopyAtomically(version.SavePath, target);
+        // File.Copy kept the old timestamp; the save is written now as far as anyone looking at it is concerned.
+        File.SetLastWriteTimeUtc(target, now.ToUniversalTime());
+        return kept;
     }
 
     private static void Prune(ServerPaths paths, string saveName, Kind kind)
     {
-        var keep = kind == Kind.Start ? KeepStart : KeepRunning;
+        var keep = kind == Kind.Running ? KeepRunning : KeepStart;
         foreach (var old in List(paths, saveName).Where(b => b.Kind == kind).Skip(keep))
         {
             try
@@ -153,7 +221,7 @@ public static class SaveBackups
         var dash = name.LastIndexOf('-');
         if (dash <= 0) return null;
         if (!DateTime.TryParseExact(name[..dash], StampFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)) return null;
-        Kind? kind = name[(dash + 1)..] switch { "start" => Kind.Start, "running" => Kind.Running, _ => null };
+        Kind? kind = name[(dash + 1)..] switch { "start" => Kind.Start, "running" => Kind.Running, "replaced" => Kind.Replaced, _ => null };
         return kind is null ? null : new Backup(path, saveName, at, kind.Value);
     }
 

@@ -247,10 +247,15 @@ public partial class HostViewModel : ObservableObject
     internal void RefreshSaves(ServerPaths paths)
     {
         Saves.Clear();
-        foreach (var h in SaveHeaderReader.ReadAll(paths.SavesDir))
+        var headers = SaveHeaderReader.ReadAll(paths.SavesDir).ToList();
+        var names = new HashSet<string>(headers.Select(h => h.Name), StringComparer.OrdinalIgnoreCase);
+        foreach (var h in headers)
         {
+            // Coop's own previous copies (<save>.backup1, .backup2) are listed inside their save, not beside it.
+            if (SaveBackups.IsCoopCopy(h.Name, out var owner) && names.Contains(owner)) continue;
             var row = new SaveRow { Header = h };
-            LoadBackups(row, paths);
+            LoadVersions(row, paths);
+            row.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SaveRow.ChosenVersion)) OnVersionChosen(row); };
             Saves.Add(row);
         }
         SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(Profile.SaveName, StringComparison.OrdinalIgnoreCase));
@@ -299,7 +304,7 @@ public partial class HostViewModel : ObservableObject
                 Application.Current?.Dispatcher.BeginInvoke(() =>
                 {
                     AddLine(LogCategory.Tool, $"[ModderLords] backed up save '{saveName}' ({b.Label}) to {Path.GetDirectoryName(b.SavePath)}");
-                    if (Saves.FirstOrDefault(r => r.Name.Equals(saveName, StringComparison.OrdinalIgnoreCase)) is { } row) LoadBackups(row, paths);
+                    if (Saves.FirstOrDefault(r => r.Name.Equals(saveName, StringComparison.OrdinalIgnoreCase)) is { } row) LoadVersions(row, paths);
                 });
         }
         catch (Exception ex)
@@ -334,47 +339,57 @@ public partial class HostViewModel : ObservableObject
         }, null, check, check);
     }
 
-    /// <summary>Fills a save's backup list, shown under it on the Saves tab. Must run on the UI thread.</summary>
-    private void LoadBackups(SaveRow row, ServerPaths paths)
-    {
-        row.Backups.Clear();
-        try { foreach (var b in SaveBackups.List(paths, row.Name)) row.Backups.Add(SaveBackupRow.From(b)); }
-        catch (Exception ex) { AddLine(LogCategory.Tool, $"[ModderLords] could not list the backups of '{row.Name}': " + ex.Message); }
-        row.BackupsChanged();
-    }
+    private bool _loadingVersions;
 
-    /// <summary>How Host this backup asks first. Replaceable so tests never block on a message box.</summary>
-    internal Func<string, bool> ConfirmRestoreBackup { get; set; } = message => MessageBox.Show(
-        message, "Host this backup", MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK;
-
-    [RelayCommand]
-    private void RestoreSaveBackup(SaveBackupRow? row)
+    /// <summary>Fills a save's version list, shown under it on the Saves tab. Must run on the UI thread.</summary>
+    private void LoadVersions(SaveRow row, ServerPaths paths)
     {
-        if (row is null) { Status = "Pick a backup to restore."; return; }
+        var keep = row.ChosenVersion?.Version.SavePath;
+        _loadingVersions = true;
         try
         {
-            var paths = LaunchSession.ResolvePaths(Profile);
-            var planned = SaveBackups.RestoreName(paths, row.Backup);
-            if (!ConfirmRestoreBackup(
-                    $"Host the backup of '{row.Backup.SaveName}' taken {row.Backup.Label} (day {row.Day})?\n\n"
-                    + $"It is copied into your saves as '{planned}' and selected to host. Press Launch afterwards to start the server on it.\n\n"
-                    + $"'{row.Backup.SaveName}' itself is not changed, and you can switch back to it on this tab at any time."))
-            {
-                Status = "Backup not restored; nothing was changed.";
-                return;
-            }
-            var name = SaveBackups.Restore(paths, row.Backup, DateTime.Now);
-            AddLine(LogCategory.Tool, $"[ModderLords] restored the {row.Backup.Label} backup of '{row.Backup.SaveName}' as the new save '{name}'"
-                + (row.Backup.SessionPath is null ? "; it had no Coop session file, so players will be asked to make new characters" : ""));
-            RefreshSaves(paths);
-            SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-            Status = $"Backup copied as '{name}' and selected. Press Launch to host it; '{row.Backup.SaveName}' is unchanged.";
+            row.Versions.Clear();
+            try { foreach (var v in SaveBackups.Versions(paths, row.Name)) row.Versions.Add(SaveVersionRow.From(v)); }
+            catch (Exception ex) { AddLine(LogCategory.Tool, $"[ModderLords] could not list the versions of '{row.Name}': " + ex.Message); }
+            row.VersionsChanged(keep);
         }
-        catch (Exception ex)
+        finally { _loadingVersions = false; }
+    }
+
+    /// <summary>
+    /// The host picked a version under a save: that save becomes the one to host, and the status bar says what the
+    /// next launch will do, so the click visibly registers.
+    /// </summary>
+    private void OnVersionChosen(SaveRow row)
+    {
+        if (_loadingVersions || row.ChosenVersion is not { } chosen) return;
+        if (!ReferenceEquals(SelectedSave, row)) SelectedSave = row;
+        Status = chosen.Version.IsCurrent
+            ? $"'{row.Name}': the next launch loads the save as it is now."
+            : $"'{row.Name}': the next launch loads the version from {chosen.Taken}. The save as it is now is backed up first, so you can come back to it."
+              + (chosen.Version.SessionPath is null ? " That version has no player file, so players will make new characters." : "");
+    }
+
+    /// <summary>
+    /// Before a launch: when an older version of the save to host was chosen, puts it in the save's place (after
+    /// backing the save up) and goes back to "newest". Any thread. Throws when it could not, so the launch stops rather
+    /// than hosting something other than what was chosen.
+    /// </summary>
+    internal void ApplyChosenVersion(ServerPaths paths, string saveName, SaveBackups.SaveVersion? chosen)
+    {
+        if (chosen is null || chosen.IsCurrent) return;
+        var kept = SaveBackups.LoadVersion(paths, saveName, chosen, DateTime.Now);
+        Application.Current?.Dispatcher.Invoke(() =>
         {
-            AddLine(LogCategory.Error, "[ModderLords] restore failed: " + ex.Message);
-            Status = "Restore failed: " + ex.Message;
-        }
+            AddLine(LogCategory.Tool, $"[ModderLords] loading the version of '{saveName}' from {chosen.Label}"
+                + (kept is null ? "" : $"; the save as it was is backed up ({kept.Label})")
+                + (chosen.SessionPath is null ? "; that version has no player file, so players will make new characters" : ""));
+            if (Saves.FirstOrDefault(r => r.Name.Equals(saveName, StringComparison.OrdinalIgnoreCase)) is { } row)
+            {
+                row.ChosenVersion = null;   // the chosen state is now the save itself
+                LoadVersions(row, paths);
+            }
+        });
     }
 
     /// <summary>The player's own saves, for seeding the server with a world built by the real game (see SavePreparer.ImportFrom).</summary>
@@ -561,6 +576,20 @@ public partial class HostViewModel : ObservableObject
                 Status = "Not launched: " + pre.First(p => p.Blocking).Message;
                 IsRunning = false;
                 return;
+            }
+
+            var chosenVersion = Saves.FirstOrDefault(r => r.Name.Equals(launchProfile.SaveName, StringComparison.OrdinalIgnoreCase))?.ChosenVersion?.Version;
+            if (chosenVersion is { IsCurrent: false })
+            {
+                Status = "Loading the chosen version of the save…";
+                try { await Task.Run(() => ApplyChosenVersion(LaunchSession.ResolvePaths(launchProfile), launchProfile.SaveName, chosenVersion)); }
+                catch (Exception ex)
+                {
+                    AddLine(LogCategory.Error, $"[ModderLords] could not load the chosen version of '{launchProfile.SaveName}': {ex.Message}");
+                    Status = "Not launched: the chosen version of the save could not be loaded (" + ex.Message + ")";
+                    IsRunning = false;
+                    return;
+                }
             }
 
             Status = "Preparing…";
@@ -1188,21 +1217,21 @@ public partial class HostViewModel : ObservableObject
     }
 }
 
-/// <summary>One backup of the selected save, as the Saves tab lists it.</summary>
-public sealed class SaveBackupRow
+/// <summary>One version of a save, as the Saves tab lists it under the save.</summary>
+public sealed class SaveVersionRow
 {
-    public required SaveBackups.Backup Backup { get; init; }
-    public string Taken => Backup.Label;
+    public required SaveBackups.SaveVersion Version { get; init; }
+    public string Taken => Version.Label;
     public string Day { get; init; } = "";
     public string Size { get; init; } = "";
     /// <summary>Coop's record of which player owns which character; without it players make new characters.</summary>
-    public string Players => Backup.SessionPath is null ? "missing" : "included";
+    public string Players => Version.SessionPath is null ? "missing" : "included";
 
-    public static SaveBackupRow From(SaveBackups.Backup b)
+    public static SaveVersionRow From(SaveBackups.SaveVersion v)
     {
-        var header = SaveHeaderReader.TryRead(b.SavePath, out _);
+        var header = SaveHeaderReader.TryRead(v.SavePath, out _);
         long length = 0;
-        try { length = new FileInfo(b.SavePath).Length; } catch (IOException) { }
-        return new SaveBackupRow { Backup = b, Day = header?.DayLong.ToString("0") ?? "?", Size = $"{length / (1024.0 * 1024):0.0} MB" };
+        try { length = new FileInfo(v.SavePath).Length; } catch (IOException) { }
+        return new SaveVersionRow { Version = v, Day = header?.DayLong.ToString("0") ?? "?", Size = $"{length / (1024.0 * 1024):0.0} MB" };
     }
 }
