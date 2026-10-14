@@ -111,16 +111,23 @@ public static class SaveBackups
     /// </summary>
     public static string Restore(ServerPaths paths, Backup backup, DateTime now)
     {
-        var name = $"{backup.SaveName}_restored_{backup.TakenAt.ToString(StampFormat, CultureInfo.InvariantCulture)}";
-        for (var i = 2; SavePreparer.Exists(paths, name); i++)
-            name = $"{backup.SaveName}_restored_{backup.TakenAt.ToString(StampFormat, CultureInfo.InvariantCulture)}_{i}";
-        SavePreparer.ValidateSaveName(name);
+        var name = RestoreName(paths, backup);
 
         Directory.CreateDirectory(paths.SavesDir);
         var target = SavePreparer.SavePath(paths, name);
         // Session first: a .sav that appears without its session file, even briefly, is a world with unowned players.
         if (backup.SessionPath is { } session) CopyAtomically(session, SavePreparer.SessionPath(target));
         CopyAtomically(backup.SavePath, target);
+        return name;
+    }
+
+    /// <summary>The name <see cref="Restore"/> will give this backup now: &lt;save&gt;_restored_&lt;when&gt;, numbered on a clash.</summary>
+    public static string RestoreName(ServerPaths paths, Backup backup)
+    {
+        var name = $"{backup.SaveName}_restored_{backup.TakenAt.ToString(StampFormat, CultureInfo.InvariantCulture)}";
+        for (var i = 2; SavePreparer.Exists(paths, name); i++)
+            name = $"{backup.SaveName}_restored_{backup.TakenAt.ToString(StampFormat, CultureInfo.InvariantCulture)}_{i}";
+        SavePreparer.ValidateSaveName(name);
         return name;
     }
 

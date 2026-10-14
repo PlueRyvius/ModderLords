@@ -506,8 +506,10 @@ server that crashes on every boot does not replace the good copies with the brok
 last 8 others are kept, separately, so a long session cannot push out the copy from before it began. Budget for 13
 copies of the save on disk.
 
-A save with backups has a **+** in the list; it opens the copies under that save. **Restore as a new save** copies one
-into the server's saves as `<save>_restored_<when>` and selects it to host. The save it came from is not changed.
+A save with backups has a **+** in the list; it opens the copies under that save. To go back to one, press **Host this
+backup** on it: after you confirm, it is copied into the server's saves as `<save>_restored_<when>` (with its player
+file) and selected, and **Launch** hosts it. The save it came from is not changed, and selecting a backup row on its own
+does nothing.
 
 Typing a name that does not exist starts a **vanilla** world from the official `default_new_game.sav`. When the selected
 modules include TAOM, TAOM_Map and LOTRLOME_Armory and the name is new, the launcher creates that campaign in a

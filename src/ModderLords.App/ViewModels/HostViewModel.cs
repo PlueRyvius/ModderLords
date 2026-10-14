@@ -343,6 +343,10 @@ public partial class HostViewModel : ObservableObject
         row.BackupsChanged();
     }
 
+    /// <summary>How Host this backup asks first. Replaceable so tests never block on a message box.</summary>
+    internal Func<string, bool> ConfirmRestoreBackup { get; set; } = message => MessageBox.Show(
+        message, "Host this backup", MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK;
+
     [RelayCommand]
     private void RestoreSaveBackup(SaveBackupRow? row)
     {
@@ -350,12 +354,18 @@ public partial class HostViewModel : ObservableObject
         try
         {
             var paths = LaunchSession.ResolvePaths(Profile);
+            var planned = SaveBackups.RestoreName(paths, row.Backup);
+            if (!ConfirmRestoreBackup(
+                    $"Host the backup of '{row.Backup.SaveName}' taken {row.Backup.Label} (day {row.Day})?\n\n"
+                    + $"It is copied into your saves as '{planned}' and selected to host. Press Launch afterwards to start the server on it.\n\n"
+                    + $"'{row.Backup.SaveName}' itself is not changed, and you can switch back to it on this tab at any time."))
+                return;
             var name = SaveBackups.Restore(paths, row.Backup, DateTime.Now);
             AddLine(LogCategory.Tool, $"[ModderLords] restored the {row.Backup.Label} backup of '{row.Backup.SaveName}' as the new save '{name}'"
                 + (row.Backup.SessionPath is null ? "; it had no Coop session file, so players will be asked to make new characters" : ""));
             RefreshSaves(paths);
             SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-            Status = $"Restored as '{name}', now selected to host. The original save is unchanged.";
+            Status = $"Backup copied as '{name}' and selected. Press Launch to host it; '{row.Backup.SaveName}' is unchanged.";
         }
         catch (Exception ex)
         {
@@ -1182,7 +1192,8 @@ public sealed class SaveBackupRow
     public string Taken => Backup.Label;
     public string Day { get; init; } = "";
     public string Size { get; init; } = "";
-    public string Players => Backup.SessionPath is null ? "no session file" : "kept";
+    /// <summary>Coop's record of which player owns which character; without it players make new characters.</summary>
+    public string Players => Backup.SessionPath is null ? "missing" : "included";
 
     public static SaveBackupRow From(SaveBackups.Backup b)
     {
