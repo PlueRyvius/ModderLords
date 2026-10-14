@@ -17,6 +17,11 @@ request by hand.
    verdict is filled in as Works if the record had none, and the version is added to `TestedVersions`. Without
    that, only a record the submitter wrote with Record… can be sent, and Notes stays empty. The Notes line is
    written by the submitter's own launcher and is not verified by the workflow: treat it as their word.
+
+   One hosted session proves every mod in it, so when other mods of the profile have a record ready as well,
+   Submit… offers to send them all in the same issue. The form then holds one export file with every record,
+   *Module id* lists every id separated by commas, *Mod version* is empty (each record has its own
+   `TestedVersions`) and Notes says which mods were watched working and on which date.
 2. **The workflow checks it.** `.github/workflows/compat-record.yml` runs on issues carrying that label when they are
    opened, edited or labelled. It runs `tools/CompatRecordIntake`, which reads the record out of the issue body and
    validates it.
@@ -25,7 +30,9 @@ request by hand.
    checked again.
 4. **Accepted:** the workflow merges the record into `compat-db.json` on the branch `compat-record/issue-<number>`,
    opens one pull request for it (`Closes #<number>`), and comments on the issue with the link. Editing the issue
-   updates the same branch and the same pull request.
+   updates the same branch and the same pull request. An issue with several records still gives one pull request:
+   its body says what happens to each mod and then shows every changed record in full, one after the other. A
+   record the database already holds exactly is left alone and listed as such.
 5. **The maintainer reviews and merges** the pull request. Merging closes the issue.
 
 The workflow keeps one comment per issue and rewrites it on each run.
@@ -45,7 +52,8 @@ The app builds a prefilled link to the form, and the workflow reads the submitte
 Title prefix `Compat record: `, label `compat-record`. The labels are constants in `CompatIntake`
 (`src/ModderLords.Core/Compat/CompatIntake.cs`) and `CompatIntakeTests` fails when the template and the constants
 drift apart. `record` holds either one record object or the export-file shape
-`{ "SchemaVersion": 1, "Records": [ ... ] }` with exactly one record.
+`{ "SchemaVersion": 1, "Records": [ ... ] }` with one record or several. With several, the title is
+`Compat records: <count> mods` and `mod` holds every record's id, separated by commas.
 
 ## What is checked
 
@@ -53,8 +61,10 @@ The rules live in `CompatIntake`, next to `CompatDb`, and the record is finally 
 gate and the launcher share one schema. The gate is stricter than the launcher on purpose: the launcher ignores what
 it does not know so that an old build can read a newer file, while a submission is refused for it.
 
-- exactly one record; `Id` not empty, made of letters, digits, `.`, `_` and `-` with single spaces between them (at
-  most 64), and equal to the *Module id* field;
+- one record, or an export file with at most 30 of them, 60 KB in all, no mod twice, and *Module id* listing exactly
+  their ids. One refused record refuses the whole submission, and the comment says which record it was;
+- `Id` not empty, made of letters, digits, `.`, `_` and `-` with single spaces between them (at most 64), and equal
+  to the *Module id* field;
 - only known properties, spelt with their exact case, each at most once;
 - `Verdict` and `DefaultRole` by name only (a number is refused, although the launcher's converter would take one);
 - size: the record at most 32 KB, and every text and list has its own limit (see the constants in `CompatIntake`);
@@ -78,7 +88,8 @@ request rather than working round it.
 ## How the record is merged
 
 By id, the way `CompatDb` compares ids (without regard to case): an existing record is replaced whole, otherwise the
-record is added. `UpdatedAt` is set to the time of the run, in UTC.
+record is added. `UpdatedAt` is set to the time of the run, in UTC. Several records are merged one after the other
+into the same text.
 
 `compat-db.json` is hand-written. It is not in `CompatDb.Serialize`'s order, it leaves out empty lists, and it keeps
 characters such as `'` and `<` that `Serialize` writes as `\u` escapes. Writing the whole file through `Serialize`

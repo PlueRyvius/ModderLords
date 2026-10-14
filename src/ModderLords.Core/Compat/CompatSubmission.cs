@@ -12,7 +12,7 @@ namespace ModderLords.Core.Compat;
 public sealed record CompatSubmissionLink(string Url, string RecordJson, bool RecordInUrl);
 
 /// <summary>
-/// Builds the prefilled GitHub issue that carries one compat record to the maintainer. Nothing is sent from here: the
+/// Builds the prefilled GitHub issue that carries one compat record, or several at once, to the maintainer. Nothing is sent from here: the
 /// link only opens the form in the user's browser, and the issue exists once they press Submit on GitHub.
 ///
 /// PRIVACY: the link carries the record's own fields, the mod's version and Coop's version, and nothing else. The
@@ -38,6 +38,12 @@ public static class CompatSubmission
 
     public static string TitleFor(CompatRecord record) => "Compat record: " + record.Id;
 
+    /// <summary>The title of an issue carrying several records. Their ids are in the form's module id field.</summary>
+    public static string TitleFor(IReadOnlyCollection<CompatRecord> records) => $"Compat records: {records.Count} mods";
+
+    /// <summary>What the form's module id field holds for several records: every id, the way the intake reads them.</summary>
+    public static string ModField(IEnumerable<CompatRecord> records) => string.Join(", ", records.Select(r => r.Id));
+
     // LF, not the platform's line ending: each line break costs three characters of the link once escaped, six as CRLF.
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, NewLine = "\n" };
 
@@ -53,6 +59,17 @@ public static class CompatSubmission
     }
 
     /// <summary>
+    /// Several records as one export file (<c>{ "SchemaVersion": 1, "Records": [ ... ] }</c>): the text Export…
+    /// writes and Import… reads, which is also what the form accepts for more than one record.
+    /// <paramref name="compact"/> leaves out the whitespace, which is most of what a record costs inside a link.
+    /// </summary>
+    public static string RecordsJson(IReadOnlyCollection<CompatRecord> records, bool compact = false)
+    {
+        using var doc = JsonDocument.Parse(CompatDb.Serialize(records));
+        return compact ? JsonSerializer.Serialize(doc.RootElement) : JsonSerializer.Serialize(doc.RootElement, Indented);
+    }
+
+    /// <summary>
     /// The link for one record. <paramref name="modVersion"/> and <paramref name="coopVersion"/> are the versions on
     /// the submitter's machine; a missing one leaves its field empty for them to fill in. <paramref name="notes"/>
     /// goes in the form's free-text field, which the reviewer reads and the database never stores.
@@ -60,10 +77,26 @@ public static class CompatSubmission
     public static CompatSubmissionLink Build(CompatRecord record, string? modVersion, string? coopVersion, string? notes = null)
     {
         var json = RecordJson(record);
-        var url = Url(record, modVersion, coopVersion, json, notes);
+        var url = Url(TitleFor(record), record.Id, modVersion, coopVersion, json, notes);
         return url.Length <= MaxUrlLength
             ? new CompatSubmissionLink(url, json, RecordInUrl: true)
-            : new CompatSubmissionLink(Url(record, modVersion, coopVersion, PastePlaceholder, notes), json, RecordInUrl: false);
+            : new CompatSubmissionLink(Url(TitleFor(record), record.Id, modVersion, coopVersion, PastePlaceholder, notes), json, RecordInUrl: false);
+    }
+
+    /// <summary>
+    /// The link for several records in one issue. There is no single mod version to give: each record carries its own
+    /// in TestedVersions. The records travel readable when they fit, without whitespace when only that fits, and by
+    /// clipboard (readable again) when neither does.
+    /// </summary>
+    public static CompatSubmissionLink Build(IReadOnlyCollection<CompatRecord> records, string? coopVersion, string? notes = null)
+    {
+        var (title, mods, json) = (TitleFor(records), ModField(records), RecordsJson(records));
+        foreach (var candidate in new[] { json, RecordsJson(records, compact: true) })
+        {
+            var url = Url(title, mods, null, coopVersion, candidate, notes);
+            if (url.Length <= MaxUrlLength) return new CompatSubmissionLink(url, candidate, RecordInUrl: true);
+        }
+        return new CompatSubmissionLink(Url(title, mods, null, coopVersion, PastePlaceholder, notes), json, RecordInUrl: false);
     }
 
     /// <summary>
@@ -72,6 +105,20 @@ public static class CompatSubmission
     /// </summary>
     public static string ProofNote(DateTime provenAtUtc) =>
         $"Hosted through ModderLords with exactly these settings on {provenAtUtc:yyyy-MM-dd}: the dedicated server started and a player reached the campaign map.";
+
+    /// <summary>
+    /// The notes for several records: which of them the launcher watched working and when, and which it did not.
+    /// Null when it watched none, so the form claims nothing.
+    /// </summary>
+    public static string? ProofNote(IReadOnlyCollection<(string Id, DateTime? ProvenAtUtc)> mods)
+    {
+        if (mods.All(m => m.ProvenAtUtc is null)) return null;
+        var sb = new StringBuilder("Hosted through ModderLords with exactly these settings: the dedicated server started and a player reached the campaign map.");
+        foreach (var (id, at) in mods.Where(m => m.ProvenAtUtc is not null)) sb.Append($"\n- {id}: {at:yyyy-MM-dd}");
+        var unwatched = mods.Where(m => m.ProvenAtUtc is null).Select(m => m.Id).ToList();
+        if (unwatched.Count > 0) sb.Append("\nNot watched by ModderLords (records written by hand): ").Append(string.Join(", ", unwatched));
+        return sb.ToString();
+    }
 
     /// <summary>
     /// Whether two records say the same thing, whenever they were written. Submit… uses it to tell a host that the
@@ -84,11 +131,11 @@ public static class CompatSubmission
         return CompatDb.Serialize([x]) == CompatDb.Serialize([y]);
     }
 
-    private static string Url(CompatRecord record, string? modVersion, string? coopVersion, string recordField, string? notes)
+    private static string Url(string title, string mods, string? modVersion, string? coopVersion, string recordField, string? notes)
     {
         var sb = new StringBuilder($"https://github.com/{UpdateChecker.Repository}/issues/new?template={Template}");
-        Add(sb, "title", TitleFor(record));
-        Add(sb, "mod", record.Id);
+        Add(sb, "title", title);
+        Add(sb, "mod", mods);
         Add(sb, "mod-version", modVersion);
         Add(sb, "coop-version", coopVersion);
         Add(sb, "record", recordField);

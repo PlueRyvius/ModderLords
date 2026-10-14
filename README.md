@@ -902,6 +902,10 @@ changed.
   - That note covers exactly the version and settings that were hosted. Change the mod's role or folders, or update
     the mod or Coop, and you host once more before Submit… offers it again.
   - A record you wrote with Record… can be submitted without hosting; the form then does not claim it was tried.
+  - One hosted session covers every mod in it. When other mods also have something to send, Submit… names them and
+    asks: **Yes** puts them all in the same issue, **No** sends the selected mod alone. Either way you are shown what
+    goes in before the browser opens.
+  - A record the GitHub form would refuse is stopped here, and the status line says why.
   - It opens a GitHub issue form in your browser, already filled in, with nothing else about your PC, your profile or
     your other mods, and nothing about who joined. Pressing the button sends nothing: the record becomes a public
     issue, posted from your own GitHub account, only when you press Submit on GitHub. A record too large for a link

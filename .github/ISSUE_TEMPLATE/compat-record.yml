@@ -12,13 +12,13 @@ body:
       value: |
         A compatibility record tells ModderLords how one mod behaves on a Bannerlord Coop server: whether it works, and which settings it needs. Submitting yours here proposes it for the list that ships with ModderLords, so other hosts get it without working it out again.
 
-        You do not have to fill this in by hand. In ModderLords, host a server with the mod and have a player join, then select the mod on the Mods tab and press **Submit…**: it opens this form with everything filled in, including the mod's role and folder settings. The record is checked automatically and then reviewed by the maintainer before anything changes.
+        You do not have to fill this in by hand. In ModderLords, host a server with the mod and have a player join, then select the mod on the Mods tab and press **Submit…**: it opens this form with everything filled in, including the mod's role and folder settings. When several mods are ready, Submit… offers to put them all in this one form. The record is checked automatically and then reviewed by the maintainer before anything changes.
 
   - type: input
     id: mod
     attributes:
       label: Module id
-      description: The mod's id as ModderLords shows it, for example ImprovedGarrisons. It must match the Id inside the record.
+      description: The mod's id as ModderLords shows it, for example ImprovedGarrisons. It must match the Id inside the record. For several records, every id, separated by commas.
     validations:
       required: true
 
@@ -26,7 +26,7 @@ body:
     id: mod-version
     attributes:
       label: Mod version
-      description: The version of the mod you tested, for example v4.2.0.7.
+      description: The version of the mod you tested, for example v4.2.0.7. Leave it empty for several records.
     validations:
       required: false
 
@@ -42,7 +42,7 @@ body:
     id: record
     attributes:
       label: Compatibility record
-      description: The record exactly as ModderLords exported it. One record per issue.
+      description: The record exactly as ModderLords exported it. One record, or one export file holding several.
       render: json
     validations:
       required: true

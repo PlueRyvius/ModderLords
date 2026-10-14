@@ -984,6 +984,9 @@ public class WorkflowTests
         public List<string> Copied { get; } = new();
         public List<string> Asked { get; } = new();
         public bool Answer { get; set; } = true;
+        /// <summary>The questions about sending the other ready mods too, and what is answered: all, this one, or cancel.</summary>
+        public List<string> AskedAboutOthers { get; } = new();
+        public bool? IncludeOthers { get; set; } = false;
         public bool ClipboardWorks { get; set; } = true;
         public MainViewModel Vm { get; }
         private readonly string _dir;
@@ -994,6 +997,7 @@ public class WorkflowTests
             fixture.Module("TestMod"); fixture.Module("BundledMod"); fixture.Module("PlainMod");
             Vm = fixture.ViewModel(); Vm.Rescan();
             Vm.ConfirmCompatSubmit = message => { Asked.Add(message); return Answer; };
+            Vm.AskCompatSubmitOthers = message => { AskedAboutOthers.Add(message); return IncludeOthers; };
             Vm.OpenCompatSubmitPage = Opened.Add;
             Vm.CopyCompatSubmitText = text => { Copied.Add(text); return ClipboardWorks; };
             // This PC's own proofs must neither help nor hinder a test.
@@ -1157,6 +1161,66 @@ public class WorkflowTests
         // Bundled says Works with no version; the join adds this version, which is news.
         h.Submit("BundledMod");
         Assert.Equal(["v1.0.0"], CompatIntake.ValidateSubmission(Field(Assert.Single(h.Opened), "record"), "BundledMod").Record!.TestedVersions);
+    });
+
+    [Fact]
+    public void SubmitOffersEveryModTheSessionProvedInOneIssue() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+        foreach (var id in new[] { "PlainMod", "TestMod" }) h.Vm.Mods.Single(m => m.Id == id).Enabled = true;
+        h.Vm.SetModFolders(h.Vm.Mods.Single(m => m.Id == "TestMod"), ["Assets"], null);
+        h.PlayerJoined("PlainMod", "TestMod", "Native");
+
+        // Cancel at the question: nothing is asked further and nothing opens.
+        h.IncludeOthers = null;
+        h.Submit("PlainMod");
+        Assert.Contains("TestMod", Assert.Single(h.AskedAboutOthers));
+        Assert.DoesNotContain("BundledMod", h.AskedAboutOthers[0]);
+        Assert.Empty(h.Asked);
+        Assert.Empty(h.Opened);
+
+        // No: the selected mod alone, exactly as before.
+        h.IncludeOthers = false;
+        h.Submit("PlainMod");
+        Assert.Equal("PlainMod", Field(Assert.Single(h.Opened), "mod"));
+        Assert.DoesNotContain("TestMod", Uri.UnescapeDataString(h.Opened[0]));
+
+        // Yes: one issue, both records, each as it would have gone alone.
+        h.IncludeOthers = true;
+        h.Submit("PlainMod");
+        var url = h.Opened[1];
+        Assert.Equal("Compat records: 2 mods", Field(url, "title"));
+        Assert.Equal("PlainMod, TestMod", Field(url, "mod"));
+        var sent = CompatIntake.ValidateSubmission(Field(url, "record"), Field(url, "mod"));
+        Assert.True(sent.IsValid, string.Join(" | ", sent.Problems));
+        Assert.Equal(["PlainMod", "TestMod"], sent.Records.Select(r => r.Id));
+        Assert.All(sent.Records, r => Assert.Equal(CompatVerdict.Works, r.Verdict));
+        Assert.Equal(["Assets"], sent.Records[1].ServerExcludedFolders);
+        Assert.Contains("- PlainMod: 2026-10-06", Field(url, "notes"));
+        Assert.Contains("- TestMod: 2026-10-06", Field(url, "notes"));
+        Assert.Contains("2 mods", h.Asked[^1]);
+        Assert.Contains("public issue", h.Asked[^1]);
+        Assert.Contains("the records of 2 mods", h.Vm.Status);
+        // Still nothing about the machine, the profile or a mod that had nothing to send.
+        var text = Uri.UnescapeDataString(url);
+        Assert.DoesNotContain(Path.GetFileName(fixture.Root), text);
+        Assert.DoesNotContain(h.Vm.Profile.Name, text);
+        Assert.DoesNotContain("BundledMod", text);
+    });
+
+    [Fact]
+    public void SubmitSaysWhyWhenTheFormWouldRefuseTheRecord() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+
+        h.Submit("TestMod", new CompatRecord { Id = "TestMod", Verdict = CompatVerdict.Works, Url = "ftp://example.org/mod" });
+
+        Assert.Contains("the GitHub form would refuse this record", h.Vm.Status);
+        Assert.Contains("Url must be", h.Vm.Status);
+        Assert.Empty(h.Asked);
+        Assert.Empty(h.Opened);
     });
 
     private static string Field(string url, string name) =>
