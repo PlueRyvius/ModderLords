@@ -205,6 +205,30 @@
       "DefaultSettings": {},
       "Notes": "If Swadian Armoury or Improved Horse Caparisons refuse to let the server launch make sure to tick everything to \u0022client\u0022 except for in the case of \u0022moduledata\u0022 inside the mods \u0022server and client\u0022 tab. - Rubooben",
       "UpdatedAt": "2026-10-14T01:52:02Z"
+    },
+    {
+      "Id": "swadian armoury",
+      "Verdict": "Works",
+      "TestedVersions": [
+        "v1.0.0"
+      ],
+      "TestedCoopVersion": "v0.1.6",
+      "DefaultRole": "Run",
+      "ServerAuthoritative": false,
+      "ClientSideBehaviors": [],
+      "KeepSubModules": [],
+      "SettingsTypes": [],
+      "IgnoreSettingsTypes": [],
+      "ServerExcludedFolders": [
+        "Assets",
+        "AssetSources",
+        "DsAssetPackages",
+        "RuntimeDataCache"
+      ],
+      "ClientExcludedFolders": [],
+      "EnsureLines": [],
+      "DefaultSettings": {},
+      "UpdatedAt": "2026-10-14T05:36:21Z"
     }
   ]
 }
