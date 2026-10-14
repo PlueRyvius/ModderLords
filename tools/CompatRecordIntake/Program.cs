@@ -8,7 +8,8 @@ using ModderLords.Core.Compat;
 //       Holds every record of a database file to the submission rules. Exit 1 when any record fails.
 //
 //   intake --body <file> --db <compat-db.json> --out <dir> --issue <number> [--previous <file>] [--now <utc>]
-//       Reads a "Compat record" issue body, validates the record in it and merges it into the database file in place.
+//       Reads a "Compat record" issue body, validates the record in it (or the several records of one export file)
+//       and merges it into the database file in place.
 //       Writes what the workflow needs into <dir>, so the workflow never builds text out of the issue itself:
 //         outcome.txt          ok | unchanged | invalid
 //         comment.md           the comment for the issue
@@ -91,27 +92,63 @@ int Intake(Dictionary<string, string> o)
         return Finish(outDir, "invalid", string.Join(Environment.NewLine, submission.Problems.Select(p => "  - " + p)));
     }
 
-    var record = submission.Record!;
+    var records = submission.Records;
     var dbPath = o["--db"];
     var dbText = File.ReadAllText(dbPath);
     var previousText = o.TryGetValue("--previous", out var previousPath) && File.Exists(previousPath) ? File.ReadAllText(previousPath) : null;
-    var merge = CompatIntake.Merge(dbText, record, now, previousText);
-
-    if (merge.Unchanged)
+    // One after the other into the same text, so each record is spliced into what the one before it left.
+    var merges = new List<CompatIntake.MergeResult>();
+    var merged = dbText;
+    foreach (var submitted in records)
     {
-        Write(outDir, "comment.md", $"{Marker}\nThe compatibility database already holds exactly this record for `{record.Id}`, so there is nothing to change. Thank you all the same.\n\nIf you meant to change something, edit the record in this issue (the pencil on the first post) and it will be checked again.\n");
-        return Finish(outDir, "unchanged", $"  {record.Id} is already in the database with these values");
+        var merge = CompatIntake.Merge(merged, submitted, now, previousText);
+        merged = merge.Text;
+        merges.Add(merge);
+    }
+    var changed = merges.Where(m => !m.Unchanged).ToList();
+    const string editHint = "If you meant to change something, edit the record in this issue (the pencil on the first post) and it will be checked again.";
+
+    if (changed.Count == 0)
+    {
+        Write(outDir, "comment.md", records.Count == 1
+            ? $"{Marker}\nThe compatibility database already holds exactly this record for `{records[0].Id}`, so there is nothing to change. Thank you all the same.\n\n{editHint}\n"
+            : $"{Marker}\nThe compatibility database already holds exactly these {records.Count} records ({Ids(merges)}), so there is nothing to change. Thank you all the same.\n\n{editHint}\n");
+        return Finish(outDir, "unchanged", string.Join(Environment.NewLine, records.Select(r => $"  {r.Id} is already in the database with these values")));
     }
 
-    File.WriteAllText(dbPath, merge.Text, utf8);
-    var changes = CompatIntake.Describe(merge.Previous, merge.Record);
-    var verb = merge.Added ? "Add" : "Update";
-    Write(outDir, "pr-title.txt", $"Compat record: {record.Id}");
-    Write(outDir, "commit-message.txt", $"Compat record: {record.Id}\n\n{verb} the compatibility record for {record.Id}, submitted in issue #{issue}.\n");
-    Write(outDir, "pr-body.md", PullRequestBody(issue, merge, changes, CompatIntake.SafeVersion(form.ModVersion), CompatIntake.SafeVersion(form.CoopVersion)));
-    Write(outDir, "comment.md", $"{Marker}\nThank you. The record for `{record.Id}` passed the automatic checks and is now waiting for the maintainer to review it. Nothing is merged automatically.\n\nIf you edit the record in this issue, the pull request is updated to match.\n");
-    return Finish(outDir, "ok", $"  {(merge.Added ? "new record" : "replaces the existing record")} for {record.Id}; {changes.Count} field(s) differ");
+    File.WriteAllText(dbPath, merged, utf8);
+    var modVersion = CompatIntake.SafeVersion(form.ModVersion);
+    var coopVersion = CompatIntake.SafeVersion(form.CoopVersion);
+    if (records.Count == 1)
+    {
+        var (merge, record) = (changed[0], changed[0].Record);
+        var changes = CompatIntake.Describe(merge.Previous, record);
+        Write(outDir, "pr-title.txt", $"Compat record: {record.Id}");
+        Write(outDir, "commit-message.txt", $"Compat record: {record.Id}\n\n{(merge.Added ? "Add" : "Update")} the compatibility record for {record.Id}, submitted in issue #{issue}.\n");
+        Write(outDir, "pr-body.md", PullRequestBody(issue, merge, changes, modVersion, coopVersion));
+        Write(outDir, "comment.md", $"{Marker}\nThank you. The record for `{record.Id}` passed the automatic checks and is now waiting for the maintainer to review it. Nothing is merged automatically.\n\nIf you edit the record in this issue, the pull request is updated to match.\n");
+        return Finish(outDir, "ok", $"  {(merge.Added ? "new record" : "replaces the existing record")} for {record.Id}; {changes.Count} field(s) differ");
+    }
+
+    var title = $"Compat records: {Short(changed)}";
+    Write(outDir, "pr-title.txt", title);
+    Write(outDir, "commit-message.txt", $"{title}\n\nSubmitted together in issue #{issue}:\n"
+        + string.Concat(changed.Select(m => $"- {(m.Added ? "add" : "update")} {m.Record.Id}\n")));
+    Write(outDir, "pr-body.md", PullRequestBodyForSeveral(issue, merges, coopVersion));
+    var left = merges.Count - changed.Count;
+    Write(outDir, "comment.md", $"{Marker}\nThank you. The {changed.Count} record(s) for {Ids(changed)} passed the automatic checks and are now waiting for the maintainer to review them. Nothing is merged automatically.\n"
+        + (left > 0 ? $"\nThe database already holds exactly what you sent for {Ids(merges.Where(m => m.Unchanged))}, so nothing changes there.\n" : "")
+        + "\nIf you edit the records in this issue, the pull request is updated to match.\n");
+    return Finish(outDir, "ok", string.Join(Environment.NewLine, merges.Select(m =>
+        $"  {(m.Unchanged ? "already in the database" : m.Added ? "new record" : "replaces the existing record")}: {m.Record.Id}")));
 }
+
+// Ids as code, for a comment or a pull request body. Each one passed the id rule, so it holds nothing markdown reads.
+string Ids(IEnumerable<CompatIntake.MergeResult> merges) => string.Join(", ", merges.Select(m => $"`{m.Record.Id}`"));
+
+// The first few ids for a title or a commit subject, which have to stay one readable line.
+string Short(IReadOnlyList<CompatIntake.MergeResult> merges) =>
+    string.Join(", ", merges.Take(3).Select(m => m.Record.Id)) + (merges.Count > 3 ? $" and {merges.Count - 3} more" : "");
 
 int Finish(string outDir, string outcome, string detail)
 {
@@ -148,8 +185,36 @@ string PullRequestBody(int issue, CompatIntake.MergeResult merge, IReadOnlyList<
         : $"**Replaces** the existing compatibility record for `{record.Id}`, submitted through the issue form in #{issue}.\n");
     if (modVersion is not null || coopVersion is not null)
         sb.Append($"\nThe submitter reports testing with mod version `{modVersion ?? "not given"}` and Coop version `{coopVersion ?? "not given"}`.\n");
+    sb.Append('\n');
+    AppendRecord(sb, merge, changes);
+    AppendFooter(sb);
+    return sb.ToString();
+}
 
-    sb.Append("\n## Review these first\n\n");
+// Several records in one pull request: what happens to each, then every changed record in full, one after the other.
+string PullRequestBodyForSeveral(int issue, IReadOnlyList<CompatIntake.MergeResult> merges, string? coopVersion)
+{
+    var changed = merges.Where(m => !m.Unchanged).ToList();
+    var sb = new StringBuilder();
+    sb.Append($"Closes #{issue}\n\n");
+    sb.Append($"{changed.Count} compatibility record(s), submitted together through the issue form in #{issue}:\n\n");
+    foreach (var m in merges)
+        sb.Append($"- `{m.Record.Id}`: {(m.Unchanged ? "already in the database with exactly these values, left alone" : m.Added ? "**new**" : "**replaces** the existing record")}\n");
+    if (coopVersion is not null) sb.Append($"\nThe submitter reports testing with Coop version `{coopVersion}`. Each record lists the mod version it was tested with.\n");
+    sb.Append("\nEach record is reviewed on its own: one being right says nothing about the next.\n\n");
+    foreach (var m in changed)
+    {
+        sb.Append($"# `{m.Record.Id}`\n\n");
+        AppendRecord(sb, m, CompatIntake.Describe(m.Previous, m.Record));
+    }
+    AppendFooter(sb);
+    return sb.ToString();
+}
+
+void AppendRecord(StringBuilder sb, CompatIntake.MergeResult merge, IReadOnlyList<CompatIntake.FieldChange> changes)
+{
+    var record = merge.Record;
+    sb.Append("## Review these first\n\n");
     sb.Append("These four fields change what the launcher does on every host that has this mod. The automatic checks only prove they are well-formed, not that they are right.\n\n");
     sb.Append("### ServerExcludedFolders\n\nTop-level folders of the mod that the dedicated server is not shown.\n\n");
     sb.Append(Fenced(CompatIntake.Display(record.ServerExcludedFolders))).Append('\n');
@@ -180,10 +245,13 @@ string PullRequestBody(int issue, CompatIntake.MergeResult merge, IReadOnlyList<
         }
     }
 
+}
+
+void AppendFooter(StringBuilder sb)
+{
     sb.Append("---\n\n");
     sb.Append("Opened by the compat-record workflow. Values above are shown as JSON with anything outside plain ASCII escaped, so nothing in them can hide. ");
     sb.Append("CI does not start by itself on a pull request opened by a workflow: close and reopen this pull request to run it (docs/COMPAT-RECORDS.md).\n");
-    return sb.ToString();
 }
 
 // A code block whose fence is longer than any run of backticks inside it, so the content cannot end the block early.

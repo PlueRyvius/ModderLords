@@ -139,4 +139,69 @@ public sealed class CompatSubmissionTests
         Assert.True(fits.RecordInUrl);
         Assert.True(fits.Url.Length <= CompatSubmission.MaxUrlLength);
     }
+
+    // ---- several records in one issue --------------------------------------------------------------------------
+
+    private static CompatRecord Small(string id) => new() { Id = id, Verdict = CompatVerdict.Works, TestedVersions = ["v1.0.0"] };
+
+    [Fact]
+    public void SeveralRecords_TravelAsOneExportFile_TheIntakeAccepts()
+    {
+        var link = CompatSubmission.Build([Small("B.Mod"), Small("a mod")], "v0.1.6", "noted");
+        var q = Query(link.Url);
+
+        Assert.True(link.RecordInUrl);
+        Assert.Equal("Compat records: 2 mods", q["title"]);
+        Assert.Equal("B.Mod, a mod", q["mod"]);
+        Assert.Equal("v0.1.6", q["coop-version"]);
+        Assert.False(q.ContainsKey("mod-version"));            // each record carries its own in TestedVersions
+        Assert.Equal(link.RecordJson, q["record"]);
+        Assert.DoesNotContain("\r", q["record"]);
+        // The same text Import… reads.
+        Assert.Equal(["a mod", "B.Mod"], CompatDb.Parse(q["record"]).Records.Select(r => r.Id));
+    }
+
+    [Fact]
+    public void SeveralRecords_LoseTheirWhitespaceBeforeTheyLoseTheLink()
+    {
+        // Enough records that the readable form is too long for a link and the compact one is not.
+        var records = Enumerable.Range(0, 30).Select(i => Small($"Mod{i:00}")).ToList();
+        var count = records.Count;
+        while (count > 1 && Uri.EscapeDataString(CompatSubmission.RecordsJson(records.Take(count).ToList(), compact: true)).Length > CompatSubmission.MaxUrlLength - 600) count--;
+        var fitting = records.Take(count).ToList();
+        Assert.True(Uri.EscapeDataString(CompatSubmission.RecordsJson(fitting)).Length > CompatSubmission.MaxUrlLength, "the fixture should not fit readable");
+
+        var link = CompatSubmission.Build(fitting, "v0.1.6");
+
+        Assert.True(link.RecordInUrl);
+        Assert.True(link.Url.Length <= CompatSubmission.MaxUrlLength);
+        Assert.DoesNotContain("\n", link.RecordJson);
+        Assert.Equal(count, CompatDb.Parse(Query(link.Url)["record"]).Records.Count);
+    }
+
+    [Fact]
+    public void SeveralRecords_TooLargeEvenCompact_GoByClipboard_Readable()
+    {
+        var records = Enumerable.Range(0, 30).Select(i => new CompatRecord { Id = $"Mod{i:00}", Notes = new string('n', 400) }).ToList();
+
+        var link = CompatSubmission.Build(records, null);
+
+        Assert.False(link.RecordInUrl);
+        Assert.True(link.Url.Length <= CompatSubmission.MaxUrlLength);
+        Assert.Equal(CompatSubmission.PastePlaceholder, Query(link.Url)["record"]);
+        Assert.Contains("\n", link.RecordJson);
+        Assert.Equal(30, CompatDb.Parse(link.RecordJson).Records.Count);
+    }
+
+    [Fact]
+    public void ProofNote_ForSeveral_SaysWhichWereWatched_AndClaimsNothingWhenNoneWere()
+    {
+        var day = new DateTime(2026, 10, 6, 23, 59, 0, DateTimeKind.Utc);
+        var note = CompatSubmission.ProofNote([("A", day), ("B", null), ("C", day)])!;
+
+        Assert.Contains("- A: 2026-10-06", note);
+        Assert.Contains("- C: 2026-10-06", note);
+        Assert.Contains("Not watched by ModderLords (records written by hand): B", note);
+        Assert.Null(CompatSubmission.ProofNote([("A", null), ("B", null)]));
+    }
 }

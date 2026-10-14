@@ -1170,20 +1170,36 @@ public partial class MainViewModel : ObservableObject
     internal string CompatProofPath { get; set; } = CompatProofStore.DefaultPath;
 
     /// <summary>
-    /// Opens a prefilled GitHub issue for the selected mod. What is sent is the mod's record with its settings on the
-    /// Mods tab (role, server-only logic, the two folder lists) written into it: those live in the profile, so a
-    /// record on its own never carried them.
+    /// How Submit… asks whether the other mods that are ready should go in the same issue: true for all of them,
+    /// false for the selected mod alone, null to call it off. Replaceable so tests never block on a message box.
+    /// </summary>
+    internal Func<string, bool?> AskCompatSubmitOthers { get; set; } = message => MessageBox.Show(
+        message, "Submit compatibility records", MessageBoxButton.YesNoCancel, MessageBoxImage.Question) switch
+    {
+        MessageBoxResult.Yes => true,
+        MessageBoxResult.No => false,
+        _ => null,
+    };
+
+    /// <summary>What Submit… would send for one mod: its record, and the proof behind it when a player joined with exactly this.</summary>
+    private sealed record CompatSubmitItem(ModRow Row, CompatRecord Record, ModSettings? Settings, CompatProof? Proof)
+    {
+        public bool Proven => Proof is not null;
+    }
+
+    /// <summary>
+    /// The record Submit… would send for <paramref name="row"/>, or null with the reason there is nothing to send.
+    /// What is sent is the mod's record with its settings on the Mods tab (role, server-only logic, the two folder
+    /// lists) written into it: those live in the profile, so a record on its own never carried them.
     ///
     /// No Record… step is needed once ModderLords has watched the set-up work: a server hosted with this version and
     /// these settings, and a player on the campaign map (<see cref="RecordSessionProof"/>). Without that, only a
     /// record the user wrote themselves is offered - the bundled one came from the maintainer, and settings nobody
     /// has seen working are not something to send to every host.
     /// </summary>
-    internal void SubmitCompatFrom(CompatDb db)
+    private CompatSubmitItem? CompatSubmitItemFor(ModRow row, CompatDb db, out string reason)
     {
-        if (SelectedMod is not { } row) { Status = "Select a mod first"; return; }
-        // The Role cell and the tick are edited on the row; the profile entry only has them once collected.
-        CollectProfileFromRows();
+        reason = "";
         var pm = row.IsGameModule ? null : Profile.Mods.FirstOrDefault(m => m.Id.Equals(row.Id, StringComparison.OrdinalIgnoreCase));
         var effective = db.Find(row.Id);
         var settings = pm is null ? null : ModSettings.From(pm, effective);
@@ -1192,12 +1208,12 @@ public partial class MainViewModel : ObservableObject
         if (!proven && db.SourceOf(row.Id) != CompatSource.Local)
         {
             const string how = "host a server with it and have a player reach the campaign map (the Smoke test tab does both), then press Submit… again";
-            Status = proof is not null
+            reason = proof is not null
                 ? $"{row.Id}: its version, Coop's version or its settings changed since a player last joined with it, so that no longer counts. To submit it, {how}."
                 : effective is not null
                     ? $"{row.Id} shows the bundled record, which the maintainer already has. To send your own settings for it, {how}. Or press Record… to write a record by hand."
                     : $"{row.Id} has nothing to submit yet: {how}. Or press Record… to write a record by hand.";
-            return;
+            return null;
         }
 
         var record = settings?.Over(row.Id, effective) ?? effective!;
@@ -1210,32 +1226,89 @@ public partial class MainViewModel : ObservableObject
         }
         if (db.FindBundled(row.Id) is { } bundled && CompatSubmission.SameContent(bundled, record))
         {
-            Status = $"{record.Id}: the bundled record already says exactly this, so there is nothing new to send";
-            return;
+            reason = $"{record.Id}: the bundled record already says exactly this, so there is nothing new to send";
+            return null;
+        }
+        // The form's own gate, run here first: a record it would refuse is better stopped before the browser opens.
+        if (CompatIntake.ValidateSubmission(CompatSubmission.RecordJson(record), record.Id).Problems is { Count: > 0 } refused)
+        {
+            reason = $"{record.Id}: the GitHub form would refuse this record. {refused[0].Replace("`", "'")}";
+            return null;
+        }
+        return new CompatSubmitItem(row, record, settings, proven ? proof : null);
+    }
+
+    /// <summary>
+    /// Opens a prefilled GitHub issue for the selected mod. When other mods of the profile have something to send as
+    /// well (one hosted session proves every mod in it at once), it first offers to put them all in the same issue.
+    /// </summary>
+    internal void SubmitCompatFrom(CompatDb db)
+    {
+        if (SelectedMod is not { } row) { Status = "Select a mod first"; return; }
+        // The Role cell and the tick are edited on the row; the profile entry only has them once collected.
+        CollectProfileFromRows();
+        if (CompatSubmitItemFor(row, db, out var reason) is not { } chosen) { Status = reason; return; }
+
+        var others = Mods.Where(m => !ReferenceEquals(m, row)).Select(m => CompatSubmitItemFor(m, db, out _)).OfType<CompatSubmitItem>()
+            .Take(CompatIntake.MaxRecordsPerIssue - 1).ToList();
+        if (others.Count > 0)
+        {
+            var answer = AskCompatSubmitOthers(
+                $"{others.Count} other mod(s) also have a record ready to send: {string.Join(", ", others.Select(o => o.Record.Id))}.\n\n"
+                + $"Yes: put them in the same GitHub issue as {chosen.Record.Id}.\nNo: send {chosen.Record.Id} alone.\n\n"
+                + "Either way you are shown what will be sent before anything opens.");
+            if (answer is null) return;
+            if (answer == true) { SubmitSeveral([chosen, .. others]); return; }
         }
 
-        var link = CompatSubmission.Build(record, row.Version, CoopVersion, proven ? CompatSubmission.ProofNote(proof!.ProvenAtUtc) : null);
+        var (record, settings, proof) = (chosen.Record, chosen.Settings, chosen.Proof);
+        var link = CompatSubmission.Build(record, row.Version, CoopVersion, chosen.Proven ? CompatSubmission.ProofNote(proof!.ProvenAtUtc) : null);
         var message = $"This opens a GitHub issue form in your browser, filled in with a compatibility record for {record.Id}: verdict {record.Verdict}, "
                     + (settings is null ? "" : $"its settings on the Mods tab ({settings.Describe()}), ")
                     + "the versions it was tested with, the defaults and notes in the record, plus this mod's version and Coop's. "
-                    + (proven
+                    + (chosen.Proven
                         ? $"It also says that a server hosted this way started and a player reached the campaign map on {proof!.ProvenAtUtc:yyyy-MM-dd}. "
                         : "ModderLords has not watched a player join with these settings, so the form does not claim they were tried. ")
                     + "Nothing else about this PC, your profile or your other mods is included.\n\n"
                     + "Nothing is sent by pressing OK here. Once you press Submit on GitHub it becomes a public issue posted from your own GitHub account."
                     + (link.RecordInUrl ? "" : "\n\nThis record is too large to put in a link, so it will be copied to the clipboard (replacing what is there) for you to paste into the form.");
+        OpenCompatSubmission(link, message, $"the {record.Id} record", "is");
+    }
+
+    /// <summary>Several mods' records in one issue: one form, one review, and each record still checked on its own.</summary>
+    private void SubmitSeveral(IReadOnlyList<CompatSubmitItem> items)
+    {
+        var records = items.Select(i => i.Record).ToList();
+        var link = CompatSubmission.Build(records, CoopVersion,
+            CompatSubmission.ProofNote(items.Select(i => (i.Record.Id, i.Proof?.ProvenAtUtc)).ToList()));
+        var lines = items.Select(i => $"- {i.Record.Id}: verdict {i.Record.Verdict}"
+            + (i.Settings is null ? "" : $", {i.Settings.Describe()}")
+            + (i.Proven ? $"; a player reached the map with this on {i.Proof!.ProvenAtUtc:yyyy-MM-dd}" : "; not watched by ModderLords, so the form does not claim it was tried"));
+        var message = $"This opens one GitHub issue form in your browser, filled in with compatibility records for {items.Count} mods:\n\n"
+                    + string.Join("\n", lines) + "\n\n"
+                    + "Each record carries its settings on the Mods tab, the versions it was tested with and the defaults and notes in the record, plus Coop's version. "
+                    + "Nothing else about this PC, your profile or your other mods is included.\n\n"
+                    + "Nothing is sent by pressing OK here. Once you press Submit on GitHub it becomes a public issue posted from your own GitHub account."
+                    + (link.RecordInUrl ? "" : "\n\nThese records are too large to put in a link, so they will be copied to the clipboard (replacing what is there) for you to paste into the form.");
+        OpenCompatSubmission(link, message, $"the records of {items.Count} mods", "are");
+    }
+
+    /// <summary>Asks, then opens the form, putting the record on the clipboard first when the link could not carry it.</summary>
+    private void OpenCompatSubmission(CompatSubmissionLink link, string message, string what, string verb)
+    {
         if (!ConfirmCompatSubmit(message)) return;
+        var subject = char.ToUpperInvariant(what[0]) + what[1..];
         try
         {
             if (!link.RecordInUrl && !CopyCompatSubmitText(link.RecordJson))
             {
-                Status = $"The {record.Id} record is too large for a link and could not be copied to the clipboard: use Export… and attach the file instead";
+                Status = $"{subject} {verb} too large for a link and could not be copied to the clipboard: use Export… and attach the file instead";
                 return;
             }
             OpenCompatSubmitPage(link.Url);
             Status = link.RecordInUrl
-                ? $"Opened the GitHub form for the {record.Id} record. Nothing is posted until you press Submit there"
-                : $"The {record.Id} record is too large for a link, so it was copied to the clipboard: paste it into the Record field of the GitHub form that just opened, then press Submit there";
+                ? $"Opened the GitHub form for {what}. Nothing is posted until you press Submit there"
+                : $"{subject} {verb} too large for a link, so that was copied to the clipboard: paste it into the Record field of the GitHub form that just opened, then press Submit there";
         }
         catch (Exception ex) { Status = "Could not open the GitHub form: " + ex.Message; }
     }

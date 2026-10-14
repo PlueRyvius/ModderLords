@@ -37,8 +37,12 @@ public static partial class CompatIntake
 
     // ---- limits ------------------------------------------------------------------------------------------------
 
-    /// <summary>The whole submitted record, as UTF-8. The largest hand-written record today is under 4 KB.</summary>
+    /// <summary>One submitted record, as UTF-8. The largest hand-written record today is under 4 KB.</summary>
     public const int MaxRecordBytes = 32 * 1024;
+    /// <summary>Everything in the record field, as UTF-8. GitHub itself stops an issue body at 65,536 characters.</summary>
+    public const int MaxSubmissionBytes = 60 * 1024;
+    /// <summary>Records one issue may carry: what one hosted session can prove at once, and still a pull request somebody can read.</summary>
+    public const int MaxRecordsPerIssue = 30;
     public const int MaxIdLength = 64;
     public const int MaxVersionLength = 40;
     public const int MaxTypeNameLength = 200;
@@ -156,72 +160,124 @@ public static partial class CompatIntake
     /// <summary>A form version field that is safe to show back, or null when it is empty or holds anything unexpected.</summary>
     public static string? SafeVersion(string? value) => value is not null && VersionPattern().IsMatch(value.Trim()) ? value.Trim() : null;
 
-    // ---- validating one submitted record -----------------------------------------------------------------------
+    // ---- validating a submission -------------------------------------------------------------------------------
 
-    /// <summary>A submission's outcome: the record when <see cref="Problems"/> is empty, otherwise why it was refused.</summary>
-    public sealed record Submission(CompatRecord? Record, IReadOnlyList<string> Problems)
+    /// <summary>
+    /// A submission's outcome: the records when <see cref="Problems"/> is empty, otherwise why it was refused. A
+    /// submission is taken whole or not at all, so one bad record among several refuses them all.
+    /// </summary>
+    public sealed record Submission(IReadOnlyList<CompatRecord> Records, IReadOnlyList<string> Problems)
     {
-        public bool IsValid => Record is not null && Problems.Count == 0;
+        public bool IsValid => Records.Count > 0 && Problems.Count == 0;
+
+        /// <summary>The record of a submission that holds exactly one; null for a refusal and for several.</summary>
+        public CompatRecord? Record => Records.Count == 1 ? Records[0] : null;
     }
 
-    /// <summary>Reads the issue body and validates the record in it against the form's own module id field.</summary>
+    private static Submission Refused(IReadOnlyList<string> problems) => new([], problems);
+
+    /// <summary>Reads the issue body and validates the records in it against the form's own module id field.</summary>
     public static Submission ValidateIssue(string? issueBody)
     {
         var problems = new List<string>();
         var form = ParseIssueBody(issueBody, problems);
         if (form.Mod is null) problems.Add($"The \"{ModLabel}\" field is empty or missing.");
         if (form.Record is null) problems.Add($"The \"{RecordLabel}\" field is empty or missing. It should hold the JSON that ModderLords exported for the mod.");
-        if (problems.Count > 0) return new Submission(null, problems);
+        if (problems.Count > 0) return Refused(problems);
         return ValidateSubmission(form.Record!, form.Mod);
     }
 
     /// <summary>
-    /// Validates one submitted record: a single record object, or the export-file shape with exactly one record.
-    /// <paramref name="expectedId"/> is the form's module id field; the record must be for that mod.
+    /// Validates what the record field holds: a single record object, or the export-file shape with one record or
+    /// several (at most <see cref="MaxRecordsPerIssue"/>). <paramref name="expectedId"/> is the form's module id
+    /// field: the record's mod, or every record's mod separated by commas.
     /// </summary>
     public static Submission ValidateSubmission(string json, string? expectedId)
     {
         var problems = new List<string>();
-        if (Encoding.UTF8.GetByteCount(json) > MaxRecordBytes)
-            return new Submission(null, [$"The record is larger than {MaxRecordBytes / 1024} KB. A record is a few lines about one mod; please shorten the notes."]);
+        if (Encoding.UTF8.GetByteCount(json) > MaxSubmissionBytes)
+            return Refused([$"The submission is larger than {MaxSubmissionBytes / 1024} KB. A record is a few lines about one mod; please shorten the notes or send fewer records at once."]);
 
         JsonDocument doc;
         try { doc = JsonDocument.Parse(json, StrictJson); }
-        catch (JsonException ex) { return new Submission(null, [$"The record is not valid JSON: {Quote(ex.Message, 200)}"]); }
+        catch (JsonException ex) { return Refused([$"The record is not valid JSON: {Quote(ex.Message, 200)}"]); }
 
         using (doc)
         {
-            var element = SingleRecord(doc.RootElement, problems);
-            if (element is null) return new Submission(null, problems);
+            var elements = RecordElements(doc.RootElement, problems);
+            if (elements is null) return Refused(problems);
+            var several = elements.Count > 1;
 
-            // Reading a string with a broken \u escape throws rather than returning text.
-            try { CheckRecord(element.Value, problems); }
-            catch (InvalidOperationException) { problems.Add("The record contains text that is not valid Unicode (a broken \\u escape)."); }
-            if (problems.Count > 0) return new Submission(null, problems);
-
-            CompatRecord record;
-            try { record = CompatDb.Parse("{\"SchemaVersion\":1,\"Records\":[" + element.Value.GetRawText() + "]}").Records.Single(); }
-            catch (Exception ex) when (ex is JsonException or InvalidDataException or InvalidOperationException)
+            var records = new List<CompatRecord>();
+            for (var i = 0; i < elements.Count; i++)
             {
-                return new Submission(null, [$"ModderLords could not read the record: {Quote(ex.Message, 200)}"]);
+                var own = new List<string>();
+                // Reading a string with a broken \u escape throws rather than returning text.
+                try { CheckRecord(elements[i], own); }
+                catch (InvalidOperationException) { own.Add("The record contains text that is not valid Unicode (a broken \\u escape)."); }
+                if (own.Count == 0)
+                {
+                    try { records.Add(CompatDb.Parse("{\"SchemaVersion\":1,\"Records\":[" + elements[i].GetRawText() + "]}").Records.Single()); }
+                    catch (Exception ex) when (ex is JsonException or InvalidDataException or InvalidOperationException)
+                    {
+                        own.Add($"ModderLords could not read the record: {Quote(ex.Message, 200)}");
+                    }
+                }
+                // With several records a sentence has to say which one it is about.
+                problems.AddRange(several ? own.Select(p => $"Record {i + 1}{IdForDisplay(elements[i])}: {p}") : own);
             }
+            if (problems.Count > 0) return Refused(problems);
 
-            if (expectedId is not null && !string.Equals(record.Id, expectedId.Trim(), StringComparison.Ordinal))
-                problems.Add($"The record is for {Quote(record.Id)}, but the \"{ModLabel}\" field says {Quote(expectedId.Trim())}. They must be the same mod, spelt the same way.");
-            return problems.Count > 0 ? new Submission(null, problems) : new Submission(record, problems);
+            // The database compares ids without regard to case, so two records that differ only there are one mod twice.
+            foreach (var twice in records.GroupBy(r => r.Id, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+                problems.Add($"There is more than one record for {Quote(twice.Key)}. Send each mod once.");
+
+            if (expectedId is not null) CheckNamedMods(records, expectedId, several, problems);
+            return problems.Count > 0 ? Refused(problems) : new Submission(records, problems);
         }
     }
 
-    /// <summary>The record element out of either accepted shape, or null (with the reason added) when there is not exactly one.</summary>
-    private static JsonElement? SingleRecord(JsonElement root, List<string> problems)
+    /// <summary>The module id field against the records: the same mods, spelt the same way.</summary>
+    private static void CheckNamedMods(List<CompatRecord> records, string expectedId, bool several, List<string> problems)
+    {
+        if (!several)
+        {
+            if (!string.Equals(records[0].Id, expectedId.Trim(), StringComparison.Ordinal))
+                problems.Add($"The record is for {Quote(records[0].Id)}, but the \"{ModLabel}\" field says {Quote(expectedId.Trim())}. They must be the same mod, spelt the same way.");
+            return;
+        }
+        var named = expectedId.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var ids = records.Select(r => r.Id).ToList();
+        var notNamed = ids.Except(named, StringComparer.Ordinal).ToList();
+        var noRecord = named.Except(ids, StringComparer.Ordinal).ToList();
+        if (notNamed.Count > 0)
+            problems.Add($"The \"{ModLabel}\" field does not list {string.Join(", ", notNamed.Select(id => Quote(id)))}. With several records it must list every record's mod, separated by commas and spelt the same way.");
+        if (noRecord.Count > 0)
+            problems.Add($"The \"{ModLabel}\" field lists {string.Join(", ", noRecord.Take(MaxRecordsPerIssue).Select(id => Quote(id)))}, but there is no record for {(noRecord.Count == 1 ? "it" : "them")}.");
+    }
+
+    /// <summary>" (`Id`)" for a record that has a readable id, so a problem can name it; empty otherwise.</summary>
+    private static string IdForDisplay(JsonElement record)
+    {
+        try
+        {
+            return record.ValueKind == JsonValueKind.Object && record.TryGetProperty(nameof(CompatRecord.Id), out var id)
+                   && id.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(id.GetString())
+                ? $" ({Quote(id.GetString()!)})" : "";
+        }
+        catch (InvalidOperationException) { return ""; }
+    }
+
+    /// <summary>The record elements out of either accepted shape, or null (with the reason added) when there are none to read.</summary>
+    private static List<JsonElement>? RecordElements(JsonElement root, List<string> problems)
     {
         if (root.ValueKind != JsonValueKind.Object)
         {
-            problems.Add("The record must be a JSON object: one record, or an export file holding exactly one record.");
+            problems.Add("The record must be a JSON object: one record, or an export file holding the records.");
             return null;
         }
         var isFile = root.EnumerateObject().Any(p => p.Name is nameof(CompatDbFile.Records) or nameof(CompatDbFile.SchemaVersion));
-        if (!isFile) return root;
+        if (!isFile) return [root];
 
         JsonElement? records = null;
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -248,12 +304,14 @@ public static partial class CompatIntake
             return null;
         }
         var count = records.Value.GetArrayLength();
-        if (count != 1)
+        if (count == 0 || count > MaxRecordsPerIssue)
         {
-            problems.Add($"The export file holds {count} records. Submit exactly one record per issue.");
+            problems.Add(count == 0
+                ? "The export file holds no records."
+                : $"The export file holds {count} records; one issue takes at most {MaxRecordsPerIssue}. Please split them over several issues.");
             return null;
         }
-        return problems.Count > 0 ? null : records.Value[0];
+        return problems.Count > 0 ? null : records.Value.EnumerateArray().ToList();
     }
 
     // ---- the per-field rules -----------------------------------------------------------------------------------

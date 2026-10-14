@@ -54,6 +54,65 @@ public sealed class CompatIntakeTests
         return string.Join(" | ", result.Problems);
     }
 
+    private static string SecondRecord => With("Id", "\"OtherMod\"");
+
+    private static string ExportOf(params string[] records) => "{ \"SchemaVersion\": 1, \"Records\": [ " + string.Join(", ", records) + " ] }";
+
+    // ---- several records in one submission ---------------------------------------------------------------------
+
+    [Fact]
+    public void SeveralRecords_AreAccepted_WhenTheModFieldListsThemAll()
+    {
+        var result = CompatIntake.ValidateIssue(Body(ExportOf(GoodRecord, SecondRecord), mod: "OtherMod, SomeMod"));
+
+        Assert.True(result.IsValid, string.Join(" | ", result.Problems));
+        Assert.Equal(["SomeMod", "OtherMod"], result.Records.Select(r => r.Id));
+        Assert.Null(result.Record);                            // "the record" only means something when there is one
+    }
+
+    [Fact]
+    public void SeveralRecords_ModFieldMustNameExactlyTheirMods()
+    {
+        var missing = Refusal(ExportOf(GoodRecord, SecondRecord), expectedId: "SomeMod");
+        Assert.Contains("does not list `OtherMod`", missing);
+
+        var extra = Refusal(ExportOf(GoodRecord, SecondRecord), expectedId: "SomeMod, OtherMod, ThirdMod");
+        Assert.Contains("lists `ThirdMod`, but there is no record for it", extra);
+    }
+
+    [Fact]
+    public void SeveralRecords_OneBadRecordRefusesThemAll_AndIsNamed()
+    {
+        var problems = Refusal(ExportOf(GoodRecord, With("Id", "\"OtherMod\"").Replace("\"NeedsRecipe\"", "\"Fine\"")), expectedId: "SomeMod, OtherMod");
+        Assert.Contains("Record 2 (`OtherMod`): Verdict is", problems);
+        Assert.DoesNotContain("Record 1", problems);
+    }
+
+    [Fact]
+    public void SeveralRecords_TheSameModTwice_IsRefused() =>
+        Assert.Contains("more than one record for", Refusal(ExportOf(GoodRecord, With("Id", "\"somemod\"")), expectedId: "SomeMod, somemod"));
+
+    [Fact]
+    public void SeveralRecords_AreBounded()
+    {
+        var tooMany = Enumerable.Range(0, CompatIntake.MaxRecordsPerIssue + 1).Select(i => With("Id", $"\"Mod{i}\"")).ToArray();
+        Assert.Contains($"at most {CompatIntake.MaxRecordsPerIssue}", Refusal(ExportOf(tooMany), expectedId: null));
+        Assert.Contains("holds no records", Refusal(ExportOf(), expectedId: null));
+        Assert.Contains($"larger than {CompatIntake.MaxSubmissionBytes / 1024} KB",
+            Refusal(ExportOf(GoodRecord, With("Notes", JsonSerializer.Serialize(new string('a', CompatIntake.MaxSubmissionBytes)))), expectedId: null));
+    }
+
+    [Fact]
+    public void SeveralRecords_MergeOneAfterTheOther_IntoOneFile()
+    {
+        var submission = CompatIntake.ValidateSubmission(ExportOf(GoodRecord, SecondRecord), "SomeMod, OtherMod");
+        var text = CompatDb.Serialize([new CompatRecord { Id = "Existing", Verdict = CompatVerdict.Works }]);
+        foreach (var record in submission.Records) text = CompatIntake.Merge(text, record, Now).Text;
+
+        Assert.Empty(CompatIntake.ValidateDatabase(text));
+        Assert.Equal(["Existing", "OtherMod", "SomeMod"], CompatDb.Parse(text).Records.Select(r => r.Id).Order());
+    }
+
     // ---- reading the issue body --------------------------------------------------------------------------------
 
     [Theory]
@@ -160,10 +219,10 @@ public sealed class CompatIntakeTests
     // ---- refusing ------------------------------------------------------------------------------------------------
 
     [Fact]
-    public void NotExactlyOneRecord_IsRefused()
+    public void MalformedExportFile_IsRefused()
     {
-        Assert.Contains("2 records", Refusal("{ \"SchemaVersion\": 1, \"Records\": [ " + GoodRecord + ", " + GoodRecord + " ] }"));
-        Assert.Contains("0 records", Refusal("{ \"SchemaVersion\": 1, \"Records\": [] }"));
+        Assert.Contains("more than one record for", Refusal("{ \"SchemaVersion\": 1, \"Records\": [ " + GoodRecord + ", " + GoodRecord + " ] }"));
+        Assert.Contains("holds no records", Refusal("{ \"SchemaVersion\": 1, \"Records\": [] }"));
         Assert.Contains("must be a JSON object", Refusal("[ " + GoodRecord + " ]"));
         Assert.Contains("SchemaVersion must be", Refusal("{ \"SchemaVersion\": 2, \"Records\": [ " + GoodRecord + " ] }"));
         Assert.Contains("unknown property", Refusal("{ \"SchemaVersion\": 1, \"Extra\": 1, \"Records\": [ " + GoodRecord + " ] }"));
