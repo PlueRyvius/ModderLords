@@ -180,6 +180,31 @@
       "Notes": "Fourberie (criminal empire). Run: its manifest says client-only, but the server must load it, and its code only reaches the UI from the map screen and missions. The four gameplay switches in FourberieConfig.xml (minor-faction recruitment, heal buttons, good fortune) follow the host through Settings sync; its key bindings and one-key/two-key choices stay each player's own. ModderLords ships a co-op layer for it inside ModderLords.Compat (docs/FOURBERIE-LAYER-PLAN.md): the server keeps one Fourberie book per player, runs Fourberie's ticks once per connected player (offline players' empires freeze), saves the books with the campaign, and keeps each player's game in step with their own book. Needs Settings sync on (the launch is refused without it). Leave Server-only logic OFF for it. Menu actions that create parties or change gold, relations or settlements are not carried to the server yet. Not yet tested live.",
       "Url": "https://www.nexusmods.com/mountandblade2bannerlord/mods/2969",
       "UpdatedAt": "2026-09-30T00:00:00Z"
+    },
+    {
+      "Id": "ImprovedHorseCaparisons",
+      "Verdict": "Works",
+      "TestedVersions": [
+        "e1.5.2"
+      ],
+      "TestedCoopVersion": "v0.1.6",
+      "DefaultRole": "Run",
+      "ServerAuthoritative": false,
+      "ClientSideBehaviors": [],
+      "KeepSubModules": [],
+      "SettingsTypes": [],
+      "IgnoreSettingsTypes": [],
+      "ServerExcludedFolders": [
+        "Assets",
+        "AssetSources",
+        "EmAssetPackages",
+        "RuntimeDataCache"
+      ],
+      "ClientExcludedFolders": [],
+      "EnsureLines": [],
+      "DefaultSettings": {},
+      "Notes": "If Swadian Armoury or Improved Horse Caparisons refuse to let the server launch make sure to tick everything to \u0022client\u0022 except for in the case of \u0022moduledata\u0022 inside the mods \u0022server and client\u0022 tab. - Rubooben",
+      "UpdatedAt": "2026-10-14T01:52:02Z"
     }
   ]
 }
