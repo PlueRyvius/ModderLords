@@ -61,10 +61,11 @@ public static partial class CompatIntake
 
     /// <summary>
     /// A module id as it may appear in a branch-free but still public place: the commit message and the pull request
-    /// title. Letters, digits, dot, underscore and hyphen only, so nothing in it can be markdown, a mention or a shell
-    /// metacharacter.
+    /// title. Letters, digits, dot, underscore and hyphen, so nothing in it can be markdown, a mention or a shell
+    /// metacharacter, and single spaces between them: a module id may hold one ("swadian armoury"), and every place
+    /// the id is published takes it from a file or a quoted argument.
     /// </summary>
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")]
+    [GeneratedRegex(@"^(?=.{1,64}$)[A-Za-z0-9][A-Za-z0-9._-]*(?: [A-Za-z0-9._-]+)*$")]
     private static partial Regex IdPattern();
 
     /// <summary>The form's free-text version fields, when they are shown back in the pull request.</summary>
@@ -331,7 +332,7 @@ public static partial class CompatIntake
             {
                 case nameof(CompatRecord.Id):
                     if (v.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(v.GetString())) problems.Add("Id is empty. It must be the mod's module id.");
-                    else if (!IdPattern().IsMatch(v.GetString()!)) problems.Add($"Id {Quote(v.GetString()!)} is not a module id this form accepts: letters, digits, dot, underscore and hyphen, at most {MaxIdLength} characters, no spaces.");
+                    else if (!IdPattern().IsMatch(v.GetString()!)) problems.Add($"Id {Quote(v.GetString()!)} is not a module id this form accepts: letters, digits, dot, underscore and hyphen, with single spaces only between them, at most {MaxIdLength} characters.");
                     break;
                 case nameof(CompatRecord.Verdict):
                     CheckEnum<CompatVerdict>(p.Name, v, nullable: false, problems);

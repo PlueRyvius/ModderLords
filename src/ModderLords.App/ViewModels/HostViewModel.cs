@@ -263,9 +263,15 @@ public partial class HostViewModel : ObservableObject
         // Added/removed modules and a version bump are not the same thing, and saying "with a warning" for both
         // understates the case that actually stalls a load. Same severity split the CLI reports.
         var r = SaveModuleCheck.Compare(SelectedSave.Header, LaunchSession.PlannedCommunityVersions(_prepared));
-        if (r.IsClean) { SaveDiff = "Save and profile agree on every community module."; return; }
-
         var lines = new List<string>();
+        // A story campaign matches its own mod list and still cannot be hosted, so it is said before anything else.
+        if (SaveCampaignKind.IsStoryCampaign(SelectedSave.Header) == true)
+        {
+            lines.Add("This is a Story Mode campaign (started with Campaign, not Sandbox). The server has no StoryMode module and is expected to crash while loading it.");
+            lines.Add("  Start a Sandbox campaign in the game with the same mods and import that save.");
+        }
+        if (r.IsClean) { SaveDiff = lines.Count > 0 ? string.Join("\n", lines) : "Save and profile agree on every community module."; return; }
+
         if (r.IsSevere)
         {
             lines.Add("This world was not built with this module set. The engine will force the load and the campaign may stall while the world initialises.");

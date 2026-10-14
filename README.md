@@ -498,6 +498,9 @@ Every `.sav` in the server's save folder with the character, level, day and the 
 Selecting one sets it as the save to host. The box below lists differences between that save and your current mod set.
 The engine loads such a save anyway and logs *module mismatch ... Forcing load anyway*; the tool never rewrites a save.
 
+A save started with **Campaign** (Story Mode) instead of **Sandbox** cannot be hosted: the server has no StoryMode
+module and crashes while loading it. The box and the launch log say so when the selected save is one.
+
 Typing a name that does not exist starts a **vanilla** world from the official `default_new_game.sav`. When the selected
 modules include TAOM, TAOM_Map and LOTRLOME_Armory and the name is new, the launcher creates that campaign in a
 private preparation phase before hosting it. The launcher does not ask users to copy `AssetPackages`, `DsAssetPackages`,
@@ -701,6 +704,15 @@ Send the Share tab list again and have them run **Check my client** on their PC 
 
 **The server exits with code 2 or hangs at "loading... state=<none>".** The save could not be loaded. Check the Saves
 tab shows it; a save from a different Bannerlord version may not load.
+
+**Players crash while joining, or the server crashes a few seconds after loading the map, after someone was in a town.**
+The save remembers the menu that was open for the player whose character the campaign was started with, and the game
+reopens it on load. Under Coop that menu can be a town's while the party loading it is in no town (a joining player
+is on the map; once Coop has parked a disconnected player's party it can be in none), and the game then crashes
+reading the town (`NullReferenceException` in
+`encounter_menu_ui_castle_on_init`). The compat module drops such a menu and opens on the campaign map instead,
+and the server log says `load menu guard: the stored menu 'town_outside' ...` when it does. Players need the compat
+module too (Settings sync) for their side of it.
 
 **A mod crashes the server on start (red lines, then exit).** Look at the last red lines. If they mention UI or view
 types, the mod runs UI code at startup; set its role to **Client only** (`DependencyOnly`) if players only need it locally, or leave it

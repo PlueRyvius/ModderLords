@@ -63,8 +63,8 @@ it does not know so that an old build can read a newer file, while a submission 
 
 - one record, or an export file with at most 30 of them, 60 KB in all, no mod twice, and *Module id* listing exactly
   their ids. One refused record refuses the whole submission, and the comment says which record it was;
-- `Id` not empty, made of letters, digits, `.`, `_` and `-` (at most 64), and equal to the
-  *Module id* field;
+- `Id` not empty, made of letters, digits, `.`, `_` and `-` with single spaces between them (at most 64), and equal
+  to the *Module id* field;
 - only known properties, spelt with their exact case, each at most once;
 - `Verdict` and `DefaultRole` by name only (a number is refused, although the launcher's converter would take one);
 - size: the record at most 32 KB, and every text and list has its own limit (see the constants in `CompatIntake`);
