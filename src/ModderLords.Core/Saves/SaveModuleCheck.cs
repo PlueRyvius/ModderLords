@@ -124,9 +124,12 @@ public static class SaveModuleCheck
             return new[] { $"WARNING save '{Path.GetFileNameWithoutExtension(savePath)}' could not be read ({error}); its module list was not checked" };
 
         var r = Compare(header, plannedCommunityVersions);
-        if (r.IsClean) return Array.Empty<string>();
-
         var messages = new List<string>();
+        // First, and regardless of the community modules: StoryMode is official, so Compare never sees it, and a
+        // story campaign agrees with its own mod list perfectly while being the one world the server cannot load.
+        if (SaveCampaignKind.IsStoryCampaign(header) == true) messages.Add(SaveCampaignKind.Warning(r.SaveName));
+        if (r.IsClean) return messages;
+
         if (r.IsSevere)
         {
             var parts = new List<string>();

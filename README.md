@@ -498,6 +498,9 @@ Every `.sav` in the server's save folder with the character, level, day and the 
 Selecting one sets it as the save to host. The box below lists differences between that save and your current mod set.
 The engine loads such a save anyway and logs *module mismatch ... Forcing load anyway*; the tool never rewrites a save.
 
+A save started with **Campaign** (Story Mode) instead of **Sandbox** cannot be hosted: the server has no StoryMode
+module and crashes while loading it. The box and the launch log say so when the selected save is one.
+
 Typing a name that does not exist starts a **vanilla** world from the official `default_new_game.sav`. When the selected
 modules include TAOM, TAOM_Map and LOTRLOME_Armory and the name is new, the launcher creates that campaign in a
 private preparation phase before hosting it. The launcher does not ask users to copy `AssetPackages`, `DsAssetPackages`,
