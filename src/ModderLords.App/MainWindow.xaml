@@ -455,7 +455,47 @@
                         <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,2" />
                         <TextBox Grid.Row="2" Text="{Binding SaveDiff, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
                     <DataGrid Grid.Row="0" ItemsSource="{Binding Saves}" SelectedItem="{Binding SelectedSave}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0">
+                        <!-- A save's backups open under it with the + in the first column. -->
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                <Setter Property="DetailsVisibility" Value="{Binding IsExpanded, Converter={StaticResource BoolToVis}}" />
+                            </Style>
+                        </DataGrid.RowStyle>
+                        <DataGrid.RowDetailsTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="28,2,4,6">
+                                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,4" Foreground="{DynamicResource MutedForeground}"
+                                               Text="Copies ModderLords took when the server started, every hour while it ran, and when it stopped, with Coop's record of which player owns which character. Restoring makes a new save from a copy and selects it; this save is left as it is." />
+                                    <DataGrid ItemsSource="{Binding Backups}" AutoGenerateColumns="False" IsReadOnly="True" RowHeaderWidth="0" HeadersVisibility="Column" MaxHeight="180">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Taken" Binding="{Binding Taken}" Width="200" />
+                                            <DataGridTextColumn Header="Day" Binding="{Binding Day}" Width="60" />
+                                            <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="80" />
+                                            <DataGridTextColumn Header="Players" Binding="{Binding Players}" Width="120" />
+                                            <DataGridTemplateColumn Width="*">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Button Content="Restore as a new save" HorizontalAlignment="Left" Padding="8,1"
+                                                                Command="{Binding DataContext.RestoreSaveBackupCommand, RelativeSource={RelativeSource AncestorType=TabItem}}"
+                                                                CommandParameter="{Binding}" />
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </DockPanel>
+                            </DataTemplate>
+                        </DataGrid.RowDetailsTemplate>
                         <DataGrid.Columns>
+                            <DataGridTemplateColumn Width="28" CanUserResize="False">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ToggleButton Width="20" Height="20" Padding="0" FontWeight="Bold" Content="{Binding ExpandGlyph}"
+                                                      IsChecked="{Binding IsExpanded}" ToolTip="{Binding BackupsTip}"
+                                                      Visibility="{Binding HasBackups, Converter={StaticResource BoolToVis}}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Save" Binding="{Binding Name}" Width="200" />
                             <DataGridTextColumn Header="Character" Binding="{Binding Character}" Width="120" />
                             <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="50" />

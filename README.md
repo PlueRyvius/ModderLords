@@ -498,6 +498,17 @@ Every `.sav` in the server's save folder with the character, level, day and the 
 Selecting one sets it as the save to host. The box below lists differences between that save and your current mod set.
 The engine loads such a save anyway and logs *module mismatch ... Forcing load anyway*; the tool never rewrites a save.
 
+**Backups.** The server autosaves and saves on stop over the one file it hosts, so ModderLords keeps copies of it in
+`CoopData\DedicatedServer\ModderLords\save-backups\<save>\`: one when the server starts, one an hour while it runs (a
+save written in the last 30 seconds waits for the next check), and one after it stops. Coop's session file, which
+records which player owns which character, is copied with each one. A copy is only taken when the save changed, so a
+server that crashes on every boot does not replace the good copies with the broken one. The last 5 start copies and the
+last 8 others are kept, separately, so a long session cannot push out the copy from before it began. Budget for 13
+copies of the save on disk.
+
+A save with backups has a **+** in the list; it opens the copies under that save. **Restore as a new save** copies one
+into the server's saves as `<save>_restored_<when>` and selects it to host. The save it came from is not changed.
+
 Typing a name that does not exist starts a **vanilla** world from the official `default_new_game.sav`. When the selected
 modules include TAOM, TAOM_Map and LOTRLOME_Armory and the name is new, the launcher creates that campaign in a
 private preparation phase before hosting it. The launcher does not ask users to copy `AssetPackages`, `DsAssetPackages`,

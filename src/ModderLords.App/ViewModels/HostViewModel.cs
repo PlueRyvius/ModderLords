@@ -80,6 +80,8 @@ public partial class HostViewModel : ObservableObject
     /// </summary>
     private readonly BoundedQueue<PerfSample> _pendingPerf = new(1000);
     private ProcessResourceSampler? _resources;
+    /// <summary>Takes a running backup of the hosted save now and then while the server runs (see <see cref="SaveBackups"/>).</summary>
+    private System.Threading.Timer? _backupTimer;
     private DateTime _lastPerfSave = DateTime.MinValue;
     /// <summary>Raised on the UI thread after a batch of console lines was added (the view scrolls once per batch).</summary>
     public event Action? ConsoleFlushed;
@@ -245,7 +247,12 @@ public partial class HostViewModel : ObservableObject
     internal void RefreshSaves(ServerPaths paths)
     {
         Saves.Clear();
-        foreach (var h in SaveHeaderReader.ReadAll(paths.SavesDir)) Saves.Add(new SaveRow { Header = h });
+        foreach (var h in SaveHeaderReader.ReadAll(paths.SavesDir))
+        {
+            var row = new SaveRow { Header = h };
+            LoadBackups(row, paths);
+            Saves.Add(row);
+        }
         SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(Profile.SaveName, StringComparison.OrdinalIgnoreCase));
         RefreshClientSaves();
     }
@@ -275,6 +282,86 @@ public partial class HostViewModel : ObservableObject
         }
         foreach (var d in r.VersionChanges) lines.Add($"  {d.ModuleId}: version changed (save {d.SaveVersion ?? "-"}, now {d.CurrentVersion ?? "-"})");
         SaveDiff = string.Join("\n", lines);
+    }
+
+    // ---- save backups ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Copies the hosted save aside. Any thread. A failed backup is reported and never stops a launch: losing the
+    /// copy is bad, losing the session because of it would be worse.
+    /// </summary>
+    internal void BackUpSave(ServerPaths paths, string? saveName, SaveBackups.Kind kind, bool serverRunning)
+    {
+        if (string.IsNullOrWhiteSpace(saveName)) return;
+        try
+        {
+            if (SaveBackups.Take(paths, saveName, kind, DateTime.Now, serverRunning) is { } b)
+                Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    AddLine(LogCategory.Tool, $"[ModderLords] backed up save '{saveName}' ({b.Label}) to {Path.GetDirectoryName(b.SavePath)}");
+                    if (Saves.FirstOrDefault(r => r.Name.Equals(saveName, StringComparison.OrdinalIgnoreCase)) is { } row) LoadBackups(row, paths);
+                });
+        }
+        catch (Exception ex)
+        {
+            Application.Current?.Dispatcher.BeginInvoke(() =>
+                AddLine(LogCategory.Warning, $"[ModderLords] could not back up save '{saveName}': {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Checks every few minutes and copies the save once <see cref="SaveBackups.RunningInterval"/> has passed since the
+    /// last copy. A save the server wrote moments ago is left for the next check rather than copied half-written.
+    /// </summary>
+    private void StartRunningBackups(ServerPaths paths, string? saveName)
+    {
+        _backupTimer?.Dispose();
+        if (string.IsNullOrWhiteSpace(saveName)) return;
+        var last = DateTime.Now;
+        var check = TimeSpan.FromMinutes(5);
+        _backupTimer = new System.Threading.Timer(_ =>
+        {
+            // A timer callback that throws ends the process, so nothing may escape it.
+            try
+            {
+                if (DateTime.Now - last < SaveBackups.RunningInterval) return;
+                var save = SavePreparer.SavePath(paths, saveName);
+                if (File.Exists(save) && DateTime.Now.ToUniversalTime() - File.GetLastWriteTimeUtc(save) < SaveBackups.Settled) return;
+                BackUpSave(paths, saveName, SaveBackups.Kind.Running, serverRunning: true);
+                last = DateTime.Now;
+            }
+            catch (Exception) { /* BackUpSave reports its own failures; a missed check is retried in five minutes */ }
+        }, null, check, check);
+    }
+
+    /// <summary>Fills a save's backup list, shown under it on the Saves tab. Must run on the UI thread.</summary>
+    private void LoadBackups(SaveRow row, ServerPaths paths)
+    {
+        row.Backups.Clear();
+        try { foreach (var b in SaveBackups.List(paths, row.Name)) row.Backups.Add(SaveBackupRow.From(b)); }
+        catch (Exception ex) { AddLine(LogCategory.Tool, $"[ModderLords] could not list the backups of '{row.Name}': " + ex.Message); }
+        row.BackupsChanged();
+    }
+
+    [RelayCommand]
+    private void RestoreSaveBackup(SaveBackupRow? row)
+    {
+        if (row is null) { Status = "Pick a backup to restore."; return; }
+        try
+        {
+            var paths = LaunchSession.ResolvePaths(Profile);
+            var name = SaveBackups.Restore(paths, row.Backup, DateTime.Now);
+            AddLine(LogCategory.Tool, $"[ModderLords] restored the {row.Backup.Label} backup of '{row.Backup.SaveName}' as the new save '{name}'"
+                + (row.Backup.SessionPath is null ? "; it had no Coop session file, so players will be asked to make new characters" : ""));
+            RefreshSaves(paths);
+            SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            Status = $"Restored as '{name}', now selected to host. The original save is unchanged.";
+        }
+        catch (Exception ex)
+        {
+            AddLine(LogCategory.Error, "[ModderLords] restore failed: " + ex.Message);
+            Status = "Restore failed: " + ex.Message;
+        }
     }
 
     /// <summary>The player's own saves, for seeding the server with a world built by the real game (see SavePreparer.ImportFrom).</summary>
@@ -608,8 +695,14 @@ public partial class HostViewModel : ObservableObject
                 ReportPrepared(prepared);
             }
 
+            // Before the engine can write to it: this is the copy to go back to if the session ruins the world.
+            var backupPaths = prepared.Paths;
+            var backupSave = launchProfile.SaveName;
+            await Task.Run(() => BackUpSave(backupPaths, backupSave, SaveBackups.Kind.Start, serverRunning: false));
+
             _engine = EngineProcess.Start(prepared.Plan);
             RecordRunningSession(prepared, launchProfile);
+            StartRunningBackups(backupPaths, backupSave);
             Performance.SessionStarted();
             // CPU and working set come from the launcher watching the process, so they cost the server nothing and
             // work even when the compat module is not loaded. Its own timer; never the dispatcher.
@@ -674,6 +767,10 @@ public partial class HostViewModel : ObservableObject
             var code = await _engine.Exited;
             IsRunning = false;
             IsServing = false;
+            _backupTimer?.Dispose(); _backupTimer = null;
+            // The stop writes the save one last time; keep that state too. Skipped when nothing changed, so a server
+            // that crashes while loading does not push good copies out.
+            await Task.Run(() => BackUpSave(backupPaths, backupSave, SaveBackups.Kind.Running, serverRunning: false));
             ServerExited?.Invoke(code);
             _resources?.Dispose(); _resources = null;
             if (Performance.WriteSessionSummary(launchProfile.Name) is { } summary)
@@ -1075,5 +1172,23 @@ public partial class HostViewModel : ObservableObject
     public async Task OnClosingAsync()
     {
         if (_engine is { IsRunning: true }) await _engine.StopAsync(TimeSpan.FromSeconds(20));
+    }
+}
+
+/// <summary>One backup of the selected save, as the Saves tab lists it.</summary>
+public sealed class SaveBackupRow
+{
+    public required SaveBackups.Backup Backup { get; init; }
+    public string Taken => Backup.Label;
+    public string Day { get; init; } = "";
+    public string Size { get; init; } = "";
+    public string Players => Backup.SessionPath is null ? "no session file" : "kept";
+
+    public static SaveBackupRow From(SaveBackups.Backup b)
+    {
+        var header = SaveHeaderReader.TryRead(b.SavePath, out _);
+        long length = 0;
+        try { length = new FileInfo(b.SavePath).Length; } catch (IOException) { }
+        return new SaveBackupRow { Backup = b, Day = header?.DayLong.ToString("0") ?? "?", Size = $"{length / (1024.0 * 1024):0.0} MB" };
     }
 }

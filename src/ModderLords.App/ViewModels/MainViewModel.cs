@@ -273,9 +273,29 @@ public sealed record RoleChoiceItem(RoleChoice Choice)
 
 public sealed record ConsoleLine(string Time, LogCategory Category, string Text);
 
-public sealed class SaveRow
+public sealed partial class SaveRow : ObservableObject
 {
     public required SaveHeader Header { get; init; }
+
+    /// <summary>The launcher's copies of this save, shown under it when the row is expanded. Server saves only.</summary>
+    public ObservableCollection<SaveBackupRow> Backups { get; } = new();
+    public bool HasBackups => Backups.Count > 0;
+    public string BackupsTip => $"Show the {Backups.Count} backup(s) ModderLords took of this save";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ExpandGlyph))]
+    private bool _isExpanded;
+
+    public string ExpandGlyph => IsExpanded ? "\u2212" : "+";
+
+    /// <summary>Call after <see cref="Backups"/> was refilled; a save left with none closes.</summary>
+    public void BackupsChanged()
+    {
+        if (!HasBackups) IsExpanded = false;
+        OnPropertyChanged(nameof(HasBackups));
+        OnPropertyChanged(nameof(BackupsTip));
+    }
+
     public string Name => Header.Name;
     public string Character => Header.CharacterName;
     public string Level => Header.MainHeroLevel;
