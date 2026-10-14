@@ -173,10 +173,22 @@ public sealed class CompatIntakeTests
     [InlineData("\"\"", "Id is empty")]
     [InlineData("\"   \"", "Id is empty")]
     [InlineData("null", "Id is empty")]
-    [InlineData("\"Some Mod\"", "not a module id")]
+    [InlineData("\"Some  Mod\"", "not a module id")]
+    [InlineData("\" SomeMod\"", "not a module id")]
+    [InlineData("\"SomeMod \"", "not a module id")]
     [InlineData("\"Some`Mod\"", "not a module id")]
     [InlineData("\"../SomeMod\"", "not a module id")]
     public void BadId_IsRefused(string idJson, string expected) => Assert.Contains(expected, Refusal(With("Id", idJson), expectedId: null));
+
+    /// <summary>A module id may hold a space ("swadian armoury" does), and the record for it has to get through.</summary>
+    [Fact]
+    public void IdWithASpace_IsAccepted()
+    {
+        var result = CompatIntake.ValidateIssue(Body(With("Id", "\"swadian armoury\""), mod: "swadian armoury"));
+        Assert.True(result.IsValid, string.Join(" | ", result.Problems));
+        Assert.Equal("swadian armoury", result.Record!.Id);
+        Assert.False(CompatIntake.Merge(CompatDb.Serialize([]), result.Record, Now).Unchanged);
+    }
 
     [Fact]
     public void MissingId_IsRefused() => Assert.Contains("has no Id", Refusal("{ \"Verdict\": \"Works\" }", expectedId: null));

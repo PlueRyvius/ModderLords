@@ -63,6 +63,11 @@
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
     </Style>
 
+    <!-- The stock Expander takes the system text colour, so in dark mode its header was black on the dark window. -->
+    <Style TargetType="Expander">
+        <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+    </Style>
+
     <Style TargetType="TextBox">
         <Setter Property="Padding" Value="3" />
         <Setter Property="Background" Value="{DynamicResource ControlBackground}" />
