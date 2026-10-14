@@ -110,6 +110,15 @@ An A/B run without Bellum did not show it. `KingdomDecisionTrace` (validation on
 add and remove on both sides, `ApplyResolved`, the election steps with a finalizer, and the runtime list of methods
 patched by both Bellum and Coop, so a recurrence is diagnosable from logs.
 
+Recurred on 2026-10-13 (support bundles 20261014-014618-c4081a5d and 20261014-014836-402edadf), with a cause. One
+player's own Bellum opened a privy council ballot (proposer an AI clan). Coop's client adds a decision to its own list
+before asking the server for it, and could not send this type, so only that game held it. From then on that game called
+the next policy vote "decision 1" while the server called it "decision 0", and its vote was dropped. The ruler's game
+then kept a decision the server had settled; when its time ran out, the base game's map screen reopened the Kingdom
+screen every frame with a prompt that has no Cancel, and the player had to kill the game. `ClientKingdomDecisions` (all
+co-op players, not only validation runs) keeps decisions another clan proposed out of a player's game, and stops a
+player's game demanding that its player settle a decision, since the server settles every one.
+
 Known gaps found, and where each stands after the offline follow-up below:
 
 - `PrivyCouncilBehavior.EnsureRecordIndexes` threw "same key already added" from Coop's parallel moving-party tick.
