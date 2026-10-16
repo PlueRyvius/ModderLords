@@ -48,6 +48,9 @@ public partial class HostViewModel : ObservableObject
         _flushTimer.Start();
         _creationTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _creationTimer.Tick += (_, _) => RefreshCreationProgress();
+        _restartTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _restartTimer.Tick += async (_, _) => await CheckScheduledRestart();
+        _restartTimer.Start();
         Smoke = new SmokeTestViewModel(this);
         Characters = new CharactersViewModel(this);
     }
@@ -976,6 +979,56 @@ public partial class HostViewModel : ObservableObject
             Status = $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved, {result.DuplicatesRemoved} duplicates removed).";
         }
         return true;
+    }
+
+    // ---- scheduled restart ---------------------------------------------------------------------------
+
+    private readonly System.Windows.Threading.DispatcherTimer _restartTimer;
+    private DateTime? _restartDueAt;
+    private bool _restarting;
+    private bool _warned10, _warned1;
+
+    partial void OnIsServingChanged(bool value)
+    {
+        _warned10 = _warned1 = false;
+        _restartDueAt = value && Profile.AutoRestartHours > 0 ? DateTime.Now.AddHours(Profile.AutoRestartHours) : null;
+        if (_restartDueAt is { } due)
+            AddLine(LogCategory.Tool, $"[ModderLords] scheduled restart at {due:HH:mm} (every {Profile.AutoRestartHours} h)");
+    }
+
+    /// <summary>Says so in the Console and on every player's screen (needs Settings sync, which loads the compat module on clients).</summary>
+    private async Task WarnRestart(string when)
+    {
+        var text = $"The server restarts in {when}. The campaign is saved first; rejoin once it is back.";
+        AddLine(LogCategory.Warning, "[ModderLords] " + text);
+        try { await SendServerCommandAsync("modderlords.announce - " + Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(text)).ToLowerInvariant()); }
+        catch (Exception ex) { AddLine(LogCategory.Warning, "[ModderLords] could not warn players in game: " + ex.Message); }
+    }
+
+    /// <summary>Every 30 s: warns before a scheduled restart, then stops the server and launches it again.</summary>
+    private async Task CheckScheduledRestart()
+    {
+        if (_restarting || _restartDueAt is not { } due || !IsServing) return;
+        var left = due - DateTime.Now;
+        if (left > TimeSpan.Zero)
+        {
+            if (!_warned10 && left <= TimeSpan.FromMinutes(10)) { _warned10 = true; await WarnRestart("10 minutes"); }
+            else if (!_warned1 && left <= TimeSpan.FromMinutes(1)) { _warned1 = true; await WarnRestart("1 minute"); }
+            return;
+        }
+        _restarting = true;
+        try
+        {
+            AddLine(LogCategory.Milestone, "[ModderLords] scheduled restart: stopping the server");
+            await Stop();
+            // Launch's own await ends when the engine exits; wait for it to settle before launching again.
+            for (var i = 0; i < 120 && IsRunning; i++) await Task.Delay(1000);
+            if (IsRunning) { AddLine(LogCategory.Error, "[ModderLords] scheduled restart: the server did not stop; not restarting"); return; }
+            AddLine(LogCategory.Milestone, "[ModderLords] scheduled restart: launching again");
+            // Not awaited: the launch task runs for as long as the server does.
+            if (LaunchCommand.CanExecute(null)) LaunchCommand.Execute(null);
+        }
+        finally { _restarting = false; }
     }
 
     [RelayCommand(CanExecute = nameof(IsRunning))]

@@ -24,6 +24,7 @@ public static class Bridge
         Steps.Run("ClientSettingsHandler.ApplyPending", () => global::Coop.Core.Client.Services.ModderLordsCompat.Handlers.ClientSettingsHandler.Current?.ApplyPending());
         Steps.Run("EncounterOptionGate.EnsureInstalled", () => EncounterOptionGate.EnsureInstalled());
         Steps.Run("EncounterOptionGate.Tick", () => EncounterOptionGate.Tick());
+        Steps.Run("OfflineFreeze.Tick", () => OfflineFreeze.Tick());
         Steps.Run("BattleScenePick.EnsureInstalled", () => BattleScenePick.EnsureInstalled());
         Steps.Run("BellumThreadSafety.EnsureInstalled", () => BellumThreadSafety.EnsureInstalled());
         Steps.Run("BellumPeaceInCoop.EnsureInstalled", () => BellumPeaceInCoop.EnsureInstalled());

@@ -43,6 +43,12 @@ public sealed class StaticSettingsSource : ISettingsSource
     public static List<string> Include { get; } = new List<string>();
     public static List<string> Exclude { get; } = new List<string>();
 
+    /// <summary>
+    /// ModderLords' own settings classes (static classes of public static properties). The assembly and module rules
+    /// skip ModderLords, so these are registered by type; they show in the Mod settings tab like any other mod's.
+    /// </summary>
+    public static List<(Type Type, string ModuleId)> Own { get; } = new List<(Type, string)>();
+
     private sealed class StaticObject
     {
         public string Id = "";
@@ -94,6 +100,11 @@ public sealed class StaticSettingsSource : ISettingsSource
             if (moduleId == null || SkipAssemblyPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase))) continue;
             try { ScanAssembly(a, name, moduleId); }
             catch (Exception ex) { Log.Warn($"static settings: scan of {name} failed: {ex.GetBaseException().Message}"); }
+        }
+        foreach (var (type, moduleId) in Own.ToList())
+        {
+            try { AddHop0(type, moduleId); }
+            catch (Exception ex) { Log.Warn($"static settings: {type.FullName} failed: {ex.GetBaseException().Message}"); }
         }
         ResolvePending();
         if (_announced != _objects.Count && _objects.Count > 0)

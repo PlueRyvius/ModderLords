@@ -91,6 +91,11 @@ public sealed class Profile
     /// </summary>
     public bool AutoSyncLauncherData { get; set; }
     /// <summary>
+    /// Restart the server this many hours after it starts serving; 0 = never. The Host tab stops it (which saves the
+    /// campaign), waits for it to exit, and launches the same profile again.
+    /// </summary>
+    public int AutoRestartHours { get; set; }
+    /// <summary>
     /// Set when a shared mod list was imported into the Bannerlord launcher while some of its mods were not installed.
     /// LauncherData.xml cannot hold a mod that is not on disk, so this profile remembers the rest of the list and the
     /// app offers to apply it again once they appear, rather than making the player import the file a second time.

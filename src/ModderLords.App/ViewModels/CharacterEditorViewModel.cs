@@ -243,6 +243,7 @@ public partial class CharacterEditorViewModel : ObservableObject
                 "age" => HeroEdits.Age(v.Value),
                 "level" => HeroEdits.Level(v.Value),
                 "gold" => HeroEdits.Gold(v.Value),
+                "renown" => HeroEdits.ClanRenown(v.Value),
                 "hp" => HeroEdits.HitPoints(v.Value),
                 "unspent_attr" => HeroEdits.UnspentAttributePoints(v.Value),
                 "unspent_focus" => HeroEdits.UnspentFocusPoints(v.Value),
@@ -271,6 +272,8 @@ public partial class CharacterEditorViewModel : ObservableObject
         Values.Add(new EditValue("age", "Age", hero.Age, 0, hero.MaxAge));
         Values.Add(new EditValue("level", "Level", hero.Level, 1, hero.MaxLevel));
         Values.Add(new EditValue("gold", "Gold", hero.Gold, 0, int.MaxValue));
+        if (hero.Renown >= 0)
+            Values.Add(new EditValue("renown", hero.Clan.Length > 0 ? $"Clan renown ({hero.Clan})" : "Clan renown", hero.Renown, 0, hero.MaxRenown));
         Values.Add(new EditValue("hp", "Hit points", hero.HitPoints, 1, Math.Max(1, hero.MaxHitPoints)));
         Values.Add(new EditValue("unspent_attr", "Unspent attribute points", hero.UnspentAttributePoints, 0, 1000));
         Values.Add(new EditValue("unspent_focus", "Unspent focus points", hero.UnspentFocusPoints, 0, 1000));

@@ -523,6 +523,8 @@
                         <ComboBox ItemsSource="{Binding Visibilities}" SelectedItem="{Binding Profile.Server.Visibility}" />
                         <TextBlock Text="Autosave minutes (0 = off)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.AutosaveMinutes}" />
+                        <TextBlock Text="Restart every N hours (0 = off)" VerticalAlignment="Center" ToolTip="Once the server has been serving this long, the launcher stops it (the stop saves the campaign) and launches it again with this profile. The Console and every player's screen get a warning 10 minutes and 1 minute before. Players are disconnected and rejoin once it is serving again." />
+                        <TextBox Text="{Binding Profile.AutoRestartHours}" />
                         <TextBlock Text="Server guards (Compat module)" VerticalAlignment="Center" ToolTip="Loads the launcher's DedicatedServer.ModderLordsCompat module on the server: answers inquiries and swallows screen pushes so single-player mods do not crash the headless host. Server-only; players need nothing." />
                         <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" />
                         <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compat\ModderLords.Compat from the launcher folder into their game Modules folder) and enable it." />

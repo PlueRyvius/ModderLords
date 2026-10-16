@@ -16,6 +16,7 @@ public enum HeroEditKind
     Focus,
     Skill,
     Trait,
+    ClanRenown,
 }
 
 /// <summary>One requested change: set <see cref="Kind"/> (of <see cref="Id"/>, for the per-attribute/skill/trait kinds) to <see cref="Value"/>.</summary>
@@ -32,7 +33,7 @@ public sealed class HeroEdit
 
 /// <summary>
 /// The edits <c>modderlords.edit &lt;req&gt; &lt;steam id&gt; &lt;token&gt;...</c> takes, one token each:
-/// <c>age=N</c>, <c>level=N</c>, <c>gold=N</c>, <c>hp=N</c>, <c>unspent_attr=N</c>, <c>unspent_focus=N</c>, <c>attr.&lt;id&gt;=N</c>,
+/// <c>age=N</c>, <c>level=N</c>, <c>gold=N</c>, <c>hp=N</c>, <c>unspent_attr=N</c>, <c>unspent_focus=N</c>, <c>renown=N</c> (the hero's clan), <c>attr.&lt;id&gt;=N</c>,
 /// <c>focus.&lt;skill id&gt;=N</c>, <c>skill.&lt;skill id&gt;=N</c>, <c>trait.&lt;id&gt;=N</c>. Every value is the new value,
 /// never a difference, so sending the same edit twice does the same thing.
 /// <para>No game types here: the launcher's tests compile this file to check both ends agree.</para>
@@ -50,6 +51,7 @@ public static class HeroEditWire
             HeroEditKind.HitPoints => "hp=" + v,
             HeroEditKind.UnspentAttributePoints => "unspent_attr=" + v,
             HeroEditKind.UnspentFocusPoints => "unspent_focus=" + v,
+            HeroEditKind.ClanRenown => "renown=" + v,
             HeroEditKind.Attribute => "attr." + id + "=" + v,
             HeroEditKind.Focus => "focus." + id + "=" + v,
             HeroEditKind.Skill => "skill." + id + "=" + v,
@@ -80,6 +82,7 @@ public static class HeroEditWire
             case "hp": edit = new HeroEdit(HeroEditKind.HitPoints, "", value); return true;
             case "unspent_attr": edit = new HeroEdit(HeroEditKind.UnspentAttributePoints, "", value); return true;
             case "unspent_focus": edit = new HeroEdit(HeroEditKind.UnspentFocusPoints, "", value); return true;
+            case "renown": edit = new HeroEdit(HeroEditKind.ClanRenown, "", value); return true;
         }
 
         var dot = key.IndexOf('.');
