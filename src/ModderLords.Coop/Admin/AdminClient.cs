@@ -22,7 +22,7 @@ public sealed class AdminClient
     public const string CommandGroup = "modderlords";
 
     private readonly Func<string, Task> _send;
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<AdminReply>> _pending = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, (string Command, TaskCompletionSource<AdminReply> Waiter)> _pending = new(StringComparer.Ordinal);
     private int _next;
 
     public AdminClient(Func<string, Task> send) => _send = send;
@@ -32,7 +32,7 @@ public sealed class AdminClient
     {
         var id = "r" + Interlocked.Increment(ref _next).ToString(CultureInfo.InvariantCulture);
         var waiter = new TaskCompletionSource<AdminReply>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pending[id] = waiter;
+        _pending[id] = (command, waiter);
         try
         {
             var line = string.Join(" ", new[] { $"{CommandGroup}.{command}", id }.Concat(args.Select(CheckArgument)));
@@ -49,15 +49,40 @@ public sealed class AdminClient
     /// <summary>Feeds one server stdout line. Returns the reply when it was one (matched to a request or not).</summary>
     public AdminReply? Observe(string line)
     {
+        if (UnknownCommand(line) is { } unknown)
+        {
+            // Nothing will ever answer: fail now rather than after the timeout, and say why.
+            foreach (var kv in _pending)
+                if (kv.Value.Command == unknown) kv.Value.Waiter.TrySetException(new InvalidOperationException(NotLoaded));
+            return null;
+        }
         if (Parse(line) is not { } reply) return null;
-        if (_pending.TryGetValue(reply.RequestId, out var waiter)) waiter.TrySetResult(reply);
+        if (_pending.TryGetValue(reply.RequestId, out var pending)) pending.Waiter.TrySetResult(reply);
         return reply;
+    }
+
+    /// <summary>Why the server does not know the admin commands: they live in the shared sync module.</summary>
+    public const string NotLoaded = "This server is not running ModderLords' admin commands. They are in the ModderLords.Compat module, "
+        + "which the server loads only with Settings sync on. Turn on Settings sync in the Server tab and restart the server.";
+
+    /// <summary>
+    /// The admin command the dedicated server says it does not have (<c>no game console command 'modderlords.players'</c>),
+    /// or null for any other line.
+    /// </summary>
+    public static string? UnknownCommand(string line)
+    {
+        const string Said = "no game console command '" + CommandGroup + ".";
+        var at = line.IndexOf(Said, StringComparison.Ordinal);
+        if (at < 0) return null;
+        var start = at + Said.Length;
+        var end = line.IndexOf('\'', start);
+        return end > start ? line[start..end] : null;
     }
 
     /// <summary>Fails every request still waiting: the server went away and nothing will answer them.</summary>
     public void Abandon(string why)
     {
-        foreach (var kv in _pending) kv.Value.TrySetException(new InvalidOperationException(why));
+        foreach (var kv in _pending) kv.Value.Waiter.TrySetException(new InvalidOperationException(why));
     }
 
     /// <summary>The reply on this line, or null for any other line.</summary>
