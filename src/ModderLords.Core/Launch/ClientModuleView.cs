@@ -41,14 +41,41 @@ public static class ClientModuleView
         }
         foreach (var file in Directory.EnumerateFiles(plan.GameRoot))
             File.Copy(file, Path.Combine(root, Path.GetFileName(file)));
+        var names = FolderNames(plan.SelectedModules);
         foreach (var mod in plan.SelectedModules)
         {
-            var target = Path.Combine(root, "Modules", mod.Id);
+            var target = Path.Combine(root, "Modules", names[mod.Id]);
             var leftOut = LeftOut(plan, mod.Id);
             if (leftOut.Count == 0) Junction.Create(target, mod.FolderPath);
             else LinkWithout(target, mod.FolderPath, leftOut);
         }
         return root;
+    }
+
+    /// <summary>
+    /// The folder each mod gets under the view's Modules: the name of the folder it is installed in, so the view looks
+    /// to the mod exactly as a normal start does. Bannerlord finds a module by its SubModule.xml, whatever the folder
+    /// is called, but some mods build paths from their own folder name. Reported 2026-10-15: ABUV Expanded loads its
+    /// button pictures from "Modules\ABUV Expanded by FrannCC\..."; the view named that folder by the mod's ID
+    /// (ABUVFiefBorders), so in co-op the buttons worked and showed no pictures.
+    ///
+    /// The ID is still used when the folder name cannot be one here: not a plain folder name, or the same as another
+    /// selected mod's (two copies called "MyMod" from different places, which the ID tells apart).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> FolderNames(IReadOnlyList<Modules.DiscoveredModule> mods)
+    {
+        static bool Plain(string name) => name is not ("" or "." or "..") && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
+        var folders = mods.ToDictionary(m => m.Id, m => m.FolderName, StringComparer.OrdinalIgnoreCase);
+        var shared = folders.Values.GroupBy(n => n, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var mod in mods)
+            names[mod.Id] = Plain(folders[mod.Id]) && !shared.Contains(folders[mod.Id]) ? folders[mod.Id] : mod.Id;
+        // A fallback ID can still meet another mod's real folder name (mod "B" installed in a folder called "A", and
+        // mod "A" falling back to its ID). Then every mod is named by its ID, as views always were: those are unique.
+        if (names.Values.Distinct(StringComparer.OrdinalIgnoreCase).Count() != names.Count)
+            foreach (var mod in mods) names[mod.Id] = mod.Id;
+        return names;
     }
 
     /// <summary>
