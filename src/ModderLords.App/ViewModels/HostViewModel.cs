@@ -995,6 +995,15 @@ public partial class HostViewModel : ObservableObject
             AddLine(LogCategory.Tool, $"[ModderLords] scheduled restart at {due:HH:mm} (every {Profile.AutoRestartHours} h)");
     }
 
+    /// <summary>Says so in the Console and on every player's screen (needs Settings sync, which loads the compat module on clients).</summary>
+    private async Task WarnRestart(string when)
+    {
+        var text = $"The server restarts in {when}. The campaign is saved first; rejoin once it is back.";
+        AddLine(LogCategory.Warning, "[ModderLords] " + text);
+        try { await SendServerCommandAsync("modderlords.announce - " + Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(text)).ToLowerInvariant()); }
+        catch (Exception ex) { AddLine(LogCategory.Warning, "[ModderLords] could not warn players in game: " + ex.Message); }
+    }
+
     /// <summary>Every 30 s: warns before a scheduled restart, then stops the server and launches it again.</summary>
     private async Task CheckScheduledRestart()
     {
@@ -1002,8 +1011,8 @@ public partial class HostViewModel : ObservableObject
         var left = due - DateTime.Now;
         if (left > TimeSpan.Zero)
         {
-            if (!_warned10 && left <= TimeSpan.FromMinutes(10)) { _warned10 = true; AddLine(LogCategory.Warning, "[ModderLords] scheduled restart in 10 minutes"); }
-            if (!_warned1 && left <= TimeSpan.FromMinutes(1)) { _warned1 = true; AddLine(LogCategory.Warning, "[ModderLords] scheduled restart in 1 minute"); }
+            if (!_warned10 && left <= TimeSpan.FromMinutes(10)) { _warned10 = true; await WarnRestart("10 minutes"); }
+            else if (!_warned1 && left <= TimeSpan.FromMinutes(1)) { _warned1 = true; await WarnRestart("1 minute"); }
             return;
         }
         _restarting = true;

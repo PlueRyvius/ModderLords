@@ -199,3 +199,11 @@ public sealed class NetworkModKingdomDecision : IEvent
     [ProtoMember(5)] public float RandomNumber { get; set; }
     [ProtoMember(6)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>Server -> every client: a message from the host to show on screen (e.g. a scheduled restart warning).</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkAnnouncement : IEvent
+{
+    [ProtoMember(1)] public string Text { get; set; } = "";
+    [ProtoMember(2)] public int ProtocolVersion { get; set; }
+}
