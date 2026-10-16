@@ -25,6 +25,7 @@ public static class Bridge
         Steps.Run("EncounterOptionGate.EnsureInstalled", () => EncounterOptionGate.EnsureInstalled());
         Steps.Run("EncounterOptionGate.Tick", () => EncounterOptionGate.Tick());
         Steps.Run("OfflineFreeze.Tick", () => OfflineFreeze.Tick());
+        Steps.Run("PlayerKingdomProtection.Tick", () => PlayerKingdomProtection.Tick());
         Steps.Run("BattleScenePick.EnsureInstalled", () => BattleScenePick.EnsureInstalled());
         Steps.Run("BellumThreadSafety.EnsureInstalled", () => BellumThreadSafety.EnsureInstalled());
         Steps.Run("BellumPeaceInCoop.EnsureInstalled", () => BellumPeaceInCoop.EnsureInstalled());

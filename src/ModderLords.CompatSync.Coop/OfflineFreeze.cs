@@ -20,6 +20,16 @@ public static class ModderLordsSettings
     /// fiefs keep paying an offline player, and trading keeps raising their Trade skill.
     /// </summary>
     public static bool FreezeOfflinePlayers { get; set; }
+
+    /// <summary>
+    /// AI kingdoms never declare war on a kingdom a player belongs to. Wars a player's kingdom declares, wars a
+    /// player's own actions cause (hostility, crime) and, unless <see cref="ProtectFromRebellions"/>, rebellions are
+    /// still allowed.
+    /// </summary>
+    public static bool ProtectPlayerKingdoms { get; set; }
+
+    /// <summary>With <see cref="ProtectPlayerKingdoms"/>: also undo a rebellion's war on a player's kingdom.</summary>
+    public static bool ProtectFromRebellions { get; set; }
 }
 
 /// <summary>
