@@ -981,6 +981,28 @@ public partial class HostViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>Picks the folder that also gets a copy of the client ModderLords.Compat module.</summary>
+    [RelayCommand]
+    private void BrowseCompatExportFolder()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Also export ModderLords.Compat to this folder" };
+        if (Directory.Exists(Profile.CompatExportFolder)) dialog.InitialDirectory = Profile.CompatExportFolder;
+        if (dialog.ShowDialog() != true) return;
+        SetCompatExportFolder(dialog.FolderName);
+    }
+
+    [RelayCommand]
+    private void ClearCompatExportFolder() => SetCompatExportFolder("");
+
+    private void SetCompatExportFolder(string folder)
+    {
+        Profile.CompatExportFolder = folder;
+        OnPropertyChanged(nameof(Profile));
+        ProfileStore.Save(Profile);
+        if (ClientModuleInstaller.Export(folder) is { } exported) AddLine(LogCategory.Tool, "[ModderLords] " + exported);
+        Status = folder.Length == 0 ? "ModderLords.Compat export turned off." : "ModderLords.Compat is exported to " + folder;
+    }
+
     // ---- scheduled restart ---------------------------------------------------------------------------
 
     private readonly System.Windows.Threading.DispatcherTimer _restartTimer;
