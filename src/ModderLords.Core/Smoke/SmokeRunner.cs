@@ -18,6 +18,11 @@ public sealed record SmokeOptions
     public TimeSpan LoadTimeout { get; init; } = TimeSpan.FromMinutes(12);
     /// <summary>How long the game must then stay on the map, connected, before the test closes it.</summary>
     public TimeSpan SteadyFor { get; init; } = TimeSpan.FromSeconds(60);
+    /// <summary>
+    /// When the test runs campaign time, how much longer than <see cref="SteadyFor"/> it waits for the date to move.
+    /// A big world at 2x can take a minute per day, and the server's pulse that reports the date comes late.
+    /// </summary>
+    public TimeSpan DayWaitLimit { get; init; } = TimeSpan.FromMinutes(4);
     public bool CloseClientWhenDone { get; init; } = true;
 
     /// <summary>
@@ -130,6 +135,7 @@ public sealed class SmokeRunner
         // 3. Watch.
         ClientStage lastStage = ClientStage.Started;
         DateTimeOffset? onMapAt = null;
+        var saidWaitingForDay = false;
         while (!cancel.IsCancellationRequested)
         {
             await Delay(1000, cancel);
@@ -175,7 +181,14 @@ public sealed class SmokeRunner
                 onMapAt ??= now;
                 facts = facts with { SteadyAchieved = now - onMapAt.Value };
                 if (Locked(() => _observer.PlayerDropped)) { Say("The server dropped the player."); break; }
-                if (now - onMapAt.Value >= _options.SteadyFor) { Say("Stayed on the map; closing the game."); break; }
+                if (now - onMapAt.Value >= _options.SteadyFor)
+                {
+                    // With time running, also wait for a day to pass, or the time check fails on a slow world.
+                    var waitingForDay = _options.SendServerCommand is not null && !Locked(() => _observer.TimeRan)
+                        && now - onMapAt.Value < _options.SteadyFor + _options.DayWaitLimit;
+                    if (!waitingForDay) { Say("Stayed on the map; closing the game."); break; }
+                    if (!saidWaitingForDay) { Say("Stayed on the map; waiting for an in-game day to pass…"); saidWaitingForDay = true; }
+                }
                 continue;
             }
             if (stage < ClientStage.Connecting && now - clientStarted > _options.ConnectTimeout)

@@ -70,7 +70,8 @@ public sealed class SmokeObserver
         return string.Equals(LastTimeMode, "Stop", StringComparison.Ordinal) && now - asked >= TimeAskRetry;
     }
 
-    public bool TimeRan => FirstDateOnMap is { } first && LastDate is { } last && last.Day > first.Day;
+    /// <summary>The server's date moved while the game was on the map (by date, so a season change counts).</summary>
+    public bool TimeRan => FirstDateOnMap is { } first && LastDate is { } last && last.Date != first.Date;
     public List<string> ServerErrorSamples { get; } = new();
 
     // ---- the player's game: Coop's log ----
@@ -361,9 +362,9 @@ public static class SmokeEvaluator
         else if (o.TimeRequestedAs is null)
             checks.Add(new SmokeCheck("Campaign time ran", SmokeVerdict.Skipped,
                 "the test had no server console to ask (attach mode without --server-commands), so the map stayed paused"));
-        else if (o.FirstDateOnMap is { } first && o.LastDate is { } last && last.Day > first.Day)
+        else if (o.TimeRan && o.FirstDateOnMap is { } first && o.LastDate is { } last)
             checks.Add(new SmokeCheck("Campaign time ran", SmokeVerdict.Pass,
-                $"{last.Day - first.Day} in-game day(s) passed at {o.TimeRequestedAs} ({first.Date} to {last.Date})"
+                (last.Day > first.Day ? $"{last.Day - first.Day} in-game day(s) passed" : "the in-game date moved") + $" at {o.TimeRequestedAs} ({first.Date} to {last.Date})"
                 + (o.TimeAsks > 1 ? $"; asked {o.TimeAsks} times" + (o.TimeLimitedBy is { } by ? $", Coop held it back at first ({by})" : "") : "")));
         else
             checks.Add(new SmokeCheck("Campaign time ran", SmokeVerdict.Fail,
