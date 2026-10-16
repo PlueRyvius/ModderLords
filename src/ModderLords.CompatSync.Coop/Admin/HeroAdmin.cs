@@ -227,6 +227,8 @@ internal static class HeroAdmin
         return null;
     }
 
+    private const int MaxRenown = 1_000_000;
+
     /// <summary>Checks one edit against this hero and the game's own limits; on success, how to apply it and read it back.</summary>
     private static string? Prepare(Hero hero, HeroEdit edit, out Action? apply, out Func<int>? read)
     {
@@ -260,6 +262,13 @@ internal static class HeroAdmin
                 if (v < 0) return "Gold cannot be negative.";
                 read = () => hero.Gold;
                 apply = () => hero.ChangeHeroGold(v - hero.Gold);
+                return null;
+            case HeroEditKind.ClanRenown:
+                if (hero.Clan is not { } clan) return $"{hero.Name} has no clan.";
+                if (v < 0 || v > MaxRenown) return $"Clan renown must be 0 to {MaxRenown}.";
+                read = () => (int)clan.Renown;
+                // Clan.AddRenown also moves the clan's tier, and Coop patches it to send the new renown to every client.
+                apply = () => clan.AddRenown(v - clan.Renown, false);
                 return null;
             case HeroEditKind.HitPoints:
                 if (v < 1 || v > hero.MaxHitPoints) return $"Hit points must be 1 to {hero.MaxHitPoints}.";
@@ -352,6 +361,9 @@ internal static class HeroAdmin
             ["level"] = hero.Level,
             ["maxLevel"] = MaximumLevel(model, dev),
             ["gold"] = hero.Gold,
+            ["clan"] = hero.Clan?.Name?.ToString() ?? "",
+            ["renown"] = hero.Clan is { } c ? (int)c.Renown : -1,
+            ["maxRenown"] = MaxRenown,
             ["hp"] = hero.HitPoints,
             ["maxHp"] = hero.MaxHitPoints,
             ["unspentAttr"] = dev.UnspentAttributePoints,
