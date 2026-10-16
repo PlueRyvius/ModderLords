@@ -908,6 +908,7 @@ public partial class HostViewModel : ObservableObject
         if (!serverRequiresIt && !ClientProfile.SettingsSync && !alreadyThere) return;
 
         var r = ClientModuleInstaller.Ensure(gameRoot);
+        if (ClientModuleInstaller.Export(ClientProfile.CompatExportFolder) is { } exported) AddLine(LogCategory.Tool, "[ModderLords] " + exported);
         switch (r.Outcome)
         {
             case ClientModuleInstaller.InstallOutcome.Installed:

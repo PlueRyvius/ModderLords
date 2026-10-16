@@ -467,6 +467,8 @@ public partial class MainViewModel : ObservableObject
                 Log(LogCategory.Tool, "[ModderLords] " + r.Message);
             else if (r.Outcome is ClientModuleInstaller.InstallOutcome.Failed)
                 Log(LogCategory.Warning, "[ModderLords] " + r.Message);
+            if (await Task.Run(() => ClientModuleInstaller.Export(profile.CompatExportFolder)) is { } exported)
+                Log(LogCategory.Tool, "[ModderLords] " + exported);
         }
         catch (Exception ex) { Log(LogCategory.Tool, "[ModderLords] client module check skipped: " + ex.Message); }
     }

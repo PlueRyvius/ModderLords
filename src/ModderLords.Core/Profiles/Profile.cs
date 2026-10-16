@@ -78,6 +78,11 @@ public sealed class Profile
     public bool CompatGuards { get; set; } = true;
     /// <summary>Also load the shared ModderLords.Compat module (settings sync). Players must install it too; it is part of the handshake.</summary>
     public bool SettingsSync { get; set; } = false;
+    /// <summary>
+    /// An extra folder (e.g. a shared drive) that also gets a copy of the client ModderLords.Compat module whenever the
+    /// launcher installs or checks the one in Modules. Empty = none.
+    /// </summary>
+    public string CompatExportFolder { get; set; } = "";
     /// <summary>Only shipped, fingerprint-matched and validated operation contracts may activate automatically.</summary>
     public bool AutomaticCompatibility { get; set; } = true;
     /// <summary>

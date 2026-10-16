@@ -512,7 +512,7 @@
             <TabItem Header="Server" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
                     <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,10" />
-                    <UniformGrid Columns="2" Rows="17">
+                    <UniformGrid Columns="2" Rows="18">
                         <TextBlock Text="Join port (UDP, forward this)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.JoinPort}" />
                         <TextBlock Text="Password (empty = open)" VerticalAlignment="Center" />
@@ -527,6 +527,8 @@
                         <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" />
                         <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compat\ModderLords.Compat from the launcher folder into their game Modules folder) and enable it." />
                         <CheckBox IsChecked="{Binding Profile.SettingsSync}" HorizontalAlignment="Left" />
+                        <TextBlock Text="Also export ModderLords.Compat to" VerticalAlignment="Center" ToolTip="A folder (for example a shared Dropbox or OneDrive folder) that also gets an up-to-date copy of the client ModderLords.Compat module, as ModderLords.Compat inside it. Updated whenever the launcher installs or checks the copy in your Modules folder: at startup and when launching. Friends copy it into their game's Modules folder. Empty = off." />
+                        <TextBox Text="{Binding Profile.CompatExportFolder}" />
                         <!-- The one thing this launcher writes inside the DedicatedServer package, so it is opt-in and
                              says so. Turning it off restores SandBox's file on the next launch. -->
                         <TextBlock Text="Use a map mod's distance cache" VerticalAlignment="Center" ToolTip="A map mod replaces the campaign map but the server always reads SandBox's settlement distance cache, which was built for the vanilla map — the mismatch crashes world loading in a loop that never ends. This replaces that file with the one your map mod ships (TAOM_Map ships a rebuilt 10 MB cache). It is the only file the launcher writes inside the DedicatedServer folder; the original is backed up and put back when you untick this. Leave off unless you are running a map-replacing mod." />

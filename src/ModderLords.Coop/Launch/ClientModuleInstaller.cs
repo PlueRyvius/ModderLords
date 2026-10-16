@@ -127,6 +127,25 @@ public static class ClientModuleInstaller
     }
 
     /// <summary>
+    /// Also copies the bundled module to <c>&lt;folder&gt;\ModderLords.Compat</c>, e.g. a shared folder friends install
+    /// from. Replaced only when its files differ. Null when there is nothing to report (no folder set, already current).
+    /// </summary>
+    public static string? Export(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return null;
+        if (LaunchSession.LocateSyncModule() is not { } bundled) return null;
+        var target = Path.Combine(folder.Trim(), LaunchSession.SyncModuleId);
+        try
+        {
+            if (Directory.Exists(target) && SameContent(bundled.FolderPath, target)) return null;
+            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+            CopyDirectory(bundled.FolderPath, target);
+            return $"exported {LaunchSession.SyncModuleId} {bundled.Version} to {target}";
+        }
+        catch (Exception ex) { return $"could not export {LaunchSession.SyncModuleId} to {target}: {ex.Message}"; }
+    }
+
+    /// <summary>
     /// True when the installed copy holds exactly the bundled files, byte for byte. Host-only files are ignored on
     /// both sides; any other extra or missing file counts as a difference, since a stale DLL is itself a problem.
     /// </summary>
