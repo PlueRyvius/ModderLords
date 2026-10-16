@@ -259,7 +259,7 @@ internal static class HeroAdmin
             case HeroEditKind.Gold:
                 if (v < 0) return "Gold cannot be negative.";
                 read = () => hero.Gold;
-                apply = () => hero.ChangeHeroGold(v - hero.Gold);
+                apply = () => OfflineFreeze.Allow(() => hero.ChangeHeroGold(v - hero.Gold));
                 return null;
             case HeroEditKind.HitPoints:
                 if (v < 1 || v > hero.MaxHitPoints) return $"Hit points must be 1 to {hero.MaxHitPoints}.";
