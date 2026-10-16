@@ -512,7 +512,7 @@
             <TabItem Header="Server" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <StackPanel Margin="8" MaxWidth="560" HorizontalAlignment="Left">
                     <TextBlock Text="Written to server-config.json on every launch (a backup goes to config-backups)." Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,10" />
-                    <UniformGrid Columns="2" Rows="19">
+                    <UniformGrid Columns="2" Rows="17">
                         <TextBlock Text="Join port (UDP, forward this)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.JoinPort}" />
                         <TextBlock Text="Password (empty = open)" VerticalAlignment="Center" />
@@ -523,14 +523,10 @@
                         <ComboBox ItemsSource="{Binding Visibilities}" SelectedItem="{Binding Profile.Server.Visibility}" />
                         <TextBlock Text="Autosave minutes (0 = off)" VerticalAlignment="Center" />
                         <TextBox Text="{Binding Profile.Server.AutosaveMinutes}" />
-                        <TextBlock Text="Restart every N hours (0 = off)" VerticalAlignment="Center" ToolTip="Once the server has been serving this long, the launcher stops it (the stop saves the campaign) and launches it again with this profile. The Console and every player's screen get a warning 10 minutes and 1 minute before. Players are disconnected and rejoin once it is serving again." />
-                        <TextBox Text="{Binding Profile.AutoRestartHours}" />
                         <TextBlock Text="Server guards (Compat module)" VerticalAlignment="Center" ToolTip="Loads the launcher's DedicatedServer.ModderLordsCompat module on the server: answers inquiries and swallows screen pushes so single-player mods do not crash the headless host. Server-only; players need nothing." />
                         <CheckBox IsChecked="{Binding Profile.CompatGuards}" HorizontalAlignment="Left" />
                         <TextBlock Text="Settings sync (ModderLords.Compat)" VerticalAlignment="Center" ToolTip="Pushes the server's MCM settings to joining players. Adds the shared ModderLords.Compat module to the server AND to the player mod list: every player must install it (copy compat\ModderLords.Compat from the launcher folder into their game Modules folder) and enable it." />
                         <CheckBox IsChecked="{Binding Profile.SettingsSync}" HorizontalAlignment="Left" />
-                        <TextBlock Text="Also export ModderLords.Compat to" VerticalAlignment="Center" ToolTip="A folder (for example a shared Dropbox or OneDrive folder) that also gets an up-to-date copy of the client ModderLords.Compat module, as ModderLords.Compat inside it. Updated whenever the launcher installs or checks the copy in your Modules folder: at startup and when launching. Friends copy it into their game's Modules folder. Empty = off." />
-                        <TextBox Text="{Binding Profile.CompatExportFolder}" />
                         <!-- The one thing this launcher writes inside the DedicatedServer package, so it is opt-in and
                              says so. Turning it off restores SandBox's file on the next launch. -->
                         <TextBlock Text="Use a map mod's distance cache" VerticalAlignment="Center" ToolTip="A map mod replaces the campaign map but the server always reads SandBox's settlement distance cache, which was built for the vanilla map — the mismatch crashes world loading in a loop that never ends. This replaces that file with the one your map mod ships (TAOM_Map ships a rebuilt 10 MB cache). It is the only file the launcher writes inside the DedicatedServer folder; the original is backed up and put back when you untick this. Leave off unless you are running a map-replacing mod." />
@@ -571,6 +567,46 @@
                         </StackPanel>
                     </Expander>
                 </StackPanel>
+            </TabItem>
+
+            <!-- HOST: ModderLords' own server features. The toggles are the compat module's ModderLordsSettings, stored as
+                 host overrides (LiveSettingsViewModel.OwnSettingsId) and sent live while the server runs. -->
+            <TabItem Header="Host" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="4" MaxWidth="900" HorizontalAlignment="Left">
+                        <TextBlock Text="Server upkeep" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="320" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                            <TextBlock Text="Restart every N hours (0 = off)" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Width="80" HorizontalAlignment="Left" Text="{Binding Profile.AutoRestartHours}"
+                                     ToolTip="Once the server has been serving this long, the launcher stops it (the stop saves the campaign) and launches it again. The Console and every player's screen get a warning 10 minutes and 1 minute before." />
+                            <TextBlock Grid.Row="1" Text="Also export ModderLords.Compat to" VerticalAlignment="Center" Margin="0,4,0,0" />
+                            <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,4,0,0">
+                                <Button DockPanel.Dock="Right" Content="Clear" Margin="4,0,0,0" Command="{Binding ClearCompatExportFolderCommand}" />
+                                <Button DockPanel.Dock="Right" Content="Browse…" Margin="6,0,0,0" Command="{Binding BrowseCompatExportFolderCommand}" />
+                                <TextBox IsReadOnly="True" Text="{Binding Profile.CompatExportFolder, Mode=OneWay}"
+                                     ToolTip="A folder (e.g. a shared Dropbox or OneDrive folder) that also gets an up-to-date copy of the client ModderLords.Compat module, at startup and when launching. Friends copy it into their game's Modules folder. Empty = off." />
+                            </DockPanel>
+                        </Grid>
+                        <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,16"
+                                   Text="Saved with the profile (Save, or Launch)." />
+
+                        <TextBlock Text="Gameplay rules" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
+                        <CheckBox Content="Freeze offline players' gold and XP" IsChecked="{Binding LiveSettings.FreezeOfflinePlayers}" Margin="0,2"
+                                  ToolTip="While a player is offline their hero gains and loses no gold and gains no skill XP: caravans, workshops and fiefs stop paying them and trading stops raising Trade. Edits from the Characters tab still apply." />
+                        <CheckBox Content="Protect player kingdoms from AI wars" IsChecked="{Binding LiveSettings.ProtectPlayerKingdoms}" Margin="0,2"
+                                  ToolTip="AI kingdoms never pick a kingdom a player belongs to as a war target, and any war that still starts against one is ended with peace on the next tick. Wars a player's kingdom declares, and wars caused by a player's own hostility or crime, are allowed." />
+                        <CheckBox Content="Also protect them from rebellions" IsChecked="{Binding LiveSettings.ProtectFromRebellions}" Margin="20,2,0,2"
+                                  IsEnabled="{Binding LiveSettings.ProtectPlayerKingdoms}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Apply" Command="{Binding LiveSettings.ApplyHostOptionsCommand}" FontWeight="Bold" />
+                            <TextBlock Text="{Binding LiveSettings.HostOptionsReport}" VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SuccessForeground}" />
+                        </StackPanel>
+                        <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Text="These run on the server and need Settings sync (Server tab). Apply sends them to a running server at once and keeps them for every launch of this profile." />
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- GAMEPLAY (mod-config.json) -->

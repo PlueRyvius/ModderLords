@@ -199,6 +199,52 @@ public partial class LiveSettingsViewModel : ObservableObject
     [ObservableProperty] private string _applyReport = "";
     [ObservableProperty] private bool _isBusy;
 
+    // ---- ModderLords' own server options (Host tab) ---------------------------------------------------------
+
+    /// <summary>The compat module's ModderLordsSettings, as the static settings source names it. Shown on the Host tab, not here.</summary>
+    public const string OwnSettingsId = "static:ModderLords.CompatSync.Coop:ModderLords.CompatSync.Coop.ModderLordsSettings";
+
+    [ObservableProperty] private bool _freezeOfflinePlayers;
+    [ObservableProperty] private bool _protectPlayerKingdoms;
+    [ObservableProperty] private bool _protectFromRebellions;
+    [ObservableProperty] private string _hostOptionsReport = "";
+
+    /// <summary>Server value, else stored override, else off.</summary>
+    private void LoadOwnOptions(LiveSettingsDocument? doc)
+    {
+        var server = doc?.Objects.FirstOrDefault(o => o.SettingsId == OwnSettingsId)?.Groups.SelectMany(g => g.Properties).ToList();
+        bool Read(string id) =>
+            string.Equals(_overrides.Get(OwnSettingsId, id) ?? server?.FirstOrDefault(x => x.Id == id)?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        FreezeOfflinePlayers = Read(nameof(FreezeOfflinePlayers));
+        ProtectPlayerKingdoms = Read(nameof(ProtectPlayerKingdoms));
+        ProtectFromRebellions = Read(nameof(ProtectFromRebellions));
+    }
+
+    /// <summary>Stores the Host tab's options as overrides (applied at every launch) and, while the server runs, sends them live.</summary>
+    [RelayCommand]
+    private async Task ApplyHostOptions()
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [nameof(FreezeOfflinePlayers)] = FreezeOfflinePlayers ? "true" : "false",
+            [nameof(ProtectPlayerKingdoms)] = ProtectPlayerKingdoms ? "true" : "false",
+            [nameof(ProtectFromRebellions)] = ProtectFromRebellions ? "true" : "false",
+        };
+        _overrides.Set(OwnSettingsId, values);
+        try { SettingsOverridesStore.Save(_profileName, _overrides); }
+        catch (Exception ex) { HostOptionsReport = "Not saved: " + ex.Message; return; }
+        if (_client is null) { HostOptionsReport = $"Saved for '{_profileName}'; applied when the server next starts."; return; }
+        HostOptionsReport = "Sending to the server…";
+        try
+        {
+            var ack = await _client.ApplyAsync(OwnSettingsId, values, TimeSpan.FromSeconds(15));
+            HostOptionsReport = ack is null ? "Saved, but the server did not answer within 15 s; it applies at the next start."
+                : ack.Ok ? "Applied on the server now, and saved for every launch." : "Saved; the server refused it live: " + ack.Report;
+            Log?.Invoke($"host options: {HostOptionsReport}");
+        }
+        catch (Exception ex) { HostOptionsReport = "Saved; live apply failed: " + ex.Message; }
+    }
+
     /// <summary>Console sink for tool lines (set by the main view model).</summary>
     public Action<string>? Log { get; set; }
 
@@ -215,6 +261,7 @@ public partial class LiveSettingsViewModel : ObservableObject
         ApplyReport = "";
         var cache = SettingsOverridesStore.LoadCache(profileName);
         if (cache is not null) Merge(cache, offline: true);
+        else LoadOwnOptions(null);
         UpdateOfflineState();
     }
 
@@ -302,8 +349,10 @@ public partial class LiveSettingsViewModel : ObservableObject
     {
         _last = doc;
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        LoadOwnOptions(doc);
         foreach (var o in doc.Objects)
         {
+            if (o.SettingsId == OwnSettingsId) continue;   // the Host tab shows these
             seen.Add(o.SettingsId);
             var vm = Objects.FirstOrDefault(v => v.SettingsId == o.SettingsId);
             if (vm is null) { vm = new LiveObjectVm(o.SettingsId); Objects.Add(vm); }
