@@ -48,6 +48,9 @@ public partial class HostViewModel : ObservableObject
         _flushTimer.Start();
         _creationTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _creationTimer.Tick += (_, _) => RefreshCreationProgress();
+        _restartTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _restartTimer.Tick += async (_, _) => await CheckScheduledRestart();
+        _restartTimer.Start();
         Smoke = new SmokeTestViewModel(this);
         Characters = new CharactersViewModel(this);
     }
@@ -975,6 +978,47 @@ public partial class HostViewModel : ObservableObject
             Status = $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved, {result.DuplicatesRemoved} duplicates removed).";
         }
         return true;
+    }
+
+    // ---- scheduled restart ---------------------------------------------------------------------------
+
+    private readonly System.Windows.Threading.DispatcherTimer _restartTimer;
+    private DateTime? _restartDueAt;
+    private bool _restarting;
+    private bool _warned10, _warned1;
+
+    partial void OnIsServingChanged(bool value)
+    {
+        _warned10 = _warned1 = false;
+        _restartDueAt = value && Profile.AutoRestartHours > 0 ? DateTime.Now.AddHours(Profile.AutoRestartHours) : null;
+        if (_restartDueAt is { } due)
+            AddLine(LogCategory.Tool, $"[ModderLords] scheduled restart at {due:HH:mm} (every {Profile.AutoRestartHours} h)");
+    }
+
+    /// <summary>Every 30 s: warns before a scheduled restart, then stops the server and launches it again.</summary>
+    private async Task CheckScheduledRestart()
+    {
+        if (_restarting || _restartDueAt is not { } due || !IsServing) return;
+        var left = due - DateTime.Now;
+        if (left > TimeSpan.Zero)
+        {
+            if (!_warned10 && left <= TimeSpan.FromMinutes(10)) { _warned10 = true; AddLine(LogCategory.Warning, "[ModderLords] scheduled restart in 10 minutes"); }
+            if (!_warned1 && left <= TimeSpan.FromMinutes(1)) { _warned1 = true; AddLine(LogCategory.Warning, "[ModderLords] scheduled restart in 1 minute"); }
+            return;
+        }
+        _restarting = true;
+        try
+        {
+            AddLine(LogCategory.Milestone, "[ModderLords] scheduled restart: stopping the server");
+            await Stop();
+            // Launch's own await ends when the engine exits; wait for it to settle before launching again.
+            for (var i = 0; i < 120 && IsRunning; i++) await Task.Delay(1000);
+            if (IsRunning) { AddLine(LogCategory.Error, "[ModderLords] scheduled restart: the server did not stop; not restarting"); return; }
+            AddLine(LogCategory.Milestone, "[ModderLords] scheduled restart: launching again");
+            // Not awaited: the launch task runs for as long as the server does.
+            if (LaunchCommand.CanExecute(null)) LaunchCommand.Execute(null);
+        }
+        finally { _restarting = false; }
     }
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
