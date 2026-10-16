@@ -182,7 +182,7 @@ internal static class CharacterTransfer
         }
         if (parts.Contains("gold"))
         {
-            hero.ChangeHeroGold(c.Gold - hero.Gold);
+            OfflineFreeze.Allow(() => hero.ChangeHeroGold(c.Gold - hero.Gold));
             done.Add("gold " + hero.Gold);
         }
         if (parts.Contains("look"))
