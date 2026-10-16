@@ -13,6 +13,7 @@ public class CharacterEditWireTests
     public static TheoryData<string, HeroEditKind, string, int> LauncherTokens => new()
     {
         { HeroEdits.Gold(25000), HeroEditKind.Gold, "", 25000 },
+        { HeroEdits.ClanRenown(900), HeroEditKind.ClanRenown, "", 900 },
         { HeroEdits.HitPoints(80), HeroEditKind.HitPoints, "", 80 },
         { HeroEdits.UnspentAttributePoints(3), HeroEditKind.UnspentAttributePoints, "", 3 },
         { HeroEdits.UnspentFocusPoints(0), HeroEditKind.UnspentFocusPoints, "", 0 },
