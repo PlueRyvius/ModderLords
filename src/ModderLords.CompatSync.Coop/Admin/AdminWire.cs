@@ -30,3 +30,33 @@ public static class AdminWire
     /// <summary>The request id a command was given (its first argument), or "-" when typed by hand without one.</summary>
     public static string RequestId(IList<string> args) => args.Count > 0 && args[0].Length > 0 ? args[0] : "-";
 }
+
+/// <summary>
+/// Text for <c>modderlords.announce &lt;req&gt; &lt;hex&gt;</c>, shown on every player's screen. The console splits its
+/// arguments on spaces, so the text travels as the hex of its UTF-8 bytes.
+/// </summary>
+public static class AnnounceWire
+{
+    public const int MaxLength = 200;
+
+    public static string Encode(string text)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(text.Trim());
+        var sb = new System.Text.StringBuilder(bytes.Length * 2);
+        foreach (var b in bytes) sb.Append(b.ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
+        return sb.ToString();
+    }
+
+    /// <summary>False for anything that is not hex of valid UTF-8, or is empty or too long.</summary>
+    public static bool TryDecode(string hex, out string text)
+    {
+        text = "";
+        if (hex.Length == 0 || hex.Length % 2 != 0) return false;
+        var bytes = new byte[hex.Length / 2];
+        for (var i = 0; i < bytes.Length; i++)
+            if (!byte.TryParse(hex.Substring(i * 2, 2), System.Globalization.NumberStyles.AllowHexSpecifier, System.Globalization.CultureInfo.InvariantCulture, out bytes[i])) return false;
+        try { text = new System.Text.UTF8Encoding(false, throwOnInvalidBytes: true).GetString(bytes).Trim(); }
+        catch (System.ArgumentException) { return false; }
+        return text.Length > 0 && text.Length <= MaxLength;
+    }
+}
