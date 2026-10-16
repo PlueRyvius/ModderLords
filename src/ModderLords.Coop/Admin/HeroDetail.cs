@@ -20,6 +20,10 @@ public sealed record HeroDetail
     public int Level { get; init; }
     public int MaxLevel { get; init; }
     public int Gold { get; init; }
+    public string Clan { get; init; } = "";
+    /// <summary>The hero's clan's renown; -1 when the hero has no clan or the server is too old to say.</summary>
+    public int Renown { get; init; } = -1;
+    public int MaxRenown { get; init; }
     public int HitPoints { get; init; }
     public int MaxHitPoints { get; init; }
     public int UnspentAttributePoints { get; init; }
@@ -52,6 +56,9 @@ public sealed record HeroDetail
             Level = Int(r, "level"),
             MaxLevel = Int(r, "maxLevel"),
             Gold = Int(r, "gold"),
+            Clan = Str(r, "clan"),
+            Renown = r.TryGetProperty("renown", out _) ? Int(r, "renown") : -1,
+            MaxRenown = Int(r, "maxRenown"),
             HitPoints = Int(r, "hp"),
             MaxHitPoints = Int(r, "maxHp"),
             UnspentAttributePoints = Int(r, "unspentAttr"),
@@ -89,6 +96,7 @@ public static class HeroEdits
     public static string Age(int value) => "age=" + N(value);
     public static string Level(int value) => "level=" + N(value);
     public static string Gold(int value) => "gold=" + N(value);
+    public static string ClanRenown(int value) => "renown=" + N(value);
     public static string HitPoints(int value) => "hp=" + N(value);
     public static string UnspentAttributePoints(int value) => "unspent_attr=" + N(value);
     public static string UnspentFocusPoints(int value) => "unspent_focus=" + N(value);
