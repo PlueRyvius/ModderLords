@@ -199,3 +199,21 @@ public sealed class NetworkModKingdomDecision : IEvent
     [ProtoMember(5)] public float RandomNumber { get; set; }
     [ProtoMember(6)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>Client -> server: give this much of my hero's gold to the player whose hero has this name.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkGiveGold : ICommand
+{
+    [ProtoMember(1)] public string Recipient { get; set; } = "";
+    [ProtoMember(2)] public int Amount { get; set; }
+    [ProtoMember(3)] public int ProtocolVersion { get; set; }
+}
+
+/// <summary>Server -> a client: the outcome of a gold gift, for the giver, or news of one, for the receiver.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkGiveGoldNotice : IEvent
+{
+    [ProtoMember(1)] public bool Ok { get; set; }
+    [ProtoMember(2)] public string Message { get; set; } = "";
+    [ProtoMember(3)] public int ProtocolVersion { get; set; }
+}
