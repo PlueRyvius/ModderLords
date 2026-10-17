@@ -411,9 +411,16 @@ public partial class MainWindow : Window
     {
         _restoring = true;
         foreach (var (code, name) in Loc.Languages)
-            LanguageBox.Items.Add(new ComboBoxItem { Content = code is null ? Loc.T(name) : name, Tag = code });
+            LanguageBox.Items.Add(new ComboBoxItem { Content = code is null ? $"{Loc.T(name)} ({SystemLanguageName()})" : name, Tag = code });
         LanguageBox.SelectedIndex = Math.Max(0, Array.FindIndex(Loc.Languages, l => l.Code == _ui.Language));
         _restoring = false;
+    }
+
+    /// <summary>What "System default" would pick on this PC, so the entry says what it means.</summary>
+    private static string SystemLanguageName()
+    {
+        var code = Loc.Resolve(null);
+        return Array.Find(Loc.Languages, l => l.Code == code).Name ?? code;
     }
 
     private void Language_SelectionChanged(object sender, SelectionChangedEventArgs e)

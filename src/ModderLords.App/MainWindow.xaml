@@ -39,9 +39,6 @@
                             ToolTip="{l:T 'Check GitHub for a newer ModderLords release now. Nothing is downloaded unless you then click Update now.'}" />
                     <Button x:Name="ThemeButton" Content="{l:T 'Dark'}" Click="Theme_Click" MinWidth="52" Margin="4,0,4,0"
                             ToolTip="{l:T 'Switch between the light and dark theme'}" />
-                    <!-- Language names are written in their own language, so anyone can find theirs. Takes effect on restart. -->
-                    <ComboBox x:Name="LanguageBox" SelectionChanged="Language_SelectionChanged" MinWidth="96" Margin="4,0,12,0"
-                              ToolTip="{l:T 'Language of the app. Takes effect when ModderLords is restarted.'}" />
                     <!-- Player mode launches the mods you picked; Host mode launches the game that joins the server
                          you are running, which is why the wording and the tooltip change with the mode. -->
                     <Button Command="{Binding LaunchClientCommand}" Margin="4,0,20,0">
@@ -140,6 +137,13 @@
                 <!-- Support link. The mark keeps its brand colours in both themes, so it sits on its own
                      light chip rather than vanishing into a dark background. -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <!-- Language. A globe, because the picker has to be findable by someone who cannot read the current
+                         language; the names are written in their own language for the same reason. Takes effect on restart. -->
+                    <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"
+                               Foreground="{DynamicResource LogTool}" Margin="0,0,6,0" />
+                    <ComboBox x:Name="LanguageBox" SelectionChanged="Language_SelectionChanged" MinWidth="110" Margin="0,0,16,0"
+                              VerticalAlignment="Center"
+                              ToolTip="{l:T 'Language of the app. Takes effect when ModderLords is restarted.'}" />
                     <Border Background="{StaticResource BmcChip}" CornerRadius="4" Padding="4,3" VerticalAlignment="Center">
                         <Viewbox Width="15" Height="21">
                             <Canvas Width="27" Height="39">
