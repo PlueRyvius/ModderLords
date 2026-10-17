@@ -8,6 +8,7 @@ using ModderLords.Core.Launch;
 using ModderLords.Core.Logs;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Smoke;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App.ViewModels;
 
@@ -57,14 +58,14 @@ public partial class SmokeTestViewModel : ObservableObject
         Checks.Clear();
         Report = null;
         Overall = null;
-        if (ClientLauncher.IsClientRunning()) { Headline = "Bannerlord is already running on this PC. Close it, then run the test."; return; }
-        if (_host.ClientProfile.Server.Password.Length > 0) { Headline = "This server has a password, and Coop's automatic join cannot send one. Clear it on the Server tab for the test."; return; }
-        if (!int.TryParse(SteadySeconds, out var steady) || steady < 10) { Headline = "Seconds on the map: a number, 10 or more."; return; }
+        if (ClientLauncher.IsClientRunning()) { Headline = Loc.T("Bannerlord is already running on this PC. Close it, then run the test."); return; }
+        if (_host.ClientProfile.Server.Password.Length > 0) { Headline = Loc.T("This server has a password, and Coop's automatic join cannot send one. Clear it on the Server tab for the test."); return; }
+        if (!int.TryParse(SteadySeconds, out var steady) || steady < 10) { Headline = Loc.T("Seconds on the map: a number, 10 or more."); return; }
         var gameRoot = ClientLauncher.ResolveGameRoot(_host.ClientProfile);
-        if (gameRoot is null) { Headline = "No Bannerlord install found for this profile."; return; }
+        if (gameRoot is null) { Headline = Loc.T("No Bannerlord install found for this profile."); return; }
 
         IsTesting = true;
-        Headline = "Running…";
+        Headline = Loc.T("Running…");
         _cancel = new CancellationTokenSource();
         var dispatcher = Application.Current.Dispatcher;
         var runner = new SmokeRunner(new SmokeOptions
@@ -105,7 +106,7 @@ public partial class SmokeTestViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Headline = "The smoke test stopped: " + ex.Message;
+            Headline = Loc.T("The smoke test stopped: ") + ex.Message;
             _host.AddLine(LogCategory.Error, "[ModderLords] smoke test: " + ex);
         }
         finally
@@ -149,7 +150,7 @@ public partial class SmokeTestViewModel : ObservableObject
     private void CopyReport()
     {
         if (Report is null) return;
-        try { Clipboard.SetText(Report.ToText()); Headline = Report.Headline + " — report copied."; }
+        try { Clipboard.SetText(Report.ToText()); Headline = Report.Headline + Loc.T(" — report copied."); }
         catch (System.Runtime.InteropServices.COMException) { }
     }
 

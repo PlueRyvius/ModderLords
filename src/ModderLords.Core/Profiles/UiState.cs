@@ -23,6 +23,9 @@ public sealed class UiState
     /// <summary>"Light" or "Dark". A name, not an index, so reordering the enum cannot repaint someone's app.</summary>
     public string? Theme { get; set; }
 
+    /// <summary>UI language code ("en", "zh-Hans"). Null follows the Windows display language. Applied at startup.</summary>
+    public string? Language { get; set; }
+
     /// <summary>Header of the tab that was selected. By header rather than index, because the visible tabs
     /// differ between the two modes and an index would land somewhere arbitrary after a mode switch.</summary>
     public string? SelectedTab { get; set; }

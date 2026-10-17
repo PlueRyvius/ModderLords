@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Workshop;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -22,8 +23,8 @@ public partial class App : Application
         {
             LogCrash(args.Exception);
             var report = MessageBox.Show(args.Exception.Message +
-                "\n\nThe error was logged. Create a reviewed support bundle now? Nothing is uploaded automatically.",
-                "ModderLords: error (logged)", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                Loc.T("\n\nThe error was logged. Create a reviewed support bundle now? Nothing is uploaded automatically."),
+                Loc.T("ModderLords: error (logged)"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
             args.Handled = true;
             if (report == MessageBoxResult.Yes && Current.MainWindow is MainWindow window)
                 Current.Dispatcher.BeginInvoke(async () => await window.ShowSupportReportAsync());

@@ -1,25 +1,26 @@
 <Window x:Class="ModderLords.App.ImportListWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:ModderLords.App.Localization"
         Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
-        Title="Import a shared mod list" Height="520" Width="680" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+        Title="{l:T 'Import a shared mod list'}" Height="520" Width="680" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
     <DockPanel Margin="10">
         <TextBlock DockPanel.Dock="Top" x:Name="Header" FontWeight="Bold" Margin="0,0,0,2" TextWrapping="Wrap" />
         <TextBlock DockPanel.Dock="Top" x:Name="SourceLine" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8" TextWrapping="Wrap" />
 
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Right" FlowDirection="RightToLeft">
-            <Button Content="Cancel" IsCancel="True" MinWidth="80" Margin="4,0" />
-            <Button Content="Import" Click="Import_Click" MinWidth="90" Margin="4,0" IsDefault="True" />
+            <Button Content="{l:T 'Cancel'}" IsCancel="True" MinWidth="80" Margin="4,0" />
+            <Button Content="{l:T 'Import'}" Click="Import_Click" MinWidth="90" Margin="4,0" IsDefault="True" />
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-            <CheckBox x:Name="ApplyBox" Content="Set up my Bannerlord launcher to match (you will see what changes first)" IsChecked="True" Margin="0,0,0,6" />
+            <CheckBox x:Name="ApplyBox" Content="{l:T 'Set up my Bannerlord launcher to match (you will see what changes first)'}" IsChecked="True" Margin="0,0,0,6" />
             <CheckBox x:Name="CoopBox" Margin="0,0,0,6"
-                      Content="Always make sure Bannerlord Coop is subscribed on the Workshop" />
+                      Content="{l:T 'Always make sure Bannerlord Coop is subscribed on the Workshop'}" />
             <CheckBox x:Name="SubscribeBox" Margin="0,0,0,6"
-                      Content="Subscribe to missing Workshop mods automatically (Steam shows you playing Bannerlord briefly)" />
+                      Content="{l:T 'Subscribe to missing Workshop mods automatically (Steam shows you playing Bannerlord briefly)'}" />
             <StackPanel Orientation="Horizontal">
-                <CheckBox x:Name="ProfileBox" Content="Create a server profile called" VerticalAlignment="Center" />
+                <CheckBox x:Name="ProfileBox" Content="{l:T 'Create a server profile called'}" VerticalAlignment="Center" />
                 <TextBox x:Name="ProfileName" Width="180" Margin="6,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
         </StackPanel>

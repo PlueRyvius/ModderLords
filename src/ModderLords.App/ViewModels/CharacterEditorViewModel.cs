@@ -4,6 +4,7 @@ using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModderLords.Coop.Admin;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App.ViewModels;
 
@@ -145,14 +146,14 @@ public partial class CharacterEditorViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanReload))]
     private async Task Reload()
     {
-        if (!_serving()) { Status = "The server is not running."; return; }
+        if (!_serving()) { Status = Loc.T("The server is not running."); return; }
         IsBusy = true;
         try
         {
             var reply = await _admin.RequestAsync("hero", [Target], ReplyTimeout);
-            if (!reply.Ok) { Status = "The server could not read this hero: " + reply.Error; return; }
+            if (!reply.Ok) { Status = Loc.T("The server could not read this hero: ") + reply.Error; return; }
             Show(HeroDetail.From(reply));
-            Status = "Change any value, then Apply. Values are sent as new values; the server checks every one before changing any.";
+            Status = Loc.T("Change any value, then Apply. Values are sent as new values; the server checks every one before changing any.");
         }
         catch (Exception ex) { Status = ex.Message; }
         finally { IsBusy = false; }
@@ -167,13 +168,13 @@ public partial class CharacterEditorViewModel : ObservableObject
             .Concat(Skills.Where(s => s.IsChanged && (s.Value < 0 || s.Value > s.MaxValue || s.Focus < 0 || s.Focus > s.MaxFocus))
                 .Select(s => $"{s.Name}: skill 0 to {s.MaxValue}, focus 0 to {s.MaxFocus}"))
             .ToList();
-        if (outOfRange.Count > 0) { Status = "Not sent: " + string.Join("; ", outOfRange) + "."; return; }
+        if (outOfRange.Count > 0) { Status = Loc.T("Not sent: ") + string.Join("; ", outOfRange) + "."; return; }
 
         var rename = IsNameChanged ? Name.Trim() : null;
-        if (rename is not null && HeroNames.Problem(rename) is { } problem) { Status = "Not sent: " + problem; return; }
+        if (rename is not null && HeroNames.Problem(rename) is { } problem) { Status = Loc.T("Not sent: ") + problem; return; }
         var tokens = Tokens().ToList();
-        if (tokens.Count == 0 && rename is null) { Status = "Nothing has changed."; return; }
-        if (!_serving()) { Status = "The server is not running."; return; }
+        if (tokens.Count == 0 && rename is null) { Status = Loc.T("Nothing has changed."); return; }
+        if (!_serving()) { Status = Loc.T("The server is not running."); return; }
         IsBusy = true;
         try
         {
@@ -183,7 +184,7 @@ public partial class CharacterEditorViewModel : ObservableObject
             if (tokens.Count > 0)
             {
                 var reply = await _admin.RequestAsync("edit", new[] { Target }.Concat(tokens), ReplyTimeout);
-                if (!reply.Ok) { Status = "Nothing was changed: " + reply.Error; return; }
+                if (!reply.Ok) { Status = Loc.T("Nothing was changed: ") + reply.Error; return; }
                 var detail = HeroDetail.From(reply);
                 applied += detail.Changes.Count;
                 refused.AddRange(detail.NotApplied);
@@ -195,7 +196,7 @@ public partial class CharacterEditorViewModel : ObservableObject
                 if (!reply.Ok)
                 {
                     Name = rename;
-                    Status = (applied > 0 ? $"Applied {applied} change(s), but the name was not changed: " : "The name was not changed: ") + reply.Error;
+                    Status = (applied > 0 ? Loc.F("Applied {0} change(s), but the name was not changed: ", applied) : Loc.T("The name was not changed: ")) + reply.Error;
                     return;
                 }
                 var detail = HeroDetail.From(reply);
@@ -203,8 +204,8 @@ public partial class CharacterEditorViewModel : ObservableObject
                 Show(detail);
             }
             Status = refused.Count > 0
-                ? $"Applied {applied}; the game refused {refused.Count}: {string.Join("; ", refused)}"
-                : $"Applied {applied} change(s). The player's game picks them up through Coop's own sync.";
+                ? Loc.F("Applied {0}; the game refused {1}: {2}", applied, refused.Count, string.Join("; ", refused))
+                : Loc.F("Applied {0} change(s). The player's game picks them up through Coop's own sync.", applied);
         }
         catch (Exception ex) { Status = ex.Message; }
         finally { IsBusy = false; }
@@ -216,19 +217,19 @@ public partial class CharacterEditorViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanResetPerks))]
     private async Task ResetPerks()
     {
-        if (!_serving()) { Status = "The server is not running."; return; }
+        if (!_serving()) { Status = Loc.T("The server is not running."); return; }
         if (!Confirm($"Take away all {PerkCount} perk(s) {OriginalName} has chosen?\n\nSkills, focus and attributes stay as they are. "
                 + "The perks can be chosen again in the game's character screen. Values changed here and not yet applied are discarded.")) return;
         IsBusy = true;
         try
         {
             var reply = await _admin.RequestAsync("resetperks", [Target], ReplyTimeout);
-            if (!reply.Ok) { Status = "No perk was taken away: " + reply.Error; return; }
+            if (!reply.Ok) { Status = Loc.T("No perk was taken away: ") + reply.Error; return; }
             var detail = HeroDetail.From(reply);
             Show(detail);
             Status = detail.NotApplied.Count > 0
-                ? "Perks were reset, but " + string.Join("; ", detail.NotApplied) + "."
-                : "All perks were taken away. They can be chosen again in the game's character screen.";
+                ? Loc.T("Perks were reset, but ") + string.Join("; ", detail.NotApplied) + "."
+                : Loc.T("All perks were taken away. They can be chosen again in the game's character screen.");
         }
         catch (Exception ex) { Status = ex.Message; }
         finally { IsBusy = false; }
@@ -260,10 +261,10 @@ public partial class CharacterEditorViewModel : ObservableObject
 
     internal void Show(HeroDetail hero)
     {
-        Title = $"Edit {hero.Name}";
-        Summary = $"{hero.Name}: level {hero.Level}, {(hero.Female ? "female" : "male")}, {hero.Age}, {hero.Culture}. {hero.Perks} perk(s)."
-            + (hero.SteamId.Length > 0 ? $" Steam id {hero.SteamId}." : "")
-            + (hero.Busy.Length > 0 ? $" Now {hero.Busy}: edits are refused until that is over." : "");
+        Title = Loc.F("Edit {0}", hero.Name);
+        Summary = Loc.F("{0}: level {1}, {2}, {3}, {4}. {5} perk(s).", hero.Name, hero.Level, (hero.Female ? "female" : "male"), hero.Age, hero.Culture, hero.Perks)
+            + (hero.SteamId.Length > 0 ? Loc.F(" Steam id {0}.", hero.SteamId) : "")
+            + (hero.Busy.Length > 0 ? Loc.F(" Now {0}: edits are refused until that is over.", hero.Busy) : "");
         OriginalName = hero.Name;
         Name = hero.Name;
         PerkCount = hero.Perks;

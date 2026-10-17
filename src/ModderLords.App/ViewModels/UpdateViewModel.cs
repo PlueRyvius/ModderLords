@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Updates;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App.ViewModels;
 
@@ -47,7 +48,7 @@ public partial class UpdateViewModel : ObservableObject
     public bool HasUpdate => Available is not null;
 
     public string BannerText => Available is { } r
-        ? $"ModderLords {UpdateChecker.Format(r.Version)} is available — you have {UpdateChecker.Format(Running)}."
+        ? Loc.F("ModderLords {0} is available — you have {1}.", UpdateChecker.Format(r.Version), UpdateChecker.Format(Running))
         : "";
 
     /// <summary>Called once the window has drawn. Silent whatever happens.</summary>
@@ -94,7 +95,7 @@ public partial class UpdateViewModel : ObservableObject
         if (Available is not { } r) return;
         var notes = string.IsNullOrWhiteSpace(r.Notes) ? "(No release notes.)" : r.Notes.Trim();
         if (notes.Length > 3000) notes = notes[..3000] + "…";
-        if (MessageBox.Show($"{notes}\n\nOpen the release page?", $"What's new in {UpdateChecker.Format(r.Version)}",
+        if (MessageBox.Show(Loc.F("{0}\n\nOpen the release page?", notes), Loc.F("What's new in {0}", UpdateChecker.Format(r.Version)),
                 MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
             OpenPage(r.PageUrl);
     }
@@ -118,7 +119,7 @@ public partial class UpdateViewModel : ObservableObject
         if (Available is not { } release || IsBusy) return;
         if (_main.Host is { } host && (host.IsRunning || host.LaunchCommand.IsRunning))
         {
-            MessageBox.Show("Stop the server before updating. Updating restarts ModderLords.", "Update", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(Loc.T("Stop the server before updating. Updating restarts ModderLords."), Loc.T("Update"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         if (IsDevBuild)
@@ -131,10 +132,10 @@ public partial class UpdateViewModel : ObservableObject
         var installer = UpdateInstaller.ForThisApp();
         if (!installer.CanWriteInstallDir())
         {
-            MessageBox.Show($"ModderLords cannot write to the folder it runs from:\n{installer.InstallDir}\n\n" +
+            MessageBox.Show(Loc.F("ModderLords cannot write to the folder it runs from:\n{0}\n\n" +
                             "The release page will open instead. Unzip the new version over this one, or move ModderLords to a folder " +
-                            "you own (for example C:\\Games\\ModderLords) so it can update itself next time.",
-                "Update", MessageBoxButton.OK, MessageBoxImage.Information);
+                            "you own (for example C:\\Games\\ModderLords) so it can update itself next time.", installer.InstallDir),
+                Loc.T("Update"), MessageBoxButton.OK, MessageBoxImage.Information);
             OpenPage(release.PageUrl);
             return;
         }
@@ -143,11 +144,11 @@ public partial class UpdateViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            ProgressText = "Downloading…";
+            ProgressText = Loc.T("Downloading…");
             using var http = UpdateInstaller.CreateDownloadClient();
             var zip = await installer.DownloadAndVerifyAsync(release, http,
-                new Progress<double>(p => ProgressText = $"Downloading… {p:P0}"));
-            ProgressText = "Installing…";
+                new Progress<double>(p => ProgressText = Loc.F("Downloading… {0:P0}", p)));
+            ProgressText = Loc.T("Installing…");
             var exe = await Task.Run(() => installer.Install(zip));
 
             var start = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = installer.InstallDir };
@@ -159,8 +160,8 @@ public partial class UpdateViewModel : ObservableObject
         catch (Exception ex)
         {
             ProgressText = "";
-            MessageBox.Show($"The update did not install: {ex.Message}\n\nModderLords is unchanged. You can download the new version " +
-                            "from the release page instead.", "Update", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(Loc.F("The update did not install: {0}\n\nModderLords is unchanged. You can download the new version " +
+                            "from the release page instead.", ex.Message), Loc.T("Update"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally { IsBusy = false; }
     }

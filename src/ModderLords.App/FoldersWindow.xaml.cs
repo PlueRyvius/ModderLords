@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using Microsoft.Win32;
 using ModderLords.Core.Launch;
 using ModderLords.Coop.Launch;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -84,7 +85,7 @@ public partial class FoldersWindow : Window
 
     private void AddRoot_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog { Title = "Add a folder that holds mods", Multiselect = true };
+        var dlg = new OpenFolderDialog { Title = Loc.T("Add a folder that holds mods"), Multiselect = true };
         if (dlg.ShowDialog() != true) return;
         foreach (var picked in dlg.FolderNames)
         {
@@ -103,7 +104,7 @@ public partial class FoldersWindow : Window
         // Allowed, but not silently: a wrong game folder means the next scan finds no mods at all.
         var game = ModderLords.App.ViewModels.FolderChecks.Game(GameRoot, _detectedGame);
         if (GameRoot is not null && !game.Ok &&
-            MessageBox.Show(game.Text + "\n\nUse this folder anyway?", "Folders", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            MessageBox.Show(game.Text + Loc.T("\n\nUse this folder anyway?"), Loc.T("Folders"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
         DialogResult = true;
         Close();

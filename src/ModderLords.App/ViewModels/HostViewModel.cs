@@ -17,6 +17,7 @@ using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
 using ModderLords.Coop.Saves;
 using ModderLords.Coop.Config;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App.ViewModels;
 
@@ -208,7 +209,7 @@ public partial class HostViewModel : ObservableObject
     {
         if (_creationStartedAt is not { } started) return;
         var elapsed = DateTimeOffset.Now - started;
-        CreationProgressText = $"World creation: {_creationPhase} · elapsed {elapsed:hh\\:mm\\:ss}";
+        CreationProgressText = Loc.F("World creation: {0} · elapsed {1:hh\\:mm\\:ss}", _creationPhase, elapsed);
     }
 
     private void ObserveCreationLine(string text)
@@ -240,7 +241,7 @@ public partial class HostViewModel : ObservableObject
         if (_creationStartedAt is { } started)
         {
             var elapsed = DateTimeOffset.Now - started;
-            CreationProgressText = $"World creation: {_creationPhase} · elapsed {elapsed:hh\\:mm\\:ss}";
+            CreationProgressText = Loc.F("World creation: {0} · elapsed {1:hh\\:mm\\:ss}", _creationPhase, elapsed);
         }
         _creationStartedAt = null;
     }
@@ -374,9 +375,9 @@ public partial class HostViewModel : ObservableObject
         if (_loadingVersions || row.ChosenVersion is not { } chosen) return;
         if (!ReferenceEquals(SelectedSave, row)) SelectedSave = row;
         Status = chosen.Version.IsCurrent
-            ? $"'{row.Name}': the next launch loads the save as it is now."
-            : $"'{row.Name}': the next launch loads the version from {chosen.Taken}. The save as it is now is backed up first, so you can come back to it."
-              + (chosen.Version.SessionPath is null ? " That version has no player file, so players will make new characters." : "");
+            ? Loc.F("'{0}': the next launch loads the save as it is now.", row.Name)
+            : Loc.F("'{0}': the next launch loads the version from {1}. The save as it is now is backed up first, so you can come back to it.", row.Name, chosen.Taken)
+              + (chosen.Version.SessionPath is null ? Loc.T(" That version has no player file, so players will make new characters.") : "");
     }
 
     /// <summary>
@@ -417,7 +418,7 @@ public partial class HostViewModel : ObservableObject
     [RelayCommand]
     private void ImportClientSave()
     {
-        if (SelectedClientSave is null) { Status = "Pick one of the game's saves to import."; return; }
+        if (SelectedClientSave is null) { Status = Loc.T("Pick one of the game's saves to import."); return; }
         try
         {
             var paths = LaunchSession.ResolvePaths(Profile);
@@ -425,8 +426,8 @@ public partial class HostViewModel : ObservableObject
             var exists = SavePreparer.Exists(paths, name);
             // Replacing a hosted world is not something to do on a single click without saying so.
             if (exists && MessageBox.Show(
-                    $"The server already has a save called '{name}'. Replace it?\n\nThe existing one is kept alongside it, not deleted.",
-                    "Import save", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                    Loc.F("The server already has a save called '{0}'. Replace it?\n\nThe existing one is kept alongside it, not deleted.", name),
+                    Loc.T("Import save"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
 
             var r = SavePreparer.ImportFrom(SelectedClientSave.Header.Path, paths, name, overwrite: exists);
@@ -435,12 +436,12 @@ public partial class HostViewModel : ObservableObject
             AddLine(LogCategory.Tool, "[ModderLords] " + SessionLine(r));
             RefreshSaves(paths);
             SelectedSave = Saves.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-            Status = $"Imported save '{name}'";
+            Status = Loc.F("Imported save '{0}'", name);
         }
         catch (Exception ex)
         {
             AddLine(LogCategory.Error, "[ModderLords] import failed: " + ex.Message);
-            Status = "Import failed: " + ex.Message;
+            Status = Loc.T("Import failed: ") + ex.Message;
         }
     }
 
@@ -466,8 +467,8 @@ public partial class HostViewModel : ObservableObject
             var catalog = Main.ScannedCatalog?.Catalog ?? LaunchSession.Scan(Profile, LaunchSession.ResolvePaths(Profile), out _);
             var drift = LaunchSession.DetectDrift(Profile, catalog);
             DriftText = drift.Count == 0 ? "" :
-                "Mod versions changed since the last launch: " + string.Join(", ", drift.Select(d => $"{d.ModuleId} {d.LastVersion} → {d.CurrentVersion}"))
-                + ". Players must update to match" + (IsRunning ? "; restart the server to pick them up." : ".");
+                Loc.T("Mod versions changed since the last launch: ") + string.Join(", ", drift.Select(d => $"{d.ModuleId} {d.LastVersion} → {d.CurrentVersion}"))
+                + Loc.T(". Players must update to match") + (IsRunning ? Loc.T("; restart the server to pick them up.") : ".");
         }
         catch (Exception ex)
         {
@@ -483,11 +484,11 @@ public partial class HostViewModel : ObservableObject
         {
             Main.CollectProfileFromRows();
             var r = LaunchSession.Resync(Profile);
-            Status = $"Re-synced {r.Applied.Count} junction(s), removed {r.Removed.Count}" + (r.Warnings.Count > 0 ? $", {r.Warnings.Count} warning(s)" : "");
+            Status = Loc.F("Re-synced {0} junction(s), removed {1}", r.Applied.Count, r.Removed.Count) + (r.Warnings.Count > 0 ? Loc.F(", {0} warning(s)", r.Warnings.Count) : "");
             foreach (var w in r.Warnings) Messages.Add("WARNING " + w);
             if (IsRunning) Status += " (running server keeps the old files until restart)";
         }
-        catch (Exception ex) { Status = "Re-sync failed: " + ex.Message; }
+        catch (Exception ex) { Status = Loc.T("Re-sync failed: ") + ex.Message; }
     }
 
     [RelayCommand]
@@ -501,7 +502,7 @@ public partial class HostViewModel : ObservableObject
                 Gameplay.Add(new GameplayRow { Path = s.Path, Kind = s.Kind, Original = s.RawValue, Value = s.Display,
                     Choices = Coop.Config.ModConfig.Choices.TryGetValue(s.Path, out var c) ? c : (s.Kind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False ? ["true", "false"] : null) });
         }
-        catch (Exception ex) { Status = "mod-config.json: " + ex.Message; }
+        catch (Exception ex) { Status = Loc.T("mod-config.json: ") + ex.Message; }
     }
 
     [RelayCommand]
@@ -517,10 +518,10 @@ public partial class HostViewModel : ObservableObject
                 if (raw != row.Original) changes.Add((row.Path, raw));
             }
             var n = Coop.Config.ModConfig.Apply(paths, changes);
-            Status = n == 0 ? "Gameplay settings unchanged" : $"Saved {n} gameplay setting(s) to mod-config.json" + (IsRunning ? " (applies on next server start)" : "");
+            Status = n == 0 ? Loc.T("Gameplay settings unchanged") : Loc.F("Saved {0} gameplay setting(s) to mod-config.json", n) + (IsRunning ? Loc.T(" (applies on next server start)") : "");
             LoadGameplay();
         }
-        catch (Exception ex) { Status = "mod-config.json: " + ex.Message; }
+        catch (Exception ex) { Status = Loc.T("mod-config.json: ") + ex.Message; }
     }
 
     [RelayCommand]
@@ -530,8 +531,8 @@ public partial class HostViewModel : ObservableObject
         if (ClientTarget is not { } target) return;
         var checks = ClientManifest.CompareWithLauncherData(ClientManifest.From(target.Modules), ClientManifest.DefaultLauncherDataPath(),
             Main.InstalledClientVersions());
-        ClientCheckText = checks.Count == 0 ? "No community modules to compare." :
-            string.Join("\n", checks.Select(c => $"{(c.Verdict == "ok" ? "  ok " : "  !! ")}{c.Id,-30} server {c.ServerVersion ?? "-",-12} client {c.ClientVersion ?? "-",-12} {c.Verdict}"));
+        ClientCheckText = checks.Count == 0 ? Loc.T("No community modules to compare.") :
+            string.Join("\n", checks.Select(c => Loc.F("{0}{1,-30} server {2,-12} client {3,-12} {4}", (c.Verdict == "ok" ? "  ok " : "  !! "), c.Id, c.ServerVersion ?? "-", c.ClientVersion ?? "-", c.Verdict)));
     }
 
     // ---- launch ------------------------------------------------------------------------------------
@@ -545,7 +546,7 @@ public partial class HostViewModel : ObservableObject
         var launchProfile = ProfileStore.Snapshot(Profile);
         var experimentalCompat = Main.ExperimentalCompat;
         Console.Clear();
-        Status = "Checking…";
+        Status = Loc.T("Checking…");
         var autoCreateWorld = false;
         try
         {
@@ -582,7 +583,7 @@ public partial class HostViewModel : ObservableObject
             foreach (var p in pre) AddLine(p.Blocking ? LogCategory.Error : LogCategory.Warning, "[ModderLords] " + p.Message);
             if (pre.Any(p => p.Blocking))
             {
-                Status = "Not launched: " + pre.First(p => p.Blocking).Message;
+                Status = Loc.T("Not launched: ") + pre.First(p => p.Blocking).Message;
                 IsRunning = false;
                 return;
             }
@@ -590,18 +591,18 @@ public partial class HostViewModel : ObservableObject
             var chosenVersion = Saves.FirstOrDefault(r => r.Name.Equals(launchProfile.SaveName, StringComparison.OrdinalIgnoreCase))?.ChosenVersion?.Version;
             if (chosenVersion is { IsCurrent: false })
             {
-                Status = "Loading the chosen version of the save…";
+                Status = Loc.T("Loading the chosen version of the save…");
                 try { await Task.Run(() => ApplyChosenVersion(LaunchSession.ResolvePaths(launchProfile), launchProfile.SaveName, chosenVersion)); }
                 catch (Exception ex)
                 {
                     AddLine(LogCategory.Error, $"[ModderLords] could not load the chosen version of '{launchProfile.SaveName}': {ex.Message}");
-                    Status = "Not launched: the chosen version of the save could not be loaded (" + ex.Message + ")";
+                    Status = Loc.T("Not launched: the chosen version of the save could not be loaded (") + ex.Message + ")";
                     IsRunning = false;
                     return;
                 }
             }
 
-            Status = "Preparing…";
+            Status = Loc.T("Preparing…");
             var prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, allowWorldCreation: autoCreateWorld, experimentalCompat: experimentalCompat));
             _prepared = prepared;
             // Preparing can take long enough for the user to save more edits. Merge observations into
@@ -657,7 +658,7 @@ public partial class HostViewModel : ObservableObject
 
             if (autoCreateWorld)
             {
-                Status = $"Generating world '{launchProfile.SaveName}'…";
+                Status = Loc.F("Generating world '{0}'…", launchProfile.SaveName);
                 AddLine(LogCategory.Milestone, $"[ModderLords] generating world '{launchProfile.SaveName}' with {profileModuleIds.Count} active mod(s) before starting the server");
                 // The creation phase must start with no configured save. Otherwise a stale server-config.json can
                 // make the official host begin loading an older campaign before the creation hook gets control.
@@ -763,7 +764,7 @@ public partial class HostViewModel : ObservableObject
                 _resources.SampleReady += r => Application.Current.Dispatcher.BeginInvoke(() => Performance.Apply(r));
                 _resources.Start();
             }
-            Status = $"Engine pid {_engine.ProcessId}, loading…";
+            Status = Loc.F("Engine pid {0}, loading…", _engine.ProcessId);
             // A load that repeats one state forever produces no error and no exit. Say so instead of looking healthy.
             // The quiet period is per profile: a heavy mod can load for hours without anything being wrong.
             var stall = new LoadStallDetector(_engine.StartedAt,
@@ -802,7 +803,7 @@ public partial class HostViewModel : ObservableObject
                     Application.Current.Dispatcher.BeginInvoke(() =>
                     {
                         AddLine(LogCategory.Error, "[ModderLords] WRONG MAP: " + mismatch);
-                        Status = "Wrong map — stop the server";
+                        Status = Loc.T("Wrong map — stop the server");
                     });
                 if (c.Category == LogCategory.Milestone && line.Text.Contains("SERVING"))
                     Application.Current.Dispatcher.BeginInvoke(() =>
@@ -839,7 +840,7 @@ public partial class HostViewModel : ObservableObject
                 AddLine(LogCategory.Warning, $"[ModderLords] {launchWarnings.Count} warning(s) were raised before this launch; the cause is usually among them:");
                 foreach (var w in launchWarnings) AddLine(LogCategory.Warning, "[ModderLords]   " + w);
             }
-            Status = $"Engine exited with {code}: {ExitCodeExplainer.Explain(code)}";
+            Status = Loc.F("Engine exited with {0}: {1}", code, ExitCodeExplainer.Explain(code));
             AddLine(LogCategory.Milestone, "[ModderLords] " + Status);
             _launchLog?.Dispose(); _launchLog = null;
             _engine.Dispose(); _engine = null;
@@ -878,7 +879,7 @@ public partial class HostViewModel : ObservableObject
     private void MatchServer()
     {
         Main.RefreshPreview();
-        if (ClientTarget is not { } target) { Status = "Nothing to compare yet: rescan the mods first."; return; }
+        if (ClientTarget is not { } target) { Status = Loc.T("Nothing to compare yet: rescan the mods first."); return; }
         EnsureClientModule(ServerCarriesSyncModule(target));
         Main.RefreshPreview();
         var path = ClientManifest.DefaultLauncherDataPath();
@@ -890,8 +891,8 @@ public partial class HostViewModel : ObservableObject
         {
             var result = LauncherDataSync.Apply(plan, path, LauncherDataSync.DefaultBackupRoot());
             Status = result is null
-                ? "Your mod list already matches the server."
-                : $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved, {result.DuplicatesRemoved} duplicates removed).";
+                ? Loc.T("Your mod list already matches the server.")
+                : Loc.F("Mod list synced ({0} on, {1} added, {2} off, {3} moved, {4} duplicates removed).", result.Enabled, result.Added, result.Disabled, result.Moved, result.DuplicatesRemoved);
             if (result is not null) AddLine(LogCategory.Tool, $"[ModderLords] mod list synced (backup: {result.BackupPath})");
         }
         catch (Exception ex) { Status = ex.Message; }
@@ -960,7 +961,7 @@ public partial class HostViewModel : ObservableObject
             var win = new LauncherSyncWindow(plan, path, backupRoot) { Owner = Application.Current.MainWindow };
             if (win.ShowDialog() != true)
             {
-                Status = "Launch client cancelled.";
+                Status = Loc.T("Launch client cancelled.");
                 return false;
             }
             if (win.DontAskAgain)
@@ -976,7 +977,7 @@ public partial class HostViewModel : ObservableObject
         if (result is not null)
         {
             AddLine(LogCategory.Tool, $"[ModderLords] mod list synced: {result.Enabled} enabled, {result.Added} added, {result.Disabled} disabled, {result.Moved} reordered, {result.DuplicatesRemoved} duplicates removed (backup: {result.BackupPath})");
-            Status = $"Mod list synced ({result.Enabled} on, {result.Added} added, {result.Disabled} off, {result.Moved} moved, {result.DuplicatesRemoved} duplicates removed).";
+            Status = Loc.F("Mod list synced ({0} on, {1} added, {2} off, {3} moved, {4} duplicates removed).", result.Enabled, result.Added, result.Disabled, result.Moved, result.DuplicatesRemoved);
         }
         return true;
     }
@@ -985,7 +986,7 @@ public partial class HostViewModel : ObservableObject
     [RelayCommand]
     private void BrowseCompatExportFolder()
     {
-        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Also export ModderLords.Compat to this folder" };
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = Loc.T("Also export ModderLords.Compat to this folder") };
         if (Directory.Exists(Profile.CompatExportFolder)) dialog.InitialDirectory = Profile.CompatExportFolder;
         if (dialog.ShowDialog() != true) return;
         SetCompatExportFolder(dialog.FolderName);
@@ -1000,7 +1001,7 @@ public partial class HostViewModel : ObservableObject
         OnPropertyChanged(nameof(Profile));
         ProfileStore.Save(Profile);
         if (ClientModuleInstaller.Export(folder) is { } exported) AddLine(LogCategory.Tool, "[ModderLords] " + exported);
-        Status = folder.Length == 0 ? "ModderLords.Compat export turned off." : "ModderLords.Compat is exported to " + folder;
+        Status = folder.Length == 0 ? Loc.T("ModderLords.Compat export turned off.") : Loc.T("ModderLords.Compat is exported to ") + folder;
     }
 
     // ---- scheduled restart ---------------------------------------------------------------------------
@@ -1058,7 +1059,7 @@ public partial class HostViewModel : ObservableObject
     {
         var process = _creationEngine ?? _engine;
         if (process is null) return;
-        Status = "Stopping…";
+        Status = Loc.T("Stopping…");
         await process.StopAsync(TimeSpan.FromSeconds(30));
     }
 
@@ -1083,18 +1084,18 @@ public partial class HostViewModel : ObservableObject
             _replyWindowEnds = DateTime.Now + ReplyWindow;
             AddLine(LogCategory.Command, "> " + sent);
             CommandText = "";
-            CommandStatus = $"Sent \u201c{sent}\u201d \u2014 waiting for the server\u2026";
+            CommandStatus = Loc.F("Sent \u201c{0}\u201d \u2014 waiting for the server\u2026", sent);
             // Report what came back, so a command that the engine silently ignores is visibly different from one
             // that answered. The engine does not acknowledge commands, so silence is a real and common outcome.
             await Task.Delay(ReplyWindow);
             CommandStatus = _repliesSeen > 0
-                ? $"\u201c{_lastCommand}\u201d \u2014 {_repliesSeen} line(s) back from the server"
-                : $"\u201c{_lastCommand}\u201d \u2014 sent, but the server said nothing (many commands answer in the game log, not here)";
+                ? Loc.F("\u201c{0}\u201d \u2014 {1} line(s) back from the server", _lastCommand, _repliesSeen)
+                : Loc.F("\u201c{0}\u201d \u2014 sent, but the server said nothing (many commands answer in the game log, not here)", _lastCommand);
         }
         catch (Exception ex)
         {
             AddLine(LogCategory.Error, "[ModderLords] " + ex.Message);
-            CommandStatus = $"\u201c{sent}\u201d could not be sent: {ex.Message}";
+            CommandStatus = Loc.F("\u201c{0}\u201d could not be sent: {1}", sent, ex.Message);
         }
     }
 
@@ -1260,9 +1261,9 @@ public partial class HostViewModel : ObservableObject
     private void CopyShown()
     {
         var text = string.Join(Environment.NewLine, ConsoleView.Cast<ConsoleLine>().Select(Format));
-        if (text.Length == 0) { CommandStatus = "Nothing to copy: the console is empty or fully filtered out."; return; }
+        if (text.Length == 0) { CommandStatus = Loc.T("Nothing to copy: the console is empty or fully filtered out."); return; }
         if (TrySetClipboard(text))
-            CommandStatus = $"Copied {ConsoleView.Cast<ConsoleLine>().Count()} shown line(s) to the clipboard.";
+            CommandStatus = Loc.F("Copied {0} shown line(s) to the clipboard.", ConsoleView.Cast<ConsoleLine>().Count());
     }
 
     /// <summary>The same shape the launch log uses on disk, so a pasted excerpt and the file read alike.</summary>
@@ -1277,7 +1278,7 @@ public partial class HostViewModel : ObservableObject
         try { System.Windows.Clipboard.SetText(text); return true; }
         catch (Exception ex)
         {
-            CommandStatus = "Could not write to the clipboard (another app may be holding it): " + ex.Message;
+            CommandStatus = Loc.T("Could not write to the clipboard (another app may be holding it): ") + ex.Message;
             return false;
         }
     }

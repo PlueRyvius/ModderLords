@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using ModderLords.Coop.Admin;
 using ModderLords.Coop.Launch;
 using ModderLords.Core.Smoke;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App.ViewModels;
 
@@ -18,7 +19,7 @@ public sealed record PlayerRow(AdminPlayer Player)
     public string Clan => Player.Clan;
     public int Level => Player.Level;
     public int Gold => Player.Gold;
-    public string State => !Player.Online ? "offline" : Player.Busy.Length > 0 ? "online, " + Player.Busy : "online";
+    public string State => !Player.Online ? "offline" : Player.Busy.Length > 0 ? Loc.T("online, ") + Player.Busy : "online";
     public string SteamId => Player.SteamId;
     public string Ip => Player.Ip;
 }
@@ -106,7 +107,7 @@ public partial class CharactersViewModel : ObservableObject
 
     /// <summary>Asks before a town or castle changes hands. Replaced in tests, which have no message box.</summary>
     public Func<string, bool> ConfirmOwner { get; set; } = message =>
-        MessageBox.Show(message, "Change owner", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
+        MessageBox.Show(message, Loc.T("Change owner"), MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(KickCommand))]
@@ -151,17 +152,17 @@ public partial class CharactersViewModel : ObservableObject
         try
         {
             var reply = await _admin.RequestAsync("players", [], ReplyTimeout);
-            if (!reply.Ok) { Headline = "The server could not list its players: " + reply.Error; return; }
+            if (!reply.Ok) { Headline = Loc.T("The server could not list its players: ") + reply.Error; return; }
             ShowPlayers(AdminClient.Players(reply));
 
             reply = await _admin.RequestAsync("companions", [], ReplyTimeout);
             if (reply.Ok) ShowCompanions(AdminCompanion.From(reply));
-            else CompanionStatus = "The server could not list companions: " + reply.Error;
+            else CompanionStatus = Loc.T("The server could not list companions: ") + reply.Error;
 
             if (!holdings) return;
             reply = await _admin.RequestAsync("holdings", [], ReplyTimeout);
             if (reply.Ok) ShowHoldings(HoldingsList.From(reply));
-            else HoldingStatus = "The server could not list the holdings: " + reply.Error;
+            else HoldingStatus = Loc.T("The server could not list the holdings: ") + reply.Error;
         }
         catch (Exception ex) { Headline = ex.Message; }
         finally { IsBusy = false; }
@@ -194,10 +195,10 @@ public partial class CharactersViewModel : ObservableObject
         try
         {
             var reply = await _admin.RequestAsync("setowner", [row.Id, clan.Id], ReplyTimeout);
-            if (!reply.Ok) { HoldingStatus = $"{row.Name} was not changed: {reply.Error}"; return; }
+            if (!reply.Ok) { HoldingStatus = Loc.F("{0} was not changed: {1}", row.Name, reply.Error); return; }
             var holdings = HoldingsList.From(reply);
             ShowHoldings(holdings);
-            HoldingStatus = holdings.Changed.Length > 0 ? "Changed " + holdings.Changed + "." : $"{row.Name} already belonged to {clan.Clan.Name}.";
+            HoldingStatus = holdings.Changed.Length > 0 ? Loc.T("Changed ") + holdings.Changed + "." : Loc.F("{0} already belonged to {1}.", row.Name, clan.Clan.Name);
         }
         catch (Exception ex) { HoldingStatus = ex.Message; }
         finally { IsBusy = false; }
@@ -210,7 +211,7 @@ public partial class CharactersViewModel : ObservableObject
         foreach (var c in companions.OrderBy(c => c.Owner, StringComparer.CurrentCultureIgnoreCase).ThenBy(c => c.Kind).ThenBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase))
             Companions.Add(new CompanionRow(c));
         SelectedCompanion = Companions.FirstOrDefault(r => r.HeroId == selected);
-        CompanionStatus = $"{companions.Count(c => c.Kind == "companion")} companion(s) and {companions.Count(c => c.Kind != "companion")} family member(s) in the players' clans. Updated {DateTime.Now:HH:mm:ss}.";
+        CompanionStatus = Loc.F("{0} companion(s) and {1} family member(s) in the players' clans. Updated {2:HH:mm:ss}.", companions.Count(c => c.Kind == "companion"), companions.Count(c => c.Kind != "companion"), DateTime.Now);
     }
 
     internal void ShowHoldings(HoldingsList holdings)
@@ -225,7 +226,7 @@ public partial class CharactersViewModel : ObservableObject
             Clans.Add(new ClanChoice(c));
         SelectedHolding = Holdings.FirstOrDefault(r => r.Id == selected);
         NewOwner = Clans.FirstOrDefault(c => c.Id == owner);
-        HoldingStatus = $"{holdings.Settlements.Count(s => s.Type == "town")} town(s) and {holdings.Settlements.Count(s => s.Type != "town")} castle(s). Updated {DateTime.Now:HH:mm:ss}.";
+        HoldingStatus = Loc.F("{0} town(s) and {1} castle(s). Updated {2:HH:mm:ss}.", holdings.Settlements.Count(s => s.Type == "town"), holdings.Settlements.Count(s => s.Type != "town"), DateTime.Now);
     }
 
     private bool CanKick() => Serving && !IsBusy && SelectedPlayer?.Player.Online == true;
@@ -239,8 +240,8 @@ public partial class CharactersViewModel : ObservableObject
         {
             var reply = await _admin.RequestAsync("kick", [row.SteamId], ReplyTimeout);
             Headline = reply.Ok
-                ? $"Kicked {row.Name}. Their character stays in the world, and they can rejoin unless banned."
-                : $"Could not kick {row.Name}: {reply.Error}";
+                ? Loc.F("Kicked {0}. Their character stays in the world, and they can rejoin unless banned.", row.Name)
+                : Loc.F("Could not kick {0}: {1}", row.Name, reply.Error);
         }
         catch (Exception ex) { Headline = ex.Message; }
         finally { IsBusy = false; }
@@ -256,7 +257,7 @@ public partial class CharactersViewModel : ObservableObject
         if (SelectedPlayer is not { } row || Transfer() is not { } transfer) return;
         var dialog = new SaveFileDialog
         {
-            Title = "Export character",
+            Title = Loc.T("Export character"),
             Filter = $"ModderLords character (*{CharacterTransferClient.FileExtension})|*{CharacterTransferClient.FileExtension}",
             FileName = SafeFileName(row.Name) + CharacterTransferClient.FileExtension,
         };
@@ -266,9 +267,9 @@ public partial class CharactersViewModel : ObservableObject
         {
             var text = await transfer.ExportAsync(row.SteamId);
             await File.WriteAllTextAsync(dialog.FileName, text);
-            Headline = $"Exported {row.Name} to {dialog.FileName}.";
+            Headline = Loc.F("Exported {0} to {1}.", row.Name, dialog.FileName);
         }
-        catch (Exception ex) { Headline = $"Could not export {row.Name}: {ex.Message}"; }
+        catch (Exception ex) { Headline = Loc.F("Could not export {0}: {1}", row.Name, ex.Message); }
         finally { IsBusy = false; }
     }
 
@@ -282,7 +283,7 @@ public partial class CharactersViewModel : ObservableObject
         if (SelectedPlayer is not { } row || Transfer() is not { } transfer) return;
         var dialog = new OpenFileDialog
         {
-            Title = $"Import a character onto {row.Name}",
+            Title = Loc.F("Import a character onto {0}", row.Name),
             Filter = $"ModderLords character (*{CharacterTransferClient.FileExtension})|*{CharacterTransferClient.FileExtension}|All files (*.*)|*.*",
         };
         if (dialog.ShowDialog() != true) return;
@@ -293,13 +294,13 @@ public partial class CharactersViewModel : ObservableObject
             token = transfer.Stage(await File.ReadAllTextAsync(dialog.FileName));
             var check = await transfer.CheckAsync(row.SteamId, token);
             var confirm = new ImportCharacterWindow(check, row.Name) { Owner = Application.Current.MainWindow };
-            if (confirm.ShowDialog() != true) { transfer.Discard(token); Headline = "Import cancelled; nothing was changed."; return; }
+            if (confirm.ShowDialog() != true) { transfer.Discard(token); Headline = Loc.T("Import cancelled; nothing was changed."); return; }
             var done = await transfer.ApplyAsync(row.SteamId, token, confirm.SelectedParts);
             token = null; // the server deletes it once applied
-            Headline = $"Imported {done.SourceName} onto {row.Name}: {string.Join(", ", done.Applied)}."
-                + (done.Notes.Count > 0 ? $" {done.Notes.Count} thing(s) did not come across as they were; see the check." : "");
+            Headline = Loc.F("Imported {0} onto {1}: {2}.", done.SourceName, row.Name, string.Join(", ", done.Applied))
+                + (done.Notes.Count > 0 ? Loc.F(" {0} thing(s) did not come across as they were; see the check.", done.Notes.Count) : "");
         }
-        catch (Exception ex) { Headline = $"Could not import onto {row.Name}: {ex.Message}"; }
+        catch (Exception ex) { Headline = Loc.F("Could not import onto {0}: {1}", row.Name, ex.Message); }
         finally
         {
             if (token is not null) transfer.Discard(token);
@@ -347,20 +348,20 @@ public partial class CharactersViewModel : ObservableObject
         }.Where(s => s is not null));
         if (by.Length == 0)
         {
-            Headline = $"{row.Name} has no Steam id of their own and no outside address (they may be playing on this PC), so there is nothing to ban them by.";
+            Headline = Loc.F("{0} has no Steam id of their own and no outside address (they may be playing on this PC), so there is nothing to ban them by.", row.Name);
             return;
         }
-        if (MessageBox.Show($"Ban {row.Name} by {by}?\n\nThey are disconnected now if online, and refused whenever they try to join."
-                + (BanStore.IsRemoteIp(row.Ip) ? " The address ban also refuses anyone else who joins from the same network." : ""),
-                "Ban player", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+        if (MessageBox.Show(Loc.F("Ban {0} by {1}?\n\nThey are disconnected now if online, and refused whenever they try to join.", row.Name, by)
+                + (BanStore.IsRemoteIp(row.Ip) ? Loc.T(" The address ban also refuses anyone else who joins from the same network.") : ""),
+                Loc.T("Ban player"), MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
         try
         {
             store.Add(row.SteamId, row.Ip, row.Name, BanReason);
             BanReason = "";
             LoadBans();
-            Headline = $"Banned {row.Name} by {by}.";
+            Headline = Loc.F("Banned {0} by {1}.", row.Name, by);
         }
-        catch (Exception ex) { Headline = "Could not save the ban: " + ex.Message; return; }
+        catch (Exception ex) { Headline = Loc.T("Could not save the ban: ") + ex.Message; return; }
         await ApplyBansNow();
     }
 
@@ -374,9 +375,9 @@ public partial class CharactersViewModel : ObservableObject
         {
             store.Remove(ban);
             LoadBans();
-            Headline = $"Unbanned {(ban.Name.Length > 0 ? ban.Name : ban.SteamId.Length > 0 ? ban.SteamId : ban.Ip)}.";
+            Headline = Loc.F("Unbanned {0}.", (ban.Name.Length > 0 ? ban.Name : ban.SteamId.Length > 0 ? ban.SteamId : ban.Ip));
         }
-        catch (Exception ex) { Headline = "Could not save the ban list: " + ex.Message; return; }
+        catch (Exception ex) { Headline = Loc.T("Could not save the ban list: ") + ex.Message; return; }
         await ApplyBansNow();
     }
 
@@ -403,7 +404,7 @@ public partial class CharactersViewModel : ObservableObject
             if (Store() is { } store)
                 foreach (var b in store.Load().OrderByDescending(b => b.At)) Bans.Add(b);
         }
-        catch (Exception ex) { Headline = "The ban list could not be read: " + ex.Message; }
+        catch (Exception ex) { Headline = Loc.T("The ban list could not be read: ") + ex.Message; }
     }
 
     /// <summary>The ban file for the server this profile hosts, or null (and says why) when there is no server folder.</summary>
@@ -421,7 +422,7 @@ public partial class CharactersViewModel : ObservableObject
             Players.Add(new PlayerRow(p));
         SelectedPlayer = Players.FirstOrDefault(r => r.SteamId == selected);
         var online = players.Count(p => p.Online);
-        ListStatus = $"{players.Count} player(s) registered, {online} online. Updated {DateTime.Now:HH:mm:ss}.";
+        ListStatus = Loc.F("{0} player(s) registered, {1} online. Updated {2:HH:mm:ss}.", players.Count, online, DateTime.Now);
     }
 
     private Task RefreshIfServing() => Serving ? RefreshLists(holdings: false) : Task.CompletedTask;
@@ -460,7 +461,7 @@ public partial class CharactersViewModel : ObservableObject
         var last = Players.Select(r => r.Player with { Online = false, PeerId = -1, Ip = "", Busy = "" }).ToList();
         Players.Clear();
         foreach (var p in last) Players.Add(new PlayerRow(p));
-        ListStatus = "The server stopped. The list is as it was last seen; bans can still be managed.";
-        CompanionStatus = HoldingStatus = "The server stopped. The list is as it was last seen.";
+        ListStatus = Loc.T("The server stopped. The list is as it was last seen; bans can still be managed.");
+        CompanionStatus = HoldingStatus = Loc.T("The server stopped. The list is as it was last seen.");
     }
 }

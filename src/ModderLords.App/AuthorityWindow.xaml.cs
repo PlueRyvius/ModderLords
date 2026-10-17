@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using ModderLords.Core.Compat.Authority;
 using ModderLords.Core.Launch;
 using ModderLords.Core.Modules;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -71,7 +72,7 @@ public partial class AuthorityWindow : Window
     {
         InitializeComponent();
         _module = module;
-        Title = $"Authority: {module.Id}";
+        Title = Loc.F("Authority: {0}", module.Id);
         Header.Text = $"{module.Id} {module.Version}: analysing…";
         SubHeader.Text = "Reading the mod's code and Coop's; large mods take a few seconds.";
         Loaded += async (_, _) => await AnalyseAsync();

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using ModderLords.Core.Export;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -33,7 +34,7 @@ public partial class LauncherSyncWindow : Window
         Section("Dup", "Remove duplicate entries — the Bannerlord launcher lists these twice", plan.Changes.Where(c => c.Action == LauncherDataSync.SyncAction.RemoveDuplicate));
         Section("Blocked", "Cannot be fixed from here — you will still be able to launch, but the join may be refused", plan.Blockers);
         if (!plan.HasChanges)
-            Sections.Children.Add(new TextBlock { Text = "Your mod list already matches the server; nothing to change.", Margin = new Thickness(0, 8, 0, 4), TextWrapping = TextWrapping.Wrap });
+            Sections.Children.Add(new TextBlock { Text = Loc.T("Your mod list already matches the server; nothing to change."), Margin = new Thickness(0, 8, 0, 4), TextWrapping = TextWrapping.Wrap });
     }
 
     private void Section(string _, string heading, IEnumerable<LauncherDataSync.PlannedChange> changes)

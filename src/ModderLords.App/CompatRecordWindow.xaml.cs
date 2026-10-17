@@ -5,6 +5,7 @@ using ModderLords.Coop.Compat;
 using ModderLords.Core.Overlay;
 using ModderLords.Core.Saves;
 using ModderLords.Coop.Saves;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -108,7 +109,7 @@ public partial class CompatRecordWindow : Window
 
     private void Remove_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show(this, $"Remove your local record for {_row.Id}?", "Compatibility record", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(this, Loc.F("Remove your local record for {0}?", _row.Id), Loc.T("Compatibility record"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         RemoveLocal = true;
         DialogResult = true;
         Close();

@@ -4,6 +4,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModderLords.Coop.Live;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App.ViewModels;
 
@@ -29,8 +30,8 @@ public partial class LivePropertyVm : ObservableObject
     public bool IsText => Editable && !IsBool && !IsEnum;
     public bool IsReadOnly => !Editable;
     public string RangeText => Min is not null && Max is not null ? $"{Min:0.###} to {Max:0.###}" : "";
-    public string KindText => Editable ? Kind : Kind + " (not editable here)";
-    public string ToolTip => (string.IsNullOrWhiteSpace(Hint) ? Id : Hint + "\n(" + Id + ")") + (RequireRestart ? "\nThe mod says this one needs a restart to take effect." : "");
+    public string KindText => Editable ? Kind : Kind + Loc.T(" (not editable here)");
+    public string ToolTip => (string.IsNullOrWhiteSpace(Hint) ? Id : Hint + "\n(" + Id + ")") + (RequireRestart ? Loc.T("\nThe mod says this one needs a restart to take effect.") : "");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDirty), nameof(BoolValue), nameof(Error), nameof(HasError))]
@@ -54,7 +55,7 @@ public partial class LivePropertyVm : ObservableObject
     public string Baseline => OfflineMode ? OverrideValue ?? Original : Original;
     public bool IsDirty => Editable && !string.Equals(Value, Baseline, StringComparison.Ordinal);
     public bool HasOverride => OverrideValue is not null;
-    public string OverrideTip => OverrideValue is null ? "" : $"Host override {OverrideValue}, re-applied at every launch. Server/cached value: {Original}";
+    public string OverrideTip => OverrideValue is null ? "" : Loc.F("Host override {0}, re-applied at every launch. Server/cached value: {1}", OverrideValue, Original);
 
     public bool BoolValue
     {
@@ -232,17 +233,17 @@ public partial class LiveSettingsViewModel : ObservableObject
         };
         _overrides.Set(OwnSettingsId, values);
         try { SettingsOverridesStore.Save(_profileName, _overrides); }
-        catch (Exception ex) { HostOptionsReport = "Not saved: " + ex.Message; return; }
-        if (_client is null) { HostOptionsReport = $"Saved for '{_profileName}'; applied when the server next starts."; return; }
-        HostOptionsReport = "Sending to the server…";
+        catch (Exception ex) { HostOptionsReport = Loc.T("Not saved: ") + ex.Message; return; }
+        if (_client is null) { HostOptionsReport = Loc.F("Saved for '{0}'; applied when the server next starts.", _profileName); return; }
+        HostOptionsReport = Loc.T("Sending to the server…");
         try
         {
             var ack = await _client.ApplyAsync(OwnSettingsId, values, TimeSpan.FromSeconds(15));
-            HostOptionsReport = ack is null ? "Saved, but the server did not answer within 15 s; it applies at the next start."
-                : ack.Ok ? "Applied on the server now, and saved for every launch." : "Saved; the server refused it live: " + ack.Report;
+            HostOptionsReport = ack is null ? Loc.T("Saved, but the server did not answer within 15 s; it applies at the next start.")
+                : ack.Ok ? Loc.T("Applied on the server now, and saved for every launch.") : Loc.T("Saved; the server refused it live: ") + ack.Report;
             Log?.Invoke($"host options: {HostOptionsReport}");
         }
-        catch (Exception ex) { HostOptionsReport = "Saved; live apply failed: " + ex.Message; }
+        catch (Exception ex) { HostOptionsReport = Loc.T("Saved; live apply failed: ") + ex.Message; }
     }
 
     /// <summary>Console sink for tool lines (set by the main view model).</summary>
@@ -268,18 +269,18 @@ public partial class LiveSettingsViewModel : ObservableObject
     private void UpdateOfflineState()
     {
         IsLive = false;
-        ModeText = "Offline";
+        ModeText = Loc.T("Offline");
         var has = Objects.Count > 0;
         IsEnabled = has || !_overrides.IsEmpty;
         if (has)
         {
-            StatusText = $"Server not running: editing host overrides for '{_profileName}'; they apply at the next launch. Values shown are from {(_last?.WrittenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "the last run")}."
-                         + (_overrides.IsEmpty ? "" : $" {_overrides.Count} override(s) stored.");
-            GateHint = "Editing overrides offline.";
+            StatusText = Loc.F("Server not running: editing host overrides for '{0}'; they apply at the next launch. Values shown are from {1}.", _profileName, (_last?.WrittenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "the last run"))
+                         + (_overrides.IsEmpty ? "" : Loc.F(" {0} override(s) stored.", _overrides.Count));
+            GateHint = Loc.T("Editing overrides offline.");
         }
         else
         {
-            StatusText = "Server not running. Launch once with Settings sync on and the settings it reports become editable here, live and offline.";
+            StatusText = Loc.T("Server not running. Launch once with Settings sync on and the settings it reports become editable here, live and offline.");
             GateHint = StatusText;
         }
     }
@@ -294,18 +295,18 @@ public partial class LiveSettingsViewModel : ObservableObject
         if (!settingsSync || liveDir is null)
         {
             IsLive = false;
-            ModeText = "Offline";
+            ModeText = Loc.T("Offline");
             IsEnabled = Objects.Count > 0 || !_overrides.IsEmpty;
-            StatusText = "Settings sync is off in this profile; turn it on in the Server tab and restart the server to edit mod settings live.";
+            StatusText = Loc.T("Settings sync is off in this profile; turn it on in the Server tab and restart the server to edit mod settings live.");
             GateHint = StatusText;
             return;
         }
         _liveDir = liveDir;
         IsEnabled = true;
         IsLive = true;
-        ModeText = "Live";
-        StatusText = "Waiting for the server's settings… (they appear once the ModderLords.Compat module has loaded, usually within a minute of launch)";
-        GateHint = "Live while the server runs.";
+        ModeText = Loc.T("Live");
+        StatusText = Loc.T("Waiting for the server's settings… (they appear once the ModderLords.Compat module has loaded, usually within a minute of launch)");
+        GateHint = Loc.T("Live while the server runs.");
         foreach (var p in Objects.SelectMany(o => o.AllProperties)) p.OfflineMode = false;
         _client = new LiveSettingsClient(liveDir);
         _client.Changed += doc => Application.Current?.Dispatcher.BeginInvoke(() => OnDocument(doc));
@@ -337,8 +338,8 @@ public partial class LiveSettingsViewModel : ObservableObject
         Merge(doc, offline: false);
         try { SettingsOverridesStore.SaveCache(_profileName, doc); } catch (Exception ex) { Log?.Invoke("mod settings: cache write failed: " + ex.Message); }
         IsLive = _client is not null;
-        ModeText = "Live";
-        StatusText = $"Live, {Objects.Count} settings object(s), updated {doc.WrittenAt.ToLocalTime():HH:mm:ss}" + (_overrides.IsEmpty ? "" : $"; {_overrides.Count} override(s) stored for this profile");
+        ModeText = Loc.T("Live");
+        StatusText = Loc.F("Live, {0} settings object(s), updated {1:HH:mm:ss}", Objects.Count, doc.WrittenAt.ToLocalTime()) + (_overrides.IsEmpty ? "" : Loc.F("; {0} override(s) stored for this profile", _overrides.Count));
         LogOverridesAckOnce();
         ApplyCommand.NotifyCanExecuteChanged();
         RevertCommand.NotifyCanExecuteChanged();
@@ -392,16 +393,16 @@ public partial class LiveSettingsViewModel : ObservableObject
         var obj = SelectedObject;
         if (obj is null) return;
         var dirty = obj.AllProperties.Where(p => p.IsDirty).ToList();
-        if (dirty.Count == 0) { ApplyReport = "Nothing changed."; return; }
+        if (dirty.Count == 0) { ApplyReport = Loc.T("Nothing changed."); return; }
         var bad = dirty.Where(p => p.HasError).ToList();
-        if (bad.Count > 0) { ApplyReport = "Fix first: " + string.Join(", ", bad.Select(p => $"{p.DisplayName} ({p.Error})")); return; }
+        if (bad.Count > 0) { ApplyReport = Loc.T("Fix first: ") + string.Join(", ", bad.Select(p => $"{p.DisplayName} ({p.Error})")); return; }
         var values = dirty.ToDictionary(p => p.Id, p => p.Value.Trim(), StringComparer.Ordinal);
 
         if (_client is null)
         {
             // Offline: the override is the deliverable; the module applies it at the next launch.
             StoreOverrides(obj, values);
-            ApplyReport = $"Saved {values.Count} override(s) for '{_profileName}'; applied when the server next starts.";
+            ApplyReport = Loc.F("Saved {0} override(s) for '{1}'; applied when the server next starts.", values.Count, _profileName);
             Log?.Invoke($"mod settings: {values.Count} override(s) stored for {obj.SettingsId} (offline)");
             UpdateOfflineState();
             return;
@@ -409,18 +410,18 @@ public partial class LiveSettingsViewModel : ObservableObject
 
         IsBusy = true;
         ApplyCommand.NotifyCanExecuteChanged();
-        ApplyReport = $"Sending {dirty.Count} change(s)…";
+        ApplyReport = Loc.F("Sending {0} change(s)…", dirty.Count);
         try
         {
             var ack = await _client.ApplyAsync(obj.SettingsId, values, TimeSpan.FromSeconds(15));
             if (ack is null)
             {
-                ApplyReport = "No answer from the server within 15 s. Is the ModderLords.Compat module loaded? (Console: look for [ModderLords.Compat] lines.)";
+                ApplyReport = Loc.T("No answer from the server within 15 s. Is the ModderLords.Compat module loaded? (Console: look for [ModderLords.Compat] lines.)");
                 Log?.Invoke($"live apply {obj.SettingsId}: no ack");
                 return;
             }
             var restart = dirty.Any(p => p.RequireRestart) ? " Some of these are marked restart-required by the mod." : "";
-            ApplyReport = (ack.Ok ? "Applied: " : "Failed: ") + ack.Report + (ack.Persisted is null ? "" : "; " + ack.Persisted) + ". Players receive it on the next sync tick; also stored as a host override for this profile." + restart;
+            ApplyReport = (ack.Ok ? Loc.T("Applied: ") : Loc.T("Failed: ")) + ack.Report + (ack.Persisted is null ? "" : "; " + ack.Persisted) + Loc.T(". Players receive it on the next sync tick; also stored as a host override for this profile.") + restart;
             Log?.Invoke($"live apply {obj.SettingsId}: {(ack.Ok ? "ok" : "FAILED")}, {ack.Report}" + (ack.Persisted is null ? "" : $", {ack.Persisted}"));
             if (ack.Ok)
             {
@@ -442,7 +443,7 @@ public partial class LiveSettingsViewModel : ObservableObject
     {
         _overrides.Set(obj.SettingsId, values);
         try { SettingsOverridesStore.Save(_profileName, _overrides); }
-        catch (Exception ex) { ApplyReport = "Override not saved: " + ex.Message; return; }
+        catch (Exception ex) { ApplyReport = Loc.T("Override not saved: ") + ex.Message; return; }
         foreach (var p in obj.AllProperties)
             if (values.TryGetValue(p.Id, out var v)) p.OverrideValue = v;
         obj.RefreshOverrideCount();
@@ -465,7 +466,7 @@ public partial class LiveSettingsViewModel : ObservableObject
         if (obj is null) return;
         _overrides.Clear(obj.SettingsId);
         try { SettingsOverridesStore.Save(_profileName, _overrides); }
-        catch (Exception ex) { ApplyReport = "Overrides not cleared: " + ex.Message; return; }
+        catch (Exception ex) { ApplyReport = Loc.T("Overrides not cleared: ") + ex.Message; return; }
         foreach (var p in obj.AllProperties)
         {
             p.OverrideValue = null;
@@ -473,8 +474,8 @@ public partial class LiveSettingsViewModel : ObservableObject
         }
         obj.RefreshOverrideCount();
         ApplyReport = IsLive
-            ? "Overrides cleared for this object; the server keeps its current values, they are just not re-applied at the next launch."
-            : "Overrides cleared for this object; values shown are the last ones the server reported.";
+            ? Loc.T("Overrides cleared for this object; the server keeps its current values, they are just not re-applied at the next launch.")
+            : Loc.T("Overrides cleared for this object; values shown are the last ones the server reported.");
         Log?.Invoke($"mod settings: overrides cleared for {obj.SettingsId}");
         if (!IsLive) UpdateOfflineState();
         ClearOverridesCommand.NotifyCanExecuteChanged();

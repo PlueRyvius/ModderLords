@@ -1,5 +1,6 @@
 using System.Windows;
 using ModderLords.Coop.Admin;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -34,7 +35,7 @@ public partial class ImportCharacterWindow : Window
         if (Look.IsChecked == true) parts.Add("look");
         if (Gear.IsChecked == true) parts.Add("gear");
         if (NameBox.IsChecked == true) parts.Add("name");
-        if (parts.Count == 0) { MessageBox.Show(this, "Pick at least one part to import.", "Import character"); return; }
+        if (parts.Count == 0) { MessageBox.Show(this, Loc.T("Pick at least one part to import."), Loc.T("Import character")); return; }
         SelectedParts = parts;
         DialogResult = true;
     }

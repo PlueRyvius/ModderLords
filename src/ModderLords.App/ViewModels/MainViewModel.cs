@@ -19,6 +19,7 @@ using ModderLords.Core.Perf;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
 using ModderLords.Coop.Saves;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App.ViewModels;
 
@@ -150,17 +151,17 @@ public partial class ModRow : ObservableObject
     public string Kind => IsMissing ? "Missing" : IsCoop ? "Coop" : IsGameModule ? (OfficialModules.IsDlc(Module.Id) ? "DLC" : "Game") : LoadsBeforeGame ? "Framework" : "Mod";
 
     public string KindTip => IsCoopClientMarker
-        ? "The Coop mod. This row shows where it loads on players' machines — drag it to change that. On the server it is always last; the dedicated server pins it there and this list cannot change it.\n\nMods that patch Coop (CoopMarriage, CoopModPatch) must sit BELOW this row on a player's machine, or their game crashes at startup.\n\nAlways on: the server supplies Coop and every player needs it."
+        ? Loc.T("The Coop mod. This row shows where it loads on players' machines — drag it to change that. On the server it is always last; the dedicated server pins it there and this list cannot change it.\n\nMods that patch Coop (CoopMarriage, CoopModPatch) must sit BELOW this row on a player's machine, or their game crashes at startup.\n\nAlways on: the server supplies Coop and every player needs it.")
         : IsCoop
-        ? "The Coop mod. Mods that patch it — CoopMarriage, CoopModPatch — must load after it, or their Harmony patches find nothing to patch and the game crashes at startup."
+        ? Loc.T("The Coop mod. Mods that patch it — CoopMarriage, CoopModPatch — must load after it, or their Harmony patches find nothing to patch and the game crashes at startup.")
         : LoadsBeforeGame
-        ? "A framework. Its own manifest says the game's modules load after it, so it sits above them - the TaleWorlds launcher does the same. Drag it among the other frameworks."
-        : !IsGameModule ? "A mod. Enable it and drag it to place it in the load order."
-        : IsLocked ? "Part of the base game. It cannot be turned off - the game will not start without it."
-        : OfficialModules.IsDlc(Module.Id) ? "A paid expansion. Coop refuses to let a client join with a DLC enabled, so leave it off for coop sessions."
+        ? Loc.T("A framework. Its own manifest says the game's modules load after it, so it sits above them - the TaleWorlds launcher does the same. Drag it among the other frameworks.")
+        : !IsGameModule ? Loc.T("A mod. Enable it and drag it to place it in the load order.")
+        : IsLocked ? Loc.T("Part of the base game. It cannot be turned off - the game will not start without it.")
+        : OfficialModules.IsDlc(Module.Id) ? Loc.T("A paid expansion. Coop refuses to let a client join with a DLC enabled, so leave it off for coop sessions.")
         : HostMode
-            ? "Part of the base game, and safe to turn off. Coop does not work with Birth and Aging or Fast Mode enabled."
-            : "Part of the base game, and safe to turn off.";
+            ? Loc.T("Part of the base game, and safe to turn off. Coop does not work with Birth and Aging or Fast Mode enabled.")
+            : Loc.T("Part of the base game, and safe to turn off.");
 
     /// <summary>Whether the row is being shown in Host mode. Only the wording depends on it: a player should not be
     /// told which game modules break coop.</summary>
@@ -213,8 +214,8 @@ public partial class ModRow : ObservableObject
     public string Settings => IsMissing ? "" : _scan?.SettingsSummary ?? Scanning;
     public string? SettingsTip => _scan is not { } s ? null
         : s.SettingsClasses.Count == 0
-            ? (s.UsesMcm ? "Uses MCM; its settings appear in the Mod settings tab." : "No settings class found by the scan. If the mod does have one, add its type name to the compat record as a settings hint (SettingsTypes in compat-db.local.json).")
-            : "Settings classes found (shown in the Mod settings tab once the server has created them):\n" + string.Join("\n", s.SettingsClasses) + (s.UsesMcm ? "\nPlus MCM settings." : "");
+            ? (s.UsesMcm ? Loc.T("Uses MCM; its settings appear in the Mod settings tab.") : Loc.T("No settings class found by the scan. If the mod does have one, add its type name to the compat record as a settings hint (SettingsTypes in compat-db.local.json)."))
+            : Loc.T("Settings classes found (shown in the Mod settings tab once the server has created them):\n") + string.Join("\n", s.SettingsClasses) + (s.UsesMcm ? Loc.T("\nPlus MCM settings.") : "");
 
     /// <summary>Curated verdict from the compat database (bundled + local override); refreshed by Rescan and after Record….</summary>
     [ObservableProperty]
@@ -223,11 +224,11 @@ public partial class ModRow : ObservableObject
 
     public string CompatText => Compat.Verdict switch
     {
-        CompatVerdict.Works => "Works",
-        CompatVerdict.NeedsRecipe => "Needs recipe",
-        CompatVerdict.Broken => "Broken",
-        _ => Compat.Source == CompatSource.None ? "" : "Unknown",
-    } + (Compat.VersionUntested ? " · untested version" : "");
+        CompatVerdict.Works => Loc.T("Works"),
+        CompatVerdict.NeedsRecipe => Loc.T("Needs recipe"),
+        CompatVerdict.Broken => Loc.T("Broken"),
+        _ => Compat.Source == CompatSource.None ? "" : Loc.T("Unknown"),
+    } + (Compat.VersionUntested ? Loc.T(" · untested version") : "");
 
     /// <summary>
     /// The verdict itself, for the Mods grid to colour by. The colour used to be a hex string built here,
@@ -283,7 +284,7 @@ public sealed partial class SaveRow : ObservableObject
     /// </summary>
     public ObservableCollection<SaveVersionRow> Versions { get; } = new();
     public bool HasVersions => Versions.Count > 1;
-    public string VersionsTip => $"Choose which of the {Versions.Count} versions of this save the next launch loads";
+    public string VersionsTip => Loc.F("Choose which of the {0} versions of this save the next launch loads", Versions.Count);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ExpandGlyph))]
@@ -533,8 +534,8 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>How the unsaved-changes question is asked. Replaceable so tests never block on a message box.</summary>
     internal Func<string, MessageBoxResult> AskUnsaved { get; set; } = profileName => MessageBox.Show(
-        $"The mod list in profile '{profileName}' has unsaved changes. Save them?",
-        "Unsaved changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+        Loc.F("The mod list in profile '{0}' has unsaved changes. Save them?", profileName),
+        Loc.T("Unsaved changes"), MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
 
     /// <summary>
     /// Settles unsaved edits before they would be lost: Yes saves, No discards, Cancel stops. Returns false only on
@@ -548,7 +549,7 @@ public partial class MainViewModel : ObservableObject
             case MessageBoxResult.Yes:
                 CollectProfileFromRows();
                 ProfileStore.Save(Profile);
-                Status = $"Profile '{Profile.Name}' saved";
+                Status = Loc.F("Profile '{0}' saved", Profile.Name);
                 break;
             case MessageBoxResult.No:
                 break;
@@ -632,7 +633,7 @@ public partial class MainViewModel : ObservableObject
         // Re-select the saved profile once its item exists again; do not reload its contents.
         SelectedProfileName = Profile.Name;
         IsDirty = false;
-        Status = $"Profile '{Profile.Name}' saved";
+        Status = Loc.F("Profile '{0}' saved", Profile.Name);
     }
 
     [RelayCommand]
@@ -663,7 +664,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (Host?.IsRunning == true)
         {
-            Status = "Stop the server before renaming this profile.";
+            Status = Loc.T("Stop the server before renaming this profile.");
             return;
         }
         var old = Profile.Name;
@@ -674,19 +675,19 @@ public partial class MainViewModel : ObservableObject
         CollectProfileFromRows();
         ProfileStore.Save(Profile);
         try { ProfileStore.Rename(old, ask.ProfileName); }
-        catch (Exception ex) { Status = "Rename failed: " + ex.Message; return; }
+        catch (Exception ex) { Status = Loc.T("Rename failed: ") + ex.Message; return; }
 
         Profile.Name = ask.ProfileName;
         LoadProfileList();
         SelectedProfileName = Profile.Name;
         IsDirty = false;
-        Status = $"Renamed “{old}” to “{Profile.Name}”";
+        Status = Loc.F("Renamed “{0}” to “{1}”", old, Profile.Name);
     }
 
     [RelayCommand]
     private void DeleteProfile()
     {
-        if (MessageBox.Show($"Delete profile '{Profile.Name}'? Junctions it created are removed too.", "Delete profile", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(Loc.F("Delete profile '{0}'? Junctions it created are removed too.", Profile.Name), Loc.T("Delete profile"), MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         string? junctionError = null;
         try { new OverlayApplier().RemoveAll(ProfileStore.OverlayDirFor(Profile.Name)); }
         catch (Exception ex) { junctionError = ex.Message; }
@@ -791,7 +792,7 @@ public partial class MainViewModel : ObservableObject
                 {
                     other.Enabled = false;
                     // The folder, not just the version: two copies at one version are told apart by nothing else.
-                    Status = $"{row.Id}: using {row.Version} from {row.Folder}; the other copy was switched off.";
+                    Status = Loc.F("{0}: using {1} from {2}; the other copy was switched off.", row.Id, row.Version, row.Folder);
                 }
         }
         finally { _syncingVersions = false; }
@@ -1054,14 +1055,14 @@ public partial class MainViewModel : ObservableObject
                 Host?.RefreshDrift();
                 Host?.LoadGameplay();
             }
-            Status = $"{modRows.Count(r => r.Enabled && !r.IsMissing)} installed mods enabled, "
-                   + $"{Mods.Count(r => r.IsMissing && r.Enabled)} selected modules missing, "
-                   + $"{Mods.Count(r => r.IsGameModule && r.Enabled && !r.IsMissing)} game modules";
+            Status = Loc.F("{0} installed mods enabled, "
+                   + "{1} selected modules missing, "
+                   + "{2} game modules", modRows.Count(r => r.Enabled && !r.IsMissing), Mods.Count(r => r.IsMissing && r.Enabled), Mods.Count(r => r.IsGameModule && r.Enabled && !r.IsMissing));
         }
         catch (Exception ex)
         {
             Status = ex.Message;
-            ClientManifestText = "Cannot scan this selection: " + ex.Message;
+            ClientManifestText = Loc.T("Cannot scan this selection: ") + ex.Message;
             if (IsHost && Host?.ClientTarget is not null) UpdateShareText();
             Messages.Add(ex.Message);
         }
@@ -1070,23 +1071,23 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void EditBehaviors()
     {
-        if (SelectedMod is null) { Status = "Select a mod first"; return; }
+        if (SelectedMod is null) { Status = Loc.T("Select a mod first"); return; }
         var scan = SelectedMod.Scan;
-        if (scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count == 0) { Status = $"{SelectedMod.Id} has no campaign or mission behaviours to gate"; return; }
+        if (scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count == 0) { Status = Loc.F("{0} has no campaign or mission behaviours to gate", SelectedMod.Id); return; }
         var win = new BehaviorsWindow(SelectedMod.Id, scan, SelectedMod.ClientSideBehaviors) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() == true)
         {
             SelectedMod.ClientSideBehaviors = win.ClientSide;
             if (!SelectedMod.ServerAuthoritative && win.ClientSide.Count < scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count) SelectedMod.ServerAuthoritative = true;
-            Status = $"{SelectedMod.Id}: {scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count - win.ClientSide.Count} behaviour(s) server-only, {win.ClientSide.Count} kept client-side";
+            Status = Loc.F("{0}: {1} behaviour(s) server-only, {2} kept client-side", SelectedMod.Id, scan.CampaignBehaviors.Count + scan.MissionBehaviors.Count - win.ClientSide.Count, win.ClientSide.Count);
         }
     }
 
     [RelayCommand]
     private void ShowAuthority()
     {
-        if (SelectedMod is null) { Status = "Select a mod first"; return; }
-        if (!SelectedMod.Module.HasCode) { Status = $"{SelectedMod.Id} has no code to analyse"; return; }
+        if (SelectedMod is null) { Status = Loc.T("Select a mod first"); return; }
+        if (!SelectedMod.Module.HasCode) { Status = Loc.F("{0} has no code to analyse", SelectedMod.Id); return; }
         new AuthorityWindow(SelectedMod.Module) { Owner = Application.Current.MainWindow }.Show();
     }
 
@@ -1128,7 +1129,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void RecordCompat()
     {
-        if (SelectedMod is null) { Status = "Select a mod first"; return; }
+        if (SelectedMod is null) { Status = Loc.T("Select a mod first"); return; }
         var win = new CompatRecordWindow(SelectedMod, CoopVersion) { Owner = Application.Current.MainWindow };
         if (win.ShowDialog() != true) return;
         try
@@ -1137,7 +1138,7 @@ public partial class MainViewModel : ObservableObject
             {
                 CompatDb.RemoveLocal(CompatDb.LocalPath, SelectedMod.Id);
                 RefreshCompatBadges();
-                Status = $"{SelectedMod.Id}: local record removed" + (SelectedMod.Compat.Source == CompatSource.Bundled ? ", showing the bundled one" : "");
+                Status = Loc.F("{0}: local record removed", SelectedMod.Id) + (SelectedMod.Compat.Source == CompatSource.Bundled ? Loc.T(", showing the bundled one") : "");
             }
             else if (CompatDb.LocalPart(win.Result, CompatDb.Current.FindBundled(SelectedMod.Id)) is { } part)
             {
@@ -1145,14 +1146,14 @@ public partial class MainViewModel : ObservableObject
                 // that whole would pin today's bundled values in the local file, hiding every later bundled fix.
                 CompatDb.SaveLocal(CompatDb.LocalPath, part);
                 RefreshCompatBadges();
-                Status = $"{SelectedMod.Id}: recorded as {SelectedMod.CompatText} in {CompatDb.LocalPath}";
+                Status = Loc.F("{0}: recorded as {1} in {2}", SelectedMod.Id, SelectedMod.CompatText, CompatDb.LocalPath);
             }
             else
             {
                 // Nothing differs from the bundled record, so there is nothing of the user's to keep.
                 CompatDb.RemoveLocal(CompatDb.LocalPath, SelectedMod.Id);
                 RefreshCompatBadges();
-                Status = $"{SelectedMod.Id}: same as the bundled record, no local record kept";
+                Status = Loc.F("{0}: same as the bundled record, no local record kept", SelectedMod.Id);
             }
         }
         catch (Exception ex) { Status = ex.Message; Messages.Add("compat db: " + ex.Message); }
@@ -1167,10 +1168,10 @@ public partial class MainViewModel : ObservableObject
         // still exports that.
         var selected = SelectedMod is not null ? db.FindLocal(SelectedMod.Id) ?? db.Find(SelectedMod.Id) : null;
         var records = selected is not null ? new[] { selected } : db.LocalRecords.ToArray();
-        if (records.Length == 0) { Status = "Nothing to export: select a mod with a record, or record one first"; return; }
+        if (records.Length == 0) { Status = Loc.T("Nothing to export: select a mod with a record, or record one first"); return; }
         var dlg = new SaveFileDialog
         {
-            Title = selected is not null ? $"Export the {selected.Id} record" : "Export all local records",
+            Title = selected is not null ? Loc.F("Export the {0} record", selected.Id) : Loc.T("Export all local records"),
             Filter = "Compat records (*.json)|*.json",
             FileName = selected is not null ? $"compat-{ProfileStore.Safe(selected.Id)}.json" : "compat-db.local.json",
         };
@@ -1178,14 +1179,14 @@ public partial class MainViewModel : ObservableObject
         try
         {
             CompatDb.WriteFile(dlg.FileName, records);
-            Status = $"Exported {records.Length} record(s) to {dlg.FileName}";
+            Status = Loc.F("Exported {0} record(s) to {1}", records.Length, dlg.FileName);
         }
         catch (Exception ex) { Status = ex.Message; }
     }
 
     /// <summary>How Submit… asks before opening the browser. Replaceable so tests never block on a message box.</summary>
     internal Func<string, bool> ConfirmCompatSubmit { get; set; } = message => MessageBox.Show(
-        message, "Submit compatibility record", MessageBoxButton.OKCancel, MessageBoxImage.Information) == MessageBoxResult.OK;
+        message, Loc.T("Submit compatibility record"), MessageBoxButton.OKCancel, MessageBoxImage.Information) == MessageBoxResult.OK;
 
     /// <summary>Opens the issue form in the default browser. Replaceable so tests never start one.</summary>
     internal Action<string> OpenCompatSubmitPage { get; set; } = url =>
@@ -1209,7 +1210,7 @@ public partial class MainViewModel : ObservableObject
     /// false for the selected mod alone, null to call it off. Replaceable so tests never block on a message box.
     /// </summary>
     internal Func<string, bool?> AskCompatSubmitOthers { get; set; } = message => MessageBox.Show(
-        message, "Submit compatibility records", MessageBoxButton.YesNoCancel, MessageBoxImage.Question) switch
+        message, Loc.T("Submit compatibility records"), MessageBoxButton.YesNoCancel, MessageBoxImage.Question) switch
     {
         MessageBoxResult.Yes => true,
         MessageBoxResult.No => false,
@@ -1279,7 +1280,7 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     internal void SubmitCompatFrom(CompatDb db)
     {
-        if (SelectedMod is not { } row) { Status = "Select a mod first"; return; }
+        if (SelectedMod is not { } row) { Status = Loc.T("Select a mod first"); return; }
         // The Role cell and the tick are edited on the row; the profile entry only has them once collected.
         CollectProfileFromRows();
         if (CompatSubmitItemFor(row, db, out var reason) is not { } chosen) { Status = reason; return; }
@@ -1337,15 +1338,15 @@ public partial class MainViewModel : ObservableObject
         {
             if (!link.RecordInUrl && !CopyCompatSubmitText(link.RecordJson))
             {
-                Status = $"{subject} {verb} too large for a link and could not be copied to the clipboard: use Export… and attach the file instead";
+                Status = Loc.F("{0} {1} too large for a link and could not be copied to the clipboard: use Export… and attach the file instead", subject, verb);
                 return;
             }
             OpenCompatSubmitPage(link.Url);
             Status = link.RecordInUrl
-                ? $"Opened the GitHub form for {what}. Nothing is posted until you press Submit there"
-                : $"{subject} {verb} too large for a link, so that was copied to the clipboard: paste it into the Record field of the GitHub form that just opened, then press Submit there";
+                ? Loc.F("Opened the GitHub form for {0}. Nothing is posted until you press Submit there", what)
+                : Loc.F("{0} {1} too large for a link, so that was copied to the clipboard: paste it into the Record field of the GitHub form that just opened, then press Submit there", subject, verb);
         }
-        catch (Exception ex) { Status = "Could not open the GitHub form: " + ex.Message; }
+        catch (Exception ex) { Status = Loc.T("Could not open the GitHub form: ") + ex.Message; }
     }
 
     // ---- proof that a set-up works -----------------------------------------------------------------
@@ -1400,7 +1401,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ImportCompat()
     {
-        var dlg = new OpenFileDialog { Title = "Import compat records", Filter = "Compat records (*.json)|*.json|All files (*.*)|*.*" };
+        var dlg = new OpenFileDialog { Title = Loc.T("Import compat records"), Filter = "Compat records (*.json)|*.json|All files (*.*)|*.*" };
         if (dlg.ShowDialog() != true) return;
         try
         {
@@ -1409,7 +1410,7 @@ public partial class MainViewModel : ObservableObject
             if (r.Added.Count > 0) Messages.Add("compat import: added " + string.Join(", ", r.Added));
             if (r.Updated.Count > 0) Messages.Add("compat import: updated " + string.Join(", ", r.Updated));
             foreach (var id in r.Kept) Messages.Add($"compat import: kept your local {id} record (the file's copy is not newer)");
-            Status = $"Import: {r.Added.Count} added, {r.Updated.Count} updated, {r.Kept.Count} kept";
+            Status = Loc.F("Import: {0} added, {1} updated, {2} kept", r.Added.Count, r.Updated.Count, r.Kept.Count);
         }
         catch (Exception ex) { Status = ex.Message; Messages.Add("compat import: " + ex.Message); }
     }
@@ -1462,7 +1463,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedMod is not { CanRemove: true } row) return;
         RemoveRows([row]);
-        Status = $"{row.Id} removed from profile '{Profile.Name}'. Save to keep the change.";
+        Status = Loc.F("{0} removed from profile '{1}'. Save to keep the change.", row.Id, Profile.Name);
     }
 
     private bool CanRemoveMod() => SelectedMod is { CanRemove: true };
@@ -1472,8 +1473,8 @@ public partial class MainViewModel : ObservableObject
     {
         var ids = Mods.Where(r => r.IsMissing).Select(r => r.Id).ToList();
         if (ids.Count == 0) return;
-        if (MessageBox.Show($"Take these {ids.Count} mod(s) that are no longer installed off profile '{Profile.Name}'?\n\n{string.Join("\n", ids)}",
-                "Remove missing mods", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(Loc.F("Take these {0} mod(s) that are no longer installed off profile '{1}'?\n\n{2}", ids.Count, Profile.Name, string.Join("\n", ids)),
+                Loc.T("Remove missing mods"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         RemoveMissingRows();
     }
 
@@ -1485,9 +1486,9 @@ public partial class MainViewModel : ObservableObject
         includeCoop: AlwaysSubscribeCoop && !CoopOnWorkshop());
 
     private bool AskToSubscribe() => MessageBox.Show(
-        "Subscribe to the missing mods through Steam? Steam shows you as playing Bannerlord for as long as it takes.\n\n"
-        + "No opens their Workshop pages instead, so you can subscribe to each yourself.",
-        "Subscribe to missing mods", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        Loc.T("Subscribe to the missing mods through Steam? Steam shows you as playing Bannerlord for as long as it takes.\n\n"
+        + "No opens their Workshop pages instead, so you can subscribe to each yourself."),
+        Loc.T("Subscribe to missing mods"), MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
 
     /// <summary>
     /// The profile's missing mods, split into those with a Workshop id (from the link the list carried) and those
@@ -1539,10 +1540,10 @@ public partial class MainViewModel : ObservableObject
         foreach (var m in mismatches)
             Log(LogCategory.Warning, $"[ModderLords] {m.Id}: the list wants {m.Wanted}, the Workshop gave {m.Installed}");
         MessageBox.Show(
-            "These mods downloaded at a different version from the one in the list. The Workshop only serves the latest, "
-            + "so the host may need to update too, or send you the version they run:\n\n"
-            + string.Join("\n", mismatches.Select(m => $"{m.Id}: list {m.Wanted}, installed {m.Installed}")),
-            "Version mismatch", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Loc.T("These mods downloaded at a different version from the one in the list. The Workshop only serves the latest, "
+            + "so the host may need to update too, or send you the version they run:\n\n")
+            + string.Join("\n", mismatches.Select(m => Loc.F("{0}: list {1}, installed {2}", m.Id, m.Wanted, m.Installed))),
+            Loc.T("Version mismatch"), MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     /// <summary>Mods in <paramref name="ids"/> installed at a version other than the one the profile recorded.</summary>
@@ -1573,7 +1574,7 @@ public partial class MainViewModel : ObservableObject
         if (win.ShowDialog() != true) return;
         pm.DownloadUrl = win.Link.Length == 0 ? null : win.Link;
         IsDirty = true;
-        Status = $"{row.Id}: download link {(pm.DownloadUrl is null ? "removed" : "set")}. Save to keep it.";
+        Status = Loc.F("{0}: download link {1}. Save to keep it.", row.Id, (pm.DownloadUrl is null ? "removed" : "set"));
     }
 
     private bool CanSetSourceLink() => SelectedMod is { IsGameModule: false };
@@ -1644,7 +1645,7 @@ public partial class MainViewModel : ObservableObject
             null or { Count: 0 } => "no folder is server only",
             _ => "server only: " + string.Join(", ", clientExcluded),
         };
-        Status = $"{row.Id}: {clientOnly}; {serverOnly}. Applies from the next launch. Save to keep it.";
+        Status = Loc.F("{0}: {1}; {2}. Applies from the next launch. Save to keep it.", row.Id, clientOnly, serverOnly);
         // The preview's messages are where a host sees what the launch will do with the lists (and a rejected name).
         RefreshPreview();
     }
@@ -1655,7 +1656,7 @@ public partial class MainViewModel : ObservableObject
         var rows = Mods.Where(r => r.IsMissing).ToList();
         if (rows.Count == 0) return;
         RemoveRows(rows);
-        Status = $"Removed {rows.Count} missing mod(s) from profile '{Profile.Name}'. Save to keep the change.";
+        Status = Loc.F("Removed {0} missing mod(s) from profile '{1}'. Save to keep the change.", rows.Count, Profile.Name);
     }
 
     /// <summary>
@@ -1696,7 +1697,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedMod is not { IsMissing: false } row || !Directory.Exists(row.Folder)) return;
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(row.Folder) { UseShellExecute = true }); }
-        catch (Exception ex) { Status = "Could not open the folder: " + ex.Message; }
+        catch (Exception ex) { Status = Loc.T("Could not open the folder: ") + ex.Message; }
     }
 
     private bool CanOpenModFolder() => SelectedMod is { IsMissing: false };
@@ -1782,7 +1783,7 @@ public partial class MainViewModel : ObservableObject
         if (!TryMoveTo(coop, Mods.IndexOf(first))) return;
         IsDirty = true;
         CheckCoopOrder();
-        Status = $"Moved {coop.Id} above the mods that patch it — save the profile to keep it";
+        Status = Loc.F("Moved {0} above the mods that patch it — save the profile to keep it", coop.Id);
     }
 
     public bool TryMoveTo(ModRow row, int insertAt)
@@ -1809,14 +1810,14 @@ public partial class MainViewModel : ObservableObject
         var row = Mods[from];
         if (row.IsGameModule)
         {
-            Status = $"{row.Id} is part of the game; the engine places it, not you.";
+            Status = Loc.F("{0} is part of the game; the engine places it, not you.", row.Id);
             return false;
         }
         if (Mods[to].Band != row.Band)
         {
             Status = row.LoadsBeforeGame
-                ? $"{row.Id} is a framework: the game's own modules load after it because its manifest says so, so it stays above them."
-                : $"{row.Id} loads after the game's own modules. Only frameworks that ask for it (Harmony, ButterLib, UIExtenderEx, MCM) sit above them.";
+                ? Loc.F("{0} is a framework: the game's own modules load after it because its manifest says so, so it stays above them.", row.Id)
+                : Loc.F("{0} loads after the game's own modules. Only frameworks that ask for it (Harmony, ButterLib, UIExtenderEx, MCM) sit above them.", row.Id);
             return false;
         }
         Mods.Move(from, to);
@@ -1834,7 +1835,7 @@ public partial class MainViewModel : ObservableObject
     private void UseEngineOrder()
     {
         if (_preview is null) RefreshPreview();
-        if (_preview is null) { Status = "Nothing to order yet: rescan the mods first."; return; }
+        if (_preview is null) { Status = Loc.T("Nothing to order yet: rescan the mods first."); return; }
 
         var position = _preview.Order.ModuleIds
             .Select((id, i) => (id, i))
@@ -1850,7 +1851,7 @@ public partial class MainViewModel : ObservableObject
             if (from != target) Mods.Move(from, target);
         }
         RefreshPreview();
-        Status = "Mod list sorted into the engine's load order.";
+        Status = Loc.T("Mod list sorted into the engine's load order.");
     }
 
     /// <summary>
@@ -1871,7 +1872,7 @@ public partial class MainViewModel : ObservableObject
             var snapshot = ProfileStore.Snapshot(Profile);
             var revision = _previewRevision;
             var request = IsHost ? OperationPreparation.Resolve(snapshot) : CreateClientAnalysisRequest(snapshot);
-            Status = "Analyzing selected operations…";
+            Status = Loc.T("Analyzing selected operations…");
             var report = await Task.Run(() => OperationAnalysisService.Analyze(request, cancellationToken), cancellationToken);
             // Details remain tied to the captured request. Do not annotate a newly selected profile with old results.
             if (Profile.Name == snapshot.Name && revision == _previewRevision)
@@ -1884,8 +1885,8 @@ public partial class MainViewModel : ObservableObject
             Status = report.Summary;
             new OperationAnalysisWindow(report) { Owner = Application.Current.MainWindow }.Show();
         }
-        catch (OperationCanceledException) { Status = "Analysis cancelled"; }
-        catch (Exception ex) { Status = "Operation analysis failed: " + ex.Message; }
+        catch (OperationCanceledException) { Status = Loc.T("Analysis cancelled"); }
+        catch (Exception ex) { Status = Loc.T("Operation analysis failed: ") + ex.Message; }
     }
     private static ModderLords.Analysis.AnalysisRequest CreateClientAnalysisRequest(Profile profile)
     {
@@ -1937,7 +1938,7 @@ public partial class MainViewModel : ObservableObject
         {
             _preview = null;
             LoadOrderPreview.Clear();
-            ClientManifestText = "Cannot prepare this selection: " + ex.Message;
+            ClientManifestText = Loc.T("Cannot prepare this selection: ") + ex.Message;
             if (IsHost && Host?.ClientTarget is not null) UpdateShareText();
             SetPreviewMessages(["preview: " + ex.Message]);
         }
@@ -2059,12 +2060,12 @@ public partial class MainViewModel : ObservableObject
         {
             var coop = modules.Catalog.Modules.FirstOrDefault(m => m.IsStock && m.FolderName == "Coop");
             ClientManifestText = ClientManifest.ToText(entries, coop?.Id ?? "Coop", coop?.Version ?? "");
-            if (Host?.IsRunning == true) ClientManifestText = "Running server — " + Host.ClientProfile.Name + "\n" + ClientManifestText;
+            if (Host?.IsRunning == true) ClientManifestText = Loc.T("Running server — ") + Host.ClientProfile.Name + "\n" + ClientManifestText;
         }
         if (Host?.IsRunning != true || !IsHost)
         {
             var missing = Mods.Where(m => m.Enabled && m.IsMissing).Select(m => m.Id).ToList();
-            if (missing.Count > 0) ClientManifestText = "INCOMPLETE — download these selected mods before launching: " + string.Join(", ", missing) + "\n\n" + ClientManifestText;
+            if (missing.Count > 0) ClientManifestText = Loc.T("INCOMPLETE — download these selected mods before launching: ") + string.Join(", ", missing) + "\n\n" + ClientManifestText;
         }
     }
 
@@ -2090,10 +2091,10 @@ public partial class MainViewModel : ObservableObject
     private void ExportList()
     {
         var file = CurrentExport();
-        if (file is null) { Status = "Nothing to export yet: rescan the mods first."; return; }
+        if (file is null) { Status = Loc.T("Nothing to export yet: rescan the mods first."); return; }
         var dlg = new SaveFileDialog
         {
-            Title = "Export this mod list",
+            Title = Loc.T("Export this mod list"),
             Filter = "Mod list (*.json)|*.json",
             FileName = $"modlist-{ProfileStore.Safe(file.Name ?? Profile.Name)}.json",
         };
@@ -2101,7 +2102,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             ModListFile.Write(dlg.FileName, file);
-            Status = $"Exported {file.Mods.Count} mods to {dlg.FileName}";
+            Status = Loc.F("Exported {0} mods to {1}", file.Mods.Count, dlg.FileName);
         }
         catch (Exception ex) { Status = ex.Message; }
     }
@@ -2113,7 +2114,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ImportList()
     {
-        var dlg = new OpenFileDialog { Title = "Import a shared mod list", Filter = "Mod list (*.json)|*.json|All files (*.*)|*.*" };
+        var dlg = new OpenFileDialog { Title = Loc.T("Import a shared mod list"), Filter = "Mod list (*.json)|*.json|All files (*.*)|*.*" };
         if (dlg.ShowDialog() != true) return;
         ModListFile file;
         try { file = ModListFile.Read(dlg.FileName); }
@@ -2147,7 +2148,7 @@ public partial class MainViewModel : ObservableObject
             if (AutoSubscribeWorkshop && (missing.Count > 0 || coop)) SubscribeToMissing(auto: true, includeCoop: coop);
             else if (coop) SubscribeToMissing(auto: true, onlyCoop: true);
             if (win.ApplyToLauncher) ApplyListToLauncher(file, "the shared file");
-            Status = missing.Count > 0 ? $"Import done — {missing.Count} mods still to download." : "Import done.";
+            Status = missing.Count > 0 ? Loc.F("Import done — {0} mods still to download.", missing.Count) : Loc.T("Import done.");
         }
         catch (Exception ex) { Status = ex.Message; Log(LogCategory.Error, "[ModderLords] import: " + ex); }
     }
@@ -2199,7 +2200,7 @@ public partial class MainViewModel : ObservableObject
             var text = missing.Count == 0
                 ? $"Every mod from the list imported into “{name}” is now installed. Set up the Bannerlord launcher to match?"
                 : $"Some mods from the list imported into “{name}” are now installed ({missing.Count} still missing). Update the Bannerlord launcher with what is here so far?";
-            if (MessageBox.Show(text, "Imported mod list", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            if (MessageBox.Show(text, Loc.T("Imported mod list"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             try
             {
                 if (!ApplyListToLauncher(file, $"profile “{name}”") || missing.Count > 0) return;
@@ -2208,7 +2209,7 @@ public partial class MainViewModel : ObservableObject
                 if (stored is not null) { stored.PendingLauncherApply = false; ProfileStore.Save(stored); }
                 Profile.PendingLauncherApply = false;
                 _pendingMissingSeen.Remove(name);
-                Status = $"Launcher set up from “{name}” — nothing left to download.";
+                Status = Loc.F("Launcher set up from “{0}” — nothing left to download.", name);
             }
             catch (Exception ex) { Status = ex.Message; Log(LogCategory.Error, "[ModderLords] pending import: " + ex); }
         });
@@ -2263,7 +2264,7 @@ public partial class MainViewModel : ObservableObject
     {
         _modFolderDebounce?.Stop();
         // A rescan rebuilds the rows from the saved profile, so it would throw away unsaved ticks and drags.
-        if (IsDirty) { Status = "New mods were downloaded — save, then Rescan to pick them up."; return; }
+        if (IsDirty) { Status = Loc.T("New mods were downloaded — save, then Rescan to pick them up."); return; }
         Rescan();
     }
 
@@ -2282,7 +2283,7 @@ public partial class MainViewModel : ObservableObject
         {
             if (ClientLauncher.IsClientRunning())
             {
-                Status = "Bannerlord is already running.";
+                Status = Loc.T("Bannerlord is already running.");
                 return;
             }
 
@@ -2295,7 +2296,7 @@ public partial class MainViewModel : ObservableObject
                 AppendClientLaunchLog(clientLog, client.Plan.Describe());
                 foreach (var message in client.Messages) AppendClientLaunchLog(clientLog, message);
                 var process = ClientLaunchSession.Start(client.Plan, note => { Log(LogCategory.Tool, "[ModderLords] " + note); AppendClientLaunchLog(clientLog, note); });
-                Status = $"Client started for server profile '{Host.ClientProfile.Name}' (pid {process.Id}).";
+                Status = Loc.F("Client started for server profile '{0}' (pid {1}).", Host.ClientProfile.Name, process.Id);
                 AppendClientLaunchLog(clientLog, $"started pid={process.Id}");
                 return;
             }
@@ -2310,13 +2311,13 @@ public partial class MainViewModel : ObservableObject
             AppendClientLaunchLog(clientLog, prepared.Plan.Describe());
             foreach (var message in prepared.Messages) AppendClientLaunchLog(clientLog, message);
             var p = ClientLaunchSession.Start(prepared.Plan, note => { Log(LogCategory.Tool, "[ModderLords] " + note); AppendClientLaunchLog(clientLog, note); });
-            Status = $"Bannerlord started with {prepared.Order.ModuleIds.Count} modules (pid {p.Id}).";
+            Status = Loc.F("Bannerlord started with {0} modules (pid {1}).", prepared.Order.ModuleIds.Count, p.Id);
             Log(LogCategory.Tool, $"[ModderLords] Play: {prepared.Plan.Exe} (pid {p.Id})");
             AppendClientLaunchLog(clientLog, $"started pid={p.Id}");
         }
         catch (Exception ex)
         {
-            Status = "Play: " + ex.Message;
+            Status = Loc.T("Play: ") + ex.Message;
             Log(LogCategory.Error, "[ModderLords] Play: " + ex);
             AppendClientLaunchLog(clientLog, "FAILED\n" + ex);
         }
