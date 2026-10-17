@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <Resource Include="appicon.ico" />
+    <EmbeddedResource Include="Localization\Strings.*.json" WithCulture="false" LogicalName="ModderLords.App.Localization.%(Filename).json" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 

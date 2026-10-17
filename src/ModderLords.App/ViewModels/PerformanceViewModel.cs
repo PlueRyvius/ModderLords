@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using ModderLords.Core.Logs;
 using ModderLords.Core.Perf;
 using ModderLords.Core.Profiles;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App.ViewModels;
 
@@ -115,7 +116,7 @@ public partial class PerformanceViewModel : ObservableObject
         _sessionStart = DateTimeOffset.Now;
         _departures.Clear();
         DataTotals = "—";
-        SessionState = "Warming up — the first samples after a launch are world load, not normal running.";
+        SessionState = Loc.T("Warming up — the first samples after a launch are world load, not normal running.");
     }
 
     /// <summary>A perf line from a module, already parsed off the read thread.</summary>
@@ -139,7 +140,7 @@ public partial class PerformanceViewModel : ObservableObject
                 if (sample.Count("count") is { } n)
                 {
                     Players = n.ToString();
-                    PlayersNote = n == 0 ? "Nobody connected — a quiet server ticks differently to a busy one." : "";
+                    PlayersNote = n == 0 ? Loc.T("Nobody connected — a quiet server ticks differently to a busy one.") : "";
                 }
                 break;
             case PerfKind.Net:
@@ -155,7 +156,7 @@ public partial class PerformanceViewModel : ObservableObject
         if (peers is { } n)
         {
             Players = n.ToString();
-            PlayersNote = n == 0 ? "Nobody connected — a quiet server ticks differently to a busy one." : "";
+            PlayersNote = n == 0 ? Loc.T("Nobody connected — a quiet server ticks differently to a busy one.") : "";
         }
         // With nobody connected the rates are zero. Recording that would make zero the normal range.
         foreach (var (row, key) in new[] { (Upload, "upKbps"), (Download, "downKbps") })
@@ -187,9 +188,9 @@ public partial class PerformanceViewModel : ObservableObject
     {
         var departed = Metrics.Where(m => m.Departed).Select(m => m.Title).ToList();
         SessionState = departed.Count > 0
-            ? "Watching: " + string.Join(", ", departed) + " outside the normal range for this session."
-            : TickRate.History.Count == 0 ? "Warming up — no samples past the warm-up window yet."
-            : "Everything within this session's normal range.";
+            ? Loc.T("Watching: ") + string.Join(", ", departed) + Loc.T(" outside the normal range for this session.")
+            : TickRate.History.Count == 0 ? Loc.T("Warming up — no samples past the warm-up window yet.")
+            : Loc.T("Everything within this session's normal range.");
     }
 
     /// <summary>

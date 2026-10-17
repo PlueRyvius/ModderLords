@@ -660,6 +660,7 @@ it by hand**, or your edit will be overwritten.
 |---|---|---|
 | Mode | not changeable since 1.2.6 | Always Host mode; see [Player mode and Host mode](#player-mode-and-host-mode). |
 | Theme | **Light** / **Dark** button on the top bar | Remembered between runs. |
+| `Language` | language list on the top bar | **System default** follows the Windows display language; **English** or **简体中文** (Simplified Chinese) picks one. Takes effect on restart. Text with no translation yet shows in English; server console and log output always stay in English. |
 | `CheckForUpdates` | `ui-state.json` only | `false` stops the check on startup. **Updates** on the top bar still checks on demand. See [Updates](#updates). |
 | `SkippedVersion` | set by **Skip this version** on the update banner | That one version is never mentioned again; a later one still is. Clear it to be offered the skipped version again. |
 | Window size, position, selected tab | remembered automatically | — |

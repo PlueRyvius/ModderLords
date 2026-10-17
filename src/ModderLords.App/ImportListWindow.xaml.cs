@@ -1,6 +1,7 @@
 using System.Windows;
 using ModderLords.Core.Export;
 using ModderLords.Core.Overlay;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -43,13 +44,13 @@ public partial class ImportListWindow : Window
     {
         if (!ApplyToLauncher && !CreateProfile)
         {
-            MessageBox.Show(this, "Pick at least one of the two, or cancel.", "Import a shared mod list",
+            MessageBox.Show(this, Loc.T("Pick at least one of the two, or cancel."), Loc.T("Import a shared mod list"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         if (CreateProfile && ProfileNameText.Length == 0)
         {
-            MessageBox.Show(this, "Give the profile a name.", "Import a shared mod list", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, Loc.T("Give the profile a name."), Loc.T("Import a shared mod list"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         DialogResult = true;

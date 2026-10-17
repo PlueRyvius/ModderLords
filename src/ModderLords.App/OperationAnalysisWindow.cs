@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using ModderLords.Analysis;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -9,13 +10,13 @@ public sealed class OperationAnalysisWindow : Window
 {
     public OperationAnalysisWindow(AnalysisReport report)
     {
-        Title = "Operation compatibility — selected launch snapshot"; Width = 1100; Height = 740;
+        Title = Loc.T("Operation compatibility — selected launch snapshot"); Width = 1100; Height = 740;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var dock = new DockPanel { Margin = new Thickness(16) };
-        var summary = new TextBlock { Text = report.Summary + "\nEvidence describes possible effects, not proof of working multiplayer.", Margin = new Thickness(0, 0, 0, 12), TextWrapping = TextWrapping.Wrap };
+        var summary = new TextBlock { Text = report.Summary + Loc.T("\nEvidence describes possible effects, not proof of working multiplayer."), Margin = new Thickness(0, 0, 0, 12), TextWrapping = TextWrapping.Wrap };
         DockPanel.SetDock(summary, Dock.Top); dock.Children.Add(summary);
         var tabs = new TabControl();
-        tabs.Items.Add(new TabItem { Header = "Contracts", Content = GridFor(report.Plan.Contracts.Select(c => new
+        tabs.Items.Add(new TabItem { Header = Loc.T("Contracts"), Content = GridFor(report.Plan.Contracts.Select(c => new
         { Feature = c.Contract.Operation, c.Contract.Provider, Decision = c.Decision.ToString(), c.Reason, c.Contract.ActorBinding, c.Contract.Transport })) });
         var split = new Grid(); split.RowDefinitions.Add(new RowDefinition()); split.RowDefinitions.Add(new RowDefinition { Height = new GridLength(230) });
         var operations = GridFor(report.Operations.Select(o => new OperationRow(o))); split.Children.Add(operations);
@@ -28,8 +29,8 @@ public sealed class OperationAnalysisWindow : Window
             details.Text = $"Loading: {o.Status.Loading}; authority: {o.Status.Authority}; interaction: {o.Status.Interaction}; replication: {o.Status.Replication}\nOffline: {o.Status.OfflineVerification}; runtime: {o.Status.RuntimeVerification}\n\n" +
                 string.Join("\n\n", o.Evidence.Select(e => $"{e.Effect}\n{string.Join(" → ", e.CallChain)}\n{e.MethodIdentity}, IL_{e.IlOffset:X4}: {e.Detail}"));
         };
-        tabs.Items.Add(new TabItem { Header = "Operations and evidence", Content = split });
-        tabs.Items.Add(new TabItem { Header = "Coverage gaps", Content = GridFor(report.Gaps) });
+        tabs.Items.Add(new TabItem { Header = Loc.T("Operations and evidence"), Content = split });
+        tabs.Items.Add(new TabItem { Header = Loc.T("Coverage gaps"), Content = GridFor(report.Gaps) });
         dock.Children.Add(tabs); Content = dock;
     }
     private sealed class OperationRow(OperationFinding operation)

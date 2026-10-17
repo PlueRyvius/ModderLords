@@ -8,6 +8,7 @@ using System.Windows.Media;
 using ModderLords.App.ViewModels;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Support;
+using ModderLords.App.Localization;
 
 namespace ModderLords.App;
 
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
         _ui = UiStateStore.Load();
         RestoreGeometry();
         RestoreTheme();
+        RestoreLanguage();
 
         // The mode decides which half of the app is even constructed, so it is settled before the first scan.
         // Everyone is a host now: the mode button is hidden and the first-run question is not asked, so a saved
@@ -122,7 +124,7 @@ public partial class MainWindow : Window
     {
         if (ViewModel.Mode == AppMode.Host && ViewModel.Host is { } host && (host.IsRunning || host.LaunchCommand.IsRunning))
         {
-            MessageBox.Show("Stop the server before switching to Player mode.", "ModderLords",
+            MessageBox.Show(Loc.T("Stop the server before switching to Player mode."), "ModderLords",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -365,7 +367,7 @@ public partial class MainWindow : Window
         _restoring = true;
         _theme = _ui.Theme == nameof(AppTheme.Dark) ? AppTheme.Dark : AppTheme.Light;
         App.ApplyTheme(_theme);
-        ThemeButton.Content = _theme == AppTheme.Light ? "Dark" : "Light";
+        ThemeButton.Content = Loc.T(_theme == AppTheme.Light ? "Dark" : "Light");
         _restoring = false;
     }
 
@@ -397,10 +399,33 @@ public partial class MainWindow : Window
     {
         _theme = _theme == AppTheme.Light ? AppTheme.Dark : AppTheme.Light;
         App.ApplyTheme(_theme);
-        ThemeButton.Content = _theme == AppTheme.Light ? "Dark" : "Light";
+        ThemeButton.Content = Loc.T(_theme == AppTheme.Light ? "Dark" : "Light");
         if (_restoring) return;
         _ui.Theme = _theme.ToString();
         UiStateStore.Save(_ui);
+    }
+
+    // ---- language --------------------------------------------------------------------------------------
+
+    private void RestoreLanguage()
+    {
+        _restoring = true;
+        foreach (var (code, name) in Loc.Languages)
+            LanguageBox.Items.Add(new ComboBoxItem { Content = code is null ? Loc.T(name) : name, Tag = code });
+        LanguageBox.SelectedIndex = Math.Max(0, Array.FindIndex(Loc.Languages, l => l.Code == _ui.Language));
+        _restoring = false;
+    }
+
+    private void Language_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_restoring || LanguageBox.SelectedItem is not ComboBoxItem item) return;
+        var code = item.Tag as string;
+        if (code == _ui.Language) return;
+        _ui.Language = code;
+        UiStateStore.Save(_ui);
+        // Shown in both languages: whoever picked it may not read the current one.
+        MessageBox.Show(this, "Restart ModderLords to switch the language.\n\u91cd\u65b0\u542f\u52a8 ModderLords \u4ee5\u5207\u6362\u8bed\u8a00\u3002", "ModderLords",
+            MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private async void ReportProblem_Click(object sender, RoutedEventArgs e) => await ShowSupportReportAsync();
@@ -413,7 +438,7 @@ public partial class MainWindow : Window
         try { context = SupportReportService.Capture(ViewModel); }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Could not inspect the current diagnostics: " + ex.Message, "Report a problem",
+            MessageBox.Show(this, Loc.T("Could not inspect the current diagnostics: ") + ex.Message, Loc.T("Report a problem"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -438,7 +463,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ViewModel.Status = "Support bundle: " + ex.Message;
-            MessageBox.Show(this, ex.Message, "Could not create support bundle", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, ex.Message, Loc.T("Could not create support bundle"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         finally
@@ -448,15 +473,15 @@ public partial class MainWindow : Window
         }
 
         if (result.Warnings.Count > 0)
-            MessageBox.Show(this, "The diagnostics bundle was created with these notes:\n\n" +
+            MessageBox.Show(this, Loc.T("The diagnostics bundle was created with these notes:\n\n") +
                 string.Join("\n", result.Warnings.Select(w => "• " + w)) +
-                "\n\nClick OK to open the GitHub report form and show the bundle in Explorer.",
-                "Support bundle created", MessageBoxButton.OK, MessageBoxImage.Information);
+                Loc.T("\n\nClick OK to open the GitHub report form and show the bundle in Explorer."),
+                Loc.T("Support bundle created"), MessageBoxButton.OK, MessageBoxImage.Information);
         try { SupportDestination.Open(result, new WindowsSupportDestinationLauncher()); }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "The bundle was created, but Windows could not open GitHub or Explorer.\n\n" +
-                result.DiagnosticPath + "\n\n" + ex.Message, "Support bundle created",
+            MessageBox.Show(this, Loc.T("The bundle was created, but Windows could not open GitHub or Explorer.\n\n") +
+                result.DiagnosticPath + "\n\n" + ex.Message, Loc.T("Support bundle created"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -478,7 +503,7 @@ public partial class MainWindow : Window
     private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
     {
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Could not open the link", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex) { MessageBox.Show(ex.Message, Loc.T("Could not open the link"), MessageBoxButton.OK, MessageBoxImage.Warning); }
         e.Handled = true;
     }
 
@@ -552,7 +577,7 @@ public partial class MainWindow : Window
     private async void CloseAfterStoppingServer(HostViewModel host, CancelEventArgs e)
     {
         e.Cancel = true;
-        if (MessageBox.Show("The server is running. Stop it and close?", "ModderLords", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(Loc.T("The server is running. Stop it and close?"), "ModderLords", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         await host.OnClosingAsync();
         _closeConfirmed = true;
         Close();
