@@ -24,7 +24,7 @@
                         ToolTip="{l:T 'Take away every perk this character has chosen, so they can be chosen again in the game. Skills, focus and attributes stay.'}" />
                 <Button Content="{l:T 'Reload'}" Command="{Binding ReloadCommand}" MinWidth="80" Margin="4,0" />
                 <Button Content="{l:T 'Apply'}" Command="{Binding ApplyCommand}" MinWidth="80" Margin="4,0" IsDefault="True" />
-                <Button Content="{l:T 'Close'}" IsCancel="True" MinWidth="80" Margin="4,0,0,0" />
+                <Button Content="{l:T 'Close'}" IsCancel="True" Click="Close_Click" MinWidth="80" Margin="4,0,0,0" />
             </StackPanel>
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center" />
         </DockPanel>
