@@ -12,4 +12,7 @@ public partial class CharacterEditorWindow : Window
         DataContext = vm;
         Loaded += async (_, _) => await vm.ReloadCommand.ExecuteAsync(null);
     }
+
+    // The window is shown modeless, where IsCancel alone does not close it.
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
 }
