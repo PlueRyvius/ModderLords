@@ -2352,6 +2352,12 @@ public partial class GameplayRow : ObservableObject
     public string Key => Path.Contains('.') ? Path[(Path.IndexOf('.') + 1)..] : Path;
 }
 
+/// <summary>An entry of the Gameplay tab's Difficulty preset list: a <see cref="Coop.Config.DifficultyPresets"/> name and how it reads.</summary>
+public sealed record GameplayPresetChoice(string Name, string Label)
+{
+    public override string ToString() => Label;
+}
+
 /// <summary>
 /// The width of the Share tab's second column: a star in Host mode, zero in Player mode. A collapsed child does
 /// not shrink its grid column, so without this the mod list would sit in half a tab with nothing beside it.

@@ -459,6 +459,42 @@ public partial class HostViewModel : ObservableObject
     [ObservableProperty] private string _driftText = "";
     public ObservableCollection<GameplayRow> Gameplay { get; } = new();
 
+    /// <summary>The Gameplay tab's Difficulty preset list: the game's three presets, then Custom.</summary>
+    public IReadOnlyList<GameplayPresetChoice> GameplayPresets { get; } =
+    [
+        new("Freebooter", Loc.T("Freebooter (very easy)")),
+        new("Warrior", Loc.T("Warrior (easy)")),
+        new("Bannerlord", Loc.T("Bannerlord (realistic)")),
+        new(Coop.Config.DifficultyPresets.Custom, Loc.T("Custom")),
+    ];
+
+    /// <summary>The preset the Gameplay rows match now, or Custom; picking one sets the rows (saved with Save, like any edit).</summary>
+    [ObservableProperty] private GameplayPresetChoice? _gameplayPreset;
+    private bool _detectingPreset;
+
+    partial void OnGameplayPresetChanged(GameplayPresetChoice? value)
+    {
+        if (_detectingPreset || value is null) return;
+        var values = Coop.Config.DifficultyPresets.ValuesFor(value.Name);
+        if (values.Count == 0) return;
+        foreach (var (path, v) in values)
+            if (Gameplay.FirstOrDefault(r => r.Path.Equals(path, StringComparison.OrdinalIgnoreCase)) is { } row) row.Value = v;
+        DetectGameplayPreset();
+    }
+
+    private void DetectGameplayPreset()
+    {
+        var name = Coop.Config.DifficultyPresets.Detect(path => Gameplay.FirstOrDefault(r => r.Path.Equals(path, StringComparison.OrdinalIgnoreCase))?.Value);
+        _detectingPreset = true;
+        try { GameplayPreset = GameplayPresets.FirstOrDefault(p => p.Name == name); }
+        finally { _detectingPreset = false; }
+    }
+
+    private void GameplayRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GameplayRow.Value)) DetectGameplayPreset();
+    }
+
     public void RefreshDrift()
     {
         try
@@ -497,10 +533,16 @@ public partial class HostViewModel : ObservableObject
         try
         {
             var paths = LaunchSession.ResolvePaths(Profile);
+            foreach (var old in Gameplay) old.PropertyChanged -= GameplayRowChanged;
             Gameplay.Clear();
             foreach (var s in Coop.Config.ModConfig.Read(paths))
-                Gameplay.Add(new GameplayRow { Path = s.Path, Kind = s.Kind, Original = s.RawValue, Value = s.Display,
-                    Choices = Coop.Config.ModConfig.Choices.TryGetValue(s.Path, out var c) ? c : (s.Kind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False ? ["true", "false"] : null) });
+            {
+                var row = new GameplayRow { Path = s.Path, Kind = s.Kind, Original = s.RawValue, Value = s.Display,
+                    Choices = Coop.Config.ModConfig.Choices.TryGetValue(s.Path, out var c) ? c : (s.Kind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False ? ["true", "false"] : null) };
+                row.PropertyChanged += GameplayRowChanged;
+                Gameplay.Add(row);
+            }
+            DetectGameplayPreset();
         }
         catch (Exception ex) { Status = Loc.T("mod-config.json: ") + ex.Message; }
     }
