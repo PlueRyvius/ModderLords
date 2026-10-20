@@ -56,6 +56,11 @@ public sealed class ServerSettings
     public int EnginePort { get; set; } = 7210;
     public string Region { get; set; } = "EU";
     public string Password { get; set; } = "";
+    /// <summary>
+    /// The name players see for the server in Coop's server browser. Coop has no setting for it and shows the Steam
+    /// name of the account logged in on the server machine; the server guards module swaps that name. Empty = the Steam name.
+    /// </summary>
+    public string ServerName { get; set; } = "";
     public bool Steam { get; set; } = true;
     public int AutosaveMinutes { get; set; } = 5;
     public bool LogFile { get; set; } = true;

@@ -595,6 +595,8 @@
   "System default": "系统默认",
   "Language of the app. Takes effect when ModderLords is restarted.": "应用的语言。重启 ModderLords 后生效。",
   "Light": "浅色",
+  "Server name": "服务器名称",
+  "What players see in the Host column of Coop's server browser. Empty shows the Steam name of the account logged in on this machine, as before. Needs Server guards on; applies at the next server start. Players joining by address see no name.": "玩家在 Coop 服务器浏览器“主机”一栏中看到的名称。留空则与以前一样显示本机登录的 Steam 账户名称。需要开启“服务器防护”；下次启动服务器时生效。通过地址加入的玩家看不到名称。",
   "Difficulty preset": "难度预设",
   "Freebooter (very easy)": "自由佣兵（非常简单）",
   "Warrior (easy)": "战士（简单）",

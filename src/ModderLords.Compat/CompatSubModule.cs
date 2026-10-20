@@ -38,6 +38,8 @@ public sealed class CompatSubModule : MBSubModuleBase
             }
             var installed = Guards.InstallAll(Harmony);
             Log.Info($"server guards installed: {installed}");
+            try { ServerName.Install(Harmony); }
+            catch (Exception ex) { Log.Info("server name: not installed: " + ex.GetBaseException().Message); }
 
             var creator = WorldCreator.TryCreate();
             if (creator.IsEnabled) _worldCreator = creator;
