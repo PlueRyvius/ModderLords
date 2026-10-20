@@ -23,6 +23,10 @@ public static class SettingsHints
         var json = File.ReadAllText(path);
         if (!LegacyRecipePolicy.Accept(json, out var refusal)) { Log.Warn(refusal); return; }
         var root = MiniJson.ParseObject(json);
+        foreach (var m in MiniJson.GetArray(root, "PlayersOwnSettings") ?? new List<object?>())
+            if (m is string id && id.Length > 0) SettingsSources.PlayersOwnModules.Add(id);
+        if (SettingsSources.PlayersOwnModules.Count > 0)
+            Log.Info($"settings sync: players keep their own settings for {string.Join(", ", SettingsSources.PlayersOwnModules)}; the server does not send them");
         var mods = MiniJson.GetArray(root, "Mods");
         if (mods == null) return;
         var inc = 0; var exc = 0;

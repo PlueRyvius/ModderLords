@@ -90,6 +90,11 @@ public sealed class RecipeSet
     /// these. Null when the check is switched off (MODDERLORDS_BATTLE_SCENE_PICK=0).
     /// </summary>
     public List<string>? ExcludedBattleScenes { get; set; }
+    /// <summary>
+    /// Mods whose settings players keep for themselves (the Mods list's "Locked to host" unticked): the server's module
+    /// never sends their settings, MCM or their own classes, to players. Null when every mod's settings are locked.
+    /// </summary>
+    public List<string>? PlayersOwnSettings { get; set; }
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 

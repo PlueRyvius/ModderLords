@@ -27,6 +27,11 @@ public sealed class ProfileMod
     /// </summary>
     public List<string> ClientSideBehaviors { get; set; } = new();
     /// <summary>
+    /// With settings sync on: whether players' games are given this mod's settings (MCM and its own settings classes)
+    /// from the host. Null, the default, is locked to the host, as it always was; false lets each player keep their own.
+    /// </summary>
+    public bool? LockSettingsToHost { get; set; }
+    /// <summary>
     /// Top-level folders of this mod the dedicated server is not shown (see <see cref="ServerFolderExclusions"/>).
     /// Three states, and the difference matters: null is "no opinion", so the compat record's list applies; an empty
     /// list is "leave nothing out", which overrules a record that says otherwise; anything else replaces the record's

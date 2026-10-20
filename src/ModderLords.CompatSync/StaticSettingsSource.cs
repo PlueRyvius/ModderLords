@@ -86,6 +86,9 @@ public sealed class StaticSettingsSource : ISettingsSource
     public int Count => _objects.Count;
     public IEnumerable<string> Ids => _objects.Keys;
 
+    /// <summary>The module an object of this source belongs to, or null when it is not one of this source's.</summary>
+    public string? ModuleIdFor(string settingsId) => _objects.TryGetValue(settingsId, out var o) && o.ModuleId.Length > 0 ? o.ModuleId : null;
+
     // ---- discovery ---------------------------------------------------------------------------------------------
 
     public void Refresh()
@@ -115,7 +118,7 @@ public sealed class StaticSettingsSource : ISettingsSource
     }
 
     /// <summary>Community module id from the assembly's location (…\Modules\&lt;Id&gt;\bin\…); null for engine/stock/byte-loaded assemblies.</summary>
-    private static string? ModuleIdOf(Assembly a)
+    internal static string? ModuleIdOf(Assembly a)
     {
         string loc;
         try { loc = a.Location; } catch { return null; }
