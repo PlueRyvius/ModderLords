@@ -377,6 +377,24 @@
                                         <Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding SettingsTip}" /></Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="{l:T 'Locked to host'}" Width="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding LockSettings, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0"
+                                                      ToolTip="{l:T 'With Settings sync on: ticked, players get this mod\&#x27;s settings from the server and their own changes are put back; unticked, each player keeps their own settings for this mod. Leave it ticked for mods whose settings change the shared world.'}">
+                                                <CheckBox.Style>
+                                                    <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasSettings}" Value="False">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </CheckBox.Style>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="{l:T 'Bins'}" x:Name="BinsColumn" Binding="{Binding Bins}" IsReadOnly="True" Width="100" />
                                 <DataGridTemplateColumn Header="{l:T 'Compat'}" x:Name="CompatColumn" Width="150">
                                     <DataGridTemplateColumn.CellTemplate>

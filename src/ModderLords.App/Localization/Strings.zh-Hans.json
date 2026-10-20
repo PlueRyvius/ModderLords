@@ -600,5 +600,7 @@
   "Warrior (easy)": "战士（简单）",
   "Bannerlord (realistic)": "霸主（真实）",
   "Custom": "自定义",
-  "Sets every difficulty value below the way the game's own campaign presets do. Bannerlord is Realistic throughout, except stealth and disguise, which the game keeps at Easy. Birth and death, perk auto-allocation and Coop's own options are left alone. Shows Custom when the values match no preset. Save to keep it.": "按游戏自带战役预设的方式设置下方所有难度值。霸主预设全部为真实，但潜行与伪装保持为简单（与游戏一致）。出生与死亡、技能自动分配以及 Coop 自身的选项不会更改。数值与任何预设都不匹配时显示“自定义”。点击保存后生效。"
+  "Sets every difficulty value below the way the game's own campaign presets do. Bannerlord is Realistic throughout, except stealth and disguise, which the game keeps at Easy. Birth and death, perk auto-allocation and Coop's own options are left alone. Shows Custom when the values match no preset. Save to keep it.": "按游戏自带战役预设的方式设置下方所有难度值。霸主预设全部为真实，但潜行与伪装保持为简单（与游戏一致）。出生与死亡、技能自动分配以及 Coop 自身的选项不会更改。数值与任何预设都不匹配时显示“自定义”。点击保存后生效。",
+  "Locked to host": "锁定为主机设置",
+  "With Settings sync on: ticked, players get this mod's settings from the server and their own changes are put back; unticked, each player keeps their own settings for this mod. Leave it ticked for mods whose settings change the shared world.": "开启设置同步时：勾选后，玩家会从服务器获得此模组的设置，自己的更改会被恢复；取消勾选后，每位玩家保留自己对此模组的设置。对于设置会影响共享世界的模组，请保持勾选。"
 }
