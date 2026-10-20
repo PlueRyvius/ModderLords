@@ -155,5 +155,5 @@ public static class FourberieLayer
     }
 
     /// <summary>"; Fourberie: ..." for the 30 s verification line, or empty when the layer is not running.</summary>
-    public static string Summary() => Active ? "; Fourberie: " + (IsServer ? FbBooks.Summary() + ", " + FbTicks.Summary() + ", " + FbPrompts.Summary() + ", " + FbRelay.Summary() + ", " + FbModels.Summary() + ", " + FbEffects.Summary() : FbMirrorClient.Summary() + ", " + FbRelay.Summary() + ", " + FbGaps.Summary() + ", " + FbEffects.Summary() + FbEscape.Summary()) : "";
+    public static string Summary() => Active ? "; Fourberie: " + (IsServer ? FbBooks.Summary() + ", " + FbTicks.Summary() + ", " + FbPrompts.Summary() + ", " + FbRelay.Summary() + ", " + FbModels.Summary() + ", " + FbEffects.Summary() : FbMirrorClient.Summary() + ", " + FbLedgers.Summary() + ", " + FbRelay.Summary() + ", " + FbGaps.Summary() + ", " + FbEffects.Summary() + FbEscape.Summary()) : "";
 }
