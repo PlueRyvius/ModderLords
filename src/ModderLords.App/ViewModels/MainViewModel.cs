@@ -32,6 +32,8 @@ public partial class ModRow : ObservableObject
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(RoleChoice))] private ServerRole _role;
     /// <summary>Layer 1: behaviours run on the server only; clients skip them (needs the shared module on both sides).</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(RoleChoice))] private bool _serverAuthoritative;
+    /// <summary>With settings sync on: players get this mod's settings from the host (ticked) or keep their own.</summary>
+    [ObservableProperty] private bool _lockSettings = true;
 
     /// <summary>
     /// Whether the grid this row is in shows the experimental columns (<see cref="MainViewModel.ShowExperimentalCompat"/>,
@@ -84,7 +86,11 @@ public partial class ModRow : ObservableObject
         OnPropertyChanged(nameof(ServerVerdictDetail));
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(SettingsTip));
+        OnPropertyChanged(nameof(HasSettings));
     }
+
+    /// <summary>The scan found settings for this mod (MCM or its own classes), so the Locked to host tick means something.</summary>
+    public bool HasSettings => !IsMissing && _scan is { } s && (s.UsesMcm || s.SettingsClasses.Count > 0);
 
     public string Behaviors => IsMissing ? "" : _scan is not { } s ? Scanning
         : s.CampaignBehaviors.Count + s.MissionBehaviors.Count == 0 ? "" : $"{s.CampaignBehaviors.Count} campaign, {s.MissionBehaviors.Count} mission";
@@ -775,7 +781,7 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     private void ModRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_syncingVersions || e.PropertyName is not (nameof(ModRow.Enabled) or nameof(ModRow.Role) or nameof(ModRow.ServerAuthoritative))) return;
+        if (_syncingVersions || e.PropertyName is not (nameof(ModRow.Enabled) or nameof(ModRow.Role) or nameof(ModRow.ServerAuthoritative) or nameof(ModRow.LockSettings))) return;
         if (sender is not ModRow row) return;
         IsDirty = true;
         if (e.PropertyName != nameof(ModRow.Enabled) || !row.Enabled || row.IsGameModule || !row.HasVersionSiblings)
@@ -819,6 +825,7 @@ public partial class MainViewModel : ObservableObject
             pm.Enabled = row.Enabled;
             pm.Role = row.Role;
             pm.ServerAuthoritative = row.ServerAuthoritative;
+            pm.LockSettingsToHost = row.LockSettings ? null : false;
             pm.ClientSideBehaviors = row.ClientSideBehaviors.ToList();
             // The pin moves only when a copy is ticked: that is the one way a user says "this copy". With every copy
             // unticked the rows say nothing about which, so a pin that still names a folder is left alone - taking
@@ -954,6 +961,7 @@ public partial class MainViewModel : ObservableObject
                             new Bannerlord.ModuleManager.ModuleInfoExtended { Id = pm.Id, Name = pm.Id }),
                         IsMissing = true, Enabled = pm.Enabled, Role = pm.Role,
                         ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList(),
+                        LockSettings = pm.LockSettingsToHost != false,
                     });
                     continue;
                 }
@@ -965,6 +973,7 @@ public partial class MainViewModel : ObservableObject
                     {
                         Module = c, Enabled = pm.Enabled && ReferenceEquals(c, chosen), Role = pm.Role,
                         ServerAuthoritative = pm.ServerAuthoritative, ClientSideBehaviors = pm.ClientSideBehaviors.ToList(),
+                        LockSettings = pm.LockSettingsToHost != false,
                     });
                 byId.Remove(pm.Id);
             }
@@ -2350,6 +2359,12 @@ public partial class GameplayRow : ObservableObject
     [ObservableProperty] private string _value = "";
     public string Section => Path.Contains('.') ? Path[..Path.IndexOf('.')] : "";
     public string Key => Path.Contains('.') ? Path[(Path.IndexOf('.') + 1)..] : Path;
+}
+
+/// <summary>An entry of the Gameplay tab's Difficulty preset list: a <see cref="Coop.Config.DifficultyPresets"/> name and how it reads.</summary>
+public sealed record GameplayPresetChoice(string Name, string Label)
+{
+    public override string ToString() => Label;
 }
 
 /// <summary>

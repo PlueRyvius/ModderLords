@@ -110,6 +110,7 @@ It is built generically (`PlayerBooks`: a list of static fields plus a codec) so
 | `fourb-phantom-guard` | client | During a co-op session, any hero, clan or party construction under a Fourberie frame is refused with a log line naming the call site, so a missed relay shows up as a clear log line rather than an invisible bug. |
 | `fourb-locations` | client | Resolves how Coop's `PlayerLocationEntryPatches` treats the injected safe-house and pit locations. If it misbehaves, those two locations are marked local-only (the scenes are single-player scenes anyway). |
 | `fourb-settings` | both | Host's four gameplay switches win; **key bindings stay per player** (the generic static-settings sync would push the host's keybinds onto everyone). This is done with a compat record (`IgnoreSettingsTypes: Fourberie.Settings`) plus a small explicit sync of the four bools. Client: no reload of `FourberieConfig.xml` over the host's values during co-op. |
+| `fourb-leave` | client | Fourberie's own Leave options (29 call sites: hideout, safe house, robbery, extortion, sabotage...) call `PlayerEncounter.LeaveSettlement` and `Finish` themselves. Coop refuses the leave on a player's game and only replaces vanilla's Leave buttons, so the encounter ended locally while the server kept the party inside: the hideout menu came back and Leave did nothing (2026-10-19). While one of those methods runs on a player's game, `LeaveSettlement` sends Coop's own `EndSettlementEncounterAttempted` instead, and the `Finish` after it is skipped. |
 | `fourb-escape` | client | "Break free" in the captivity menu is **off in co-op**: shown greyed out with the reason, and its consequence refused. Fourberie frees the player with `PlayerCaptivity.EndCaptivity`, starts a new encounter with the town and opens the prison-break mission inside it. Coop's only release takes the party out of the dungeon and puts it on the map. Left alone, the server keeps the hero in the dungeon. Asking the server for the release as well (0.1.42) put the party on the map on the server while the player's game was in the mission; reported 2026-10-11 as a desync that broke surrender, crafting and smelting for that character afterwards. Carrying it needs the server to hold the release until the mission's outcome is known. |
 
 ### Command tiers
@@ -203,6 +204,13 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
      `CreateVirtualParty` hands back the existing one, emptied, on either side. Its members, prisoners and warehouse
      items travel in the book (`ml_ledgers`, row per ledger, set semantics), so Fourberie's party-screen and stash
      callbacks reach the server.
+     - **The book is the only way in on a player's game.** Coop also sends every game the server's roster changes, as
+       additions and removals on top of what that game holds. Applied as well, a change the player's game made came
+       back once the server applied the report, was reported again, and grew the party each round (2026-10-18: 15
+       saboteurs in training became about 7,000). The player's game now ignores Coop's troop and item changes to its
+       own ledgers.
+     - **Repair:** the host's console command `modderlords.agents [player] [what number]` shows and sets a player's
+       saboteurs, spies and assassins (ready, in training, and the saboteur party), in their book.
    - **Relayed (T1):** the insurance scam's `SpawnCaravan` and `SpawnBandits`. The player's game skips them and sends
      the arguments by id; the server runs them as the player.
    - **Not in co-op yet (T3, with an on-screen line):** fights against a party made on the spot (the safe-house raids,

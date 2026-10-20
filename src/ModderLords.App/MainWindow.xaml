@@ -377,6 +377,24 @@
                                         <Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding SettingsTip}" /></Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="{l:T 'Locked to host'}" Width="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding LockSettings, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="0"
+                                                      ToolTip="{l:T 'With Settings sync on: ticked, players get this mod\&#x27;s settings from the server and their own changes are put back; unticked, each player keeps their own settings for this mod. Leave it ticked for mods whose settings change the shared world.'}">
+                                                <CheckBox.Style>
+                                                    <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasSettings}" Value="False">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </CheckBox.Style>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="{l:T 'Bins'}" x:Name="BinsColumn" Binding="{Binding Bins}" IsReadOnly="True" Width="100" />
                                 <DataGridTemplateColumn Header="{l:T 'Compat'}" x:Name="CompatColumn" Width="150">
                                     <DataGridTemplateColumn.CellTemplate>
@@ -623,6 +641,9 @@
             <TabItem Header="{l:T 'Gameplay'}" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="{l:T 'Difficulty preset'}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ComboBox ItemsSource="{Binding GameplayPresets}" SelectedItem="{Binding GameplayPreset}" DisplayMemberPath="Label" MinWidth="170" Margin="0,0,12,0"
+                                  ToolTip="{l:T 'Sets every difficulty value below the way the game\&#x27;s own campaign presets do. Bannerlord is Realistic throughout, except stealth and disguise, which the game keeps at Easy. Birth and death, perk auto-allocation and Coop\&#x27;s own options are left alone. Shows Custom when the values match no preset. Save to keep it.'}" />
                         <Button Content="{l:T 'Reload'}" Command="{Binding LoadGameplayCommand}" />
                         <Button Content="{l:T 'Save to mod-config.json'}" Command="{Binding SaveGameplayCommand}" />
                         <TextBlock VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap"

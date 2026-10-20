@@ -760,6 +760,13 @@ public sealed class LaunchSession
                     + (excludedScenes.Any(s => s.StartsWith("battle_terrain", StringComparison.Ordinal)) ? $" ({string.Join(", ", excludedScenes.Where(s => s.StartsWith("battle_terrain", StringComparison.Ordinal)).Take(4))})" : ""));
         }
         var set = Compat.RecipeSet.Build(entries, "ModderLords", hints, authority, excludedScenes, traced);
+        var playersOwn = SettingsLockPolicy.PlayersOwn(profile, selections.Select(s => s.Module.Id));
+        if (playersOwn.Count > 0)
+        {
+            set.PlayersOwnSettings = playersOwn;
+            messages.Add($"settings sync: players keep their own settings for {string.Join(", ", playersOwn)}");
+            foreach (var warning in SettingsLockPolicy.Warnings(playersOwn, id => db.Find(id)?.DefaultSettings.Count > 0)) messages.Add("WARNING " + warning);
+        }
         set.WriteInto(sync.FolderPath);
         if (traced.Count > 0 && (authority is null || traced.Any(t => !set.Mods.Any(m => m.Id.Equals(t, StringComparison.OrdinalIgnoreCase) && m.TraceRoots is { Count: > 0 }))))
             messages.Add("trace: MODDERLORDS_TRACE_MODS names a mod that could not be analysed; it is not traced");
