@@ -71,6 +71,29 @@ public sealed class McmSettingsSource : ISettingsSource
         return ValueConverter.ApplyTo(Properties(target).Select(p => p.reference), values, out report);
     }
 
+    private readonly Dictionary<string, string?> _modules = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The module an MCM settings object belongs to: the folder of the assembly its settings class is in
+    /// (…\Modules\&lt;Id&gt;\bin\…). MCM's ids and folder names are the mod author's choice and say nothing reliable.
+    /// Null when MCM does not know the id or the class is not in a module folder.
+    /// </summary>
+    public string? ModuleIdFor(string settingsId)
+    {
+        if (settingsId.Contains(":")) return null;
+        if (_modules.TryGetValue(settingsId, out var known)) return known;
+        string? module = null;
+        try
+        {
+            var provider = Provider();
+            var get = provider?.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "GetSettings" && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(string));
+            if (get?.Invoke(provider, new object[] { settingsId }) is { } settings) module = StaticSettingsSource.ModuleIdOf(settings.GetType().Assembly);
+        }
+        catch (Exception) { module = null; }
+        return _modules[settingsId] = module;
+    }
+
     /// <summary>GetSettings + SaveSettings on MCM's provider, found by name. Never throws.</summary>
     public string Save(string settingsId)
     {

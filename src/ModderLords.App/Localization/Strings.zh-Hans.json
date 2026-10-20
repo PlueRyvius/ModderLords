@@ -594,5 +594,7 @@
   "The update did not install: {0}\n\nModderLords is unchanged. You can download the new version from the release page instead.": "更新未安装：{0}\n\nModderLords 未作更改。你可以改从发布页面下载新版本。",
   "System default": "系统默认",
   "Language of the app. Takes effect when ModderLords is restarted.": "应用的语言。重启 ModderLords 后生效。",
-  "Light": "浅色"
+  "Light": "浅色",
+  "Locked to host": "锁定为主机设置",
+  "With Settings sync on: ticked, players get this mod's settings from the server and their own changes are put back; unticked, each player keeps their own settings for this mod. Leave it ticked for mods whose settings change the shared world.": "开启设置同步时：勾选后，玩家会从服务器获得此模组的设置，自己的更改会被恢复；取消勾选后，每位玩家保留自己对此模组的设置。对于设置会影响共享世界的模组，请保持勾选。"
 }

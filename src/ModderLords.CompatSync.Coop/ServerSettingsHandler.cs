@@ -69,7 +69,7 @@ public sealed class ServerSettingsHandler : IHandler
     {
         if (payload.Who is not NetPeer peer) return;
         SettingsSources.Refresh();
-        var snapshots = SettingsSources.Capture();
+        var snapshots = SettingsSources.CaptureForPlayers();
         foreach (var s in snapshots)
         {
             lastSent[s.SettingsId] = s.Payload;
@@ -82,7 +82,7 @@ public sealed class ServerSettingsHandler : IHandler
     public void BroadcastChanges()
     {
         if (!active) return;
-        foreach (var s in SettingsSources.Capture())
+        foreach (var s in SettingsSources.CaptureForPlayers())
         {
             if (lastSent.TryGetValue(s.SettingsId, out var prev) && prev == s.Payload) continue;
             lastSent[s.SettingsId] = s.Payload;
