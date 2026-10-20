@@ -204,6 +204,13 @@ Every fact above holds in 0.1.5; detail with file and line references in `_fourb
      `CreateVirtualParty` hands back the existing one, emptied, on either side. Its members, prisoners and warehouse
      items travel in the book (`ml_ledgers`, row per ledger, set semantics), so Fourberie's party-screen and stash
      callbacks reach the server.
+     - **The book is the only way in on a player's game.** Coop also sends every game the server's roster changes, as
+       additions and removals on top of what that game holds. Applied as well, a change the player's game made came
+       back once the server applied the report, was reported again, and grew the party each round (2026-10-18: 15
+       saboteurs in training became about 7,000). The player's game now ignores Coop's troop and item changes to its
+       own ledgers.
+     - **Repair:** the host's console command `modderlords.agents [player] [what number]` shows and sets a player's
+       saboteurs, spies and assassins (ready, in training, and the saboteur party), in their book.
    - **Relayed (T1):** the insurance scam's `SpawnCaravan` and `SpawnBandits`. The player's game skips them and sends
      the arguments by id; the server runs them as the player.
    - **Not in co-op yet (T3, with an on-screen line):** fights against a party made on the spot (the safe-house raids,

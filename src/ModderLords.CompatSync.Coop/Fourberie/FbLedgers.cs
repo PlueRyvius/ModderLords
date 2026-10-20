@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Common.Util;
 using HarmonyLib;
 using ModderLords.CompatSync;
 using Newtonsoft.Json.Linq;
@@ -25,6 +26,12 @@ namespace ModderLords.CompatSync.Coop.Fourberie;
 /// another. What is in them (members, prisoners, warehouse items) travels in the book under "ml_ledgers", row per
 /// ledger, both ways: Fourberie's own party-screen and stash callbacks fill them on the player's game, and the server's
 /// ticks change them there.
+///
+/// On a player's game the book is the only way in. Coop also copies the server's changes to these parties' troops and
+/// items to every game, but as additions and removals on top of whatever that game holds. A change the player's game
+/// made itself then came back a second time: the game reported its roster, the server set it, Coop sent the difference
+/// back, and the game reported the larger roster. Every round added the change again (reported 2026-10-18: 15
+/// saboteurs sent to training became about 7,000). So the player's game ignores Coop's copies for its own ledgers.
 /// </summary>
 internal static class FbLedgers
 {
@@ -35,11 +42,20 @@ internal static class FbLedgers
     /// <summary>Player key (hero StringId) -> role -> ledger party. On a player's game there is one key, their own.</summary>
     private static readonly Dictionary<string, Dictionary<string, MobileParty>> Registry = new Dictionary<string, Dictionary<string, MobileParty>>(StringComparer.Ordinal);
     private static MethodInfo? _create;
-    private static long _reused, _made, _phantoms;
+    private static long _reused, _made, _phantoms, _coopCopiesIgnored;
+
+    /// <summary>Player's game: this player's ledger parties, for the roster guard (read on every roster change, so an array).</summary>
+    private static MobileParty[] _own = Array.Empty<MobileParty>();
+
+    [ThreadStatic] private static bool _applying;
 
     internal static void Bind(MethodInfo createVirtualParty) => _create = createVirtualParty;
 
-    internal static void Reset() => Registry.Clear();
+    internal static void Reset()
+    {
+        Registry.Clear();
+        _own = Array.Empty<MobileParty>();
+    }
 
     private static string? PlayerKey() =>
         FourberieLayer.IsServer ? FbBooks.Current : FourberieLayer.IsCoopClient ? Hero.MainHero?.StringId : null;
@@ -54,7 +70,43 @@ internal static class FbLedgers
     {
         if (!Registry.TryGetValue(key, out var roles)) Registry[key] = roles = new Dictionary<string, MobileParty>(StringComparer.Ordinal);
         roles[role] = party;
+        if (!FourberieLayer.IsServer) _own = roles.Values.Distinct().ToArray();
     }
+
+    // ---- Coop's copies of the server's roster changes (player's game) -----------------------------------------------
+
+    /// <summary>
+    /// Prefix on the troop and item roster changes Coop makes when it applies the server's: skips them for this player's
+    /// ledgers, whose contents arrive whole in the book instead. Coop applies them inside an AllowedThread scope;
+    /// Fourberie's own changes on this game, and the book's, are not in one.
+    /// </summary>
+    internal static bool CoopCopyPrefix(object __instance)
+    {
+        var own = _own;
+        if (own.Length == 0 || _applying || !AllowedThread.IsThisThreadAllowed()) return true;
+        foreach (var party in own)
+        {
+            if (!ReferenceEquals(party.MemberRoster, __instance) && !ReferenceEquals(party.PrisonRoster, __instance)
+                && !ReferenceEquals(party.ItemRoster, __instance)) continue;
+            _coopCopiesIgnored++;
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>The roster changes Coop applies on a player's game for the server (TroopRosterDeltaHandler, Update/ClearItemRosterHandler).</summary>
+    internal static IEnumerable<MethodInfo?> CoopCopyTargets() => new[]
+    {
+        AccessTools.Method(typeof(TroopRoster), nameof(TroopRoster.AddToCounts),
+            new[] { typeof(CharacterObject), typeof(int), typeof(bool), typeof(int), typeof(int), typeof(bool), typeof(int) }),
+        AccessTools.Method(typeof(TroopRoster), nameof(TroopRoster.AddToCountsAtIndex)),
+        AccessTools.Method(typeof(TroopRoster), nameof(TroopRoster.SetElementNumber)),
+        AccessTools.Method(typeof(TroopRoster), nameof(TroopRoster.SetElementWoundedNumber)),
+        AccessTools.Method(typeof(TroopRoster), nameof(TroopRoster.SetElementXp)),
+        AccessTools.Method(typeof(TroopRoster), nameof(TroopRoster.RemoveZeroCounts)),
+        AccessTools.Method(typeof(ItemRoster), nameof(ItemRoster.AddToCounts), new[] { typeof(EquipmentElement), typeof(int) }),
+        AccessTools.Method(typeof(ItemRoster), nameof(ItemRoster.Clear)),
+    };
 
     // ---- CreateVirtualParty ------------------------------------------------------------------------------------
 
@@ -90,6 +142,13 @@ internal static class FbLedgers
         if (ReferenceEquals(Find(key, partyNameID), __result)) return;
         Remember(key, partyNameID, __result);
         _made++;
+    }
+
+    /// <summary>Server, inside the player's scope: their saboteur party, made the way Fourberie's "Create a saboteur party" makes it.</summary>
+    internal static MobileParty? MakeSaboteurParty()
+    {
+        var (role, name) = Roles.First(r => r.Role == "fb_saboteurs_party");
+        return _create?.Invoke(null, new object[] { role, new TextObject(name) }) as MobileParty;
     }
 
     /// <summary>Server, inside the player's scope: makes any ledger this player does not have yet.</summary>
@@ -151,9 +210,14 @@ internal static class FbLedgers
                 // A ledger is bookkeeping, never on the map; Fourberie hides it the same way when it makes one.
                 if (party.IsVisible) party.IsVisible = false;
             }
-            SetTroops(party.MemberRoster, ledger["m"], problems, row.Name);
-            SetTroops(party.PrisonRoster, ledger["q"], problems, row.Name);
-            SetItems(party.ItemRoster, ledger["i"], problems, row.Name);
+            _applying = true;
+            try
+            {
+                SetTroops(party.MemberRoster, ledger["m"], problems, row.Name);
+                SetTroops(party.PrisonRoster, ledger["q"], problems, row.Name);
+                SetItems(party.ItemRoster, ledger["i"], problems, row.Name);
+            }
+            finally { _applying = false; }
         }
     }
 
@@ -218,7 +282,8 @@ internal static class FbLedgers
         foreach (var (element, amount) in wanted) roster.AddToCounts(element, amount);
     }
 
-    internal static string Summary() => $"ledgers reused {_reused}, made {_made}" + (_phantoms > 0 ? $", local stand-ins {_phantoms}" : "");
+    internal static string Summary() => $"ledgers reused {_reused}, made {_made}" + (_phantoms > 0 ? $", local stand-ins {_phantoms}" : "")
+        + (_coopCopiesIgnored > 0 ? $", Coop roster copies ignored {_coopCopiesIgnored}" : "");
 }
 
 /// <summary>Both sides: CreateVirtualParty hands out the player's own ledger parties.</summary>
@@ -239,11 +304,19 @@ internal sealed class FbLedgersComponent : IFbComponent
     public string Install(FbContext context)
     {
         FbLedgers.Bind(_create!);
-        new Harmony(Owner).Patch(_create,
+        var harmony = new Harmony(Owner);
+        harmony.Patch(_create,
             prefix: new HarmonyMethod(typeof(FbLedgers), nameof(FbLedgers.CreatePrefix)) { priority = Priority.First },
             postfix: new HarmonyMethod(typeof(FbLedgers), nameof(FbLedgers.CreatePostfix)));
-        return context.IsServer
-            ? "each player's gang and saboteur parties are made once on the server and reused"
-            : "Fourberie uses this player's gang and saboteur parties from the server";
+        if (context.IsServer) return "each player's gang and saboteur parties are made once on the server and reused";
+
+        var guarded = 0;
+        foreach (var target in FbLedgers.CoopCopyTargets())
+        {
+            if (target == null) continue;
+            harmony.Patch(target, prefix: new HarmonyMethod(typeof(FbLedgers), nameof(FbLedgers.CoopCopyPrefix)) { priority = Priority.First });
+            guarded++;
+        }
+        return $"Fourberie uses this player's gang and saboteur parties from the server; their contents follow the book only ({guarded} roster change(s) from Coop ignored for them)";
     }
 }
