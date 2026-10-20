@@ -65,6 +65,10 @@ the project only when it is true. So CI builds the whole app without a Coop inst
 - Exit codes: 0 clean stop, 2 load failure/timeout, 3 fatal while serving, 4 Coop module verification failed.
 - `server-config.json` keys the pristine core understands: `saveName, port, password, autosaveMinutes, logFile, steam, traceTick, tracePublish, traceBandits`.
   Keys `autoRestart, autoRestartHours, allowClientTimeControls, battleSize` are ignored by the pristine core (they come from third-party launcher extensions).
+- There is no server name (checked 2026-10-19 on the Coop build of 2026-10-06). The server browser's Host column is the
+  lobby's `coop_owner_name`, which Coop sets to the Steam display name of the account logged in on the server machine
+  (`Coop.Steam.SteamLobbyAdvertiser`). The Server tab's Server name reaches it through the guards module, which swaps
+  that one lobby value as it is written (`ModderLords.Compat/ServerName.cs`, `MODDERLORDS_SERVER_NAME`).
 - Engine module discovery only scans `engine\Modules\*`; a module must appear there (a junction works).
 - Submodule DLLs are looked up in `<module>\bin\Win64_Shipping_Server\`, then `engine\bin\Win64_Shipping_Server\`.
 - Submodule tags `DedicatedServerType=none` / `IsNoRenderModeElement=false` make the engine skip that submodule on the server.

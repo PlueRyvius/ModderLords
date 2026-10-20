@@ -499,6 +499,11 @@ public sealed class LaunchSession
                 }
             }
         }
+        if (!string.IsNullOrWhiteSpace(profile.Server.ServerName))
+        {
+            if (profile.CompatGuards) extraEnv["MODDERLORDS_SERVER_NAME"] = profile.Server.ServerName.Trim();
+            else messages.Add("WARNING server name: shown only with Server guards on (the guards module advertises it); players see the Steam name");
+        }
         var plan = new LaunchPlan
         {
             Paths = paths,
