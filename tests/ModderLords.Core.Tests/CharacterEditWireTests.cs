@@ -14,6 +14,8 @@ public class CharacterEditWireTests
     {
         { HeroEdits.Gold(25000), HeroEditKind.Gold, "", 25000 },
         { HeroEdits.ClanRenown(900), HeroEditKind.ClanRenown, "", 900 },
+        { HeroEdits.Female(true), HeroEditKind.Female, "", 1 },
+        { HeroEdits.Female(false), HeroEditKind.Female, "", 0 },
         { HeroEdits.HitPoints(80), HeroEditKind.HitPoints, "", 80 },
         { HeroEdits.UnspentAttributePoints(3), HeroEditKind.UnspentAttributePoints, "", 3 },
         { HeroEdits.UnspentFocusPoints(0), HeroEditKind.UnspentFocusPoints, "", 0 },
@@ -102,6 +104,53 @@ public class CharacterEditWireTests
         Assert.Equal(HeroTargetWire.ForHero("x"), HeroTargets.Hero("x"));
         Assert.False(HeroTargetWire.IsHero("76561198000000001", out _));
         Assert.Throws<ArgumentException>(() => HeroTargets.Hero("two words"));
+    }
+
+    private const string Dna = "<BodyProperties version=\"4\" age=\"25.84\" weight=\"0.5\" build=\"0.5\" key=\"000BB00F8000100D2\" />";
+
+    [Fact]
+    public void Appearance_dna_the_launcher_sends_is_read_back_unchanged()
+    {
+        var sent = HeroBodies.Encode(HeroBodies.Normalize("  " + Dna.Replace("\" age", "\"\r\n  age") + "\n"));
+        Assert.Equal(HeroBodyWire.Encode(Dna), sent);
+        Assert.True(HeroBodyWire.TryDecode(sent, out var body, out var error), error);
+        Assert.Equal(Dna, body);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("hello")]
+    [InlineData("<BodyProperties version=\"4\" />")]
+    public void Text_that_is_not_dna_is_refused_by_both_ends(string text)
+    {
+        Assert.NotNull(HeroBodies.Problem(text));
+        Assert.Equal(HeroBodies.Problem(text), HeroBodyWire.Problem(text));
+        Assert.False(HeroBodyWire.TryDecode(HeroNameWire.Encode(text.Length > 0 ? text : "x"), out _, out _));
+    }
+
+    [Fact]
+    public void A_heros_family_and_appearance_are_read_from_the_reply()
+    {
+        var hero = HeroDetail.From(AdminClient.Parse(AdminWire.Reply("hero", "r4", null, new Dictionary<string, object?>
+        {
+            ["heroId"] = "lord_1", ["name"] = "Mira", ["female"] = true, ["alive"] = false, ["body"] = Dna, ["clan"] = "Hemphill",
+            ["father"] = new Dictionary<string, object?> { ["heroId"] = "lord_0", ["name"] = "Osric", ["female"] = false, ["age"] = 61, ["alive"] = true, ["clan"] = "Ostrava" },
+            ["mother"] = null,
+            ["spouse"] = new Dictionary<string, object?> { ["heroId"] = "main", ["name"] = "Aldric", ["female"] = false, ["age"] = 34, ["alive"] = true, ["clan"] = "Hemphill" },
+            ["children"] = new List<object?> { new Dictionary<string, object?> { ["heroId"] = "kid", ["name"] = "Edda", ["female"] = true, ["age"] = 9, ["alive"] = true, ["clan"] = "Hemphill" } },
+            ["siblings"] = new List<object?>(),
+        }))!);
+        Assert.False(hero.Alive);
+        Assert.Equal(Dna, hero.Body);
+        Assert.Equal(new HeroRelative("lord_0", "Osric", false, 61, true, "Ostrava"), hero.Father);
+        Assert.Null(hero.Mother);
+        Assert.Equal("main", hero.Spouse!.HeroId);
+        Assert.Equal("Edda", Assert.Single(hero.Children).Name);
+        Assert.Empty(hero.Siblings);
+        // An older server says nothing about either: the hero is alive and has no DNA to show.
+        var old = HeroDetail.From(AdminClient.Parse(AdminWire.Reply("hero", "r5", null, new Dictionary<string, object?> { ["name"] = "X" }))!);
+        Assert.True(old.Alive);
+        Assert.Equal("", old.Body);
     }
 
     [Fact]

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:l="clr-namespace:ModderLords.App.Localization"
         Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
-        Title="{Binding Title}" Height="720" Width="900" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+        Title="{Binding Title}" Height="880" Width="960" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
     <Window.Resources>
         <!-- A changed value is bold, so what Apply will send is visible before it is sent. -->
         <Style x:Key="ChangedRow" TargetType="DataGridRow">
@@ -13,11 +13,102 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <!-- One relative: a button that opens them here. Women and men get different badge colours, the dead are
+             muted with a cross, and relatives outside this hero's clan are italic with their clan named. -->
+        <DataTemplate x:Key="RelativeChip">
+            <Button Command="{Binding DataContext.OpenRelativeCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"
+                    ToolTip="{Binding ToolTip}" Margin="0,0,6,4" Padding="6,2">
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="20" Height="20" CornerRadius="10" Margin="0,0,6,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#FF3B6EA8" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Female}" Value="True"><Setter Property="Background" Value="#FFA8457A" /></DataTrigger>
+                                    <DataTrigger Binding="{Binding Alive}" Value="False"><Setter Property="Background" Value="#FF777777" /></DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding Initial}" Foreground="White" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding OtherClan}" Value="True"><Setter Property="FontStyle" Value="Italic" /></DataTrigger>
+                                    <DataTrigger Binding="{Binding Alive}" Value="False"><Setter Property="Foreground" Value="{DynamicResource MutedForeground}" /></DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=", " /><Run Text="{Binding Detail, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+        <ItemsPanelTemplate x:Key="ChipPanel"><WrapPanel /></ItemsPanelTemplate>
     </Window.Resources>
     <DockPanel Margin="10">
         <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,4" />
         <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
                    Text="{l:T 'Changes are made on the running server and reach the player\&#x27;s game through Coop\&#x27;s own sync. Skill values do not change the character\&#x27;s level; set Level separately if needed. Edits are refused while the player is in a battle or a siege.'}" />
+        <!-- FAMILY: parents, spouse, siblings and children of the hero on show. Click one to edit them here. -->
+        <GroupBox DockPanel.Dock="Top" Header="{l:T 'Family'}" Margin="0,0,0,6" Padding="6,4">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="{l:T 'Parents'}" VerticalAlignment="Center" Margin="0,0,0,4" />
+                <ItemsControl Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Parents}" ItemTemplate="{StaticResource RelativeChip}" ItemsPanel="{StaticResource ChipPanel}" />
+                <TextBlock Grid.Row="1" Text="{l:T 'Spouse'}" VerticalAlignment="Center" Margin="0,0,0,4" />
+                <ItemsControl Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Spouses}" ItemTemplate="{StaticResource RelativeChip}" ItemsPanel="{StaticResource ChipPanel}" />
+                <TextBlock Grid.Row="2" Text="{l:T 'Siblings'}" VerticalAlignment="Center" Margin="0,0,0,4" />
+                <ItemsControl Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Siblings}" ItemTemplate="{StaticResource RelativeChip}" ItemsPanel="{StaticResource ChipPanel}" />
+                <TextBlock Grid.Row="3" Text="{l:T 'Children'}" VerticalAlignment="Center" Margin="0,0,0,4" />
+                <ItemsControl Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Children}" ItemTemplate="{StaticResource RelativeChip}" ItemsPanel="{StaticResource ChipPanel}" />
+                <Button Grid.Row="0" Grid.Column="2" Content="{l:T '&#x2190; Back'}" Command="{Binding BackCommand}" VerticalAlignment="Top"
+                        ToolTip="{l:T 'Back to the hero you were editing before this one'}" />
+            </Grid>
+        </GroupBox>
+
+        <!-- APPEARANCE: gender and the game's BodyProperties text (appearance DNA). -->
+        <GroupBox DockPanel.Dock="Top" Header="{l:T 'Appearance'}" Margin="0,0,0,8" Padding="6,4">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                    <TextBlock Text="{l:T 'Gender'}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ComboBox ItemsSource="{Binding Genders}" SelectedIndex="{Binding GenderIndex}" Width="100">
+                        <ComboBox.Style>
+                            <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsGenderChanged}" Value="True"><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ComboBox.Style>
+                    </ComboBox>
+                    <TextBlock Text="{l:T 'Copy face from'}" VerticalAlignment="Center" Margin="20,0,6,0" />
+                    <ComboBox ItemsSource="{Binding FaceSources}" SelectedItem="{Binding FaceSource}" Width="240" />
+                    <Button Content="{l:T 'Copy face'}" Command="{Binding CopyFaceFromCommand}" Margin="4,0,0,0"
+                            ToolTip="{l:T 'Put that hero\&#x27;s appearance DNA in the box below. Nothing changes until Apply.'}" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="{l:T 'Copy'}" Command="{Binding CopyBodyCommand}" MinWidth="60" ToolTip="{l:T 'Copy the DNA to the clipboard (the game\&#x27;s character editor pastes it with Ctrl+V)'}" />
+                    <Button Content="{l:T 'Paste'}" Command="{Binding PasteBodyCommand}" MinWidth="60" Margin="4,0,0,0" ToolTip="{l:T 'Use DNA from the clipboard (the game\&#x27;s character editor copies it with Ctrl+C)'}" />
+                    <Button Content="{l:T 'Export…'}" Command="{Binding ExportBodyCommand}" MinWidth="70" Margin="12,0,0,0" />
+                    <Button Content="{l:T 'Import…'}" Command="{Binding ImportBodyCommand}" MinWidth="70" Margin="4,0,0,0" />
+                    <TextBlock Foreground="{DynamicResource MutedForeground}" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap"
+                               Text="{l:T 'Face, hair, weight and build. The age in the DNA is not used; set Age below.'}" />
+                </StackPanel>
+                <TextBox Text="{Binding Body, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" Height="44"
+                         VerticalScrollBarVisibility="Auto">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsBodyChanged}" Value="True"><Setter Property="FontWeight" Value="Bold" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </DockPanel>
+        </GroupBox>
+
         <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="{l:T 'Reset perks…'}" Command="{Binding ResetPerksCommand}" MinWidth="100" Margin="4,0,16,0"

@@ -175,7 +175,7 @@ public partial class CharactersViewModel : ObservableObject
     private void EditCompanion()
     {
         if (SelectedCompanion is not { } row) return;
-        var editor = new CharacterEditorViewModel(_admin, HeroTargets.Hero(row.HeroId), row.Name, () => Serving);
+        var editor = new CharacterEditorViewModel(_admin, HeroTargets.Hero(row.HeroId), row.Name, () => Serving, Faces());
         var window = new CharacterEditorWindow(editor) { Owner = Application.Current.MainWindow };
         window.Closed += async (_, _) => await RefreshIfServing();
         window.Show();
@@ -329,11 +329,17 @@ public partial class CharactersViewModel : ObservableObject
     private void Edit()
     {
         if (SelectedPlayer is not { } row) return;
-        var editor = new CharacterEditorViewModel(_admin, row.SteamId, row.Name, () => Serving);
+        var editor = new CharacterEditorViewModel(_admin, row.SteamId, row.Name, () => Serving, Faces());
         var window = new CharacterEditorWindow(editor) { Owner = Application.Current.MainWindow };
         window.Closed += async (_, _) => await RefreshIfServing();
         window.Show();
     }
+
+    /// <summary>The players and companions on show, for the editor's "Copy face from".</summary>
+    private List<FaceSource> Faces() =>
+        Players.Where(p => p.Player.HeroId.Length > 0).Select(p => new FaceSource(HeroTargets.Hero(p.Player.HeroId), p.Name + " (player)"))
+            .Concat(Companions.Select(c => new FaceSource(HeroTargets.Hero(c.HeroId), $"{c.Name} ({c.Kind.ToLowerInvariant()}, {c.Owner})")))
+            .ToList();
 
     private bool CanBan() => SelectedPlayer is not null;
 
