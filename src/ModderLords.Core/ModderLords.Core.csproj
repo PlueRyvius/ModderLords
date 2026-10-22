@@ -17,6 +17,8 @@
   <ItemGroup>
     <!-- Curated compatibility database; ships next to the exe of every consumer (app, CLI, tests). -->
     <Content Include="compat-db.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The Supported mods tab's list (SupportedModList); inside the assembly, so packaging needs nothing new. -->
+    <EmbeddedResource Include="supported-mods.json" LogicalName="ModderLords.Core.supported-mods.json" />
   </ItemGroup>
 
 </Project>

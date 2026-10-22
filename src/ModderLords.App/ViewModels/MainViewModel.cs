@@ -329,6 +329,8 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<string> ProfileNames { get; } = new();
     public ObservableCollection<ModRow> Mods { get; } = new();
+    /// <summary>The Supported mods tab.</summary>
+    public SupportedModsViewModel Supported { get; }
     public ObservableCollection<string> Messages { get; } = new();
 
     /// <summary>
@@ -493,6 +495,7 @@ public partial class MainViewModel : ObservableObject
             if (e.NewItems is not null)
                 foreach (ModRow row in e.NewItems) row.ShowExperimental = ShowExperimentalCompat;
         };
+        Supported = new SupportedModsViewModel(Mods);
         if (!initialize) return;
         LoadProfileList();
         LoadProfile(ProfileNames.FirstOrDefault() ?? "default");
