@@ -15,6 +15,7 @@ using ModderLords.Core.Overlay;
 using ModderLords.Core.Perf;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Saves;
+using ModderLords.Core.Smoke;
 using ModderLords.Coop.Saves;
 using ModderLords.Coop.Config;
 using ModderLords.App.Localization;
@@ -133,7 +134,7 @@ public partial class HostViewModel : ObservableObject
 
     [ObservableProperty] private bool _isRunning;
     /// <summary>The running server has printed SERVING (reset when it exits).</summary>
-    [ObservableProperty] private bool _isServing;
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(SetTimeCommand))] private bool _isServing;
 
     /// <summary>Any thread: every line the running server prints, for listeners such as the smoke test.</summary>
     internal event Action<string>? ServerLineObserved;
@@ -816,6 +817,8 @@ public partial class HostViewModel : ObservableObject
             _engine.LineReceived += line =>
             {
                 ServerLineObserved?.Invoke(line.Text);
+                if (line.Text.Contains("Applying server time control", StringComparison.Ordinal) || line.Text.Contains(SmokeSignals.ServerEventMarker, StringComparison.Ordinal))
+                    Application.Current.Dispatcher.BeginInvoke(() => ObserveTime(line.Text));
                 // Two load-time bursts from Coop that say nothing about the session become one counted line each
                 // (StartupNoiseFolder says which, why, and until when). The launch log still gets every line.
                 var noise = _startupNoise.Observe(line.Text);
@@ -1046,6 +1049,44 @@ public partial class HostViewModel : ObservableObject
         Status = folder.Length == 0 ? Loc.T("ModderLords.Compat export turned off.") : Loc.T("ModderLords.Compat is exported to ") + folder;
     }
 
+    // ---- time control ---------------------------------------------------------------------------------
+
+    private readonly ServerTime _time = new();
+
+    /// <summary>The Host tab's line: the speed the server runs at, and who a join pause is waiting for.</summary>
+    [ObservableProperty] private string _timeStatus = "";
+
+    private void ObserveTime(string line)
+    {
+        _time.PauseOnJoin = Profile.PauseOnJoin;
+        var before = (_time.Holding, _time.Effective);
+        if (_time.Observe(line) is { } command)
+        {
+            AddLine(LogCategory.Tool, _time.Holding
+                ? "[ModderLords] pausing while " + string.Join(", ", _time.Joining) + " joins"
+                : "[ModderLords] everyone has joined; resuming " + (_time.Requested ?? ""));
+            _ = SendTime(command);
+        }
+        if (before != (_time.Holding, _time.Effective)) UpdateTimeStatus();
+    }
+
+    private void UpdateTimeStatus() => TimeStatus = _time.Effective is not { } now ? ""
+        : Loc.T("Server time: ") + now + (_time.Holding ? Loc.T(" (paused while a player joins)") : "");
+
+    private async Task SendTime(string command)
+    {
+        try { await SendServerCommandAsync(command); }
+        catch (Exception ex) { AddLine(LogCategory.Warning, "[ModderLords] could not set server time: " + ex.Message); }
+    }
+
+    [RelayCommand(CanExecute = nameof(IsServing))]
+    private async Task SetTime(string mode)
+    {
+        _time.Chosen(mode);
+        UpdateTimeStatus();
+        await SendTime(ServerTime.Command(mode));
+    }
+
     // ---- scheduled restart ---------------------------------------------------------------------------
 
     private readonly System.Windows.Threading.DispatcherTimer _restartTimer;
@@ -1055,6 +1096,7 @@ public partial class HostViewModel : ObservableObject
 
     partial void OnIsServingChanged(bool value)
     {
+        if (!value) TimeStatus = "";
         _warned10 = _warned1 = false;
         _restartDueAt = value && Profile.AutoRestartHours > 0 ? DateTime.Now.AddHours(Profile.AutoRestartHours) : null;
         if (_restartDueAt is { } due)
