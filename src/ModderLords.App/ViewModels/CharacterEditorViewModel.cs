@@ -171,6 +171,18 @@ public partial class CharacterEditorViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(CopyFaceFromCommand))]
     private FaceSource? _faceSource;
 
+    /// <summary>Saved faces. Replaced in tests with one in a temp folder.</summary>
+    public FaceLibrary Library { get; set; } = new();
+    public ObservableCollection<SavedFace> LibraryFaces { get; } = new();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(UseLibraryFaceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteLibraryFaceCommand))]
+    private SavedFace? _libraryFace;
+
+    /// <summary>The name "Save as" files the DNA in the box under.</summary>
+    [ObservableProperty] private string _libraryName = "";
+
     /// <summary>Picks a file to export DNA to, or one to import from. Replaced in tests, which have no dialogs.</summary>
     public Func<string, string?> PickSaveFile { get; set; } = name =>
     {
@@ -291,6 +303,63 @@ public partial class CharacterEditorViewModel : ObservableObject
                 Status += " " + Loc.F("{0} is {1}; set Gender to match, or the same DNA gives a different face.", other.Name, other.Female ? Loc.T("female") : Loc.T("male"));
         }
         catch (Exception ex) { Status = ex.Message; }
+    }
+
+    /// <summary>Re-reads the library, keeping the selection where it still exists.</summary>
+    public void LoadLibrary()
+    {
+        try { ShowLibrary(Library.Load()); }
+        catch (Exception ex) { Status = Loc.T("The face library could not be read: ") + ex.Message; }
+    }
+
+    private void ShowLibrary(IReadOnlyList<SavedFace> faces, string? select = null)
+    {
+        var keep = select ?? LibraryFace?.Name;
+        LibraryFaces.Clear();
+        foreach (var f in faces) LibraryFaces.Add(f);
+        LibraryFace = LibraryFaces.FirstOrDefault(f => string.Equals(f.Name, keep, StringComparison.CurrentCultureIgnoreCase));
+    }
+
+    private bool HasLibraryFace() => LibraryFace is not null;
+
+    /// <summary>Puts a saved face in the DNA box. Nothing changes until Apply.</summary>
+    [RelayCommand(CanExecute = nameof(HasLibraryFace))]
+    private void UseLibraryFace()
+    {
+        if (LibraryFace is not { } face) return;
+        UseBody(face.Body, face.Name);
+        if (face.Female != (GenderIndex == 1))
+            Status += " " + Loc.F("{0} was saved from a {1} hero; set Gender to match, or the same DNA gives a different face.", face.Name, face.Female ? Loc.T("female") : Loc.T("male"));
+    }
+
+    /// <summary>Saves the DNA in the box under <see cref="LibraryName"/>, asking before replacing a face of that name.</summary>
+    [RelayCommand]
+    private void SaveToLibrary()
+    {
+        var name = LibraryName.Trim();
+        var body = HeroBodies.Normalize(Body);
+        if (FaceLibrary.Problem(name, body) is { } problem) { Status = Loc.T("Not saved: ") + problem; return; }
+        try
+        {
+            if (Library.Contains(name) && !Confirm(Loc.F("Replace the saved face \u201c{0}\u201d?", name))) return;
+            ShowLibrary(Library.Save(name, body, GenderIndex == 1), name);
+            LibraryName = "";
+            Status = Loc.F("Saved \u201c{0}\u201d to the face library. Pick it under Library to put it on any hero.", name);
+        }
+        catch (Exception ex) { Status = Loc.T("The face was not saved: ") + ex.Message; }
+    }
+
+    [RelayCommand(CanExecute = nameof(HasLibraryFace))]
+    private void DeleteLibraryFace()
+    {
+        if (LibraryFace is not { } face) return;
+        if (!Confirm(Loc.F("Delete the saved face \u201c{0}\u201d from the library?", face.Name))) return;
+        try
+        {
+            ShowLibrary(Library.Delete(face.Name));
+            Status = Loc.F("Deleted \u201c{0}\u201d from the face library.", face.Name);
+        }
+        catch (Exception ex) { Status = Loc.T("The face was not deleted: ") + ex.Message; }
     }
 
     private void UseBody(string text, string from)
