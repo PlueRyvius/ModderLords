@@ -229,6 +229,24 @@
       "EnsureLines": [],
       "DefaultSettings": {},
       "UpdatedAt": "2026-10-14T05:36:21Z"
+    },
+    {
+      "Id": "ModderLords.IntakeTest",
+      "Verdict": "Works",
+      "TestedVersions": [
+        "v1.0.0"
+      ],
+      "TestedCoopVersion": "v0.1.6",
+      "ClientSideBehaviors": [],
+      "KeepSubModules": [],
+      "SettingsTypes": [],
+      "IgnoreSettingsTypes": [],
+      "ServerExcludedFolders": [],
+      "ClientExcludedFolders": [],
+      "EnsureLines": [],
+      "DefaultSettings": {},
+      "Notes": "Test of the compat intake worker. Not a real mod: close the issue and its pull request without merging.",
+      "UpdatedAt": "2026-10-23T04:55:34Z"
     }
   ]
 }
