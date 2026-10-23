@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+    <Name value="Living Economy Coop Compat"/>
+    <Id value="BetterEconomy.CoopCompat"/>
+    <Version value="v1.0.0"/>
+    <ModuleType value="Community"/>
+    <Official value="false"/>
+    <DefaultModule value="false"/>
+    <SingleplayerModule value="true"/>
+    <MultiplayerModule value="false"/>
+    <DependedModules>
+        <DependedModule Id="Bannerlord.Harmony"/>
+        <DependedModule Id="BetterEconomy"/>
+    </DependedModules>
+    <DependedModuleMetadatas>
+        <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis"/>
+        <DependedModuleMetadata id="BetterEconomy" order="LoadBeforeThis"/>
+    </DependedModuleMetadatas>
+    <SubModules>
+        <SubModule>
+            <Name value="Living Economy Coop Compat"/>
+            <DLLName value="BetterEconomy.CoopCompat.dll"/>
+            <SubModuleClassType value="BetterEconomyCoopCompat.SubModule"/>
+            <Tags/>
+        </SubModule>
+    </SubModules>
+</Module>

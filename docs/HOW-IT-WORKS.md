@@ -90,7 +90,8 @@ Two small in-game modules ship with ModderLords:
   **Settings sync** on the Server tab. **Launch client** installs and updates the player's copy, so nobody copies it
   by hand.
 
-Some mods also get a **standalone co-op compat module** (for now only Bellum Civile: `BellumCivile.CoopCompat`). It
+Some mods also get a **standalone co-op compat module**: Bellum Civile (`BellumCivile.CoopCompat`) and Living Economy
+(`BetterEconomy.CoopCompat`). It
 works without ModderLords, so it can be shared with players on other launchers. When the mod is on the server's list,
 ModderLords adds its compat module right after it, and installs it on players' games the same way as ModderLords Compat.
 
@@ -294,7 +295,11 @@ On top of that channel each supported mod has its own layer:
   special resources, the refuge, field camps and commissions, supply lines, siege defence, and the party components
   TAOM adds.
 - **Living Economy**: the economy runs only on the server, and each player's actions and treaties run there as that
-  player, with the state mirrored back.
+  player, with the state mirrored back. All of it lives in the standalone module `coop-compat/BetterEconomyCoopCompat`,
+  messages included: its records and players' clicks can't travel any other way, so it has its own versioned messages
+  in a separate Coop adapter DLL (`BetterEconomy.CoopCompat.Coop.dll`), and a player's game starts relaying only after
+  the server accepts its hello. When the module is loaded, ModderLords.Compat's own Living Economy layer stays off.
+  Settings sync still carries Living Economy's settings from the host.
 - **Fourberie**: each player's books, crimes, prompts and effects run on the server as that player and are mirrored
   back to them.
 - **Bellum Civile**: Peace Parley is replaced by Coop's peace vote, and a treaty for a player's realm becomes a vote.

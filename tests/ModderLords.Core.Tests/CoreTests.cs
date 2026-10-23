@@ -436,6 +436,16 @@ public class CompatSelectionTests : IDisposable
     }
 
     [Fact]
+    public void Living_Economy_gets_its_compat_module_too()
+    {
+        var mod = Module("game", "BetterEconomy");
+        var companion = Module("compat", "BetterEconomy.CoopCompat");
+        var list = LaunchSession.WithCompat(new Profile { CompatGuards = false }, [new ModSelection(mod, ServerRole.AsShipped)], [],
+            id => id == "BetterEconomy.CoopCompat" ? companion : null);
+        Assert.Equal(new[] { "BetterEconomy", "BetterEconomy.CoopCompat" }, list.Select(s => s.Module.Id));
+    }
+
+    [Fact]
     public void A_ticked_compat_module_before_its_mod_is_moved_after_it()
     {
         var bellum = Module("game", "BellumCivile");

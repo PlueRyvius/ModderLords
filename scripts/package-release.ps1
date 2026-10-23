@@ -90,16 +90,25 @@ Get-ChildItem $syncOut -Recurse -Filter *.pdb | Remove-Item -Force
 
 # The standalone co-op compat modules (coop-compat\), which the launcher adds after their mods and installs for players
 # (LaunchSession.CompanionModules). Each builds against the local game install, like the community repo's modules.
-$companionModules = @(@{ Folder = 'BellumCivileCoopCompat'; Id = 'BellumCivile.CoopCompat' })
+# Projects: the module, then any Coop adapter it loads by hand (built into the same folder). Dlls: what ships.
+$companionModules = @(
+    @{ Folder = 'BellumCivileCoopCompat'; Id = 'BellumCivile.CoopCompat'
+       Projects = @('BellumCivileCoopCompat.csproj'); Dlls = @('BellumCivile.CoopCompat.dll') },
+    @{ Folder = 'BetterEconomyCoopCompat'; Id = 'BetterEconomy.CoopCompat'
+       Projects = @('BetterEconomyCoopCompat.csproj', 'Coop\BetterEconomyCoopCompat.Coop.csproj')
+       Dlls = @('BetterEconomy.CoopCompat.dll', 'BetterEconomy.CoopCompat.Coop.dll') }
+)
 foreach ($c in $companionModules) {
     $src = Join-Path $root "coop-compat\$($c.Folder)"
     $bin = Join-Path $src 'bin\Release'
-    dotnet build (Join-Path $src "$($c.Folder).csproj") -c Release -o $bin
-    if ($LASTEXITCODE -ne 0) { throw "$($c.Id) build failed (it needs the game and the Harmony workshop item installed)" }
+    foreach ($project in $c.Projects) {
+        dotnet build (Join-Path $src $project) -c Release -o $bin
+        if ($LASTEXITCODE -ne 0) { throw "$($c.Id) build failed ($project; it needs the game, Harmony and, for an adapter, the Coop workshop items installed)" }
+    }
     $cOut = Join-Path $out "compat\$($c.Id)"
     foreach ($side in 'Win64_Shipping_Client', 'Win64_Shipping_Server') {
         New-Item -ItemType Directory -Path (Join-Path $cOut "bin\$side") -Force | Out-Null
-        Copy-Item (Join-Path $bin "$($c.Id).dll") (Join-Path $cOut "bin\$side") -Force
+        foreach ($dll in $c.Dlls) { Copy-Item (Join-Path $bin $dll) (Join-Path $cOut "bin\$side") -Force }
     }
     Copy-Item (Join-Path $src 'SubModule.xml'), (Join-Path $src 'README.txt') $cOut -Force
 }
