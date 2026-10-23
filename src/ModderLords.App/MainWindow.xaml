@@ -620,6 +620,18 @@
                         <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,16"
                                    Text="{l:T 'Saved with the profile (Save, or Launch).'}" />
 
+                        <TextBlock Text="{l:T 'Campaign time'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="{l:T 'Pause'}" Command="{Binding SetTimeCommand}" CommandParameter="Pause" MinWidth="60" />
+                            <Button Content="1x" Command="{Binding SetTimeCommand}" CommandParameter="Play_1x" MinWidth="60" Margin="4,0,0,0" />
+                            <Button Content="2x" Command="{Binding SetTimeCommand}" CommandParameter="Play_2x" MinWidth="60" Margin="4,0,0,0" />
+                            <TextBlock Text="{Binding TimeStatus}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                        </StackPanel>
+                        <CheckBox Content="{l:T 'Pause while a player is joining'}" IsChecked="{Binding Profile.PauseOnJoin}" Margin="0,6,0,2"
+                                  ToolTip="{l:T 'From the moment a player connects until they reach the campaign map, the server is held at Pause, then goes back to the speed it ran at. Players already on the map are never paused by a battle or a menu.'}" />
+                        <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,4,0,16"
+                                   Text="{l:T 'The buttons work while the server is running. Coop keeps time paused while nobody is connected, and players can still change the speed themselves.'}" />
+
                         <TextBlock Text="{l:T 'Gameplay rules'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
                         <CheckBox Content="{l:T 'Freeze offline players\&#x27; gold and XP'}" IsChecked="{Binding LiveSettings.FreezeOfflinePlayers}" Margin="0,2"
                                   ToolTip="{l:T 'While a player is offline their hero gains and loses no gold and gains no skill XP: caravans, workshops and fiefs stop paying them and trading stops raising Trade. Edits from the Characters tab still apply.'}" />

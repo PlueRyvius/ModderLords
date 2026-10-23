@@ -106,6 +106,11 @@ public sealed class Profile
     /// </summary>
     public int AutoRestartHours { get; set; }
     /// <summary>
+    /// Hold the server at Pause while a player is joining (from connecting until they reach the campaign map), then go
+    /// back to the speed it ran at. The Host tab sends Coop's time command; see ServerTime.
+    /// </summary>
+    public bool PauseOnJoin { get; set; }
+    /// <summary>
     /// Set when a shared mod list was imported into the Bannerlord launcher while some of its mods were not installed.
     /// LauncherData.xml cannot hold a mod that is not on disk, so this profile remembers the rest of the list and the
     /// app offers to apply it again once they appear, rather than making the player import the file a second time.
