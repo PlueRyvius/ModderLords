@@ -63,6 +63,9 @@ internal static class HeroAdmin
         foreach (var token in args.Skip(2))
         {
             if (!HeroEditWire.TryParse(token, out var edit, out var error)) return AdminWire.Reply("edit", req, error);
+            // Death takes a hero's skills, traits and attributes (Hero.OnDeath); only who they were can still change.
+            if (!hero!.IsAlive && edit!.Kind != HeroEditKind.Female)
+                return AdminWire.Reply("edit", req, $"{hero.Name} is dead, so only their name, gender and appearance can change. Revive them first.");
             if (Prepare(hero!, edit!, out var apply, out var read) is { } refused) return AdminWire.Reply("edit", req, refused);
             edits.Add((edit!, apply!, read!));
         }
@@ -157,6 +160,7 @@ internal static class HeroAdmin
         if (FindTarget(args[1], out var steamId, out var hero, out var party) is { } missing) return AdminWire.Reply("resetperks", req, missing);
         var busy = PlayerAdmin.BusyReason(party);
         if (busy.Length > 0) return AdminWire.Reply("resetperks", req, $"{hero!.Name} is {busy}. Reset their perks once it is over.");
+        if (!hero!.IsAlive) return AdminWire.Reply("resetperks", req, $"{hero.Name} is dead and has no perks. Revive them first.");
         if (CharacterTransfer.SetPerkValueInternal is not { } setPerk)
             return AdminWire.Reply("resetperks", req, "This game version has no Hero.SetPerkValueInternal, so a perk cannot be taken away.");
 
@@ -390,6 +394,8 @@ internal static class HeroAdmin
         var model = Campaign.Current.Models.CharacterDevelopmentModel;
         var dev = hero.HeroDeveloper;
         var personality = new HashSet<TraitObject>(DefaultTraits.Personality);
+        // Death clears these (Hero.OnDeath), so a dead hero has none of them to show.
+        var stats = dev is not null && hero.IsAlive;
         return new Dictionary<string, object?>
         {
             ["steamId"] = steamId,
@@ -400,20 +406,20 @@ internal static class HeroAdmin
             ["maxAge"] = 150,
             ["female"] = hero.IsFemale,
             ["level"] = hero.Level,
-            ["maxLevel"] = MaximumLevel(model, dev),
+            ["maxLevel"] = stats ? MaximumLevel(model, dev!) : hero.Level,
             ["gold"] = hero.Gold,
             ["clan"] = hero.Clan?.Name?.ToString() ?? "",
             ["renown"] = hero.Clan is { } c ? (int)c.Renown : -1,
             ["maxRenown"] = MaxRenown,
-            ["hp"] = hero.HitPoints,
-            ["maxHp"] = hero.MaxHitPoints,
-            ["unspentAttr"] = dev.UnspentAttributePoints,
-            ["unspentFocus"] = dev.UnspentFocusPoints,
+            ["hp"] = stats ? hero.HitPoints : 0,
+            ["maxHp"] = stats ? hero.MaxHitPoints : 0,
+            ["unspentAttr"] = stats ? dev!.UnspentAttributePoints : 0,
+            ["unspentFocus"] = stats ? dev!.UnspentFocusPoints : 0,
             ["maxAttribute"] = model.MaxAttribute,
             ["maxFocus"] = model.MaxFocusPerSkill,
             ["maxSkill"] = model.GetMaxSkillPoint(),
             ["busy"] = PlayerAdmin.BusyReason(party),
-            ["perks"] = PerkObject.All.Count(p => hero.GetPerkValue(p)),
+            ["perks"] = stats ? PerkObject.All.Count(p => hero.GetPerkValue(p)) : 0,
             ["alive"] = hero.IsAlive,
             ["state"] = hero.HeroState.ToString(),
             ["body"] = hero.BodyProperties.ToString(),
@@ -422,21 +428,21 @@ internal static class HeroAdmin
             ["spouse"] = Relative(hero.Spouse),
             ["children"] = hero.Children.Where(c => c is not null).Select(Relative).ToList(),
             ["siblings"] = hero.Siblings.Where(c => c is not null).Select(Relative).ToList(),
-            ["attributes"] = Attributes.All.Select(a => (object?)new Dictionary<string, object?>
+            ["attributes"] = !stats ? new List<object?>() : Attributes.All.Select(a => (object?)new Dictionary<string, object?>
             {
                 ["id"] = a.StringId,
                 ["name"] = a.Name?.ToString() ?? a.StringId,
                 ["value"] = hero.GetAttributeValue(a),
             }).ToList(),
-            ["skills"] = Skills.All.Select(s => (object?)new Dictionary<string, object?>
+            ["skills"] = !stats ? new List<object?>() : Skills.All.Select(s => (object?)new Dictionary<string, object?>
             {
                 ["id"] = s.StringId,
                 ["name"] = s.Name?.ToString() ?? s.StringId,
                 ["attribute"] = s.Attributes?.FirstOrDefault()?.StringId ?? "",
                 ["value"] = hero.GetSkillValue(s),
-                ["focus"] = dev.GetFocus(s),
+                ["focus"] = dev!.GetFocus(s),
             }).ToList(),
-            ["traits"] = TraitObject.All.Select(t => (object?)new Dictionary<string, object?>
+            ["traits"] = !stats ? new List<object?>() : TraitObject.All.Select(t => (object?)new Dictionary<string, object?>
             {
                 ["id"] = t.StringId,
                 ["name"] = t.Name?.ToString() ?? t.StringId,

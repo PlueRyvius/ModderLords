@@ -253,6 +253,39 @@ public class CharacterEditorTests
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); }
     });
 
+    [Fact]
+    public void A_dead_hero_shows_no_stats_and_is_revived_only_after_the_host_confirms() => Sta(() =>
+    {
+        var sent = new List<string>();
+        AdminClient? client = null;
+        client = new AdminClient(line =>
+        {
+            sent.Add(line);
+            var m = Regex.Match(line, @"^modderlords\.(\w+) (\S+)");
+            var alive = m.Groups[1].Value == "revive" ? "true" : "false";
+            var stats = alive == "true" ? Hero.Replace("\"name\":\"Aldric\"", "\"name\":\"Osric\"") : "\"heroId\":\"osric\",\"name\":\"Osric\",\"female\":false,\"age\":61,\"perks\":0,\"attributes\":[],\"skills\":[],\"traits\":[]";
+            client!.Observe($"@ML@{{\"ev\":\"{m.Groups[1].Value}\",\"req\":\"{m.Groups[2].Value}\",\"ok\":true,{stats},\"alive\":{alive},\"changes\":[\"Revived in Pravend\"],\"notApplied\":[]}}");
+            return Task.CompletedTask;
+        });
+        var vm = new CharacterEditorViewModel(client, HeroTargets.Hero("osric"), "Osric", () => true);
+        vm.ReloadCommand.ExecuteAsync(null).Pump();
+        Assert.True(vm.IsDead);
+        Assert.Empty(vm.Values);
+        Assert.Empty(vm.Skills);
+        Assert.True(vm.ReviveCommand.CanExecute(null));
+
+        vm.Confirm = _ => false;
+        vm.ReviveCommand.ExecuteAsync(null).Pump();
+        Assert.Single(sent);
+
+        vm.Confirm = _ => true;
+        vm.ReviveCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("modderlords.revive r2 hero:osric", sent[^1]);
+        Assert.False(vm.IsDead);
+        Assert.NotEmpty(vm.Values);
+        Assert.Contains("Revived in Pravend", vm.Status);
+    });
+
     /// <summary>Runs on an STA thread with a dispatcher, as the app does, so awaits come back to the thread that owns the views.</summary>
     private static void Sta(Action action)
     {

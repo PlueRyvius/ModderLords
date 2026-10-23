@@ -225,3 +225,11 @@ public sealed class NetworkGiveGoldNotice : IEvent
     [ProtoMember(2)] public string Message { get; set; } = "";
     [ProtoMember(3)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>Server -> every client: the host is reviving this hero; rebuild what their death took before the state changes arrive.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkHeroRevived : IEvent
+{
+    [ProtoMember(1)] public string HeroId { get; set; } = "";
+    [ProtoMember(2)] public int ProtocolVersion { get; set; }
+}
