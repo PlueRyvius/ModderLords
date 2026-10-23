@@ -195,7 +195,9 @@ what works, what to turn on and what does not work. Mods you have installed are 
 
 The game takes its module list on the command line, and that list replaces `LauncherData.xml`, so the TaleWorlds
 launcher's selection is never touched. When two copies of a mod exist, or a mod lives in a custom folder, the game is
-started from a private folder of links (`client-launches`) that points at exactly the chosen copies.
+started from a private folder of links (`client-launches`) that points at exactly the chosen copies. That folder copies
+Steam's layout (the game under `common\<game folder>`, beside a `workshop` link to the real `steamapps\workshop`), so
+mods that find Workshop files by counting folders up from the game's exe still find them.
 
 ### The server
 

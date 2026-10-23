@@ -12,9 +12,14 @@ namespace ModderLords.Core.Launch;
 /// is the whole folder or nothing, so that mod is a real folder here instead: one junction per top-level folder it
 /// keeps, and copies of its top-level files. Nothing is copied out of the folders themselves.
 ///
+/// The view mirrors Steam's layout: the game sits at &lt;id&gt;\common\&lt;game folder name&gt; and &lt;id&gt;\workshop is a junction to
+/// the real steamapps\workshop, so a path counted up from the game's exe still reaches the Workshop. Reported
+/// 2026-10-22: Fourberie opens "../../../../workshop/content/261550/2875710877/FourberieConfig.xml" from the exe folder,
+/// and the client died at startup when that pointed past the view.
+///
 /// Views outlive the launcher because the game is detached; never remove one when the launcher exits. Nothing in
 /// the launcher deletes a view. Anything that ever does must unlink the junctions first (the ones directly under
-/// Modules and the ones inside a mod's real folder) and must never delete recursively through one.
+/// Modules, the ones inside a mod's real folder and the workshop one) and must never delete recursively through one.
 /// </summary>
 public static class ClientModuleView
 {
@@ -32,8 +37,14 @@ public static class ClientModuleView
         if (plan.SelectedModules.Select(m => m.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != plan.SelectedModules.Count)
             throw new InvalidOperationException("Only one copy of each module can be linked for launch.");
 
-        var root = Path.Combine(Path.GetFullPath(viewsRoot), Guid.NewGuid().ToString("N"));
+        var gameRoot = Path.GetFullPath(plan.GameRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var gameFolder = Path.GetFileName(gameRoot) is { Length: > 0 } n ? n : "Mount & Blade II Bannerlord";
+        var view = Path.Combine(Path.GetFullPath(viewsRoot), Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(view, "common", gameFolder);
         Directory.CreateDirectory(Path.Combine(root, "Modules"));
+        // <game>\..\..\workshop is steamapps\workshop in a Steam install; elsewhere there is nothing to mirror.
+        var workshop = Path.GetFullPath(Path.Combine(gameRoot, "..", "..", "workshop"));
+        if (Directory.Exists(workshop)) Junction.Create(Path.Combine(view, "workshop"), workshop);
         foreach (var dir in Directory.EnumerateDirectories(plan.GameRoot))
         {
             var name = Path.GetFileName(dir);
