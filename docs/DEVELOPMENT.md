@@ -36,6 +36,7 @@ Status: Phase 1 complete (community mods load on the pristine server through jun
 | `src/ModderLords.Compat` | net472 in-game module: headless guards (server only) |
 | `src/ModderLords.CompatSync` | net472 in-game module: the shared settings-sync module, with no reference to Coop |
 | `src/ModderLords.CompatSync.Coop` | net472 adapter that does touch Coop's assemblies, loaded by hand at runtime |
+| `src/BellumCivile.CoopCompat`, `src/LivingEconomy.CoopCompat`, `src/Fourberie.CoopCompat` | Each mod's Coop compat plugin, loaded by `ModderLords.CompatSync` after the adapter. Shipped inside `ModderLords.Compat`'s bin folders and as standalone modules (`docs/COOP-COMPAT-MODULES.md`) |
 | `tests/ModderLords.Core.Tests` | xUnit tests (covers both libraries) |
 
 **Core must not reference Coop.** That is the whole point of the split: the mod loader has to build, test and
@@ -50,6 +51,13 @@ the mod-list export and the `LauncherData.xml` reconciliation no longer derive f
 than on NuGet. `Directory.Build.props` resolves that folder and sets `HasCoopAssemblies`; App and Cli reference
 the project only when it is true. So CI builds the whole app without a Coop install, and
 `scripts\package-release.ps1` refuses to package a build that is missing the adapter.
+
+The per-mod plugins hook into the adapter only through `CompatPlugins` (ticks, summaries, the TAOM state message's
+feeds, client session events, vote deadlines); the adapter grants them its internals with `InternalsVisibleTo`.
+A plugin is any `*.CoopCompat.dll` with a `CoopCompatPlugin.Register()`, found in `ModderLords.Compat`'s own bin
+folder or in an active module's. It registers before any session starts, so Coop finds its handlers and the game
+its console commands. Shared pieces two plugins or the adapter use (`LeMirrorDelta`, `FbPromptWire`) live in the
+adapter's `PluginShared` folder.
 
 ## Verified facts about the official server (2026-09-02, Coop v0.1.4, Bannerlord 1.4.8)
 

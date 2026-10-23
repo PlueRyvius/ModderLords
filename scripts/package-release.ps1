@@ -19,7 +19,9 @@ if ($declared -ne $Version) {
 # differ at the same version). That version is bumped by hand, so refuse a release whose module code changed since the
 # last tag while the number stayed put: the players who most need the fix would be the last to get it.
 $syncModuleXml = 'src/ModderLords.CompatSync/_Module/SubModule.xml'
-$syncModuleSources = @('src/ModderLords.CompatSync', 'src/ModderLords.CompatSync.Coop', 'src/ModderLords.Operations', 'src/Shared')
+# Each mod's Coop compat plugin ships inside that module too, so a change to one counts.
+$pluginProjects = @('BellumCivile.CoopCompat', 'LivingEconomy.CoopCompat', 'Fourberie.CoopCompat')
+$syncModuleSources = @('src/ModderLords.CompatSync', 'src/ModderLords.CompatSync.Coop', 'src/ModderLords.Operations', 'src/Shared') + ($pluginProjects | ForEach-Object { "src/$_" })
 $previousTag = git -C $root describe --tags --abbrev=0 --match 'v*' --exclude "v$Version" HEAD 2>$null
 if ($LASTEXITCODE -eq 0 -and $previousTag) {
     git -C $root diff --quiet $previousTag HEAD -- $syncModuleSources
@@ -73,6 +75,14 @@ dotnet build (Join-Path $root 'src\ModderLords.CompatSync.Coop\ModderLords.Compa
 if ($LASTEXITCODE -ne 0) { throw "compat sync adapter build failed (needs the Bannerlord Coop workshop item, or -p:CoopRefDir=...)" }
 $adapter = Join-Path $root 'src\ModderLords.CompatSync\_Module\bin\Win64_Shipping_Client\ModderLords.CompatSync.Coop.dll'
 if (-not (Test-Path $adapter)) { throw "ModderLords.CompatSync.Coop.dll was not produced; a release cannot ship without the settings-sync adapter." }
+# Each mod's plugin; its build copies the DLL into ModderLords.Compat's bin folders as well as its own module.
+foreach ($plugin in $pluginProjects) {
+    dotnet build (Join-Path $root "src\$plugin\$plugin.csproj") -c Release
+    if ($LASTEXITCODE -ne 0) { throw "$plugin build failed" }
+    foreach ($side in 'Client', 'Server') {
+        if (-not (Test-Path (Join-Path $root "src\ModderLords.CompatSync\_Module\bin\Win64_Shipping_$side\$plugin.dll"))) { throw "$plugin.dll is missing from ModderLords.Compat's $side bin folder." }
+    }
+}
 $syncOut = Join-Path $out 'compat\ModderLords.Compat'
 New-Item -ItemType Directory -Path $syncOut -Force | Out-Null
 Copy-Item (Join-Path $root 'src\ModderLords.CompatSync\_Module\*') $syncOut -Recurse -Force
@@ -130,6 +140,29 @@ $loose = @(Get-ChildItem $out -File)
 if ($loose.Count -gt 4) {
     throw "Release root has $($loose.Count) loose files; it should be the exe plus a couple of documents. Put new files in a folder. ($($loose.Name -join ', '))"
 }
+
+# For players on other launchers: ModderLords.Compat on its own (no plugins inside, so they pick which mods) plus each
+# mod's "X Coop Compat" module, ready to drop into Modules\. Not part of the launcher's zip; attached to the release.
+$shareOut = Join-Path $root "artifacts\CoopCompat-Modules-$Version"
+if (Test-Path $shareOut) { Remove-Item $shareOut -Recurse -Force }
+$shareCore = Join-Path $shareOut 'ModderLords.Compat'
+New-Item -ItemType Directory -Path $shareCore -Force | Out-Null
+Copy-Item (Join-Path $syncOut '*') $shareCore -Recurse -Force
+Get-ChildItem $shareCore -Recurse -Filter *.CoopCompat.dll | Remove-Item -Force
+foreach ($plugin in $pluginProjects) {
+    $pluginOut = Join-Path $shareOut $plugin
+    New-Item -ItemType Directory -Path $pluginOut -Force | Out-Null
+    Copy-Item (Join-Path $root "src\$plugin\_Module\*") $pluginOut -Recurse -Force
+    Get-ChildItem $pluginOut -Recurse -Filter *.pdb | Remove-Item -Force
+    Get-ChildItem $pluginOut -Recurse -Directory | Where-Object { $_.Name -eq 'win-x64' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    $extra = Get-ChildItem $pluginOut -Recurse -Filter *.dll | Where-Object { $_.Name -ne "$plugin.dll" }
+    if ($extra) { throw "$plugin module carries DLLs it should not ($($extra.Name -join ', ')). Delete its _Module bin folders and rebuild." }
+}
+Copy-Item (Join-Path $root 'docs\COOP-COMPAT-MODULES.md') (Join-Path $shareOut 'README.md') -Force
+$shareZip = "$shareOut.zip"
+if (Test-Path $shareZip) { Remove-Item $shareZip -Force }
+Compress-Archive -Path "$shareOut\*" -DestinationPath $shareZip
+Write-Host "Coop compat modules: $shareZip"
 
 $zip = "$out.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }

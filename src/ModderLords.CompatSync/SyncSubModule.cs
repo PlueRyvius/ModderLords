@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -141,6 +142,7 @@ public sealed class SyncSubModule : MBSubModuleBase
             var path = Path.Combine(dir, AdapterFileName);
             if (!File.Exists(path)) { Log.Warn("settings sync disabled: " + AdapterFileName + " missing next to the submodule"); return; }
             var asm = Assembly.LoadFrom(path);
+            LoadPlugins(dir);
             var bridge = asm.GetType("ModderLords.CompatSync.Coop.Bridge", throwOnError: false);
             _adapterTick = bridge?.GetMethod("Tick", BindingFlags.Public | BindingFlags.Static);
             _adapterRelayTick = bridge?.GetMethod("RelayTick", BindingFlags.Public | BindingFlags.Static);
@@ -158,6 +160,57 @@ public sealed class SyncSubModule : MBSubModuleBase
         {
             _adapterTried = true;
             Log.Warn("coop adapter failed to load, settings sync disabled: " + ex.GetBaseException().Message);
+        }
+    }
+
+    private const string PluginPattern = "*.CoopCompat.dll";
+
+    /// <summary>
+    /// Loads each mod's Coop compat plugin (Bellum Civile, Living Economy, Fourberie...) and calls its
+    /// <c>CoopCompatPlugin.Register()</c>, before any session starts so Coop finds their handlers. They come from this
+    /// module's own bin folder (the launcher bundles them there) and from the bin folder of every active module (each
+    /// also ships as its own "X Coop Compat" module). A plugin found in both loads once, from here.
+    /// </summary>
+    private static void LoadPlugins(string coreDir)
+    {
+        // A plugin references ModderLords.CompatSync.Coop, which was loaded from a path, not found by name.
+        AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
+        {
+            var wanted = new AssemblyName(args.Name).Name;
+            return wanted.StartsWith("ModderLords.", StringComparison.Ordinal)
+                ? AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => !a.IsDynamic && a.GetName().Name == wanted)
+                : null;
+        };
+        var dirs = new List<string> { coreDir };
+        try
+        {
+            var platform = Path.GetFileName(coreDir.TrimEnd('\\', '/'));
+            foreach (var module in TaleWorlds.ModuleManager.ModuleHelper.GetActiveModules())
+                if (!string.IsNullOrEmpty(module.FolderPath)) dirs.Add(Path.Combine(module.FolderPath, "bin", platform));
+        }
+        catch (Exception ex) { Log.Warn("could not list active modules for Coop compat plugins: " + ex.GetBaseException().Message); }
+
+        var loaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dir in dirs.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            string[] files;
+            try { files = Directory.Exists(dir) ? Directory.GetFiles(dir, PluginPattern) : new string[0]; }
+            catch { continue; }
+            foreach (var file in files)
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                if (!loaded.Add(name)) continue;
+                try
+                {
+                    var plugin = Assembly.LoadFrom(file);
+                    var entry = plugin.GetTypes().FirstOrDefault(t => t.Name == "CoopCompatPlugin")
+                        ?.GetMethod("Register", BindingFlags.Public | BindingFlags.Static);
+                    if (entry == null) { Log.Warn($"Coop compat plugin {name} has no CoopCompatPlugin.Register; skipped"); continue; }
+                    entry.Invoke(null, null);
+                    Log.Info($"Coop compat plugin {name} loaded from {dir}");
+                }
+                catch (Exception ex) { Log.Warn($"Coop compat plugin {name} failed to load: " + ex.GetBaseException().Message); }
+            }
         }
     }
 }

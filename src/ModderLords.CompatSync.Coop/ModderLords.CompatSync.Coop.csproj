@@ -20,6 +20,10 @@
     <ProjectReference Include="..\ModderLords.Operations\ModderLords.Operations.csproj" Private="true" />
     <PackageReference Include="Bannerlord.ReferenceAssemblies.Core" Version="1.4.8.119303" ExcludeAssets="runtime" />
     <ProjectReference Include="..\ModderLords.CompatSync\ModderLords.CompatSync.csproj" Private="false" />
+    <!-- Each mod's Coop compat plugin (src\*.CoopCompat) builds on this layer's internals; see CompatPlugins. -->
+    <InternalsVisibleTo Include="BellumCivile.CoopCompat" />
+    <InternalsVisibleTo Include="LivingEconomy.CoopCompat" />
+    <InternalsVisibleTo Include="Fourberie.CoopCompat" />
     <Reference Include="Common" HintPath="$(CoopRefDir)\Common.dll" Private="false" />
     <Reference Include="Coop.Core" HintPath="$(CoopRefDir)\Coop.Core.dll" Private="false" />
     <Reference Include="GameInterface" HintPath="$(CoopRefDir)\GameInterface.dll" Private="false" />

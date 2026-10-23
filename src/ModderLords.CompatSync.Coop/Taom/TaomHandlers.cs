@@ -9,7 +9,6 @@ using GameInterface.Services.Players;
 using LiteNetLib;
 using ModderLords.CompatSync;
 using ModderLords.CompatSync.Coop;
-using ModderLords.CompatSync.Coop.LivingEconomy;
 using ModderLords.CompatSync.Coop.Taom;
 using ModderLords.CompatSync.Messages;
 using TaleWorlds.CampaignSystem;
@@ -47,7 +46,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
                     Feature = feature, Op = op, Args = new System.Collections.Generic.List<string>(args),
                     Sequence = ++actionSequence, ProtocolVersion = ProtocolVersion,
                 });
-            LeStateMirror.RequestFull = () => network.SendAll(new NetworkTaomStateRequest { ProtocolVersion = ProtocolVersion });
+            foreach (var feed in CompatPlugins.StateFeeds) feed.SetRequestFull(() => network.SendAll(new NetworkTaomStateRequest { ProtocolVersion = ProtocolVersion }));
             TaomFieldCamp.Send = (op, campType) =>
             {
                 network.SendAll(new NetworkTaomCampOp { Op = op, CampType = campType, ProtocolVersion = ProtocolVersion });
@@ -58,10 +57,10 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         public void Dispose()
         {
             if (!active) return;
-            ModderLords.CompatSync.Coop.Fourberie.FbMirrorClient.SessionEnded();
+            CompatPlugins.RunAll(CompatPlugins.ClientSessionEnded, "session-ended");
             TaomFieldCamp.Send = null;
             TaomActions.Send = null;
-            LeStateMirror.RequestFull = null;
+            foreach (var feed in CompatPlugins.StateFeeds) feed.SetRequestFull(null);
             broker.Unsubscribe<NetworkTaomActionResult>(HandleActionResult);
             broker.Unsubscribe<NetworkTaomState>(HandleState);
             broker.Unsubscribe<NetworkTaomPartyComponent>(HandlePartyComponent);
@@ -97,9 +96,9 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         private void HandleState(MessagePayload<NetworkTaomState> payload)
         {
             var msg = payload.What;
-            // The same message carries the Living Economy layer's mirror; its behaviour names start with its prefix.
-            if (msg.Behaviour.StartsWith(LeStateMirror.Prefix, StringComparison.Ordinal))
-                GameThread.RunSafe(() => LeStateMirror.ClientApply(msg.Behaviour, msg.Json), false, "ModderLords Living Economy state mirror");
+            // The same message carries plugins' mirrors (Living Economy's); their behaviour names start with their prefix.
+            if (CompatPlugins.FeedFor(msg.Behaviour) is { } feed)
+                GameThread.RunSafe(() => feed.ClientApply(msg.Behaviour, msg.Json), false, "ModderLords " + feed.Name + " state mirror");
             else
                 GameThread.RunSafe(() => TaomStateMirror.ClientApply(msg.Behaviour, msg.Json), false, "ModderLords TAOM state mirror");
         }
@@ -120,7 +119,7 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
         private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
         {
             // The joined campaign exists now, so there is somewhere to load the server's TAOM state into.
-            ModderLords.CompatSync.Coop.Fourberie.FbMirrorClient.CampaignReady();
+            CompatPlugins.RunAll(CompatPlugins.ClientCampaignReady, "campaign-ready");
             SessionCheck.CampaignReady();
             network.SendAll(new NetworkTaomStateRequest { ProtocolVersion = ProtocolVersion });
 
@@ -170,9 +169,12 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Subscribe<NetworkTaomAction>(HandleAction);
             broker.Subscribe<NetworkTaomStateRequest>(HandleStateRequest);
             TaomStateMirror.Reset();
-            LeStateMirror.Reset();
-            LeStateMirror.Broadcast = (behaviour, payload) =>
-                network.SendAll(new NetworkTaomState { Behaviour = behaviour, Json = payload, ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion });
+            foreach (var feed in CompatPlugins.StateFeeds)
+            {
+                feed.Reset();
+                feed.SetBroadcast((behaviour, payload) =>
+                    network.SendAll(new NetworkTaomState { Behaviour = behaviour, Json = payload, ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion }));
+            }
             TaomActions.Push = (hero, feature, data) =>
             {
                 if (!ContainerProvider.TryResolve<IPlayerManager>(out var pm)) return;
@@ -212,10 +214,13 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
                 foreach (var (behaviour, json) in all)
                     network.Send(peer, new NetworkTaomState { Behaviour = behaviour, Json = json, ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion });
                 if (all.Count > 0) Log.Info($"TAOM layer: state mirror sent {all.Count} TAOM behaviour(s) to a joining client");
-                var living = LeStateMirror.CaptureForJoin();
-                foreach (var (behaviour, payload) in living)
-                    network.Send(peer, new NetworkTaomState { Behaviour = behaviour, Json = payload, ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion });
-                if (living.Count > 0) Log.Info($"Living Economy layer: state mirror sent {living.Count - 1} book(s) to a joining client");
+                foreach (var feed in CompatPlugins.StateFeeds)
+                {
+                    var sent = feed.CaptureForJoin();
+                    foreach (var (behaviour, payload) in sent)
+                        network.Send(peer, new NetworkTaomState { Behaviour = behaviour, Json = payload, ProtocolVersion = Coop.Core.Client.Services.ModderLordsCompat.Handlers.TaomClientHandler.ProtocolVersion });
+                    if (sent.Count > 0) Log.Info($"{feed.Name} layer: state mirror sent {sent.Count} message(s) to a joining client");
+                }
             }, false, "ModderLords TAOM state request");
         }
 
@@ -227,7 +232,7 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
             broker.Unsubscribe<NetworkTaomAction>(HandleAction);
             broker.Unsubscribe<NetworkTaomStateRequest>(HandleStateRequest);
             TaomStateMirror.Broadcast = null;
-            LeStateMirror.Broadcast = null;
+            foreach (var feed in CompatPlugins.StateFeeds) feed.SetBroadcast(null);
             PartyComponentSyncComponent.Broadcast = null;
             NoticeComponent.Send = null;
             TaomActions.Push = null;

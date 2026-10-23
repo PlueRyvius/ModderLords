@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using ModderLords.CompatSync;
+using ModderLords.CompatSync.Coop;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Election;
 
@@ -64,7 +65,11 @@ public static class KingdomVoteTimeoutAi
             if (decision?.Kingdom == null || election == null) return;
 
             // A vote standing in for a Bellum treaty: with no answer from the ruler, Bellum's council decides instead.
-            if (BellumTreatyVote.Installed && BellumTreatyVote.OnDeadline(decision, RulerVoted(__instance, decision, finalVotes))) return;
+            if (CompatPlugins.VoteDeadline.Count > 0)
+            {
+                var rulerVoted = RulerVoted(__instance, decision, finalVotes);
+                foreach (var settle in CompatPlugins.VoteDeadline) if (settle(decision, rulerVoted)) return;
+            }
 
             var decided = new List<string>();
             foreach (var clanId in (IEnumerable<string>)_eligible!.GetValue(state, null))

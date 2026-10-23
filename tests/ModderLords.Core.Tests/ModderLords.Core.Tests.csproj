@@ -50,27 +50,27 @@
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\ClientKingdomDecisionsPolicy.cs" Link="Module\ClientKingdomDecisionsPolicy.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RecipeGates.cs" Link="Module\RecipeGates.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\SerializedState.cs" Link="Module\SerializedState.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\BellumPeaceTargets.cs" Link="Module\BellumPeaceTargets.cs" />
+    <Compile Include="..\..\src\BellumCivile.CoopCompat\BellumPeaceTargets.cs" Link="Module\BellumPeaceTargets.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\BattleScenePolicy.cs" Link="Module\BattleScenePolicy.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\BellumClientKingdomTargets.cs" Link="Module\BellumClientKingdomTargets.cs" />
+    <Compile Include="..\..\src\BellumCivile.CoopCompat\BellumClientKingdomTargets.cs" Link="Module\BellumClientKingdomTargets.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RootTracer.cs" Link="Module\RootTracer.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\PlayerComparisonRewriter.cs" Link="Module\PlayerComparisonRewriter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayGates.cs" Link="Module\RelayGates.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\DecisionFieldCodec.cs" Link="Module\DecisionFieldCodec.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\RelayCoalescer.cs" Link="Module\RelayCoalescer.cs" />
     <!-- The Living Economy layer's wire forms (state mirror deltas, action arguments), game- and Coop-free. -->
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\LivingEconomy\LeMirrorDelta.cs" Link="Module\LeMirrorDelta.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\LivingEconomy\LeActionCodec.cs" Link="Module\LeActionCodec.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\PluginShared\LeMirrorDelta.cs" Link="Module\LeMirrorDelta.cs" />
+    <Compile Include="..\..\src\LivingEconomy.CoopCompat\LeActionCodec.cs" Link="Module\LeActionCodec.cs" />
     <!-- The Fourberie layer's per-player books (static swap, JSON form), game- and Coop-free. -->
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\StaticBook.cs" Link="Module\StaticBook.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbBookCodec.cs" Link="Module\FbBookCodec.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbBookSync.cs" Link="Module\FbBookSync.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbFields.cs" Link="Module\FbFields.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbTicks.cs" Link="Module\FbTicks.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbPromptWire.cs" Link="Module\FbPromptWire.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbEffectWire.cs" Link="Module\FbEffectWire.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbRecordGate.cs" Link="Module\FbRecordGate.cs" />
-    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Fourberie\FbPatchTargets.cs" Link="Module\FbPatchTargets.cs" />
+    <Compile Include="..\..\src\Fourberie.CoopCompat\StaticBook.cs" Link="Module\StaticBook.cs" />
+    <Compile Include="..\..\src\Fourberie.CoopCompat\FbBookCodec.cs" Link="Module\FbBookCodec.cs" />
+    <Compile Include="..\..\src\Fourberie.CoopCompat\FbBookSync.cs" Link="Module\FbBookSync.cs" />
+    <Compile Include="..\..\src\Fourberie.CoopCompat\FbFields.cs" Link="Module\FbFields.cs" />
+    <Compile Include="..\..\src\Fourberie.CoopCompat\FbTicks.cs" Link="Module\FbTicks.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync.Coop\PluginShared\FbPromptWire.cs" Link="Module\FbPromptWire.cs" />
+    <Compile Include="..\..\src\Fourberie.CoopCompat\FbEffectWire.cs" Link="Module\FbEffectWire.cs" />
+    <Compile Include="..\..\src\Fourberie.CoopCompat\FbRecordGate.cs" Link="Module\FbRecordGate.cs" />
+    <Compile Include="..\..\src\Fourberie.CoopCompat\FbPatchTargets.cs" Link="Module\FbPatchTargets.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\TickSteps.cs" Link="Module\TickSteps.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\NetWindow.cs" Link="Module\NetWindow.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync.Coop\Operations\PromptQueue.cs" Link="Module\PromptQueue.cs" />
