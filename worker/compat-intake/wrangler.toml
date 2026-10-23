@@ -9,7 +9,7 @@ REPO = "PlueRyvius/ModderLords"
 # Create it with `npx wrangler kv namespace create LIMITS` and paste the id it prints here.
 [[kv_namespaces]]
 binding = "LIMITS"
-id = "REPLACE_WITH_THE_KV_NAMESPACE_ID"
+id = "8df0bcfaf1f94fe8919318f03d3bd033"
 
 # Secrets, set with `npx wrangler secret put <NAME>`; never written in this file:
 #   GITHUB_TOKEN  fine-grained token, repository PlueRyvius/ModderLords only, permission Issues: read and write
