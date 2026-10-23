@@ -4,6 +4,9 @@
 machine gets into it. Nothing in this flow merges by itself: the last step is always the maintainer merging a pull
 request by hand.
 
+The record format itself, for other tools that read or write it, is described in
+[COMPAT-RECORD-FORMAT.md](COMPAT-RECORD-FORMAT.md).
+
 ## The flow
 
 1. **The user submits.** the Submit… button on ModderLords' Mods tab opens the *Compat record* issue form
