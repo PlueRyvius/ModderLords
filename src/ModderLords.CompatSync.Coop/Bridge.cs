@@ -27,11 +27,19 @@ public static class Bridge
         Steps.Run("OfflineFreeze.Tick", () => OfflineFreeze.Tick());
         Steps.Run("PlayerKingdomProtection.Tick", () => PlayerKingdomProtection.Tick());
         Steps.Run("BattleScenePick.EnsureInstalled", () => BattleScenePick.EnsureInstalled());
-        Steps.Run("BellumThreadSafety.EnsureInstalled", () => BellumThreadSafety.EnsureInstalled());
-        Steps.Run("BellumPeaceInCoop.EnsureInstalled", () => BellumPeaceInCoop.EnsureInstalled());
-        Steps.Run("BellumVotePeace.EnsureInstalled", () => BellumVotePeace.EnsureInstalled());
-        Steps.Run("BellumTreatyVote.EnsureInstalled", () => BellumTreatyVote.EnsureInstalled());
-        Steps.Run("BellumTreatyVote.ServerTick", () => BellumTreatyVote.ServerTick());
+        // The standalone Bellum Civile Coop Compat module carries these same patches; with it loaded, it runs them.
+        if (StandaloneBellum.Present)
+        {
+            Steps.Run("StandaloneBellum.EnsureWired", () => StandaloneBellum.EnsureWired());
+        }
+        else
+        {
+            Steps.Run("BellumThreadSafety.EnsureInstalled", () => BellumThreadSafety.EnsureInstalled());
+            Steps.Run("BellumPeaceInCoop.EnsureInstalled", () => BellumPeaceInCoop.EnsureInstalled());
+            Steps.Run("BellumVotePeace.EnsureInstalled", () => BellumVotePeace.EnsureInstalled());
+            Steps.Run("BellumTreatyVote.EnsureInstalled", () => BellumTreatyVote.EnsureInstalled());
+            Steps.Run("BellumTreatyVote.ServerTick", () => BellumTreatyVote.ServerTick());
+        }
         Steps.Run("ClientOptionalJoin.EnsureInstalled", () => ClientOptionalJoin.EnsureInstalled());
         Steps.Run("KingdomVoteTimeoutAi.EnsureInstalled", () => KingdomVoteTimeoutAi.EnsureInstalled());
         Steps.Run("InventoryExchangeEvent.EnsureInstalled", () => InventoryExchangeEvent.EnsureInstalled());
@@ -42,8 +50,11 @@ public static class Bridge
         Steps.Run("NetMeter.ServerTick", () => NetMeter.ServerTick());
         Steps.Run("SessionCheck.ClientTick", () => SessionCheck.ClientTick());
         Steps.Run("Admin.FamilyAdmin.ClientTick", () => Admin.FamilyAdmin.ClientTick());
-        Steps.Run("BellumClientKingdoms.EnsureInstalled", () => BellumClientKingdoms.EnsureInstalled());
-        Steps.Run("BellumClientKingdoms.ClientTick", () => BellumClientKingdoms.ClientTick());
+        if (!StandaloneBellum.Present)
+        {
+            Steps.Run("BellumClientKingdoms.EnsureInstalled", () => BellumClientKingdoms.EnsureInstalled());
+            Steps.Run("BellumClientKingdoms.ClientTick", () => BellumClientKingdoms.ClientTick());
+        }
         Steps.Run("SmokeCharacterCreation.ClientTick", () => SmokeCharacterCreation.ClientTick());
         Steps.Run("Taom.TaomLayer.Tick", () => Taom.TaomLayer.Tick());
         Steps.Run("Taom.TaomStateMirror.ServerTick", () => Taom.TaomStateMirror.ServerTick());
@@ -82,7 +93,7 @@ public static class Bridge
     public static string VerificationSummary() => BehaviorGate.VerificationSummary() + "; " + Operations.OperationRuntime.Report()
         + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary() + Operations.BellumPrompts.Summary() + "; " + InventoryExchangeEvent.Summary()
         + (BellumPeaceInCoop.Answered > 0 ? $"; Bellum parley steps answered {BellumPeaceInCoop.Answered}" : "")
-        + (BellumVotePeace.Marked > 0 ? $"; Bellum vote peace applied {BellumVotePeace.Marked}" : "") + BellumTreatyVote.Summary() + ClientKingdomDecisions.Summary() + "; " + Steps.Summary();
+        + (BellumVotePeace.Marked > 0 ? $"; Bellum vote peace applied {BellumVotePeace.Marked}" : "") + BellumTreatyVote.Summary() + StandaloneBellum.Summary() + ClientKingdomDecisions.Summary() + "; " + Steps.Summary();
 
     /// <summary>Both sides, every 30 s and at unload: writes the ground-truth trace counters. Returns how many methods were written (0 when not tracing).</summary>
     public static int TraceFlush() => BehaviorGate.TraceFlush();

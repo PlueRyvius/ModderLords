@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Bannerlord mod: built for .NET Framework 4.7.2 like the game client.
+       The same DLL is shipped for the dedicated server. Build with Build.cmd.
+       Standalone: references only the game and Harmony, never Coop or ModderLords. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>BellumCivile.CoopCompat</AssemblyName>
+    <RootNamespace>BellumCivileCoopCompat</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>1.0.0</Version>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- Not part of the ModderLords build: its Directory.Build.props targets the launcher. -->
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <SteamFolder Condition="'$(SteamFolder)' == '' And Exists('C:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord')">C:\Program Files (x86)\Steam</SteamFolder>
+    <SteamFolder Condition="'$(SteamFolder)' == '' And Exists('D:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord')">D:\Program Files (x86)\Steam</SteamFolder>
+    <GameFolder Condition="'$(GameFolder)' == ''">$(SteamFolder)\steamapps\common\Mount &amp; Blade II Bannerlord</GameFolder>
+    <HarmonyFolder Condition="'$(HarmonyFolder)' == ''">$(SteamFolder)\steamapps\workshop\content\261550\2859188632</HarmonyFolder>
+    <GameBin>$(GameFolder)\bin\Win64_Shipping_Client</GameBin>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Build.cmd;README.txt" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="0Harmony"><HintPath>$(HarmonyFolder)\bin\Win64_Shipping_Client\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.Library"><HintPath>$(GameBin)\TaleWorlds.Library.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.Localization"><HintPath>$(GameBin)\TaleWorlds.Localization.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.Core"><HintPath>$(GameBin)\TaleWorlds.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.ObjectSystem"><HintPath>$(GameBin)\TaleWorlds.ObjectSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.CampaignSystem"><HintPath>$(GameBin)\TaleWorlds.CampaignSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.MountAndBlade"><HintPath>$(GameBin)\TaleWorlds.MountAndBlade.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>
