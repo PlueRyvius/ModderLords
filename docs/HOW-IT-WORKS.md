@@ -90,6 +90,10 @@ Two small in-game modules ship with ModderLords:
   **Settings sync** on the Server tab. **Launch client** installs and updates the player's copy, so nobody copies it
   by hand.
 
+Some mods also get a **standalone co-op compat module** (for now only Bellum Civile: `BellumCivile.CoopCompat`). It
+works without ModderLords, so it can be shared with players on other launchers. When the mod is on the server's list,
+ModderLords adds its compat module right after it, and installs it on players' games the same way as ModderLords Compat.
+
 ## The Host tab
 
 - **Campaign time**: Pause, 1x and 2x buttons that work while the server runs. **Pause while a player is joining**
@@ -292,7 +296,12 @@ On top of that channel each supported mod has its own layer:
 - **Fourberie**: each player's books, crimes, prompts and effects run on the server as that player and are mirrored
   back to them.
 - **Bellum Civile**: Peace Parley is replaced by Coop's peace vote, and a treaty for a player's realm becomes a vote.
-  Votes Bellum adds reach players, and kingdoms players rule stay in step.
+  Votes Bellum adds reach players, and kingdoms players rule stay in step. The parley, voted peace, treaty vote,
+  kingdom founding and thread-safety fixes live in the standalone module `coop-compat/BellumCivileCoopCompat`, built
+  to the community Coop Compat repo's rules: no dependency on ModderLords, Coop read by reflection, no messages of its
+  own. When it is loaded, ModderLords.Compat leaves its own copy of those patches off (`StandaloneBellum`) and plugs
+  its chat notices and the vote deadline into the module's `Hooks` class. Bellum's player actions and prompts stay in
+  ModderLords.Compat, since they need the operation plan below.
 
 General co-op fixes that are not tied to one mod live here too:
 
