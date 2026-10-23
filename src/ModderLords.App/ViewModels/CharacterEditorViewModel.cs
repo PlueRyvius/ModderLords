@@ -171,6 +171,117 @@ public partial class CharacterEditorViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(CopyFaceFromCommand))]
     private FaceSource? _faceSource;
 
+    // ---- family actions -------------------------------------------------------------------------------
+
+    [ObservableProperty] private string _heroSearch = "";
+    public ObservableCollection<HeroRelative> HeroResults { get; } = new();
+
+    /// <summary>The hero the family actions are about: who to marry, who becomes a parent.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(MarryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SetFatherCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SetMotherCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AdoptCommand))]
+    private HeroRelative? _pickedHero;
+
+    [ObservableProperty] private string _clanSearch = "";
+    public ObservableCollection<HoldingClan> ClanResults { get; } = new();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(MoveToClanCommand))]
+    private HoldingClan? _pickedClan;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(DivorceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearFatherCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearMotherCommand))]
+    private HeroDetail? _shown;
+
+    [RelayCommand]
+    private async Task SearchHeroes()
+    {
+        if (!_serving()) { Status = Loc.T("The server is not running."); return; }
+        try
+        {
+            // Empty text lists every living lord and lady; the hex of nothing would be no argument at all.
+            var reply = await _admin.RequestAsync("findheroes", [HeroSearch.Trim().Length > 0 ? FamilyArgs.Search(HeroSearch) : "-"], ReplyTimeout);
+            if (!reply.Ok) { Status = reply.Error ?? ""; return; }
+            HeroResults.Clear();
+            foreach (var h in HeroRelative.ListFrom(reply).Where(h => HeroTargets.Hero(h.HeroId) != Target)) HeroResults.Add(h);
+            PickedHero = HeroResults.FirstOrDefault();
+            Status = HeroResults.Count == 0 ? Loc.F("No hero is called anything like \u201c{0}\u201d.", HeroSearch.Trim())
+                : HeroSearch.Trim().Length == 0 ? Loc.F("{0} living lords and ladies, by clan. Pick one, or type part of a name to narrow it down.", HeroResults.Count)
+                : Loc.F("{0} hero(es) found; pick one below.", HeroResults.Count);
+        }
+        catch (Exception ex) { Status = ex.Message; }
+    }
+
+    [RelayCommand]
+    private async Task SearchClans()
+    {
+        if (!_serving()) { Status = Loc.T("The server is not running."); return; }
+        try
+        {
+            var reply = await _admin.RequestAsync("findclans", [ClanSearch.Trim().Length > 0 ? FamilyArgs.Search(ClanSearch) : "-"], ReplyTimeout);
+            if (!reply.Ok) { Status = reply.Error ?? ""; return; }
+            ClanResults.Clear();
+            foreach (var c in HoldingsList.From(reply).Clans) ClanResults.Add(c);
+            PickedClan = ClanResults.FirstOrDefault();
+            Status = Loc.F("{0} clan(s) found; pick one below.", ClanResults.Count);
+        }
+        catch (Exception ex) { Status = ex.Message; }
+    }
+
+    private bool HasPicked() => PickedHero is not null && Loaded && !IsBusy;
+    private bool IsMarried() => Shown?.Spouse is not null && Loaded && !IsBusy;
+    private bool HasFather() => Shown?.Father is not null && Loaded && !IsBusy;
+    private bool HasMother() => Shown?.Mother is not null && Loaded && !IsBusy;
+    private bool HasPickedClan() => PickedClan is not null && Loaded && !IsBusy;
+
+    [RelayCommand(CanExecute = nameof(HasPicked))]
+    private Task Marry() => Family(FamilyArgs.Marry(PickedHero!.HeroId), Loc.F("Marry {0} and {1}?\n\nThe game decides which clan they live in, as at any wedding, and may move one of them there.", OriginalName, PickedHero!.Name));
+
+    [RelayCommand(CanExecute = nameof(IsMarried))]
+    private Task Divorce() => Family(FamilyArgs.Divorce(), Loc.F("Divorce {0} and {1}?\n\nEach is recorded as the other's former spouse. Neither changes clan.", OriginalName, Shown!.Spouse!.Name));
+
+    [RelayCommand(CanExecute = nameof(HasPicked))]
+    private Task SetFather() => Family(FamilyArgs.Father(PickedHero!.HeroId), Loc.F("Make {0} the father of {1}?", PickedHero!.Name, OriginalName));
+
+    [RelayCommand(CanExecute = nameof(HasPicked))]
+    private Task SetMother() => Family(FamilyArgs.Mother(PickedHero!.HeroId), Loc.F("Make {0} the mother of {1}?", PickedHero!.Name, OriginalName));
+
+    [RelayCommand(CanExecute = nameof(HasFather))]
+    private Task ClearFather() => Family(FamilyArgs.Father(null), Loc.F("Remove {0} as the father of {1}?", Shown!.Father!.Name, OriginalName));
+
+    [RelayCommand(CanExecute = nameof(HasMother))]
+    private Task ClearMother() => Family(FamilyArgs.Mother(null), Loc.F("Remove {0} as the mother of {1}?", Shown!.Mother!.Name, OriginalName));
+
+    [RelayCommand(CanExecute = nameof(HasPicked))]
+    private Task Adopt() => Family(FamilyArgs.Adopt(PickedHero!.HeroId), Loc.F("Let {0} adopt {1}?\n\n{0} becomes their {2}, and {1} moves into {0}'s clan. Leaving a party or a governorship works as it does when the game moves a hero after a wedding.",
+        PickedHero!.Name, OriginalName, PickedHero!.Female ? Loc.T("mother") : Loc.T("father")));
+
+    [RelayCommand(CanExecute = nameof(HasPickedClan))]
+    private Task MoveToClan() => Family(FamilyArgs.Clan(PickedClan!.Id), Loc.F("Move {0} into clan {1}?\n\nThey leave their party or governorship the way the game moves a hero after a wedding.", OriginalName, PickedClan!.Name));
+
+    /// <summary>Asks, sends one family action, and shows the hero as it is afterwards.</summary>
+    private async Task Family(string[] action, string question)
+    {
+        if (!_serving()) { Status = Loc.T("The server is not running."); return; }
+        if (HasPendingChanges && !Confirm(Loc.F("Apply or discard the changes to {0} first: a family change reloads them. Discard them?", OriginalName))) return;
+        if (!Confirm(question)) return;
+        IsBusy = true;
+        try
+        {
+            var reply = await _admin.RequestAsync("family", new[] { Target }.Concat(action), ReplyTimeout);
+            if (!reply.Ok) { Status = Loc.T("Nothing was changed: ") + reply.Error; return; }
+            var detail = HeroDetail.From(reply);
+            Show(detail);
+            Status = string.Join("; ", detail.Changes) + ".";
+        }
+        catch (Exception ex) { Status = ex.Message; }
+        finally { IsBusy = false; }
+    }
+
     /// <summary>Saved faces. Replaced in tests with one in a temp folder.</summary>
     public FaceLibrary Library { get; set; } = new();
     public ObservableCollection<SavedFace> LibraryFaces { get; } = new();
@@ -458,6 +569,15 @@ public partial class CharacterEditorViewModel : ObservableObject
         finally { IsBusy = false; }
     }
 
+    partial void OnIsBusyChanged(bool value) => NotifyFamilyCommands();
+    partial void OnLoadedChanged(bool value) => NotifyFamilyCommands();
+
+    private void NotifyFamilyCommands()
+    {
+        foreach (var c in new IRelayCommand[] { MarryCommand, DivorceCommand, SetFatherCommand, SetMotherCommand, ClearFatherCommand, ClearMotherCommand, AdoptCommand, MoveToClanCommand })
+            c.NotifyCanExecuteChanged();
+    }
+
     private bool CanRevive() => Loaded && !IsBusy && IsDead;
 
     /// <summary>Brings the dead hero back in their home settlement, with skills rebuilt from their template.</summary>
@@ -548,6 +668,7 @@ public partial class CharacterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBodyChanged));
         ShowFamily(hero);
 
+        Shown = hero;
         IsDead = !hero.Alive;
         Values.Clear();
         Attributes.Clear();

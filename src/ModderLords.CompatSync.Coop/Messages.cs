@@ -233,3 +233,12 @@ public sealed class NetworkHeroRevived : IEvent
     [ProtoMember(1)] public string HeroId { get; set; } = "";
     [ProtoMember(2)] public int ProtocolVersion { get; set; }
 }
+
+/// <summary>Server -> every client: this hero's parent was changed; take them off the old parent's children once the new parent has synced.</summary>
+[ProtoContract(SkipConstructor = true)]
+public sealed class NetworkParentsChanged : IEvent
+{
+    [ProtoMember(1)] public string HeroId { get; set; } = "";
+    [ProtoMember(2)] public string OldParentId { get; set; } = "";
+    [ProtoMember(3)] public int ProtocolVersion { get; set; }
+}

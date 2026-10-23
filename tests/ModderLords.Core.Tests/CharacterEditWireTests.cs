@@ -153,6 +153,47 @@ public class CharacterEditWireTests
         Assert.Equal("", old.Body);
     }
 
+    public static TheoryData<string[], FamilyAction, string> LauncherFamilyArgs => new()
+    {
+        { FamilyArgs.Marry("lord_1"), FamilyAction.Marry, "hero:lord_1" },
+        { FamilyArgs.Divorce(), FamilyAction.Divorce, "" },
+        { FamilyArgs.Father("lord_2"), FamilyAction.Father, "hero:lord_2" },
+        { FamilyArgs.Father(null), FamilyAction.Father, "none" },
+        { FamilyArgs.Mother(null), FamilyAction.Mother, "none" },
+        { FamilyArgs.Clan("clan_empire_1"), FamilyAction.Clan, "clan_empire_1" },
+        { FamilyArgs.Adopt("main_hero"), FamilyAction.Adopt, "hero:main_hero" },
+    };
+
+    [Theory]
+    [MemberData(nameof(LauncherFamilyArgs))]
+    public void Every_family_action_the_launcher_sends_is_read_as_the_same_action(string[] args, FamilyAction action, string argument)
+    {
+        Assert.True(FamilyWire.TryParse(args[0], args.Length > 1 ? args[1] : "", out var read, out var value, out var usage), usage);
+        Assert.Equal(action, read);
+        Assert.Equal(argument, value);
+    }
+
+    [Theory]
+    [InlineData("elope", "hero:x")]
+    [InlineData("marry", "")]
+    [InlineData("marry", "none")]
+    [InlineData("divorce", "hero:x")]
+    [InlineData("father", "x")]
+    [InlineData("clan", "")]
+    [InlineData("adopt", "none")]
+    public void A_family_action_with_the_wrong_argument_is_refused_with_a_reason(string action, string argument)
+    {
+        Assert.False(FamilyWire.TryParse(action, argument, out _, out _, out var usage));
+        Assert.NotEmpty(usage);
+    }
+
+    [Fact]
+    public void A_clan_id_that_would_split_on_the_console_is_refused_before_sending()
+    {
+        Assert.Throws<ArgumentException>(() => FamilyArgs.Clan("two words"));
+        Assert.Equal("6162", FamilyArgs.Search(" ab "));
+    }
+
     [Fact]
     public void Companion_and_holdings_replies_shaped_like_the_modules_are_read_whole()
     {

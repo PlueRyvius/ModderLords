@@ -227,6 +227,42 @@
                             <TextBlock Text="&#x2502;" HorizontalAlignment="Center" FontSize="18" Foreground="{DynamicResource MutedForeground}" />
                             <TextBlock Text="{l:T 'Children'}" HorizontalAlignment="Center" Foreground="{DynamicResource MutedForeground}" />
                             <ItemsControl ItemsSource="{Binding Children}" ItemTemplate="{StaticResource RelativeChip}" ItemsPanel="{StaticResource ChipPanel}" HorizontalAlignment="Center" Margin="0,4,0,0" MaxWidth="820" />
+
+                            <!-- FAMILY ACTIONS: each asks first, goes through the game's own code where it has some, and reloads the hero. -->
+                            <GroupBox Header="{l:T 'Change the family'}" Margin="0,24,0,0" Padding="8,6" MinWidth="760">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,6">
+                                        <TextBlock DockPanel.Dock="Left" Text="{l:T 'Find a hero'}" VerticalAlignment="Center" Width="90" />
+                                        <Button DockPanel.Dock="Right" Content="{l:T 'Search'}" Command="{Binding SearchHeroesCommand}" MinWidth="70" Margin="4,0,0,0" />
+                                        <TextBox Text="{Binding HeroSearch, UpdateSourceTrigger=PropertyChanged}" Width="220" HorizontalAlignment="Left"
+                                                 ToolTip="{l:T 'Part of a name (living and dead heroes in the whole world), or leave it empty to list every living lord and lady'}" />
+                                        <ComboBox ItemsSource="{Binding HeroResults}" SelectedItem="{Binding PickedHero}" DisplayMemberPath="Display" Margin="8,0,0,0" MinWidth="300" />
+                                    </DockPanel>
+                                    <WrapPanel Margin="90,0,0,10">
+                                        <Button Content="{l:T 'Marry them'}" Command="{Binding MarryCommand}" Margin="0,0,6,4" Padding="8,2"
+                                                ToolTip="{l:T 'The game\&#x27;s own wedding: it checks age, sex, kinship and clan rules, and picks the clan they live in'}" />
+                                        <Button Content="{l:T 'Make them the father'}" Command="{Binding SetFatherCommand}" Margin="0,0,6,4" Padding="8,2" />
+                                        <Button Content="{l:T 'Make them the mother'}" Command="{Binding SetMotherCommand}" Margin="0,0,6,4" Padding="8,2" />
+                                        <Button Content="{l:T 'Let them adopt'}" Command="{Binding AdoptCommand}" Margin="0,0,6,4" Padding="8,2"
+                                                ToolTip="{l:T 'They become this hero\&#x27;s parent, and this hero moves into their clan'}" />
+                                    </WrapPanel>
+                                    <WrapPanel Margin="90,0,0,10">
+                                        <Button Content="{l:T 'Divorce'}" Command="{Binding DivorceCommand}" Margin="0,0,6,4" Padding="8,2" />
+                                        <Button Content="{l:T 'Remove father'}" Command="{Binding ClearFatherCommand}" Margin="0,0,6,4" Padding="8,2" />
+                                        <Button Content="{l:T 'Remove mother'}" Command="{Binding ClearMotherCommand}" Margin="0,0,6,4" Padding="8,2" />
+                                    </WrapPanel>
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Left" Text="{l:T 'Move to clan'}" VerticalAlignment="Center" Width="90" />
+                                        <Button DockPanel.Dock="Right" Content="{l:T 'Move'}" Command="{Binding MoveToClanCommand}" MinWidth="70" Margin="4,0,0,0" />
+                                        <TextBox Text="{Binding ClanSearch, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left"
+                                                 ToolTip="{l:T 'Part of a clan name, or empty for every clan'}" />
+                                        <Button Content="{l:T 'Find'}" Command="{Binding SearchClansCommand}" MinWidth="50" Margin="4,0,0,0" />
+                                        <ComboBox ItemsSource="{Binding ClanResults}" SelectedItem="{Binding PickedClan}" DisplayMemberPath="Name" Margin="8,0,0,0" MinWidth="240" />
+                                    </DockPanel>
+                                    <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,8,0,0" MaxWidth="740" HorizontalAlignment="Left"
+                                               Text="{l:T 'Clan leaders, companions and players\&#x27; own heroes cannot be moved to another clan. Each change asks first and is synced to every player.'}" />
+                                </StackPanel>
+                            </GroupBox>
                         </StackPanel>
                     </DockPanel>
                 </ScrollViewer>

@@ -41,6 +41,7 @@ public static class Bridge
         Steps.Run("Admin.PlayerAdmin.ServerTick", () => Admin.PlayerAdmin.ServerTick());
         Steps.Run("NetMeter.ServerTick", () => NetMeter.ServerTick());
         Steps.Run("SessionCheck.ClientTick", () => SessionCheck.ClientTick());
+        Steps.Run("Admin.FamilyAdmin.ClientTick", () => Admin.FamilyAdmin.ClientTick());
         Steps.Run("BellumClientKingdoms.EnsureInstalled", () => BellumClientKingdoms.EnsureInstalled());
         Steps.Run("BellumClientKingdoms.ClientTick", () => BellumClientKingdoms.ClientTick());
         Steps.Run("SmokeCharacterCreation.ClientTick", () => SmokeCharacterCreation.ClientTick());
