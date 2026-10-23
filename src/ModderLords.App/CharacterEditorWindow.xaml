@@ -235,7 +235,7 @@
                                         <TextBlock DockPanel.Dock="Left" Text="{l:T 'Find a hero'}" VerticalAlignment="Center" Width="90" />
                                         <Button DockPanel.Dock="Right" Content="{l:T 'Search'}" Command="{Binding SearchHeroesCommand}" MinWidth="70" Margin="4,0,0,0" />
                                         <TextBox Text="{Binding HeroSearch, UpdateSourceTrigger=PropertyChanged}" Width="220" HorizontalAlignment="Left"
-                                                 ToolTip="{l:T 'Part of a name; living and dead heroes in the whole world are searched'}" />
+                                                 ToolTip="{l:T 'Part of a name (living and dead heroes in the whole world), or leave it empty to list every living lord and lady'}" />
                                         <ComboBox ItemsSource="{Binding HeroResults}" SelectedItem="{Binding PickedHero}" DisplayMemberPath="Display" Margin="8,0,0,0" MinWidth="300" />
                                     </DockPanel>
                                     <WrapPanel Margin="90,0,0,10">

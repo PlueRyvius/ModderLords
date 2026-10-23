@@ -200,16 +200,18 @@ public partial class CharacterEditorViewModel : ObservableObject
     [RelayCommand]
     private async Task SearchHeroes()
     {
-        if (HeroSearch.Trim().Length < 2) { Status = Loc.T("Type at least two letters of the name."); return; }
         if (!_serving()) { Status = Loc.T("The server is not running."); return; }
         try
         {
-            var reply = await _admin.RequestAsync("findheroes", [FamilyArgs.Search(HeroSearch)], ReplyTimeout);
+            // Empty text lists every living lord and lady; the hex of nothing would be no argument at all.
+            var reply = await _admin.RequestAsync("findheroes", [HeroSearch.Trim().Length > 0 ? FamilyArgs.Search(HeroSearch) : "-"], ReplyTimeout);
             if (!reply.Ok) { Status = reply.Error ?? ""; return; }
             HeroResults.Clear();
             foreach (var h in HeroRelative.ListFrom(reply).Where(h => HeroTargets.Hero(h.HeroId) != Target)) HeroResults.Add(h);
             PickedHero = HeroResults.FirstOrDefault();
-            Status = HeroResults.Count == 0 ? Loc.F("No hero is called anything like \u201c{0}\u201d.", HeroSearch.Trim()) : Loc.F("{0} hero(es) found; pick one below.", HeroResults.Count);
+            Status = HeroResults.Count == 0 ? Loc.F("No hero is called anything like \u201c{0}\u201d.", HeroSearch.Trim())
+                : HeroSearch.Trim().Length == 0 ? Loc.F("{0} living lords and ladies, by clan. Pick one, or type part of a name to narrow it down.", HeroResults.Count)
+                : Loc.F("{0} hero(es) found; pick one below.", HeroResults.Count);
         }
         catch (Exception ex) { Status = ex.Message; }
     }
@@ -220,7 +222,7 @@ public partial class CharacterEditorViewModel : ObservableObject
         if (!_serving()) { Status = Loc.T("The server is not running."); return; }
         try
         {
-            var reply = await _admin.RequestAsync("findclans", [FamilyArgs.Search(ClanSearch.Length > 0 ? ClanSearch : " ")], ReplyTimeout);
+            var reply = await _admin.RequestAsync("findclans", [ClanSearch.Trim().Length > 0 ? FamilyArgs.Search(ClanSearch) : "-"], ReplyTimeout);
             if (!reply.Ok) { Status = reply.Error ?? ""; return; }
             ClanResults.Clear();
             foreach (var c in HoldingsList.From(reply).Clans) ClanResults.Add(c);

@@ -197,23 +197,27 @@ namespace ModderLords.CompatSync.Coop.Admin
         private static void MoveToClan(Hero hero, Clan clan) => ClanChange!.Invoke(null, new object[] { hero, clan });
 
         /// <summary>
-        /// <c>modderlords.findheroes &lt;req&gt; &lt;hex text&gt;</c>: up to 40 heroes, living first, whose name contains the
-        /// text, for the editor's hero picker.
+        /// <c>modderlords.findheroes &lt;req&gt; &lt;hex text&gt;</c>, for the editor's hero picker: heroes whose name contains the
+        /// text (living first, up to 200), or with no text every living lord and lady, NPC or player, by clan (up to 1500).
+        /// Notables and wanderers are left out of the empty search only.
         /// </summary>
         [CommandLineFunctionality.CommandLineArgumentFunction("findheroes", AdminWire.CommandGroup)]
         public static string FindHeroesCommand(List<string> args) => PlayerAdmin.Run("findheroes", args, req =>
         {
             var text = args.Count > 1 && HeroNameWire.TryUnhex(args[1], out var t) ? t.Trim() : "";
-            if (text.Length < 2) return AdminWire.Reply("findheroes", req, "Type at least two letters of the name.");
-            var found = Hero.AllAliveHeroes.Concat(Hero.DeadOrDisabledHeroes)
-                .Where(h => h.Name?.ToString().IndexOf(text, StringComparison.CurrentCultureIgnoreCase) >= 0 && h.CharacterObject is not null && !h.IsNotable)
-                .OrderByDescending(h => h.IsAlive).ThenBy(h => h.Name.ToString(), StringComparer.CurrentCultureIgnoreCase)
-                .Take(40)
-                .Select(h => (object?)new Dictionary<string, object?>
-                {
-                    ["heroId"] = h.StringId, ["name"] = h.Name?.ToString() ?? "", ["female"] = h.IsFemale, ["age"] = (int)h.Age,
-                    ["alive"] = h.IsAlive, ["clan"] = h.Clan?.Name?.ToString() ?? "",
-                }).ToList();
+            var heroes = text.Length == 0
+                ? Hero.AllAliveHeroes.Where(h => h.IsLord && h.CharacterObject is not null)
+                    .OrderBy(h => h.Clan?.Name?.ToString() ?? "~", StringComparer.CurrentCultureIgnoreCase).ThenBy(h => h.Name.ToString(), StringComparer.CurrentCultureIgnoreCase)
+                    .Take(1500)
+                : Hero.AllAliveHeroes.Concat(Hero.DeadOrDisabledHeroes)
+                    .Where(h => h.CharacterObject is not null && h.Name?.ToString().IndexOf(text, StringComparison.CurrentCultureIgnoreCase) >= 0)
+                    .OrderByDescending(h => h.IsAlive).ThenBy(h => h.Name.ToString(), StringComparer.CurrentCultureIgnoreCase)
+                    .Take(200);
+            var found = heroes.Select(h => (object?)new Dictionary<string, object?>
+            {
+                ["heroId"] = h.StringId, ["name"] = h.Name?.ToString() ?? "", ["female"] = h.IsFemale, ["age"] = (int)h.Age,
+                ["alive"] = h.IsAlive, ["clan"] = h.Clan?.Name?.ToString() ?? "",
+            }).ToList();
             return AdminWire.Reply("findheroes", req, null, new Dictionary<string, object?> { ["list"] = found });
         });
 
