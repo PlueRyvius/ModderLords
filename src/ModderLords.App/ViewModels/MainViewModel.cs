@@ -1200,6 +1200,16 @@ public partial class MainViewModel : ObservableObject
     internal Func<string, bool> ConfirmCompatSubmit { get; set; } = message => MessageBox.Show(
         message, Loc.T("Submit compatibility record"), MessageBoxButton.OKCancel, MessageBoxImage.Information) == MessageBoxResult.OK;
 
+    /// <summary>
+    /// Sends a submission to the intake worker, or null when none is configured (<see cref="CompatIntakeClient.Endpoint"/>).
+    /// It waits for the answer, at most <see cref="CompatIntakeClient.Timeout"/>. Replaceable so tests never reach the network.
+    /// </summary>
+    internal Func<CompatSubmissionFields, CompatIntakeResult>? SendCompatSubmission { get; set; } = CompatIntakeClient.Endpoint is { } endpoint
+        ? fields => Task.Run(() => CompatIntakeClient.SendAsync(IntakeHttp, endpoint, fields)).GetAwaiter().GetResult()
+        : null;
+
+    private static readonly System.Net.Http.HttpClient IntakeHttp = new();
+
     /// <summary>Opens the issue form in the default browser. Replaceable so tests never start one.</summary>
     internal Action<string> OpenCompatSubmitPage { get; set; } = url =>
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
@@ -1311,16 +1321,15 @@ public partial class MainViewModel : ObservableObject
 
         var (record, settings, proof) = (chosen.Record, chosen.Settings, chosen.Proof);
         var link = CompatSubmission.Build(record, row.Version, CoopVersion, chosen.Proven ? CompatSubmission.ProofNote(proof!.ProvenAtUtc) : null);
-        var message = $"This opens a GitHub issue form in your browser, filled in with a compatibility record for {record.Id}: verdict {record.Verdict}, "
+        var message = $"This submits a compatibility record for {record.Id}: verdict {record.Verdict}, "
                     + (settings is null ? "" : $"its settings on the Mods tab ({settings.Describe()}), ")
                     + "the versions it was tested with, the defaults and notes in the record, plus this mod's version and Coop's. "
                     + (chosen.Proven
                         ? $"It also says that a server hosted this way started and a player reached the campaign map on {proof!.ProvenAtUtc:yyyy-MM-dd}. "
                         : "ModderLords has not watched a player join with these settings, so the form does not claim they were tried. ")
-                    + "Nothing else about this PC, your profile or your other mods is included.\n\n"
-                    + "Nothing is sent by pressing OK here. Once you press Submit on GitHub it becomes a public issue posted from your own GitHub account."
-                    + (link.RecordInUrl ? "" : "\n\nThis record is too large to put in a link, so it will be copied to the clipboard (replacing what is there) for you to paste into the form.");
-        OpenCompatSubmission(link, message, $"the {record.Id} record", "is");
+                    + "Nothing else about this PC, your profile or your other mods is included.";
+        OpenCompatSubmission(link, message, $"the {record.Id} record", "is",
+            "This record is too large to put in a link, so it will be copied to the clipboard (replacing what is there) for you to paste into the form.");
     }
 
     /// <summary>Several mods' records in one issue: one form, one review, and each record still checked on its own.</summary>
@@ -1332,33 +1341,55 @@ public partial class MainViewModel : ObservableObject
         var lines = items.Select(i => $"- {i.Record.Id}: verdict {i.Record.Verdict}"
             + (i.Settings is null ? "" : $", {i.Settings.Describe()}")
             + (i.Proven ? $"; a player reached the map with this on {i.Proof!.ProvenAtUtc:yyyy-MM-dd}" : "; not watched by ModderLords, so the form does not claim it was tried"));
-        var message = $"This opens one GitHub issue form in your browser, filled in with compatibility records for {items.Count} mods:\n\n"
+        var message = $"This submits compatibility records for {items.Count} mods, in one issue:\n\n"
                     + string.Join("\n", lines) + "\n\n"
                     + "Each record carries its settings on the Mods tab, the versions it was tested with and the defaults and notes in the record, plus Coop's version. "
-                    + "Nothing else about this PC, your profile or your other mods is included.\n\n"
-                    + "Nothing is sent by pressing OK here. Once you press Submit on GitHub it becomes a public issue posted from your own GitHub account."
-                    + (link.RecordInUrl ? "" : "\n\nThese records are too large to put in a link, so they will be copied to the clipboard (replacing what is there) for you to paste into the form.");
-        OpenCompatSubmission(link, message, $"the records of {items.Count} mods", "are");
+                    + "Nothing else about this PC, your profile or your other mods is included.";
+        OpenCompatSubmission(link, message, $"the records of {items.Count} mods", "are",
+            "These records are too large to put in a link, so they will be copied to the clipboard (replacing what is there) for you to paste into the form.");
     }
 
-    /// <summary>Asks, then opens the form, putting the record on the clipboard first when the link could not carry it.</summary>
-    private void OpenCompatSubmission(CompatSubmissionLink link, string message, string what, string verb)
+    /// <summary>
+    /// Asks, then sends the submission straight to the intake when there is one (<see cref="SendCompatSubmission"/>).
+    /// Without one, or when sending fails, it opens the prefilled form instead, putting the record on the clipboard first
+    /// when the link could not carry it.
+    /// </summary>
+    private void OpenCompatSubmission(CompatSubmissionLink link, string description, string what, string verb, string clipboardNote)
     {
+        var send = SendCompatSubmission;
+        var message = description + "\n\n" + (send is not null
+            ? "Pressing OK sends it straight to ModderLords on GitHub, where it becomes a public issue posted by ModderLords' bot. "
+              + "No GitHub account is needed and nothing is posted from yours. If sending fails, the GitHub form opens instead."
+            : "Nothing is sent by pressing OK here. Once you press Submit on GitHub it becomes a public issue posted from your own GitHub account.")
+            + (link.RecordInUrl ? "" : (send is not null ? "\n\nIf the form has to open: " : "\n\n") + clipboardNote);
         if (!ConfirmCompatSubmit(message)) return;
         var subject = char.ToUpperInvariant(what[0]) + what[1..];
+
+        var fellBack = "";
+        if (send is not null)
+        {
+            var result = send(link.Fields);
+            if (result.Sent)
+            {
+                try { OpenCompatSubmitPage(result.IssueUrl!); } catch (Exception) { /* the issue exists; the status says where */ }
+                Status = Loc.F("Sent {0}: it is now a public issue on GitHub ({1}), where it is checked and then reviewed by the maintainer", what, result.IssueUrl);
+                return;
+            }
+            fellBack = Loc.F("Could not send it directly ({0}), so the GitHub form opened instead. ", result.Message);
+        }
         try
         {
             if (!link.RecordInUrl && !CopyCompatSubmitText(link.RecordJson))
             {
-                Status = Loc.F("{0} {1} too large for a link and could not be copied to the clipboard: use Export… and attach the file instead", subject, verb);
+                Status = fellBack + Loc.F("{0} {1} too large for a link and could not be copied to the clipboard: use Export… and attach the file instead", subject, verb);
                 return;
             }
             OpenCompatSubmitPage(link.Url);
-            Status = link.RecordInUrl
+            Status = fellBack + (link.RecordInUrl
                 ? Loc.F("Opened the GitHub form for {0}. Nothing is posted until you press Submit there", what)
-                : Loc.F("{0} {1} too large for a link, so that was copied to the clipboard: paste it into the Record field of the GitHub form that just opened, then press Submit there", subject, verb);
+                : Loc.F("{0} {1} too large for a link, so that was copied to the clipboard: paste it into the Record field of the GitHub form that just opened, then press Submit there", subject, verb));
         }
-        catch (Exception ex) { Status = Loc.T("Could not open the GitHub form: ") + ex.Message; }
+        catch (Exception ex) { Status = fellBack + Loc.T("Could not open the GitHub form: ") + ex.Message; }
     }
 
     // ---- proof that a set-up works -----------------------------------------------------------------

@@ -9,9 +9,15 @@ The record format itself, for other tools that read or write it, is described in
 
 ## The flow
 
-1. **The user submits.** the Submit… button on ModderLords' Mods tab opens the *Compat record* issue form
+1. **The user submits.** The Submit… button on ModderLords' Mods tab opens the *Compat record* issue form
    (`.github/ISSUE_TEMPLATE/compat-record.yml`) with the fields filled in. The form can also be filled in by hand.
    The template gives the issue the `compat-record` label.
+
+   When an intake worker is configured (`worker/compat-intake`, and `CompatIntakeClient.DefaultEndpoint` in the app),
+   Submit… sends the same fields there instead. The worker opens the same issue, body and label included, from a bot
+   token, so the player needs no GitHub account and nothing goes through the clipboard. Its Notes start with a line
+   saying so. If the worker can't be reached or refuses, the form opens as before. Everything below is the same
+   either way.
 
    The record in the form is the mod's effective record with the submitter's Mods-tab settings written into it:
    `DefaultRole`, `ServerAuthoritative` (with `ClientSideBehaviors`), `ServerExcludedFolders` and
