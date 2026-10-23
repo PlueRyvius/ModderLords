@@ -15,8 +15,6 @@
     <DependedModuleMetadatas>
         <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis"/>
         <DependedModuleMetadata id="BellumCivile" order="LoadBeforeThis"/>
-        <DependedModuleMetadata id="Coop" order="LoadBeforeThis" optional="true"/>
-        <DependedModuleMetadata id="CoopNightly" order="LoadBeforeThis" optional="true"/>
     </DependedModuleMetadatas>
     <SubModules>
         <SubModule>
