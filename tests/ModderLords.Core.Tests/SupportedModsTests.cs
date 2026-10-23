@@ -18,7 +18,7 @@ public sealed class SupportedModsTests
             Assert.False(string.IsNullOrWhiteSpace(m.Name));
             Assert.Contains(m.Status, Statuses);
             Assert.False(string.IsNullOrWhiteSpace(m.Summary), m.Name);
-            Assert.NotEmpty(m.Details);
+            Assert.True(m.Details.Count + m.Setup.Count + m.Limits.Count > 0, m.Name);
             Assert.NotEmpty(m.ModuleIds);
             Assert.All(m.ModuleIds, id => Assert.Equal(id.Trim(), id));
         }

@@ -11,8 +11,12 @@ public sealed record SupportedMod
     /// <summary>Works, Settings (works with Settings sync on), Partial or Broken.</summary>
     public string Status { get; init; } = "";
     public string Summary { get; init; } = "";
-    /// <summary>What ModderLords does for it, one plain sentence each.</summary>
+    /// <summary>What works, one plain sentence each.</summary>
     public IReadOnlyList<string> Details { get; init; } = [];
+    /// <summary>What the host must turn on or avoid.</summary>
+    public IReadOnlyList<string> Setup { get; init; } = [];
+    /// <summary>What does not work in co-op.</summary>
+    public IReadOnlyList<string> Limits { get; init; } = [];
     /// <summary>Players must have ModderLords.Compat (Settings sync) for the support to work.</summary>
     public bool NeedsCompat { get; init; }
     /// <summary>The ModderLords version the support first shipped in, when known.</summary>

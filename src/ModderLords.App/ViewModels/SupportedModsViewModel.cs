@@ -15,6 +15,11 @@ public partial class SupportedModRow : ObservableObject
     public string Name => Mod.Name;
     public string Summary => Mod.Summary;
     public IReadOnlyList<string> Details => Mod.Details;
+    public IReadOnlyList<string> Setup => Mod.Setup;
+    public IReadOnlyList<string> Limits => Mod.Limits;
+    public bool HasDetails => Mod.Details.Count > 0;
+    public bool HasSetup => Mod.Setup.Count > 0;
+    public bool HasLimits => Mod.Limits.Count > 0;
     public string StatusText => Mod.Status switch
     {
         "Works" => Loc.T("Works"),
@@ -35,6 +40,16 @@ public partial class SupportedModRow : ObservableObject
     [ObservableProperty] private bool _installed;
 }
 
+/// <summary>One "for every mod" point, split at its first colon into a bold lead and the explanation.</summary>
+public sealed record GeneralPoint(string Lead, string Text)
+{
+    public static GeneralPoint From(string line)
+    {
+        var at = line.IndexOf(": ", StringComparison.Ordinal);
+        return at > 0 && at < 60 ? new GeneralPoint(line[..at], line[(at + 2)..]) : new GeneralPoint("", line);
+    }
+}
+
 /// <summary>
 /// The Supported mods tab: the bundled <see cref="SupportedModList"/>, installed mods first, kept in step with the Mods
 /// tab's list as it is rescanned.
@@ -48,13 +63,13 @@ public sealed class SupportedModsViewModel
     internal SupportedModsViewModel(ObservableCollection<ModRow> installed, SupportedModList list)
     {
         _installed = installed;
-        General = list.General;
+        General = list.General.Select(GeneralPoint.From).ToList();
         foreach (var m in list.Mods) Rows.Add(new SupportedModRow(m));
         Refresh();
         installed.CollectionChanged += OnInstalledChanged;
     }
 
-    public IReadOnlyList<string> General { get; }
+    public IReadOnlyList<GeneralPoint> General { get; }
     public ObservableCollection<SupportedModRow> Rows { get; } = new();
 
     private static SupportedModList Load()

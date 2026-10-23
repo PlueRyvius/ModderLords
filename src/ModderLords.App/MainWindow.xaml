@@ -1109,67 +1109,115 @@
             </TabItem>
 
             <!-- SUPPORTED MODS: what ModderLords does for each mod it has specific support for (supported-mods.json),
-                 so nobody has to read the patch notes. Both modes; installed mods first. -->
+                 so nobody has to read the patch notes. Both modes; installed mods first. One card per mod: name, status
+                 and summary always shown; expanding it shows what works, what the host sets up, and the limits. -->
             <TabItem Header="{l:T 'Supported mods'}" DataContext="{Binding Supported}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="8" MaxWidth="900" HorizontalAlignment="Left">
-                        <TextBlock Text="{l:T 'For every mod'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,4" />
-                        <ItemsControl ItemsSource="{Binding General}" Margin="0,0,0,14">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <BulletDecorator Margin="4,1">
-                                        <BulletDecorator.Bullet><TextBlock Text="&#x2022;" Margin="0,0,6,0" /></BulletDecorator.Bullet>
-                                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
-                                    </BulletDecorator>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Text="{l:T 'Mods with specific support'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,2" />
-                        <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Text="{l:T 'Mods installed on this PC are listed first. Click one to see what ModderLords does for it in co-op. Any mod not listed here gets only the support above.'}" />
+                    <StackPanel Margin="12,10" MaxWidth="860" HorizontalAlignment="Left" TextElement.FontSize="13">
+                        <TextBlock Text="{l:T 'Supported mods'}" FontWeight="Bold" FontSize="18" />
+                        <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,4,0,14" LineHeight="20"
+                                   Text="{l:T 'What ModderLords does to make mods work in co-op. Mods installed on this PC are listed first; click a mod for the details. A mod not listed here still gets everything under For every mod.'}" />
+
+                        <Border BorderBrush="{DynamicResource ControlBorder}" BorderThickness="1" CornerRadius="6" Padding="14,10" Margin="0,0,0,18" Background="{DynamicResource ControlBackground}">
+                            <StackPanel>
+                                <TextBlock Text="{l:T 'For every mod'}" FontWeight="Bold" FontSize="15" Margin="0,0,0,8" />
+                                <ItemsControl ItemsSource="{Binding General}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,7">
+                                                <Run Text="{Binding Lead, Mode=OneWay}" FontWeight="Bold" /><Run Text="  " /><Run Text="{Binding Text, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="{l:T 'Mods with specific support'}" FontWeight="Bold" FontSize="15" Margin="0,0,0,8" />
                         <ItemsControl ItemsSource="{Binding Rows}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Expander Margin="0,0,0,4">
-                                        <Expander.Header>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" VerticalAlignment="Center" />
-                                                <Border CornerRadius="3" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{DynamicResource BadgeBackground}" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Mod.Status}" Value="Works"><Setter Property="Background" Value="{DynamicResource SuccessBackground}" /></DataTrigger>
-                                                                <DataTrigger Binding="{Binding Mod.Status}" Value="Settings"><Setter Property="Background" Value="{DynamicResource SuccessBackground}" /></DataTrigger>
-                                                                <DataTrigger Binding="{Binding Mod.Status}" Value="Partial"><Setter Property="Background" Value="{DynamicResource WarningBackground}" /></DataTrigger>
-                                                                <DataTrigger Binding="{Binding Mod.Status}" Value="Broken"><Setter Property="Background" Value="{DynamicResource DangerBackground}" /></DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="{Binding StatusText}" FontSize="11" />
-                                                </Border>
-                                                <TextBlock Text="{l:T 'installed'}" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource SuccessForeground}"
-                                                           Visibility="{Binding Installed, Converter={StaticResource BoolToVis}}" />
-                                                <TextBlock Text="{Binding Summary}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource MutedForeground}" TextTrimming="CharacterEllipsis" MaxWidth="520" />
+                                    <Border BorderBrush="{DynamicResource ControlBorder}" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,8" Background="{DynamicResource ControlBackground}">
+                                        <Expander>
+                                            <Expander.Header>
+                                                <StackPanel Margin="4,0,0,0">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="15" VerticalAlignment="Center" />
+                                                        <Border CornerRadius="3" Padding="7,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="{DynamicResource BadgeBackground}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Mod.Status}" Value="Works"><Setter Property="Background" Value="{DynamicResource SuccessBackground}" /></DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Mod.Status}" Value="Settings"><Setter Property="Background" Value="{DynamicResource SuccessBackground}" /></DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Mod.Status}" Value="Partial"><Setter Property="Background" Value="{DynamicResource WarningBackground}" /></DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Mod.Status}" Value="Broken"><Setter Property="Background" Value="{DynamicResource DangerBackground}" /></DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock Text="{Binding StatusText}" FontSize="11" />
+                                                        </Border>
+                                                        <Border CornerRadius="3" Padding="7,2" Margin="6,0,0,0" VerticalAlignment="Center" BorderThickness="1" BorderBrush="{DynamicResource SuccessForeground}"
+                                                                Visibility="{Binding Installed, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="{l:T 'Installed'}" FontSize="11" Foreground="{DynamicResource SuccessForeground}" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,3,0,0" MaxWidth="760" HorizontalAlignment="Left" />
+                                                </StackPanel>
+                                            </Expander.Header>
+                                            <StackPanel Margin="26,4,8,4" MaxWidth="760" HorizontalAlignment="Left">
+                                            <StackPanel Margin="0,10,0,0" Visibility="{Binding HasDetails, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="{l:T 'What works'}" FontWeight="Bold" Margin="0,0,0,6" />
+                                                <ItemsControl ItemsSource="{Binding Details}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Margin="0,0,0,5">
+                                                                <Grid.ColumnDefinitions><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                                <TextBlock Text="&#x2713;" Foreground="{DynamicResource SuccessForeground}" />
+                                                                <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap" LineHeight="20" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
                                             </StackPanel>
-                                        </Expander.Header>
-                                        <StackPanel Margin="24,4,0,8">
-                                            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,0,0,4" />
-                                            <ItemsControl ItemsSource="{Binding Details}">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <BulletDecorator Margin="4,1">
-                                                            <BulletDecorator.Bullet><TextBlock Text="&#x2022;" Margin="0,0,6,0" /></BulletDecorator.Bullet>
-                                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" />
-                                                        </BulletDecorator>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                            <TextBlock Text="{Binding Footer}" Margin="0,6,0,0" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap"
-                                                       Visibility="{Binding HasFooter, Converter={StaticResource BoolToVis}}" />
-                                            <TextBlock Text="{Binding Ids}" FontSize="11" Foreground="{DynamicResource SubtleForeground}" Margin="0,2,0,0" />
-                                        </StackPanel>
-                                    </Expander>
+                                            <StackPanel Margin="0,10,0,0" Visibility="{Binding HasSetup, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="{l:T 'Host setup'}" FontWeight="Bold" Margin="0,0,0,6" />
+                                                <ItemsControl ItemsSource="{Binding Setup}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Margin="0,0,0,5">
+                                                                <Grid.ColumnDefinitions><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                                <TextBlock Text="&#x2192;" Foreground="{DynamicResource Foreground}" />
+                                                                <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap" LineHeight="20" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,10,0,0" Visibility="{Binding HasLimits, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="{l:T 'Limits'}" FontWeight="Bold" Margin="0,0,0,6" />
+                                                <ItemsControl ItemsSource="{Binding Limits}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Margin="0,0,0,5">
+                                                                <Grid.ColumnDefinitions><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                                <TextBlock Text="&#x2715;" Foreground="{DynamicResource DangerForeground}" />
+                                                                <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap" LineHeight="20" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                                <Border BorderBrush="{DynamicResource ControlBorder}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="0,6,0,0">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Footer}" Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap"
+                                                                   Visibility="{Binding HasFooter, Converter={StaticResource BoolToVis}}" />
+                                                        <TextBlock Text="{Binding Ids}" FontSize="11" Foreground="{DynamicResource SubtleForeground}" Margin="0,2,0,0" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                        </Expander>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
