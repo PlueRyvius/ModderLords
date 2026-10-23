@@ -23,8 +23,8 @@ public sealed record CompatIntakeResult(bool Sent, string? IssueUrl, string Mess
 /// </summary>
 public static class CompatIntakeClient
 {
-    /// <summary>The deployed worker's submit address. Empty until one is deployed: Submit… then always uses the form.</summary>
-    public const string DefaultEndpoint = "";
+    /// <summary>The deployed worker's submit address (worker/compat-intake). Empty would make Submit… always use the form.</summary>
+    public const string DefaultEndpoint = "https://modderlords-compat-intake.andrewhemphill-ah.workers.dev/submit";
 
     /// <summary>Overrides <see cref="DefaultEndpoint"/>, for testing against a worker run locally or a staging one.</summary>
     public const string EndpointVariable = "MODDERLORDS_COMPAT_INTAKE";

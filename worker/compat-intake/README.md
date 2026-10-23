@@ -6,8 +6,9 @@ form would, from a bot token, with the `compat-record` label. From there nothing
 (`.github/workflows/compat-record.yml`) validates the record and opens a pull request, and the maintainer reviews and
 merges it by hand. See `docs/COMPAT-RECORDS.md`.
 
-The app only uses it once `CompatIntakeClient.DefaultEndpoint` in `src/ModderLords.Core/Compat/CompatIntakeClient.cs`
-holds its address. Until then, and whenever a send fails, Submit… opens the GitHub form exactly as before.
+It is deployed at `https://modderlords-compat-intake.andrewhemphill-ah.workers.dev/submit`, the address in
+`CompatIntakeClient.DefaultEndpoint` (`src/ModderLords.Core/Compat/CompatIntakeClient.cs`). Whenever a send fails,
+Submit… opens the GitHub form exactly as before.
 
 ## What it accepts
 
