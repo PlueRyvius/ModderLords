@@ -286,6 +286,35 @@ public class CharacterEditorTests
         Assert.Contains("Revived in Pravend", vm.Status);
     });
 
+    [Fact]
+    public void Family_actions_ask_first_and_send_the_right_command() => Sta(() =>
+    {
+        var server = new FamilyServer();
+        var vm = new CharacterEditorViewModel(server.Client, HeroTargets.Hero("aldric"), "Aldric", () => true);
+        vm.ReloadCommand.ExecuteAsync(null).Pump();
+        // Married, no parents: divorce is offered, removing a parent is not, and nothing is picked yet.
+        Assert.True(vm.DivorceCommand.CanExecute(null));
+        Assert.False(vm.ClearFatherCommand.CanExecute(null));
+        Assert.False(vm.MarryCommand.CanExecute(null));
+
+        vm.Confirm = _ => false;
+        vm.DivorceCommand.ExecuteAsync(null).Pump();
+        Assert.Single(server.Sent);
+
+        vm.Confirm = _ => true;
+        vm.DivorceCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("modderlords.family r2 hero:aldric divorce", server.Sent[^1]);
+
+        vm.PickedHero = new HeroRelative("osric", "Osric", false, 61, true, "Ostrava");
+        Assert.True(vm.AdoptCommand.CanExecute(null));
+        vm.AdoptCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("modderlords.family r3 hero:aldric adopt hero:osric", server.Sent[^1]);
+
+        vm.PickedClan = new HoldingClan("clan_1", "dey Tihr", "Vlandia", "Aldric", false);
+        vm.MoveToClanCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("modderlords.family r4 hero:aldric clan clan_1", server.Sent[^1]);
+    });
+
     /// <summary>Runs on an STA thread with a dispatcher, as the app does, so awaits come back to the thread that owns the views.</summary>
     private static void Sta(Action action)
     {

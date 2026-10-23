@@ -211,3 +211,47 @@ public static class HeroBodyWire
         return true;
     }
 }
+
+/// <summary>What <c>modderlords.family</c> does.</summary>
+public enum FamilyAction { Marry, Divorce, Father, Mother, Clan, Adopt }
+
+/// <summary>
+/// <c>modderlords.family &lt;req&gt; &lt;target&gt; &lt;action&gt; [argument]</c>: <c>marry hero:&lt;id&gt;</c>, <c>divorce</c>,
+/// <c>father hero:&lt;id&gt;|none</c>, <c>mother hero:&lt;id&gt;|none</c>, <c>clan &lt;clan id&gt;</c>, <c>adopt hero:&lt;parent id&gt;</c>.
+/// <para>No game types here: the launcher's tests compile this file to check both ends agree.</para>
+/// </summary>
+public static class FamilyWire
+{
+    public const string None = "none";
+
+    public static string Name(FamilyAction action) => action.ToString().ToLowerInvariant();
+
+    /// <summary>Reads an action and its argument. False, with the usage, when they do not fit together.</summary>
+    public static bool TryParse(string actionText, string argument, out FamilyAction action, out string value, out string usage)
+    {
+        value = argument.Trim();
+        usage = "";
+        action = default;
+        var known = false;
+        foreach (FamilyAction a in Enum.GetValues(typeof(FamilyAction)))
+            if (Name(a) == actionText) { action = a; known = true; }
+        if (!known) { usage = $"Unknown family action \"{actionText}\": marry, divorce, father, mother, clan or adopt."; return false; }
+        var ok = action switch
+        {
+            FamilyAction.Divorce => value.Length == 0,
+            FamilyAction.Marry or FamilyAction.Adopt => HeroTargetWire.IsHero(value, out _),
+            FamilyAction.Father or FamilyAction.Mother => value == None || HeroTargetWire.IsHero(value, out _),
+            FamilyAction.Clan => value.Length > 0 && value.IndexOf(' ') < 0,
+            _ => false,
+        };
+        if (!ok)
+            usage = action switch
+            {
+                FamilyAction.Divorce => "divorce takes nothing after it.",
+                FamilyAction.Father or FamilyAction.Mother => $"{Name(action)} takes hero:<id> or none.",
+                FamilyAction.Clan => "clan takes a clan id.",
+                _ => $"{Name(action)} takes hero:<id>.",
+            };
+        return ok;
+    }
+}

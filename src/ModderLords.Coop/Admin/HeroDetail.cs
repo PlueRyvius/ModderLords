@@ -5,8 +5,18 @@ namespace ModderLords.Coop.Admin;
 
 public sealed record HeroAttribute(string Id, string Name, int Value);
 public sealed record HeroSkill(string Id, string Name, string Attribute, int Value, int Focus);
-/// <summary>A relative in the editor's family strip.</summary>
-public sealed record HeroRelative(string HeroId, string Name, bool Female, int Age, bool Alive, string Clan);
+/// <summary>A relative in the editor's family strip, or a hero the editor's search found.</summary>
+public sealed record HeroRelative(string HeroId, string Name, bool Female, int Age, bool Alive, string Clan)
+{
+    public string Display => Name + (Alive ? $", {Age}" : ", dead") + (Clan.Length > 0 ? $" ({Clan})" : "");
+    public override string ToString() => Display;
+
+    /// <summary>The <c>list</c> of a <c>modderlords.findheroes</c> reply.</summary>
+    public static IReadOnlyList<HeroRelative> ListFrom(AdminReply reply) =>
+        reply.Root.TryGetProperty("list", out var v) && v.ValueKind == JsonValueKind.Array
+            ? v.EnumerateArray().Select(HeroDetail.RelativeFrom).Where(x => x is not null).Select(x => x!).ToList()
+            : [];
+}
 public sealed record HeroTrait(string Id, string Name, int Value, int Min, int Max, bool Personality);
 
 /// <summary>A player's hero as the server's <c>modderlords.hero</c> / <c>modderlords.edit</c> report it.</summary>
@@ -97,6 +107,8 @@ public sealed record HeroDetail
 
     private static HeroRelative? Relative(JsonElement o, string name) => o.TryGetProperty(name, out var v) ? Relative(v) : null;
 
+    internal static HeroRelative? RelativeFrom(JsonElement v) => Relative(v);
+
     private static HeroRelative? Relative(JsonElement v) =>
         v.ValueKind != JsonValueKind.Object || Str(v, "heroId").Length == 0 ? null
         : new HeroRelative(Str(v, "heroId"), Str(v, "name"), v.TryGetProperty("female", out var f) && f.ValueKind == JsonValueKind.True,
@@ -163,4 +175,21 @@ public static class HeroBodies
     /// <summary>The DNA with line breaks and the spaces around them folded away, as pasted from a file or a forum post.</summary>
     public static string Normalize(string body) =>
         string.Join(" ", body.Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Where(l => l.Length > 0));
+}
+
+/// <summary>
+/// The arguments <c>modderlords.family</c> takes after the target (the module's FamilyWire; a test checks the two agree).
+/// </summary>
+public static class FamilyArgs
+{
+    public static string[] Marry(string heroId) => ["marry", HeroTargets.Hero(heroId)];
+    public static string[] Divorce() => ["divorce"];
+    public static string[] Father(string? heroId) => ["father", heroId is null ? "none" : HeroTargets.Hero(heroId)];
+    public static string[] Mother(string? heroId) => ["mother", heroId is null ? "none" : HeroTargets.Hero(heroId)];
+    public static string[] Clan(string clanId) =>
+        clanId.Length == 0 || clanId.Any(char.IsWhiteSpace) ? throw new ArgumentException($"Not a usable clan id: \"{clanId}\"") : ["clan", clanId];
+    public static string[] Adopt(string parentHeroId) => ["adopt", HeroTargets.Hero(parentHeroId)];
+
+    /// <summary>Search text as the one console argument findheroes / findclans take: the hex of its UTF-8 bytes.</summary>
+    public static string Search(string text) => Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(text.Trim())).ToLowerInvariant();
 }
