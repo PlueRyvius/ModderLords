@@ -1,6 +1,6 @@
 ﻿# Builds a self-contained win-x64 release zip: app + hook + README + roadmap.
-# Usage: .\scripts\package-release.ps1 -Version 0.3.0
-param([Parameter(Mandatory = $true)][string]$Version)
+# Usage: .\scripts\package-release.ps1 -Version 0.3.0 [-DocsChecked]
+param([Parameter(Mandatory = $true)][string]$Version, [switch]$DocsChecked)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -29,6 +29,16 @@ if ($LASTEXITCODE -eq 0 -and $previousTag) {
     $now = & $versionOf (Get-Content (Join-Path $root $syncModuleXml) -Raw)
     if ($codeChanged -and $before -eq $now) {
         throw "ModderLords.Compat code changed since $previousTag but $syncModuleXml is still $now. Bump its Version value first."
+    }
+    # The overview of every feature goes stale one release at a time, so a release that changed the app or the in-game
+    # modules has to touch it, or say with -DocsChecked that nothing in it needed to change (docs/RELEASING.md step 2a).
+    $howItWorks = 'docs/HOW-IT-WORKS.md'
+    git -C $root diff --quiet $previousTag HEAD -- (@('src/ModderLords.App', 'src/ModderLords.Coop', 'src/ModderLords.Compat') + $syncModuleSources)
+    $featuresChanged = $LASTEXITCODE -ne 0
+    git -C $root diff --quiet $previousTag HEAD -- $howItWorks
+    $docsChanged = $LASTEXITCODE -ne 0
+    if ($featuresChanged -and -not $docsChanged -and -not $DocsChecked) {
+        throw "The app or the in-game modules changed since $previousTag but $howItWorks did not. Update it for this release's features, or pass -DocsChecked if nothing in it needs to change."
     }
 }
 $out = Join-Path $root "artifacts\ModderLords-$Version"

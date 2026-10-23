@@ -43,6 +43,17 @@ Set `<VersionPrefix>` in `Directory.Build.props` to `X.Y.Z`. That one line is th
 
 **Put the bump in the same PR as the change being released**, not in a separate version-bump PR afterwards. One PR, one merge. If a release gathers several already-merged PRs, bump in the last of them. Agents cannot merge on this repo (`gh pr merge` is blocked); the maintainer merges.
 
+### 2a. Update the docs (in the same PR)
+
+For each feature or change in this release, update:
+
+- **`docs/HOW-IT-WORKS.md`**: Part 1 for anything a player or host sees (a tab, a button, a setting, a rule). Part 2
+  for anything that changes how it works underneath (a new module, channel, message, launch step or contract).
+- **`src/ModderLords.Core/supported-mods.json`**, when what a mod gets in co-op changed. It is the Supported mods tab.
+- **`README.md`**, the detailed reference for the tab or setting that changed.
+
+A bug fix that changes nothing anyone can see needs none of these. The package script checks this (step 4).
+
 ### 3. Tests
 
 ```powershell
@@ -63,6 +74,8 @@ dotnet test
 
 - Produces `artifacts\ModderLords-X.Y.Z\` and `artifacts\ModderLords-X.Y.Z.zip`.
 - It refuses when `Directory.Build.props` says a different version.
+- It refuses when the app or the in-game modules changed since the last release but `docs/HOW-IT-WORKS.md` did not.
+  Update it (step 2a), or, when nothing in it needs to change, say so with `-DocsChecked`.
 - It needs the Bannerlord Coop Workshop item installed, to build the settings-sync adapter. Without it the script stops rather than shipping a broken zip.
 
 ### 5. Smoke-test the ZIP, not the dev build
