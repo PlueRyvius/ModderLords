@@ -79,6 +79,25 @@ public class ServerAdminTests : IDisposable
     }
 
     [Fact]
+    public async Task A_server_without_the_commands_fails_the_request_at_once_and_says_why()
+    {
+        // Seen on a server launched with Settings sync off: ModderLords.Compat was not in its module list.
+        Assert.Equal("players", AdminClient.UnknownCommand("[DedicatedServer] no game console command 'modderlords.players'"));
+        Assert.Null(AdminClient.UnknownCommand("[DedicatedServer] no game console command 'campaign.cheat'"));
+
+        var client = new AdminClient(_ => Task.CompletedTask);
+        var players = client.RequestAsync("players", [], TimeSpan.FromMinutes(1));
+        var bans = client.RequestAsync("bans", [], TimeSpan.FromMinutes(1));
+        Assert.Null(client.Observe("[DedicatedServer] no game console command 'modderlords.players'"));
+
+        var failed = await Assert.ThrowsAsync<InvalidOperationException>(() => players);
+        Assert.Contains("Settings sync", failed.Message);
+        Assert.False(bans.IsCompleted);
+        client.Abandon("done");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => bans);
+    }
+
+    [Fact]
     public async Task A_request_is_answered_by_the_reply_with_its_id_only()
     {
         var sent = new ConcurrentQueue<string>();

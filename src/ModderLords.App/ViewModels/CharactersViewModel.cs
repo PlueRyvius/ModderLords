@@ -148,6 +148,8 @@ public partial class CharactersViewModel : ObservableObject
     /// </summary>
     private async Task RefreshLists(bool holdings)
     {
+        // The commands live in the sync module; a server launched without it would only answer "no such command".
+        if (_host.ClientTarget is { } target && !HostViewModel.ServerCarriesSyncModule(target)) { Headline = AdminClient.NotLoaded; return; }
         IsBusy = true;
         try
         {
