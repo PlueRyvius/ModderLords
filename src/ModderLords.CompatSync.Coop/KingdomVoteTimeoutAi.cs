@@ -65,6 +65,7 @@ public static class KingdomVoteTimeoutAi
 
             // A vote standing in for a Bellum treaty: with no answer from the ruler, Bellum's council decides instead.
             if (BellumTreatyVote.Installed && BellumTreatyVote.OnDeadline(decision, RulerVoted(__instance, decision, finalVotes))) return;
+            if (StandaloneBellum.Present && StandaloneBellum.OnDeadline(decision, RulerVoted(__instance, decision, finalVotes))) return;
 
             var decided = new List<string>();
             foreach (var clanId in (IEnumerable<string>)_eligible!.GetValue(state, null))

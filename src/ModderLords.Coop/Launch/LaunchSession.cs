@@ -87,6 +87,17 @@ public sealed class LaunchSession
     public const string CompatModuleId = "DedicatedServer.ModderLordsCompat";
     public const string SyncModuleId = "ModderLords.Compat";
 
+    /// <summary>
+    /// The standalone Coop compat modules the launcher ships (<c>coop-compat/</c> in the repository), by the mod each
+    /// one is for. Each works without ModderLords too; the launcher only puts it in place and right after its mod, on
+    /// the server and, through the server's list, on every player's game. They hold no world state of their own.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> CompanionModules =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["BellumCivile"] = "BellumCivile.CoopCompat" };
+
+    /// <summary>A bundled companion module, shipped under compat\ next to the executable.</summary>
+    public static DiscoveredModule? LocateCompanion(string companionId) => LocateBundled(companionId);
+
     /// <summary>The launcher's own guard module, shipped under compat\ next to the executable.</summary>
     public static DiscoveredModule? LocateCompatModule() => LocateBundled(CompatModuleId);
 
@@ -150,7 +161,38 @@ public sealed class LaunchSession
             if (sync is null) messages.Add("settings sync requested but the ModderLords.Compat module is missing next to the launcher; continuing without it");
             else list.Add(new ModSelection(sync, ServerRole.AsShipped));
         }
+        AddCompanions(list, messages, locateBundled);
         return list;
+    }
+
+    /// <summary>
+    /// Puts each mod's bundled companion module right after it. Both sides must load the same modules in the same
+    /// order, so it goes in the server's list, and players get it from there like any other mod on it.
+    /// </summary>
+    private static void AddCompanions(List<ModSelection> list, List<string> messages, Func<string, DiscoveredModule?> locateBundled)
+    {
+        foreach (var (modId, companionId) in CompanionModules)
+        {
+            var at = list.FindIndex(s => s.Module.Id.Equals(modId, StringComparison.OrdinalIgnoreCase));
+            if (at < 0) continue;
+            if (list.FindIndex(s => s.Module.Id.Equals(companionId, StringComparison.OrdinalIgnoreCase)) is var existing and >= 0)
+            {
+                // A profile that ticked it (already swapped for the launcher's own copy above) keeps it, moved after its mod.
+                if (existing > at) continue;
+                var ticked = list[existing];
+                list.RemoveAt(existing);
+                list.Insert(at, ticked);
+                continue;
+            }
+            var companion = locateBundled(companionId);
+            if (companion is null)
+            {
+                messages.Add($"{modId}: its co-op compat module {companionId} is missing next to the launcher; {modId} runs without its co-op fixes");
+                continue;
+            }
+            list.Insert(at + 1, new ModSelection(companion, ServerRole.AsShipped));
+            messages.Add($"{modId}: added its co-op compat module {companionId} {companion.Version} after it");
+        }
     }
 
     private static bool SameFolder(string a, string b) =>
@@ -819,7 +861,7 @@ public sealed class LaunchSession
 
     /// <summary>The launcher's own bundled modules are added to every launch and are not part of anyone's world.</summary>
     private static readonly IReadOnlySet<string> BundledIds =
-        new HashSet<string>(new[] { CompatModuleId, SyncModuleId }, StringComparer.OrdinalIgnoreCase);
+        new HashSet<string>(new[] { CompatModuleId, SyncModuleId }.Concat(CompanionModules.Values), StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlyDictionary<string, string> PlannedCommunityVersions(IReadOnlyList<ModSelection> selections) =>
         selections.Where(s => !BundledIds.Contains(s.Module.Id))

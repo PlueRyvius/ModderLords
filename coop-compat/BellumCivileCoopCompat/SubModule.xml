@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+    <Name value="Bellum Civile Coop Compat"/>
+    <Id value="BellumCivile.CoopCompat"/>
+    <Version value="v1.0.0"/>
+    <ModuleType value="Community"/>
+    <Official value="false"/>
+    <DefaultModule value="false"/>
+    <SingleplayerModule value="true"/>
+    <MultiplayerModule value="false"/>
+    <DependedModules>
+        <DependedModule Id="Bannerlord.Harmony"/>
+        <DependedModule Id="BellumCivile"/>
+    </DependedModules>
+    <DependedModuleMetadatas>
+        <DependedModuleMetadata id="Bannerlord.Harmony" order="LoadBeforeThis"/>
+        <DependedModuleMetadata id="BellumCivile" order="LoadBeforeThis"/>
+    </DependedModuleMetadatas>
+    <SubModules>
+        <SubModule>
+            <Name value="Bellum Civile Coop Compat"/>
+            <DLLName value="BellumCivile.CoopCompat.dll"/>
+            <SubModuleClassType value="BellumCivileCoopCompat.SubModule"/>
+            <Tags/>
+        </SubModule>
+    </SubModules>
+</Module>

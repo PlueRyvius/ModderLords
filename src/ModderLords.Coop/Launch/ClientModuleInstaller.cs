@@ -46,7 +46,7 @@ public static class ClientModuleInstaller
     /// <summary>Replaced copies are kept here, next to the profiles, so a bad update can be put back by hand.</summary>
     public static string BackupRoot() => Path.Combine(ProfileStore.RootDir, "module-backups");
 
-    public static string TargetDir(string gameRoot) => Path.Combine(gameRoot, "Modules", LaunchSession.SyncModuleId);
+    public static string TargetDir(string gameRoot, string moduleId = LaunchSession.SyncModuleId) => Path.Combine(gameRoot, "Modules", moduleId);
 
     /// <summary>
     /// Files that belong to the host's copy and must never be installed on a client. recipes.json is the only one:
@@ -75,9 +75,10 @@ public static class ClientModuleInstaller
     public static InstallResult Ensure(DiscoveredModule bundled, string? gameRoot, string? backupRoot = null)
     {
         if (string.IsNullOrWhiteSpace(gameRoot) || !Directory.Exists(gameRoot))
-            return new InstallResult(InstallOutcome.Unavailable, null, bundled.Version, "the game install was not found, so the client module cannot be installed");
+            return new InstallResult(InstallOutcome.Unavailable, null, bundled.Version, $"the game install was not found, so {bundled.Id} cannot be installed for the client");
 
-        var target = TargetDir(gameRoot);
+        var id = bundled.Id;
+        var target = TargetDir(gameRoot, id);
         var installed = Directory.Exists(target) && File.Exists(Path.Combine(target, "SubModule.xml"))
             ? ModuleCatalog.TryParse(target, ModuleSourceKind.GameModules, out _)?.Version
             : null;
@@ -93,7 +94,7 @@ public static class ClientModuleInstaller
             BlockedFiles.UnblockFolder(target);
             RemoveHostOnlyFiles(target);
             return new InstallResult(InstallOutcome.UpToDate, installed, bundled.Version,
-                $"{LaunchSession.SyncModuleId} {installed} is already installed for the client");
+                $"{id} {installed} is already installed for the client");
         }
 
         try
@@ -102,28 +103,44 @@ public static class ClientModuleInstaller
             if (Directory.Exists(target))
             {
                 // Keep the copy we are about to replace: it is the only way back if a new build misbehaves mid-session.
-                backup = Path.Combine(backupRoot ?? BackupRoot(), DateTime.Now.ToString("yyyyMMdd-HHmmssfff"), LaunchSession.SyncModuleId);
+                backup = Path.Combine(backupRoot ?? BackupRoot(), DateTime.Now.ToString("yyyyMMdd-HHmmssfff"), id);
                 CopyDirectory(target, backup);
                 Directory.Delete(target, recursive: true);
             }
             CopyDirectory(bundled.FolderPath, target);
             return installed is null
                 ? new InstallResult(InstallOutcome.Installed, bundled.Version, bundled.Version,
-                    $"installed {LaunchSession.SyncModuleId} {bundled.Version} for the client", backup)
+                    $"installed {id} {bundled.Version} for the client", backup)
                 : new InstallResult(InstallOutcome.Updated, bundled.Version, bundled.Version, comparison == 0
-                    ? $"refreshed the client's {LaunchSession.SyncModuleId} {installed}: its files differed from the launcher's build"
-                    : $"updated the client's {LaunchSession.SyncModuleId} from {installed} to {bundled.Version}", backup);
+                    ? $"refreshed the client's {id} {installed}: its files differed from the launcher's build"
+                    : $"updated the client's {id} from {installed} to {bundled.Version}", backup);
         }
         catch (UnauthorizedAccessException ex)
         {
             // Game installs usually live under Program Files, where a non-elevated write is refused.
             return new InstallResult(InstallOutcome.Failed, installed, bundled.Version,
-                $"could not write {target} ({ex.Message}). Run the launcher as administrator once, or copy compat\\{LaunchSession.SyncModuleId} there by hand.");
+                $"could not write {target} ({ex.Message}). Run the launcher as administrator once, or copy compat\\{id} there by hand.");
         }
         catch (Exception ex)
         {
-            return new InstallResult(InstallOutcome.Failed, installed, bundled.Version, $"could not install the client module: {ex.Message}");
+            return new InstallResult(InstallOutcome.Failed, installed, bundled.Version, $"could not install {id} for the client: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Installs or updates the bundled companion modules (<see cref="LaunchSession.CompanionModules"/>) the server's list
+    /// carries, the same way as the sync module. Players' games then have them when the mod-list sync enables them.
+    /// </summary>
+    public static IReadOnlyList<InstallResult> EnsureCompanions(IEnumerable<string> serverModuleIds, string? gameRoot, string? backupRoot = null)
+    {
+        var results = new List<InstallResult>();
+        foreach (var id in serverModuleIds.Where(id => LaunchSession.CompanionModules.Values.Contains(id, StringComparer.OrdinalIgnoreCase)))
+        {
+            results.Add(LaunchSession.LocateCompanion(id) is { } bundled
+                ? Ensure(bundled, gameRoot, backupRoot)
+                : new InstallResult(InstallOutcome.Unavailable, null, null, $"the launcher has no bundled {id} to install (expected it under compat\\ next to the exe)"));
+        }
+        return results;
     }
 
     /// <summary>

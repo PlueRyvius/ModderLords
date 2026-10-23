@@ -417,6 +417,54 @@ public class CompatSelectionTests : IDisposable
         Assert.Equal(bundled.FolderPath, Assert.Single(list).Module.FolderPath);
         Assert.Empty(messages);
     }
+
+    [Fact]
+    public void A_mods_compat_module_goes_right_after_it()
+    {
+        var bellum = Module("game", "BellumCivile");
+        var other = Module("game", "ImprovedGarrisons");
+        var companion = Module("compat", "BellumCivile.CoopCompat");
+        var messages = new List<string>();
+
+        var list = LaunchSession.WithCompat(new Profile { CompatGuards = false },
+            [new ModSelection(bellum, ServerRole.AsShipped), new ModSelection(other, ServerRole.AsShipped)], messages,
+            id => id == "BellumCivile.CoopCompat" ? companion : null);
+
+        Assert.Equal(new[] { "BellumCivile", "BellumCivile.CoopCompat", "ImprovedGarrisons" }, list.Select(s => s.Module.Id));
+        Assert.Equal(companion.FolderPath, list[1].Module.FolderPath);
+        Assert.Contains(messages, m => m.Contains("added its co-op compat module", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_ticked_compat_module_before_its_mod_is_moved_after_it()
+    {
+        var bellum = Module("game", "BellumCivile");
+        var companion = Module("compat", "BellumCivile.CoopCompat");
+        var list = LaunchSession.WithCompat(new Profile { CompatGuards = false },
+            [new ModSelection(companion, ServerRole.AsShipped), new ModSelection(bellum, ServerRole.AsShipped)], [],
+            id => id == "BellumCivile.CoopCompat" ? companion : null);
+        Assert.Equal(new[] { "BellumCivile", "BellumCivile.CoopCompat" }, list.Select(s => s.Module.Id));
+    }
+
+    [Fact]
+    public void No_compat_module_without_its_mod_and_a_missing_one_is_said()
+    {
+        var other = Module("game", "ImprovedGarrisons");
+        Assert.Single(LaunchSession.WithCompat(new Profile { CompatGuards = false }, [new ModSelection(other, ServerRole.AsShipped)], [], _ => null));
+
+        var messages = new List<string>();
+        var list = LaunchSession.WithCompat(new Profile { CompatGuards = false },
+            [new ModSelection(Module("game", "BellumCivile"), ServerRole.AsShipped)], messages, _ => null);
+        Assert.Single(list);
+        Assert.Contains(messages, m => m.Contains("BellumCivile.CoopCompat is missing", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Compat_modules_are_not_part_of_the_world()
+    {
+        var selections = new[] { new ModSelection(Module("game", "BellumCivile"), ServerRole.AsShipped), new ModSelection(Module("compat", "BellumCivile.CoopCompat"), ServerRole.AsShipped) };
+        Assert.Equal(new[] { "BellumCivile" }, LaunchSession.PlannedCommunityVersions(selections).Keys);
+    }
 }
 
 /// <summary>
@@ -455,6 +503,24 @@ public class ClientModuleInstallerTests : IDisposable
 
     private static void Block(string file) => File.WriteAllText(file + ":Zone.Identifier", "[ZoneTransfer]" + Environment.NewLine + "ZoneId=3" + Environment.NewLine);
     private static bool IsBlocked(string file) => File.Exists(file + ":Zone.Identifier");
+
+    [Fact]
+    public void A_compat_module_installs_into_its_own_folder()
+    {
+        var game = GameRoot();
+        var dir = Path.Combine(_dir, "companion");
+        Directory.CreateDirectory(Path.Combine(dir, "bin", "Win64_Shipping_Client"));
+        File.WriteAllText(Path.Combine(dir, "SubModule.xml"),
+            "<Module><Name value=\"Bellum Civile Coop Compat\" /><Id value=\"BellumCivile.CoopCompat\" /><Version value=\"v1.0.0\" /><SubModules /></Module>");
+        var companion = ModuleCatalog.TryParse(dir, ModuleSourceKind.Custom, out _)!;
+
+        var r = ClientModuleInstaller.Ensure(companion, game, Path.Combine(_dir, "backups"));
+
+        Assert.Equal(ClientModuleInstaller.InstallOutcome.Installed, r.Outcome);
+        Assert.True(File.Exists(Path.Combine(game, "Modules", "BellumCivile.CoopCompat", "SubModule.xml")));
+        Assert.False(Directory.Exists(ClientModuleInstaller.TargetDir(game)));
+        Assert.Contains("BellumCivile.CoopCompat", r.Message, StringComparison.Ordinal);
+    }
 
     [Fact]
     public void Never_copies_the_hosts_recipe_into_a_client()
