@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/PlueRyvius/ModderLords/main/docs/compat-record.schema.json",
+  "title": "ModderLords compat records",
+  "description": "The export file shape shared by compat-db.json, compat-db.local.json and Export/Import. This is the strict form the submission gate (CompatIntake) accepts; the launcher itself reads more loosely. See docs/COMPAT-RECORD-FORMAT.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Records"
+  ],
+  "properties": {
+    "SchemaVersion": {
+      "const": 1
+    },
+    "Records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/record"
+      }
+    }
+  },
+  "$defs": {
+    "list": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "\\S"
+      }
+    },
+    "folderList": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^(?!\\.\\.?$)(?![Bb][Ii][Nn]$)[^\\\\/:*?\"<>|]+$"
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Id"
+      ],
+      "properties": {
+        "Id": {
+          "description": "The mod's module id, exactly as in its SubModule.xml <Id value=\"...\"/>. Matched without regard to case.",
+          "type": "string",
+          "pattern": "^(?=.{1,64}$)[A-Za-z0-9][A-Za-z0-9._-]*(?: [A-Za-z0-9._-]+)*$"
+        },
+        "Verdict": {
+          "enum": [
+            "Unknown",
+            "Works",
+            "NeedsRecipe",
+            "Broken"
+          ]
+        },
+        "TestedVersions": {
+          "description": "Mod versions the verdict was checked against, in manifest form (\"v1.2.3\", \"e1.5.2\").",
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "TestedCoopVersion": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40
+        },
+        "DefaultRole": {
+          "enum": [
+            "Run",
+            "DependencyOnly",
+            "AsShipped",
+            "ClientOptional",
+            null
+          ]
+        },
+        "ServerAuthoritative": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ClientSideBehaviors": {
+          "$ref": "#/$defs/list"
+        },
+        "KeepSubModules": {
+          "$ref": "#/$defs/list"
+        },
+        "SettingsTypes": {
+          "$ref": "#/$defs/list"
+        },
+        "IgnoreSettingsTypes": {
+          "$ref": "#/$defs/list"
+        },
+        "ClientLoadsAfterCoop": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ServerExcludedFolders": {
+          "$ref": "#/$defs/folderList"
+        },
+        "ClientExcludedFolders": {
+          "$ref": "#/$defs/folderList"
+        },
+        "EnsureLines": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "File",
+              "Value"
+            ],
+            "properties": {
+              "File": {
+                "description": "Relative to the mod's folder; plain names; .txt .ini .cfg .conf .toml .properties only.",
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^(?![/\\\\])(?!(.*[/\\\\])?\\.\\.?([/\\\\]|$))[A-Za-z0-9 ._/\\\\-]+\\.([Tt][Xx][Tt]|[Ii][Nn][Ii]|[Cc][Ff][Gg]|[Cc][Oo][Nn][Ff]|[Tt][Oo][Mm][Ll]|[Pp][Rr][Oo][Pp][Ee][Rr][Tt][Ii][Ee][Ss])$"
+              },
+              "Section": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 100
+              },
+              "Value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            }
+          }
+        },
+        "DefaultSettings": {
+          "description": "settings id -> setting name -> value as text (\"false\", \"12\", \"0.5\").",
+          "type": "object",
+          "maxProperties": 20,
+          "additionalProperties": {
+            "type": "object",
+            "maxProperties": 100,
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        },
+        "Notes": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8000
+        },
+        "Url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 300,
+          "pattern": "^https?://[^\\s@/]+(/.*)?$"
+        },
+        "UpdatedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
