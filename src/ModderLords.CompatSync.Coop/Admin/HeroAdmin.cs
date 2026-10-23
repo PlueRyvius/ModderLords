@@ -117,6 +117,36 @@ internal static class HeroAdmin
     });
 
     /// <summary>
+    /// <c>modderlords.body &lt;req&gt; &lt;target&gt; &lt;encoded DNA&gt;</c> (<see cref="HeroBodyWire"/>): sets the hero's face
+    /// and hair (StaticBodyProperties), weight and build from the game's BodyProperties text. The age in the text is
+    /// ignored; age is its own edit. Coop auto-syncs all three properties to every client.
+    /// </summary>
+    [CommandLineFunctionality.CommandLineArgumentFunction("body", AdminWire.CommandGroup)]
+    public static string BodyCommand(List<string> args) => PlayerAdmin.Run("body", args, req =>
+    {
+        if (args.Count < 3) return AdminWire.Reply("body", req, "Usage: modderlords.body <request id> <steam id | hero:id> <encoded DNA>");
+        if (!HeroBodyWire.TryDecode(args[2], out var text, out var error)) return AdminWire.Reply("body", req, error);
+        if (!BodyProperties.FromString(text, out var body)) return AdminWire.Reply("body", req, "The game could not read that appearance DNA.");
+        if (FindTarget(args[1], out var steamId, out var hero, out var party) is { } missing) return AdminWire.Reply("body", req, missing);
+        var busy = PlayerAdmin.BusyReason(party);
+        if (busy.Length > 0) return AdminWire.Reply("body", req, $"{hero!.Name} is {busy}. Change their appearance once it is over.");
+
+        var changes = new List<object?>();
+        if (!hero!.StaticBodyProperties.Equals(body.StaticProperties) || hero.Weight != body.Weight || hero.Build != body.Build)
+        {
+            hero.StaticBodyProperties = body.StaticProperties;
+            hero.Weight = body.Weight;
+            hero.Build = body.Build;
+            changes.Add("Appearance changed");
+            Log.Info($"host changed the appearance of {hero.Name} ({args[1]})");
+        }
+        var data = Describe(steamId, hero, party);
+        data["changes"] = changes;
+        data["notApplied"] = new List<object?>();
+        return AdminWire.Reply("body", req, null, data);
+    });
+
+    /// <summary>
     /// <c>modderlords.resetperks &lt;req&gt; &lt;target&gt;</c>: takes away every perk the hero has chosen, so they can be
     /// chosen again in the game's character screen. Skills, focus and attributes are left as they are.
     /// </summary>
@@ -187,8 +217,9 @@ internal static class HeroAdmin
         players.Players.Where(p => p.ControllerId != "Server").Select(p => PlayerHeroes.HeroFor(p.HeroId)).Where(h => h is not null).Select(h => h!).ToList();
 
     /// <summary>
-    /// The hero a command names: a player's own (by Steam id), or with <c>hero:&lt;id&gt;</c> another living hero of a
-    /// player's clan. <paramref name="steamId"/> is empty for the second kind.
+    /// The hero a command names: a player's own (by Steam id), or with <c>hero:&lt;id&gt;</c> any hero in the world,
+    /// living or dead, so the editor can reach relatives outside the player's clan. <paramref name="steamId"/> is empty
+    /// for the second kind.
     /// </summary>
     internal static string? FindTarget(string target, out string steamId, out Hero? hero, out MobileParty? party)
     {
@@ -200,16 +231,9 @@ internal static class HeroAdmin
             return missing;
         }
 
-        hero = null;
-        party = null;
-        if (!ContainerProvider.TryResolve<IPlayerManager>(out var players)) return "Coop's player registry is not available yet.";
-        var clans = new HashSet<Clan>(PlayerLeads(players).Where(h => h.Clan is not null).Select(h => h.Clan));
-        var found = clans.SelectMany(c => c.Heroes.Concat(c.Companions)).FirstOrDefault(h => h is not null && h.StringId == heroStringId);
-        if (found is null) return $"No hero \"{heroStringId}\" is in a player's clan.";
-        if (!found.IsAlive) return $"{found.Name} is dead.";
-        hero = found;
-        party = found.PartyBelongedTo;
-        return null;
+        hero = Hero.Find(heroStringId) ?? Hero.FindFirst(h => h.StringId == heroStringId);
+        party = hero?.PartyBelongedTo;
+        return hero is null ? $"No hero \"{heroStringId}\" is in this world." : null;
     }
 
     /// <summary>The player, hero and party behind a Steam id, or why they cannot be had.</summary>
@@ -269,6 +293,12 @@ internal static class HeroAdmin
                 read = () => (int)clan.Renown;
                 // Clan.AddRenown also moves the clan's tier, and Coop patches it to send the new renown to every client.
                 apply = () => clan.AddRenown(v - clan.Renown, false);
+                return null;
+            case HeroEditKind.Female:
+                if (v != 0 && v != 1) return "female must be 0 (male) or 1 (female).";
+                read = () => hero.IsFemale ? 1 : 0;
+                // Coop syncs Hero.IsFemale to every client (its HeroSync auto-syncs the property).
+                apply = () => hero.IsFemale = v == 1;
                 return null;
             case HeroEditKind.HitPoints:
                 if (v < 1 || v > hero.MaxHitPoints) return $"Hit points must be 1 to {hero.MaxHitPoints}.";
@@ -340,6 +370,17 @@ internal static class HeroAdmin
         return 1023;
     }
 
+    /// <summary>One relative for the editor's family strip; null when there is none.</summary>
+    private static object? Relative(Hero? h) => h is null ? null : new Dictionary<string, object?>
+    {
+        ["heroId"] = h.StringId,
+        ["name"] = h.Name?.ToString() ?? "",
+        ["female"] = h.IsFemale,
+        ["age"] = (int)h.Age,
+        ["alive"] = h.IsAlive,
+        ["clan"] = h.Clan?.Name?.ToString() ?? "",
+    };
+
     /// <summary>The hero as the editor shows it. Lists every attribute, skill and trait this world has, modded ones included.</summary>
     internal static Dictionary<string, object?> Describe(Player player, Hero hero, MobileParty? party) => Describe(player.ControllerId, hero, party);
 
@@ -373,6 +414,14 @@ internal static class HeroAdmin
             ["maxSkill"] = model.GetMaxSkillPoint(),
             ["busy"] = PlayerAdmin.BusyReason(party),
             ["perks"] = PerkObject.All.Count(p => hero.GetPerkValue(p)),
+            ["alive"] = hero.IsAlive,
+            ["state"] = hero.HeroState.ToString(),
+            ["body"] = hero.BodyProperties.ToString(),
+            ["father"] = Relative(hero.Father),
+            ["mother"] = Relative(hero.Mother),
+            ["spouse"] = Relative(hero.Spouse),
+            ["children"] = hero.Children.Where(c => c is not null).Select(Relative).ToList(),
+            ["siblings"] = hero.Siblings.Where(c => c is not null).Select(Relative).ToList(),
             ["attributes"] = Attributes.All.Select(a => (object?)new Dictionary<string, object?>
             {
                 ["id"] = a.StringId,

@@ -138,6 +138,79 @@ public class CharacterEditorTests
         Assert.Equal("The server is not running.", vm.Status);
     });
 
+    private const string Dna = "<BodyProperties version=\\\"4\\\" age=\\\"27\\\" weight=\\\"0.5\\\" build=\\\"0.5\\\" key=\\\"00AA\\\" />";
+
+    /// <summary>A server that knows two heroes, each the other's spouse, and answers for whichever is asked.</summary>
+    private sealed class FamilyServer
+    {
+        public List<string> Sent { get; } = [];
+        public AdminClient Client { get; }
+
+        private static string HeroJson(string id, string name, bool female, string spouseId, string spouseName) =>
+            $"\"steamId\":\"\",\"heroId\":\"{id}\",\"name\":\"{name}\",\"female\":{(female ? "true" : "false")},\"age\":30,\"level\":5,\"clan\":\"Hemphill\","
+            + $"\"alive\":true,\"body\":\"{Dna}\",\"perks\":0,\"attributes\":[],\"skills\":[],\"traits\":[],"
+            + $"\"spouse\":{{\"heroId\":\"{spouseId}\",\"name\":\"{spouseName}\",\"female\":{(female ? "false" : "true")},\"age\":31,\"alive\":true,\"clan\":\"Hemphill\"}},"
+            + "\"children\":[],\"siblings\":[]";
+
+        public FamilyServer() => Client = new AdminClient(line =>
+        {
+            Sent.Add(line);
+            var m = Regex.Match(line, @"^modderlords\.(\w+) (\S+) (\S+)");
+            var hero = m.Groups[3].Value == "hero:mira" ? HeroJson("mira", "Mira", true, "aldric", "Aldric") : HeroJson("aldric", "Aldric", false, "mira", "Mira");
+            Client!.Observe($"@ML@{{\"ev\":\"{m.Groups[1].Value}\",\"req\":\"{m.Groups[2].Value}\",\"ok\":true,{hero},\"changes\":[\"x\"],\"notApplied\":[]}}");
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public void Gender_and_dna_are_sent_and_a_relative_opens_in_the_same_editor() => Sta(() =>
+    {
+        var server = new FamilyServer();
+        var vm = new CharacterEditorViewModel(server.Client, HeroTargets.Hero("aldric"), "Aldric", () => true);
+        vm.ReloadCommand.ExecuteAsync(null).Pump();
+        Assert.Equal(0, vm.GenderIndex);
+        Assert.False(vm.IsBodyChanged);
+        Assert.Equal("Mira", Assert.Single(vm.Spouses).Name);
+        Assert.Equal("hero:mira", Assert.Single(vm.FaceSources).Target);
+
+        vm.GenderIndex = 1;
+        vm.ReadClipboard = () => "<BodyProperties version=\"4\" age=\"20\"\r\n weight=\"0.1\" build=\"0.9\" key=\"00BB\" />";
+        vm.PasteBodyCommand.Execute(null);
+        Assert.True(vm.IsBodyChanged);
+        Assert.Equal(["female=1"], vm.Tokens());
+
+        vm.ApplyCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("modderlords.edit r2 hero:aldric female=1", server.Sent[^2]);
+        Assert.Equal("modderlords.body r3 hero:aldric " + HeroBodies.Encode("<BodyProperties version=\"4\" age=\"20\" weight=\"0.1\" build=\"0.9\" key=\"00BB\" />"), server.Sent[^1]);
+
+        // Unapplied changes are only thrown away once the host says so.
+        vm.Name = "Aldric the Bold";
+        vm.Confirm = _ => false;
+        vm.OpenRelativeCommand.ExecuteAsync(vm.Spouses[0]).Pump();
+        Assert.Equal("hero:aldric", vm.Target);
+        vm.Confirm = _ => true;
+        vm.OpenRelativeCommand.ExecuteAsync(vm.Spouses[0]).Pump();
+        Assert.Equal("hero:mira", vm.Target);
+        Assert.Equal("Mira", vm.OriginalName);
+        Assert.Equal(1, vm.GenderIndex);
+        Assert.True(vm.BackCommand.CanExecute(null));
+        vm.BackCommand.ExecuteAsync(null).Pump();
+        Assert.Equal("hero:aldric", vm.Target);
+        Assert.False(vm.BackCommand.CanExecute(null));
+    });
+
+    [Fact]
+    public void Text_that_is_not_dna_is_not_used() => Sta(() =>
+    {
+        var server = new FamilyServer();
+        var vm = new CharacterEditorViewModel(server.Client, HeroTargets.Hero("aldric"), "Aldric", () => true);
+        vm.ReloadCommand.ExecuteAsync(null).Pump();
+        vm.ReadClipboard = () => "just some text";
+        vm.PasteBodyCommand.Execute(null);
+        Assert.False(vm.IsBodyChanged);
+        Assert.StartsWith("Not used", vm.Status);
+    });
+
     /// <summary>Runs on an STA thread with a dispatcher, as the app does, so awaits come back to the thread that owns the views.</summary>
     private static void Sta(Action action)
     {
