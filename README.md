@@ -12,6 +12,8 @@ Works on Mount & Blade II: Bannerlord v1.4.8; coop hosting needs Bannerlord Coop
 
 ![The Mods tab: every mod found on this PC, with tick boxes, load order and per-mod compatibility, and the engine's resolved load order on the right](docs/images/mods-tab.png)
 
+**New here?** [How ModderLords works](docs/HOW-IT-WORKS.md) is the overview: every feature in plain words, then how it works underneath.
+
 **Start here:** [Quick start](#quick-start) · [Hosting a coop server](#quick-start-hosting-a-coop-server) · [Hosting a map-replacing mod](#hosting-a-map-replacing-mod) · [Troubleshooting](#troubleshooting)
 
 **Reference:** [What it does](#what-it-does) · [Requirements](#requirements) · [Install](#install) · [What is in the download](#what-is-in-the-download) · [Player mode and Host mode](#player-mode-and-host-mode) · [Playing on the machine that runs the server](#playing-on-the-machine-that-runs-the-server-host-mode) · [Performance](#performance) · [Sharing a mod list](#sharing-a-mod-list) · [The tabs](#the-tabs) · [App settings](#app-settings) · [Where things live](#where-things-live) · [Notes](#notes) · [Settings sync](#settings-sync-optional-players-install-one-extra-mod) · [Server-only logic](#server-only-logic-layer-1-needs-settings-sync-on) · [Mod settings](#mod-settings-host-side-live-or-offline) · [Compatibility database](#compatibility-database) · [Licence](#licence)
