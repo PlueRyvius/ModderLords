@@ -1,0 +1,266 @@
+// The Supported mods tab (SupportedModList). Status: Works, Settings (works with Settings sync on), Partial or Broken.
+// details: what works; setup: what the host must turn on or avoid; limits: what does not work. One plain sentence each. Update this when a release changes what a mod gets.
+{
+  "general": [
+    "Settings sync: the host's MCM settings reach every joining player, and live changes are sent at once. Players install ModderLords.Compat, which the launcher keeps up to date.",
+    "Locked to host: per mod, choose whether players get the server's settings or keep their own (Mods tab).",
+    "Roles: each mod can be Server, Client, Client-optional or Dependency-only, and single folders can be kept off the server, so art and UI stay off the headless server.",
+    "Load order: dependencies are respected and Coop's position is shown. Mods that must load after Coop are moved for you, or Fix load order is offered.",
+    "Map-replacing mods: the server prepares its own copy of the map and handles missing home towns. Field battles avoid scenes that would crash.",
+    "Kingdom votes: votes of any mod's own types reach players, and players who do not vote in time are decided for by the AI.",
+    "Quests and stashes: the game's \"inventory exchanged\" event fires in co-op, so delivery quests and mods that listen for it work.",
+    "Server-only logic (experimental, Server tab, Advanced): a mod's campaign logic runs only on the host. Works for some mods only.",
+    "Compatibility verdicts: the Mods tab shows Works, Needs recipe, Broken or Unknown for each mod, and you can submit your own findings."
+  ],
+  "mods": [
+    {
+      "name": "The Age of Men (TAOM)",
+      "moduleIds": [
+        "TAOM",
+        "TAOM.Dependencies",
+        "TAOM_Map"
+      ],
+      "status": "Settings",
+      "summary": "TAOM worlds can be created and hosted, with TAOM's per-player features carried out by the server.",
+      "details": [
+        "Each player's character-creation choices (culture, race, career, starting gold) are applied on the server, and they start at their culture's starting settlement.",
+        "Careers, Field Camp, special resources and upkeep desertion, emissaries, siege-defence rewards, Refuge, Supply Lines and Field Commission work per player.",
+        "War of the Ring and Momentum stay in step on every player's game, and TAOM's messages reach the player they are about.",
+        "Fief elections after a TAOM kingdom takes a town reach players."
+      ],
+      "needsCompat": true,
+      "since": "1.1.0",
+      "setup": [
+        "Create a world from the launcher: enable the TAOM modules, leave the save name empty and Launch. The launcher prepares the server's copy of TAOM's assets and map.",
+        "TroopWeight is off under co-op by default; the host can turn it back on in Mod settings.",
+        "Leave LOTRLOME_Armory off the server, and do not use TAOM.CoopCompat (see their entries)."
+      ],
+      "limits": [
+        "Not available in co-op: enlisting under a lord, and TAOM's hero picker in character creation. Both say so in the game."
+      ]
+    },
+    {
+      "name": "Bannerlord Living Economy",
+      "moduleIds": [
+        "BetterEconomy"
+      ],
+      "status": "Settings",
+      "summary": "The server runs the economy; each player's towns, gold and menu actions are their own.",
+      "details": [
+        "Menu actions such as town policy, taxes and trade agreements are carried out by the server for the player who chose them, after checking they are allowed.",
+        "The mod's saved records reach players when they join and stay up to date.",
+        "Its ledger no longer floods Coop chat, and its messages reach players."
+      ],
+      "needsCompat": true,
+      "since": "1.1.2",
+      "setup": [
+        "Its tuning values follow the host; each player keeps their own ledger preferences.",
+        "Settings sync must be on, or the launch is refused. Leave Server-only logic off for this mod."
+      ],
+      "limits": []
+    },
+    {
+      "name": "Fourberie",
+      "moduleIds": [
+        "Fourberie"
+      ],
+      "status": "Partial",
+      "summary": "Each player runs their own criminal empire; a few of its fights are not available in co-op.",
+      "details": [
+        "Each player's base, gang, schemes and bandit standing are their own, saved with the campaign, and frozen while they are offline.",
+        "Fourberie's pop-ups go to the player they are about; if nobody answers within 10 minutes, the AI decides.",
+        "What a player does in its menus (gold, relations, troops, loot, settlement security) is carried out on the server.",
+        "Loot donations and stashes work, and troops sent to agent training no longer vanish.",
+        "Leave options (hideouts, safe houses, robberies) work, and saboteur parties no longer grow on their own (1.5.0)."
+      ],
+      "needsCompat": true,
+      "since": "1.2.2",
+      "setup": [
+        "Its gameplay switches follow the host; key bindings stay each player's own. Settings sync is required; leave Server-only logic off."
+      ],
+      "limits": [
+        "Not available in co-op: \"Break free\", and a few fights against parties it creates on the spot (safe-house raids, the extortion militia, the caravan heist)."
+      ]
+    },
+    {
+      "name": "Bellum Civile",
+      "moduleIds": [
+        "BellumCivile"
+      ],
+      "status": "Partial",
+      "summary": "Its votes, peace and treaties work through Coop's kingdom votes.",
+      "details": [
+        "Kingdom votes Bellum adds, such as privy council appointments, reach players and work like the game's own.",
+        "Bellum's Peace Parley is replaced by Coop's peace vote. Its minimum war length still applies, and players are told when it blocks a vote.",
+        "A treaty Bellum drafts for a realm a player rules is put to that realm as a vote; if the ruler does not answer, Bellum's council decides.",
+        "Bellum no longer creates empty kingdoms on a player's game (the black Kingdom screen), and votes no longer lock the ruler in the Kingdom screen.",
+        "Its prompts open one at a time and never during a battle."
+      ],
+      "needsCompat": true,
+      "since": "1.2.4",
+      "setup": [],
+      "limits": [
+        "Players cannot draft treaty terms themselves."
+      ]
+    },
+    {
+      "name": "Improved Garrisons",
+      "moduleIds": [
+        "ImprovedGarrisons"
+      ],
+      "status": "Settings",
+      "summary": "Starts and serves with the bundled server guards; best run so only the host manages garrisons.",
+      "details": [
+        "The mod's save and screen behaviour stays on players' games."
+      ],
+      "needsCompat": true,
+      "since": "",
+      "setup": [
+        "Recommended: Settings sync on, and Server-only logic ticked for this mod, so only the host's copy manages garrisons.",
+        "Server-only logic needs Experimental compatibility on first (Server tab, Advanced); it is not ticked for you."
+      ],
+      "limits": []
+    },
+    {
+      "name": "CoopMarriage",
+      "moduleIds": [
+        "CoopMarriage"
+      ],
+      "status": "Works",
+      "summary": "Placed after Coop for you, which it needs and does not say.",
+      "details": [
+        "Loaded before Coop it crashes the game at start-up. ModderLords moves it after Coop, and the Mods tab offers Fix load order if a profile has it in the wrong place."
+      ],
+      "needsCompat": false,
+      "since": "1.0.3",
+      "setup": [],
+      "limits": []
+    },
+    {
+      "name": "CoopModPatch",
+      "moduleIds": [
+        "CoopModPatch"
+      ],
+      "status": "Works",
+      "summary": "Runs its own co-op fixes; ModderLords leaves them in charge.",
+      "details": [
+        "Works in any load-order position. Where it already fixes a mod, ModderLords does not add its own fix on top."
+      ],
+      "needsCompat": false,
+      "since": "",
+      "setup": [],
+      "limits": []
+    },
+    {
+      "name": "Modular Smithing 2",
+      "moduleIds": [
+        "ModularSmithing2"
+      ],
+      "status": "Works",
+      "summary": "Ships its own Coop adapter and runs on the server as it is.",
+      "details": [
+        "Crafted items are replayed to players who join."
+      ],
+      "needsCompat": false,
+      "since": "",
+      "setup": [],
+      "limits": []
+    },
+    {
+      "name": "Improved Horse Caparisons",
+      "moduleIds": [
+        "ImprovedHorseCaparisons"
+      ],
+      "status": "Works",
+      "summary": "Item and art pack; the server leaves its art folders out.",
+      "details": [],
+      "needsCompat": false,
+      "since": "",
+      "setup": [
+        "If the server will not start, set every folder except ModuleData to client in the mod's server/client folders."
+      ],
+      "limits": []
+    },
+    {
+      "name": "Swadian Armoury",
+      "moduleIds": [
+        "swadian armoury"
+      ],
+      "status": "Works",
+      "summary": "Item and art pack; the server leaves its art folders out.",
+      "details": [],
+      "needsCompat": false,
+      "since": "",
+      "setup": [
+        "If the server will not start, set every folder except ModuleData to client in the mod's server/client folders."
+      ],
+      "limits": []
+    },
+    {
+      "name": "Harmony, ButterLib, UIExtenderEx and MCM",
+      "moduleIds": [
+        "Bannerlord.Harmony",
+        "Bannerlord.ButterLib",
+        "Bannerlord.UIExtenderEx",
+        "Bannerlord.MBOptionScreen"
+      ],
+      "status": "Works",
+      "summary": "Frameworks other mods need; kept for Coop's handshake.",
+      "details": [
+        "They stay in the load order so players match the server, but their code does not run on the server.",
+        "MCM's settings core stays loaded so mods can read their settings on the server, which Settings sync relies on."
+      ],
+      "needsCompat": false,
+      "since": "",
+      "setup": [],
+      "limits": []
+    },
+    {
+      "name": "LOTRLOME Armory",
+      "moduleIds": [
+        "LOTRLOME_Armory"
+      ],
+      "status": "Broken",
+      "summary": "Leave it off the server; players can keep it.",
+      "details": [],
+      "needsCompat": false,
+      "since": "",
+      "setup": [],
+      "limits": [
+        "Its animations exist only in client packs, so the server stops at start-up with it. No server role fixes this."
+      ]
+    },
+    {
+      "name": "TAOM.CoopCompat",
+      "moduleIds": [
+        "TAOM.CoopCompat"
+      ],
+      "status": "Broken",
+      "summary": "Do not use with ModderLords; TAOM support is built in.",
+      "details": [],
+      "needsCompat": false,
+      "since": "",
+      "setup": [],
+      "limits": [
+        "It needs its own project's replacement server files; on the stock server it waits forever at start-up."
+      ]
+    },
+    {
+      "name": "Europe 1100",
+      "moduleIds": [
+        "Europe1100"
+      ],
+      "status": "Broken",
+      "summary": "Its world can be created and served, but the mod's own code crashes the server.",
+      "details": [],
+      "needsCompat": false,
+      "since": "",
+      "setup": [
+        "Set to Client only, its map can be created and served like any map-replacing mod."
+      ],
+      "limits": [
+        "In testing, players' games were unstable and the mod's code crashed the server, so it is not usable yet."
+      ]
+    }
+  ]
+}
