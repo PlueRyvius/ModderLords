@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Living Economy Coop Compat" />
+  <!-- Community module: enable it on the server AND on every client, after Bannerlord Living Economy and ModderLords Compat. It has no
+       submodule of its own: ModderLords Compat finds LivingEconomy.CoopCompat.dll in this module's bin folder and loads it once Coop is
+       loaded. ModderLords users do not need it; the launcher's ModderLords Compat already carries the same plugin. -->
+  <Id value="LivingEconomy.CoopCompat" />
+  <Version value="v0.1.0" />
+  <SingleplayerModule value="true" />
+  <MultiplayerModule value="false" />
+  <ModuleCategory value="Singleplayer" />
+  <ModuleType value="Community" />
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+    <DependedModule Id="Sandbox" />
+    <DependedModule Id="ModderLords.Compat" />
+    <DependedModule Id="BetterEconomy" />
+  </DependedModules>
+  <DependedModuleMetadatas>
+    <DependedModuleMetadata id="ModderLords.Compat" order="LoadBeforeThis" />
+    <DependedModuleMetadata id="BetterEconomy" order="LoadBeforeThis" />
+  </DependedModuleMetadatas>
+  <SubModules />
+  <Xmls />
+</Module>

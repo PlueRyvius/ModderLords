@@ -27,11 +27,6 @@ public static class Bridge
         Steps.Run("OfflineFreeze.Tick", () => OfflineFreeze.Tick());
         Steps.Run("PlayerKingdomProtection.Tick", () => PlayerKingdomProtection.Tick());
         Steps.Run("BattleScenePick.EnsureInstalled", () => BattleScenePick.EnsureInstalled());
-        Steps.Run("BellumThreadSafety.EnsureInstalled", () => BellumThreadSafety.EnsureInstalled());
-        Steps.Run("BellumPeaceInCoop.EnsureInstalled", () => BellumPeaceInCoop.EnsureInstalled());
-        Steps.Run("BellumVotePeace.EnsureInstalled", () => BellumVotePeace.EnsureInstalled());
-        Steps.Run("BellumTreatyVote.EnsureInstalled", () => BellumTreatyVote.EnsureInstalled());
-        Steps.Run("BellumTreatyVote.ServerTick", () => BellumTreatyVote.ServerTick());
         Steps.Run("ClientOptionalJoin.EnsureInstalled", () => ClientOptionalJoin.EnsureInstalled());
         Steps.Run("KingdomVoteTimeoutAi.EnsureInstalled", () => KingdomVoteTimeoutAi.EnsureInstalled());
         Steps.Run("InventoryExchangeEvent.EnsureInstalled", () => InventoryExchangeEvent.EnsureInstalled());
@@ -42,23 +37,16 @@ public static class Bridge
         Steps.Run("NetMeter.ServerTick", () => NetMeter.ServerTick());
         Steps.Run("SessionCheck.ClientTick", () => SessionCheck.ClientTick());
         Steps.Run("Admin.FamilyAdmin.ClientTick", () => Admin.FamilyAdmin.ClientTick());
-        Steps.Run("BellumClientKingdoms.EnsureInstalled", () => BellumClientKingdoms.EnsureInstalled());
-        Steps.Run("BellumClientKingdoms.ClientTick", () => BellumClientKingdoms.ClientTick());
         Steps.Run("SmokeCharacterCreation.ClientTick", () => SmokeCharacterCreation.ClientTick());
         Steps.Run("Taom.TaomLayer.Tick", () => Taom.TaomLayer.Tick());
         Steps.Run("Taom.TaomStateMirror.ServerTick", () => Taom.TaomStateMirror.ServerTick());
-        Steps.Run("LivingEconomy.LivingEconomyLayer.Tick", () => LivingEconomy.LivingEconomyLayer.Tick());
-        Steps.Run("LivingEconomy.LeStateMirror.ServerTick", () => LivingEconomy.LeStateMirror.ServerTick());
-        Steps.Run("Fourberie.FourberieLayer.Tick", () => Fourberie.FourberieLayer.Tick());
-        Steps.Run("Fourberie.FbBooks.ServerTick", () => Fourberie.FbBooks.ServerTick());
-        Steps.Run("Fourberie.FbMirrorClient.ClientTick", () => Fourberie.FbMirrorClient.ClientTick());
-        Steps.Run("Fourberie.FbEffects.ClientTick", () => Fourberie.FbEffects.ClientTick());
         Steps.Run("Taom.SpecialResourceSyncComponent.ClientTick", () => Taom.SpecialResourceSyncComponent.ClientTick());
         Steps.Run("Taom.CareerSyncComponent.ClientTick", () => Taom.CareerSyncComponent.ClientTick());
         Steps.Run("Taom.PartyComponentSyncComponent.ClientTick", () => Taom.PartyComponentSyncComponent.ClientTick());
         Steps.Run("Taom.RefugeComponent.ClientTick", () => Taom.RefugeComponent.ClientTick());
         Steps.Run("Taom.ClientStateBackupComponent.ClientTick", () => Taom.ClientStateBackupComponent.ClientTick());
         Steps.Run("Taom.FieldCommissionComponent.ClientTick", () => Taom.FieldCommissionComponent.ClientTick());
+        foreach (var (name, step) in CompatPlugins.Ticks) Steps.Run(name, step);
         Steps.Run("OperationRuntime.JoinBarrier.Tick", () => Operations.OperationRuntime.JoinBarrier?.Tick());
         Steps.Run("BellumSnapshotProbe.Tick", () => Operations.BellumSnapshotProbe.Tick());
         Steps.Run("BellumSnapshotBroadcast.Tick", () => Operations.BellumSnapshotBroadcast.Tick());
@@ -80,9 +68,8 @@ public static class Bridge
 
     /// <summary>The verification counter line for this side (server should count gated behaviours, a client should stay at 0).</summary>
     public static string VerificationSummary() => BehaviorGate.VerificationSummary() + "; " + Operations.OperationRuntime.Report()
-        + LivingEconomy.LivingEconomyLayer.Summary() + Fourberie.FourberieLayer.Summary() + Operations.BellumPrompts.Summary() + "; " + InventoryExchangeEvent.Summary()
-        + (BellumPeaceInCoop.Answered > 0 ? $"; Bellum parley steps answered {BellumPeaceInCoop.Answered}" : "")
-        + (BellumVotePeace.Marked > 0 ? $"; Bellum vote peace applied {BellumVotePeace.Marked}" : "") + BellumTreatyVote.Summary() + ClientKingdomDecisions.Summary() + "; " + Steps.Summary();
+        + CompatPlugins.Summary() + Operations.BellumPrompts.Summary() + "; " + InventoryExchangeEvent.Summary()
+        + ClientKingdomDecisions.Summary() + "; " + Steps.Summary();
 
     /// <summary>Both sides, every 30 s and at unload: writes the ground-truth trace counters. Returns how many methods were written (0 when not tracing).</summary>
     public static int TraceFlush() => BehaviorGate.TraceFlush();

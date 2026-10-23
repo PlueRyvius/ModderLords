@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Fourberie.CoopCompat</AssemblyName>
+    <RootNamespace>Fourberie.CoopCompat</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- Fourberie's Coop compat plugin. NOT a submodule: ModderLords.Compat loads it once Coop is loaded (CompatPlugins).
+         It ships two ways: inside ModderLords.Compat's bin folders (the launcher's bundle), and as the standalone
+         Fourberie Coop Compat module for players on other launchers. -->
+    <OutputPath>_Module\bin\Win64_Shipping_Client\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Bannerlord.ReferenceAssemblies.Core" Version="1.4.8.119303" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\ModderLords.CompatSync\ModderLords.CompatSync.csproj" Private="false" />
+    <ProjectReference Include="..\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj" Private="false" />
+    <ProjectReference Include="..\ModderLords.Operations\ModderLords.Operations.csproj" Private="false" />
+    <Reference Include="Common" HintPath="$(CoopRefDir)\Common.dll" Private="false" />
+    <Reference Include="Coop.Core" HintPath="$(CoopRefDir)\Coop.Core.dll" Private="false" />
+    <Reference Include="GameInterface" HintPath="$(CoopRefDir)\GameInterface.dll" Private="false" />
+    <Reference Include="LiteNetLib" HintPath="$(CoopRefDir)\LiteNetLib.dll" Private="false" />
+    <Reference Include="protobuf-net" HintPath="$(CoopRefDir)\protobuf-net.dll" Private="false" />
+    <Reference Include="protobuf-net.Core" HintPath="$(CoopRefDir)\protobuf-net.Core.dll" Private="false" />
+    <Reference Include="Autofac" HintPath="$(CoopRefDir)\Autofac.dll" Private="false" />
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" ExcludeAssets="runtime" />
+    <Reference Include="Newtonsoft.Json" HintPath="$(CoopRefDir)\Newtonsoft.Json.dll" Private="false" />
+  </ItemGroup>
+
+  <!-- Both sides, and the launcher's bundled ModderLords.Compat as well as this module. -->
+  <Target Name="CopyPluginBins" AfterTargets="Build">
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb" DestinationFolder="_Module\bin\Win64_Shipping_Server\\" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb" DestinationFolder="..\ModderLords.CompatSync\_Module\bin\Win64_Shipping_Client\\" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb" DestinationFolder="..\ModderLords.CompatSync\_Module\bin\Win64_Shipping_Server\\" SkipUnchangedFiles="true" ContinueOnError="true" />
+  </Target>
+
+  <Target Name="RequireCoopAssemblies" BeforeTargets="ResolveReferences" Condition="'$(HasCoopAssemblies)' != 'true'">
+    <Error Text="Coop's assemblies were not found. This plugin needs the Bannerlord Coop workshop item (3770450698), or -p:CoopRefDir=&lt;path to its bin\Win64_Shipping_Client&gt;." />
+  </Target>
+
+</Project>
