@@ -41,7 +41,7 @@ git merge --ff-only origin/main
 
 Set `<VersionPrefix>` in `Directory.Build.props` to `X.Y.Z`. That one line is the only place the version lives. The title bar, the updater's "running version" and the package script all read it.
 
-**Put the bump in the same PR as the change being released**, not in a separate version-bump PR afterwards. One PR, one merge. If a release gathers several already-merged PRs, bump in the last of them. Agents cannot merge on this repo (`gh pr merge` is blocked); the maintainer merges.
+**Put the bump in the same PR as the change being released**, not in a separate version-bump PR afterwards. One PR, one merge. If a release gathers several already-merged PRs, bump in the last of them. An agent merges only when the maintainer says so for that PR (`AGENTS.md`).
 
 ### 2a. Update the docs (in the same PR)
 
