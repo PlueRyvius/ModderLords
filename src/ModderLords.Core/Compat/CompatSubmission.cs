@@ -8,8 +8,9 @@ namespace ModderLords.Core.Compat;
 /// The link Submit… opens. <see cref="RecordInUrl"/> is false when the record was too large to travel in the link:
 /// the form then opens with <see cref="CompatSubmission.PastePlaceholder"/> in its record field and the caller has to
 /// hand <see cref="RecordJson"/> to the user some other way (the app copies it to the clipboard).
+/// <see cref="Fields"/> is the same submission for the intake worker, which needs neither the link nor the clipboard.
 /// </summary>
-public sealed record CompatSubmissionLink(string Url, string RecordJson, bool RecordInUrl);
+public sealed record CompatSubmissionLink(string Url, string RecordJson, bool RecordInUrl, CompatSubmissionFields Fields);
 
 /// <summary>
 /// Builds the prefilled GitHub issue that carries one compat record, or several at once, to the maintainer. Nothing is sent from here: the
@@ -77,10 +78,11 @@ public static class CompatSubmission
     public static CompatSubmissionLink Build(CompatRecord record, string? modVersion, string? coopVersion, string? notes = null)
     {
         var json = RecordJson(record);
+        var fields = new CompatSubmissionFields(record.Id, Blank(modVersion), Blank(coopVersion), json, Blank(notes));
         var url = Url(TitleFor(record), record.Id, modVersion, coopVersion, json, notes);
         return url.Length <= MaxUrlLength
-            ? new CompatSubmissionLink(url, json, RecordInUrl: true)
-            : new CompatSubmissionLink(Url(TitleFor(record), record.Id, modVersion, coopVersion, PastePlaceholder, notes), json, RecordInUrl: false);
+            ? new CompatSubmissionLink(url, json, RecordInUrl: true, fields)
+            : new CompatSubmissionLink(Url(TitleFor(record), record.Id, modVersion, coopVersion, PastePlaceholder, notes), json, RecordInUrl: false, fields);
     }
 
     /// <summary>
@@ -91,12 +93,13 @@ public static class CompatSubmission
     public static CompatSubmissionLink Build(IReadOnlyCollection<CompatRecord> records, string? coopVersion, string? notes = null)
     {
         var (title, mods, json) = (TitleFor(records), ModField(records), RecordsJson(records));
+        var fields = new CompatSubmissionFields(mods, null, Blank(coopVersion), json, Blank(notes));
         foreach (var candidate in new[] { json, RecordsJson(records, compact: true) })
         {
             var url = Url(title, mods, null, coopVersion, candidate, notes);
-            if (url.Length <= MaxUrlLength) return new CompatSubmissionLink(url, candidate, RecordInUrl: true);
+            if (url.Length <= MaxUrlLength) return new CompatSubmissionLink(url, candidate, RecordInUrl: true, fields);
         }
-        return new CompatSubmissionLink(Url(title, mods, null, coopVersion, PastePlaceholder, notes), json, RecordInUrl: false);
+        return new CompatSubmissionLink(Url(title, mods, null, coopVersion, PastePlaceholder, notes), json, RecordInUrl: false, fields);
     }
 
     /// <summary>
@@ -142,6 +145,8 @@ public static class CompatSubmission
         Add(sb, "notes", notes);
         return sb.ToString();
     }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     // EscapeDataString, never EscapeUriString or string concatenation: an id or a note containing & or # would
     // otherwise end the field early and the rest of the record would be read as other fields, or dropped.

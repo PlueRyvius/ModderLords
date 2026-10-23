@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using ModderLords.App.ViewModels;
@@ -982,6 +983,10 @@ public class WorkflowTests
     {
         public List<string> Opened { get; } = new();
         public List<string> Copied { get; } = new();
+        public List<CompatSubmissionFields> Sent { get; } = new();
+
+        /// <summary>Gives the view model an intake that answers <paramref name="result"/> and remembers what it was sent.</summary>
+        public void WithIntake(CompatIntakeResult result) => Vm.SendCompatSubmission = fields => { Sent.Add(fields); return result; };
         public List<string> Asked { get; } = new();
         public bool Answer { get; set; } = true;
         /// <summary>The questions about sending the other ready mods too, and what is answered: all, this one, or cancel.</summary>
@@ -1000,6 +1005,8 @@ public class WorkflowTests
             Vm.AskCompatSubmitOthers = message => { AskedAboutOthers.Add(message); return IncludeOthers; };
             Vm.OpenCompatSubmitPage = Opened.Add;
             Vm.CopyCompatSubmitText = text => { Copied.Add(text); return ClipboardWorks; };
+            // No intake unless a test asks for one, whatever this PC's environment says.
+            Vm.SendCompatSubmission = null;
             // This PC's own proofs must neither help nor hinder a test.
             Vm.CompatProofPath = Path.Combine(_dir, CompatProofStore.FileName);
         }
@@ -1049,6 +1056,50 @@ public class WorkflowTests
         Assert.DoesNotContain(Path.GetFileName(fixture.Root), sent);
         Assert.DoesNotContain(h.Vm.Profile.Name, sent);
         Assert.DoesNotContain("PlainMod", sent);
+    });
+
+    [Fact]
+    public void WithAnIntakeSubmitSendsDirectlyAndOpensTheNewIssue() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+        h.WithIntake(new CompatIntakeResult(true, "https://github.com/PlueRyvius/ModderLords/issues/9", "sent"));
+        var record = new CompatRecord { Id = "TestMod", Verdict = CompatVerdict.Works };
+
+        h.Answer = false;
+        h.Submit("TestMod", record);
+        Assert.Contains("posted by ModderLords' bot", Assert.Single(h.Asked));
+        Assert.Contains("No GitHub account is needed", h.Asked[0]);
+        Assert.Empty(h.Sent);
+
+        h.Answer = true;
+        h.Submit("TestMod", record);
+        var sent = Assert.Single(h.Sent);
+        Assert.Equal("TestMod", sent.Mod);
+        Assert.Equal("v1.0.0", sent.ModVersion);
+        Assert.Equal(CompatSubmission.RecordJson(record), sent.Record);
+        Assert.Equal("https://github.com/PlueRyvius/ModderLords/issues/9", Assert.Single(h.Opened));
+        Assert.Contains("now a public issue", h.Vm.Status);
+        // The same privacy property as the link: nothing about this PC rides along.
+        var all = JsonSerializer.Serialize(sent);
+        Assert.DoesNotContain(Path.GetFileName(fixture.Root), all);
+        Assert.DoesNotContain(h.Vm.Profile.Name, all);
+        Assert.DoesNotContain("PlainMod", all);
+    });
+
+    [Fact]
+    public void WhenTheIntakeFailsSubmitFallsBackToTheForm() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var h = new SubmitHarness(fixture);
+        h.WithIntake(new CompatIntakeResult(false, null, "the intake answered 502"));
+        var record = new CompatRecord { Id = "TestMod", Verdict = CompatVerdict.Works };
+
+        h.Submit("TestMod", record);
+        Assert.Single(h.Sent);
+        Assert.Equal(CompatSubmission.Build(record, "v1.0.0", null).Url, Assert.Single(h.Opened));
+        Assert.Contains("Could not send it directly (the intake answered 502)", h.Vm.Status);
+        Assert.Contains("Nothing is posted until you press Submit", h.Vm.Status);
     });
 
     [Fact]

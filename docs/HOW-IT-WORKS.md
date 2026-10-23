@@ -344,7 +344,9 @@ server or the game). A mod new to a profile takes those defaults; mods already i
 - **Downloaded**: the latest copy from GitHub, fetched quietly at start. It is used only if it checks out and is newer.
 - **Yours**: your own records, laid over the bundled ones field by field.
 - **Submit…** turns a working setup into a GitHub issue for the maintainer. A server you hosted with the mod, where a
-  player reached the map, counts as proof that it works.
+  player reached the map, counts as proof that it works. With the intake worker configured (`worker/compat-intake`),
+  the record is sent straight there and needs no GitHub account; otherwise, or if sending fails, a prefilled GitHub
+  form opens.
 
 The **Supported mods** tab is separate: written descriptions of how each mod is supported, embedded in the app.
 
