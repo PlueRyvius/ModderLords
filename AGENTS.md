@@ -19,7 +19,8 @@ Test builds go out as prereleases with a suffixed tag, which installed copies ig
   git merge-base --is-ancestor <sha> origin/main
   ```
 
-- **Agents cannot merge on this repo** (`gh pr merge` is blocked). The maintainer merges.
+- **Agents merge only when the maintainer says so**, in chat, for that PR. Before merging, check CI is green and the
+  PR is mergeable, and merge that one PR only. A go-ahead for one PR is not a go-ahead for the next.
 - **Close any running ModderLords before building.** A running dev build locks the App's output exe.
 - **Run the app for UI changes.** A green build proves nothing for UI. Never drive the desktop while someone is using the machine; take a screenshot first.
 - **Windows PowerShell 5.1:**
