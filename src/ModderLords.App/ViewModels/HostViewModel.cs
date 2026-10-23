@@ -925,7 +925,7 @@ public partial class HostViewModel : ObservableObject
     {
         Main.RefreshPreview();
         if (ClientTarget is not { } target) { Status = Loc.T("Nothing to compare yet: rescan the mods first."); return; }
-        EnsureClientModule(ServerCarriesSyncModule(target));
+        EnsureClientModules(target);
         Main.RefreshPreview();
         var path = ClientManifest.DefaultLauncherDataPath();
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase),
@@ -973,6 +973,20 @@ public partial class HostViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Everything the server's list needs on this machine's game: the sync module, and the co-op compat modules the
+    /// launcher added after their mods (<see cref="LaunchSession.CompanionModules"/>).
+    /// </summary>
+    internal void EnsureClientModules(LaunchSession.Prepared target)
+    {
+        EnsureClientModule(ServerCarriesSyncModule(target));
+        foreach (var r in ClientModuleInstaller.EnsureCompanions(target.Selections.Select(s => s.Module.Id), ClientLauncher.ResolveGameRoot(ClientProfile)))
+            if (r.Outcome is ClientModuleInstaller.InstallOutcome.Installed or ClientModuleInstaller.InstallOutcome.Updated)
+                AddLine(LogCategory.Tool, "[ModderLords] " + r.Message);
+            else if (r.Outcome is ClientModuleInstaller.InstallOutcome.Failed or ClientModuleInstaller.InstallOutcome.Unavailable)
+                AddLine(LogCategory.Warning, "[ModderLords] " + r.Message);
+    }
+
     /// <summary>Whether the server's own mod list carries the shared sync module, which every client then needs too.</summary>
     internal static bool ServerCarriesSyncModule(LaunchSession.Prepared target) =>
         target.Selections.Any(s => s.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase));
@@ -988,7 +1002,7 @@ public partial class HostViewModel : ObservableObject
         }
 
         // Install before the plan is computed, so a freshly installed module is seen as present rather than missing.
-        EnsureClientModule(ServerCarriesSyncModule(target));
+        EnsureClientModules(target);
         Main.RefreshPreview();
 
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(target.Modules), target.Order, path, Main.InstalledClientSide(), ClientProfile.ClientOfficialModules.ToHashSet(StringComparer.OrdinalIgnoreCase),

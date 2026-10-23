@@ -33,7 +33,7 @@ if ($LASTEXITCODE -eq 0 -and $previousTag) {
     # The overview of every feature goes stale one release at a time, so a release that changed the app or the in-game
     # modules has to touch it, or say with -DocsChecked that nothing in it needed to change (docs/RELEASING.md step 2a).
     $howItWorks = 'docs/HOW-IT-WORKS.md'
-    git -C $root diff --quiet $previousTag HEAD -- (@('src/ModderLords.App', 'src/ModderLords.Coop', 'src/ModderLords.Compat') + $syncModuleSources)
+    git -C $root diff --quiet $previousTag HEAD -- (@('src/ModderLords.App', 'src/ModderLords.Coop', 'src/ModderLords.Compat', 'coop-compat') + $syncModuleSources)
     $featuresChanged = $LASTEXITCODE -ne 0
     git -C $root diff --quiet $previousTag HEAD -- $howItWorks
     $docsChanged = $LASTEXITCODE -ne 0
@@ -87,6 +87,22 @@ $syncOut = Join-Path $out 'compat\ModderLords.Compat'
 New-Item -ItemType Directory -Path $syncOut -Force | Out-Null
 Copy-Item (Join-Path $root 'src\ModderLords.CompatSync\_Module\*') $syncOut -Recurse -Force
 Get-ChildItem $syncOut -Recurse -Filter *.pdb | Remove-Item -Force
+
+# The standalone co-op compat modules (coop-compat\), which the launcher adds after their mods and installs for players
+# (LaunchSession.CompanionModules). Each builds against the local game install, like the community repo's modules.
+$companionModules = @(@{ Folder = 'BellumCivileCoopCompat'; Id = 'BellumCivile.CoopCompat' })
+foreach ($c in $companionModules) {
+    $src = Join-Path $root "coop-compat\$($c.Folder)"
+    $bin = Join-Path $src 'bin\Release'
+    dotnet build (Join-Path $src "$($c.Folder).csproj") -c Release -o $bin
+    if ($LASTEXITCODE -ne 0) { throw "$($c.Id) build failed (it needs the game and the Harmony workshop item installed)" }
+    $cOut = Join-Path $out "compat\$($c.Id)"
+    foreach ($side in 'Win64_Shipping_Client', 'Win64_Shipping_Server') {
+        New-Item -ItemType Directory -Path (Join-Path $cOut "bin\$side") -Force | Out-Null
+        Copy-Item (Join-Path $bin "$($c.Id).dll") (Join-Path $cOut "bin\$side") -Force
+    }
+    Copy-Item (Join-Path $src 'SubModule.xml'), (Join-Path $src 'README.txt') $cOut -Force
+}
 
 # The _Module output dirs are source-tree build outputs that accumulate leftovers (e.g. a win-x64 RID subfolder
 # from a self-contained build, or DLLs under the pre-rename names). The stale-name check below matches ModularCoop

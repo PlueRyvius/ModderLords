@@ -478,8 +478,31 @@ public partial class MainViewModel : ObservableObject
                 Log(LogCategory.Warning, "[ModderLords] " + r.Message);
             if (await Task.Run(() => ClientModuleInstaller.Export(profile.CompatExportFolder)) is { } exported)
                 Log(LogCategory.Tool, "[ModderLords] " + exported);
+            LogCompanionInstalls(await Task.Run(() => InstallCompanionModules(profile)));
         }
         catch (Exception ex) { Log(LogCategory.Tool, "[ModderLords] client module check skipped: " + ex.Message); }
+    }
+
+    /// <summary>
+    /// The co-op compat modules for mods this profile enables (<see cref="LaunchSession.CompanionModules"/>), put in the
+    /// game's Modules folder. A mod list imported from a ModderLords host lists them after their mods, and the Bannerlord
+    /// launcher can only enable a module that is there.
+    /// </summary>
+    private static IReadOnlyList<ClientModuleInstaller.InstallResult> InstallCompanionModules(Profile profile)
+    {
+        var wanted = LaunchSession.CompanionModules
+            .Where(kv => profile.EnabledMods.Any(m => m.Id.Equals(kv.Key, StringComparison.OrdinalIgnoreCase) || m.Id.Equals(kv.Value, StringComparison.OrdinalIgnoreCase)))
+            .Select(kv => kv.Value).ToList();
+        return wanted.Count == 0 ? [] : ClientModuleInstaller.EnsureCompanions(wanted, ClientLauncher.ResolveGameRoot(profile));
+    }
+
+    private void LogCompanionInstalls(IEnumerable<ClientModuleInstaller.InstallResult> results)
+    {
+        foreach (var r in results)
+            if (r.Outcome is ClientModuleInstaller.InstallOutcome.Installed or ClientModuleInstaller.InstallOutcome.Updated)
+                Log(LogCategory.Tool, "[ModderLords] " + r.Message);
+            else if (r.Outcome is ClientModuleInstaller.InstallOutcome.Failed)
+                Log(LogCategory.Warning, "[ModderLords] " + r.Message);
     }
 
     public MainViewModel() : this(true) { }
@@ -2317,6 +2340,8 @@ public partial class MainViewModel : ObservableObject
             CollectProfileFromRows();
             ProfileStore.Save(Profile);
             IsDirty = false;
+            // Before Prepare, so a compat module installed now is found rather than reported missing.
+            LogCompanionInstalls(InstallCompanionModules(Profile));
             var prepared = ClientLaunchSession.Prepare(Profile);
 
             foreach (var m in prepared.Messages) Log(LogCategory.Tool, "[ModderLords] " + m);

@@ -127,7 +127,7 @@ public partial class SmokeTestViewModel : ObservableObject
         Process StartClient(IReadOnlyList<string> extraArguments) => dispatcher.Invoke(() =>
         {
             var target = _host.ClientTarget ?? throw new InvalidOperationException("The server has no client plan yet; rescan the mods.");
-            _host.EnsureClientModule(HostViewModel.ServerCarriesSyncModule(target));
+            _host.EnsureClientModules(target);
             var client = _host.PrepareClientLaunch();
             foreach (var message in client.Messages) Progress.Add($"{DateTime.Now:HH:mm:ss}  {message}");
             return ClientLaunchSession.Start(client.Plan with { ExtraArguments = extraArguments }, note => Progress.Add($"{DateTime.Now:HH:mm:ss}  {note}"));
