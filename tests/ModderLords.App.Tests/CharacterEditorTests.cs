@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using System.Windows.Threading;
@@ -209,6 +210,47 @@ public class CharacterEditorTests
         vm.PasteBodyCommand.Execute(null);
         Assert.False(vm.IsBodyChanged);
         Assert.StartsWith("Not used", vm.Status);
+    });
+
+    [Fact]
+    public void A_face_saved_to_the_library_can_be_put_on_another_hero() => Sta(() =>
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ml-faces-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var server = new FamilyServer();
+            var vm = new CharacterEditorViewModel(server.Client, HeroTargets.Hero("aldric"), "Aldric", () => true) { Library = new FaceLibrary(Path.Combine(dir, "faces.json")) };
+            vm.ReloadCommand.ExecuteAsync(null).Pump();
+            vm.LoadLibrary();
+            Assert.Empty(vm.LibraryFaces);
+
+            vm.SaveToLibraryCommand.Execute(null);
+            Assert.StartsWith("Not saved", vm.Status);
+            vm.LibraryName = "Aldric's face";
+            vm.SaveToLibraryCommand.Execute(null);
+            Assert.Equal("Aldric's face", vm.LibraryFace!.Name);
+            Assert.False(vm.LibraryFace.Female);
+
+            // Saving under the same name again asks first.
+            vm.LibraryName = "aldric's FACE";
+            vm.Confirm = _ => false;
+            vm.SaveToLibraryCommand.Execute(null);
+            Assert.Equal("Aldric's face", Assert.Single(vm.LibraryFaces).Name);
+
+            // On Mira, the saved face goes in the box; Apply would send it.
+            vm.Confirm = _ => true;
+            vm.OpenRelativeCommand.ExecuteAsync(vm.Spouses[0]).Pump();
+            vm.LoadLibrary();
+            vm.LibraryFace = vm.LibraryFaces[0];
+            vm.Body = "<BodyProperties version=\"4\" key=\"00CC\" />";
+            vm.UseLibraryFaceCommand.Execute(null);
+            Assert.Contains("00AA", vm.Body);
+            Assert.Contains("set Gender to match", vm.Status);
+
+            vm.DeleteLibraryFaceCommand.Execute(null);
+            Assert.Empty(vm.LibraryFaces);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); }
     });
 
     /// <summary>Runs on an STA thread with a dispatcher, as the app does, so awaits come back to the thread that owns the views.</summary>

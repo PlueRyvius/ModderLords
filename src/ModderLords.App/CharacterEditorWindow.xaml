@@ -83,7 +83,19 @@
                                 <Button Content="{l:T 'Copy face'}" Command="{Binding CopyFaceFromCommand}" Margin="4,0,0,0"
                                         ToolTip="{l:T 'Put that hero\&#x27;s appearance DNA in the box below. Nothing changes until Apply.'}" />
                             </StackPanel>
-                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                            <TextBlock Text="{l:T 'Library'}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <ComboBox ItemsSource="{Binding LibraryFaces}" SelectedItem="{Binding LibraryFace}" Width="220"
+                                      ToolTip="{l:T 'Faces you saved, kept on this PC for every server'}" />
+                            <Button Content="{l:T 'Use'}" Command="{Binding UseLibraryFaceCommand}" MinWidth="50" Margin="4,0,0,0"
+                                    ToolTip="{l:T 'Put the saved face in the box above. Nothing changes until Apply.'}" />
+                            <Button Content="{l:T 'Delete'}" Command="{Binding DeleteLibraryFaceCommand}" MinWidth="60" Margin="4,0,0,0" />
+                            <TextBlock Text="{l:T 'Save as'}" VerticalAlignment="Center" Margin="20,0,6,0" />
+                            <TextBox Text="{Binding LibraryName, UpdateSourceTrigger=PropertyChanged}" Width="180" MaxLength="60"
+                                     ToolTip="{l:T 'A name for the DNA in the box above, e.g. Viking jarl'}" />
+                            <Button Content="{l:T 'Save'}" Command="{Binding SaveToLibraryCommand}" MinWidth="60" Margin="4,0,0,0" />
+                        </StackPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
                                 <Button Content="{l:T 'Copy'}" Command="{Binding CopyBodyCommand}" MinWidth="60" ToolTip="{l:T 'Copy the DNA to the clipboard (the game\&#x27;s character editor pastes it with Ctrl+V)'}" />
                                 <Button Content="{l:T 'Paste'}" Command="{Binding PasteBodyCommand}" MinWidth="60" Margin="4,0,0,0" ToolTip="{l:T 'Use DNA from the clipboard (the game\&#x27;s character editor copies it with Ctrl+C)'}" />
                                 <Button Content="{l:T 'Export…'}" Command="{Binding ExportBodyCommand}" MinWidth="70" Margin="12,0,0,0" />

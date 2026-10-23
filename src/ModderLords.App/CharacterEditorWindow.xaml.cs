@@ -10,7 +10,13 @@ public partial class CharacterEditorWindow : Window
     {
         InitializeComponent();
         DataContext = vm;
-        Loaded += async (_, _) => await vm.ReloadCommand.ExecuteAsync(null);
+        Loaded += async (_, _) =>
+        {
+            vm.LoadLibrary();
+            await vm.ReloadCommand.ExecuteAsync(null);
+        };
+        // Another editor window may have saved a face meanwhile.
+        Activated += (_, _) => vm.LoadLibrary();
     }
 
     // The window is shown modeless, where IsCancel alone does not close it.
