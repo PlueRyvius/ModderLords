@@ -204,6 +204,11 @@ public partial class CharacterEditorViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ResetPerksCommand))]
     private int _perkCount;
 
+    /// <summary>The hero on show is dead: death took their stats, so only name, gender and appearance can change, and Revive is offered.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ReviveCommand))]
+    private bool _isDead;
+
     public ObservableCollection<EditValue> Values { get; } = new();
     public ObservableCollection<EditValue> Attributes { get; } = new();
     public ObservableCollection<SkillEdit> Skills { get; } = new();
@@ -219,6 +224,7 @@ public partial class CharacterEditorViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
     [NotifyCanExecuteChangedFor(nameof(ReloadCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResetPerksCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ReviveCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -452,6 +458,28 @@ public partial class CharacterEditorViewModel : ObservableObject
         finally { IsBusy = false; }
     }
 
+    private bool CanRevive() => Loaded && !IsBusy && IsDead;
+
+    /// <summary>Brings the dead hero back in their home settlement, with skills rebuilt from their template.</summary>
+    [RelayCommand(CanExecute = nameof(CanRevive))]
+    private async Task Revive()
+    {
+        if (!_serving()) { Status = Loc.T("The server is not running."); return; }
+        if (!Confirm(Loc.F("Bring {0} back to life?\n\nThey return in their home settlement with full health. Death took their skills, perks and equipment, "
+                + "so these are rebuilt the way the game first made them; set them again here afterwards if needed.", OriginalName))) return;
+        IsBusy = true;
+        try
+        {
+            var reply = await _admin.RequestAsync("revive", [Target], ReplyTimeout);
+            if (!reply.Ok) { Status = Loc.T("Not revived: ") + reply.Error; return; }
+            var detail = HeroDetail.From(reply);
+            Show(detail);
+            Status = Loc.F("{0} is alive again. {1}.", detail.Name, string.Join("; ", detail.Changes));
+        }
+        catch (Exception ex) { Status = ex.Message; }
+        finally { IsBusy = false; }
+    }
+
     private bool CanResetPerks() => Loaded && !IsBusy && PerkCount > 0;
 
     /// <summary>Takes away every perk the hero has chosen, so they can be chosen again in the game's character screen.</summary>
@@ -520,7 +548,18 @@ public partial class CharacterEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBodyChanged));
         ShowFamily(hero);
 
+        IsDead = !hero.Alive;
         Values.Clear();
+        Attributes.Clear();
+        Skills.Clear();
+        Traits.Clear();
+        if (IsDead)
+        {
+            // Nothing else to show: the game threw it away on their death.
+            TraitsView.Refresh();
+            Loaded = true;
+            return;
+        }
         Values.Add(new EditValue("age", "Age", hero.Age, 0, hero.MaxAge));
         Values.Add(new EditValue("level", "Level", hero.Level, 1, hero.MaxLevel));
         Values.Add(new EditValue("gold", "Gold", hero.Gold, 0, int.MaxValue));

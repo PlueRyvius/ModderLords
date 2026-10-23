@@ -5,6 +5,7 @@
         Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
         Title="{Binding Title}" Height="820" Width="960" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <!-- A changed value is bold, so what Apply will send is visible before it is sent. -->
         <Style x:Key="ChangedRow" TargetType="DataGridRow">
             <Style.Triggers>
@@ -53,6 +54,9 @@
                    Text="{l:T 'Changes are made on the running server and reach the player\&#x27;s game through Coop\&#x27;s own sync. Skill values do not change the character\&#x27;s level; set Level separately if needed. Edits are refused while the player is in a battle or a siege.'}" />
         <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="{l:T 'Revive…'}" Command="{Binding ReviveCommand}" MinWidth="90" Margin="4,0,8,0" FontWeight="Bold"
+                        Visibility="{Binding IsDead, Converter={StaticResource BoolToVis}}"
+                        ToolTip="{l:T 'Bring this hero back to life in their home settlement, with full health and their skills rebuilt from their template.'}" />
                 <Button Content="{l:T 'Reset perks…'}" Command="{Binding ResetPerksCommand}" MinWidth="100" Margin="4,0,16,0"
                         ToolTip="{l:T 'Take away every perk this character has chosen, so they can be chosen again in the game. Skills, focus and attributes stay.'}" />
                 <Button Content="{l:T 'Reload'}" Command="{Binding ReloadCommand}" MinWidth="80" Margin="4,0" />
