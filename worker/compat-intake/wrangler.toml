@@ -1,0 +1,16 @@
+# Cloudflare Worker for ModderLords' compat-record intake. See README.md for setting it up.
+name = "modderlords-compat-intake"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+REPO = "PlueRyvius/ModderLords"
+
+# Create it with `npx wrangler kv namespace create LIMITS` and paste the id it prints here.
+[[kv_namespaces]]
+binding = "LIMITS"
+id = "8df0bcfaf1f94fe8919318f03d3bd033"
+
+# Secrets, set with `npx wrangler secret put <NAME>`; never written in this file:
+#   GITHUB_TOKEN  fine-grained token, repository PlueRyvius/ModderLords only, permission Issues: read and write
+#   IP_SALT       any long random string; it keeps the rate-limit keys from being reversed into IPs

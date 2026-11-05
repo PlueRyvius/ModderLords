@@ -47,6 +47,11 @@ jobs:
       - name: Test
         run: dotnet test tests/ModderLords.Core.Tests/ModderLords.Core.Tests.csproj -c Release --nologo --logger "console;verbosity=normal"
 
+      # The compat-record intake worker (plain JavaScript, Node's own test runner, no packages to install).
+      - name: Test the compat intake worker
+        working-directory: worker/compat-intake
+        run: npm test
+
       - name: Test desktop workflows
         run: dotnet test tests/ModderLords.App.Tests/ModderLords.App.Tests.csproj -c Release --nologo
 
