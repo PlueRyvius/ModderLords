@@ -74,7 +74,12 @@ public static class LivingEconomyLayer
         new LeStateMirrorComponent(),
     };
 
+    private const string StandaloneHooks = "BetterEconomyCoopCompat.Hooks";
+
     private static bool _done;
+
+    /// <summary>True when the standalone module runs Living Economy's co-op support instead of this layer.</summary>
+    internal static bool Standalone { get; private set; }
 
     /// <summary>True once the layer found Living Economy loaded and installed its components.</summary>
     internal static bool Active { get; private set; }
@@ -98,6 +103,13 @@ public static class LivingEconomyLayer
             var mod = TaomLayer.Loaded(AssemblyName);
             if (mod == null) return;   // the DLL loads with its submodule; try again next tick
             _done = true;
+            if (HarmonyLib.AccessTools.TypeByName(StandaloneHooks) != null)
+            {
+                // The standalone module (coop-compat/BetterEconomyCoopCompat) carries this whole layer, messages included.
+                Standalone = true;
+                Log.Info(Tag + "the standalone Living Economy Coop Compat module is loaded; it runs Living Economy's co-op support and this layer stays off");
+                return;
+            }
             IsServer = IsServerProcess();
             InstallAll(new LeContext(mod, IsServer));
         }
@@ -161,11 +173,24 @@ public static class LivingEconomyLayer
     /// <summary>"; Living Economy: ..." for the 30 s verification line, or empty when the layer is not running.</summary>
     public static string Summary()
     {
+        if (Standalone) return StandaloneSummary();
         if (!Active) return "";
         var side = IsServer
             ? $"owner-scoped ticks {LeOwnerScopeComponent.ScopedCount}, AI treaty values refused for players {LePlayerChecksComponent.TreatiesRefused}"
             : $"simulation handlers skipped {LeServerOnlyComponent.Skipped}";
         return $"; Living Economy: {side}, {LeActionsComponent.Summary()}, {LeStateMirror.Summary()}";
+    }
+
+    private static System.Reflection.MethodInfo? _standaloneSummary;
+
+    private static string StandaloneSummary()
+    {
+        try
+        {
+            _standaloneSummary ??= HarmonyLib.AccessTools.Method(HarmonyLib.AccessTools.TypeByName(StandaloneHooks), "Summary", Type.EmptyTypes);
+            return _standaloneSummary?.Invoke(null, null) is string s && s.Length > 0 ? "; Living Economy (standalone module): " + s : "";
+        }
+        catch { return ""; }
     }
 
     internal static string Short(string typeName) => typeName.Substring(typeName.LastIndexOf('.') + 1);

@@ -93,7 +93,10 @@ public sealed class LaunchSession
     /// the server and, through the server's list, on every player's game. They hold no world state of their own.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> CompanionModules =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["BellumCivile"] = "BellumCivile.CoopCompat" };
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+            ["BellumCivile"] = "BellumCivile.CoopCompat",
+            ["BetterEconomy"] = "BetterEconomy.CoopCompat",
+        };
 
     /// <summary>A bundled companion module, shipped under compat\ next to the executable.</summary>
     public static DiscoveredModule? LocateCompanion(string companionId) => LocateBundled(companionId);

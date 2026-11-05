@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Coop adapter: this module's own messages and handlers. It references Coop's assemblies, so the module loads
+       it by hand only when Coop is there (SubModule.TryLoadAdapter). Built and shipped next to the module's DLL. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>BetterEconomy.CoopCompat.Coop</AssemblyName>
+    <RootNamespace>BetterEconomyCoopCompat</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <SteamFolder Condition="'$(SteamFolder)' == '' And Exists('C:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord')">C:\Program Files (x86)\Steam</SteamFolder>
+    <SteamFolder Condition="'$(SteamFolder)' == '' And Exists('D:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord')">D:\Program Files (x86)\Steam</SteamFolder>
+    <GameFolder Condition="'$(GameFolder)' == ''">$(SteamFolder)\steamapps\common\Mount &amp; Blade II Bannerlord</GameFolder>
+    <!-- Bannerlord Coop, Steam Workshop item 3770450698. -->
+    <CoopFolder Condition="'$(CoopFolder)' == ''">$(SteamFolder)\steamapps\workshop\content\261550\3770450698</CoopFolder>
+    <GameBin>$(GameFolder)\bin\Win64_Shipping_Client</GameBin>
+    <CoopBin>$(CoopFolder)\bin\Win64_Shipping_Client</CoopBin>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
+    <ProjectReference Include="..\BetterEconomyCoopCompat.csproj" Private="false" />
+    <Reference Include="Common"><HintPath>$(CoopBin)\Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="GameInterface"><HintPath>$(CoopBin)\GameInterface.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="LiteNetLib"><HintPath>$(CoopBin)\LiteNetLib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="protobuf-net"><HintPath>$(CoopBin)\protobuf-net.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="protobuf-net.Core"><HintPath>$(CoopBin)\protobuf-net.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.Library"><HintPath>$(GameBin)\TaleWorlds.Library.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.Core"><HintPath>$(GameBin)\TaleWorlds.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.ObjectSystem"><HintPath>$(GameBin)\TaleWorlds.ObjectSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.CampaignSystem"><HintPath>$(GameBin)\TaleWorlds.CampaignSystem.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>
