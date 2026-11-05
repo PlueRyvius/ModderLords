@@ -967,6 +967,14 @@ folders.
 
 ---
 
+## Credits
+
+- **Coodsz** and the Coodsz Ryvius Coop Compat project. The two projects share the compat record format, keep
+  settings sync from running twice, and follow the same rules for standalone Coop compat modules (`coop-compat/`).
+  Thank you for the work and the review.
+
+---
+
 ## Licence
 
 ModderLords is released under the [PolyForm Noncommercial License 1.0.0](LICENSE).
