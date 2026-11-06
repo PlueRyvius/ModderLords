@@ -31,6 +31,12 @@ namespace BellumCivileCoopCompat
         protected override void OnBeforeInitialModuleScreenSetAsRoot()
         {
             base.OnBeforeInitialModuleScreenSetAsRoot();
+            Setup();
+        }
+
+        // Coop 0.1.7's dedicated server never sets an initial screen, so the first tick does the setup there.
+        private static void Setup()
+        {
             Coop.ModulesLoaded();
             if (_patched)
                 return;
@@ -54,7 +60,8 @@ namespace BellumCivileCoopCompat
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);
-            if (!_patched || Campaign.Current == null || DateTime.UtcNow < _nextTick)
+            if (!_patched) Setup();
+            if (Campaign.Current == null || DateTime.UtcNow < _nextTick)
                 return;
             _nextTick = DateTime.UtcNow.AddSeconds(3);
             try

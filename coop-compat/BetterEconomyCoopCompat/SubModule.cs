@@ -31,6 +31,7 @@ namespace BetterEconomyCoopCompat;
 public sealed class SubModule : MBSubModuleBase
 {
     private const string AdapterFile = "BetterEconomy.CoopCompat.Coop.dll";
+    private static bool _setUp;
     private static bool _adapterTried;
     private static Action? _sessionTick;   // the adapter's Session.Tick: arms its handler for each Coop session
     private static DateTime _nextTick;
@@ -38,6 +39,14 @@ public sealed class SubModule : MBSubModuleBase
     protected override void OnBeforeInitialModuleScreenSetAsRoot()
     {
         base.OnBeforeInitialModuleScreenSetAsRoot();
+        Setup();
+    }
+
+    // Coop 0.1.7's dedicated server never sets an initial screen, so the first tick does the setup there.
+    private static void Setup()
+    {
+        if (_setUp) return;
+        _setUp = true;
         Coop.ModulesLoaded();
         TryLoadAdapter();
         Layer.Start();
@@ -46,6 +55,7 @@ public sealed class SubModule : MBSubModuleBase
     protected override void OnApplicationTick(float dt)
     {
         base.OnApplicationTick(dt);
+        if (!_setUp) Setup();
         if (!_adapterTried) TryLoadAdapter();
         if (_sessionTick != null)
         {
