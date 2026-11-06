@@ -282,8 +282,8 @@ internal static class HeroAdmin
                     // Keep the hero's XP threshold consistent with the explicit level, including when lowering it.
                     dev.SetInitialLevel(v);
                     hero.Level = v;
-                    // Coop relays level changes through this GameInterface event; a direct field write alone would stay server-side.
-                    MessageBroker.Instance.Publish(hero, new HeroLevelChanged(v, hero));
+                    // Coop 0.1.7 dropped the HeroLevelChanged event; its hero developer sync now carries the level to
+                    // clients.
                 };
                 return null;
             case HeroEditKind.Gold:
