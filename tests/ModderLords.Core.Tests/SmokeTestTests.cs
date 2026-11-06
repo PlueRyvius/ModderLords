@@ -198,6 +198,19 @@ public sealed class SmokeEvaluatorTests
     }
 
     [Fact]
+    public void ASeasonChangeCountsAsTimeRunning()
+    {
+        // The day number goes down when the season turns (Summer 21 -> Autumn 1); the date still moved.
+        var o = HealthyJoin();
+        o.TimeRequested("Play_2x", T0.AddSeconds(80));
+        o.ObserveServer("Server     [DedicatedServer] pulse: time=Summer 21, 1084 timeMode=StoppableFastForward players=1", T0.AddSeconds(85));
+        Assert.False(o.TimeRan);
+        o.ObserveServer("Server     [DedicatedServer] pulse: time=Autumn 1, 1084 timeMode=StoppableFastForward players=1", T0.AddSeconds(140));
+        Assert.True(o.TimeRan);
+        Assert.Equal(SmokeVerdict.Pass, VerdictOf(SmokeEvaluator.Evaluate(o, Done), "Campaign time ran"));
+    }
+
+    [Fact]
     public void WithoutAServerConsoleTheTimeCheckIsSkipped() =>
         Assert.Equal(SmokeVerdict.Skipped, VerdictOf(SmokeEvaluator.Evaluate(HealthyJoin(), Done), "Campaign time ran"));
 
