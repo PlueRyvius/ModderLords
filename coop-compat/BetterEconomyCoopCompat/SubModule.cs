@@ -32,6 +32,7 @@ public sealed class SubModule : MBSubModuleBase
 {
     private const string AdapterFile = "BetterEconomy.CoopCompat.Coop.dll";
     private static bool _adapterTried;
+    private static Action? _sessionTick;   // the adapter's Session.Tick: arms its handler for each Coop session
     private static DateTime _nextTick;
 
     protected override void OnBeforeInitialModuleScreenSetAsRoot()
@@ -46,14 +47,23 @@ public sealed class SubModule : MBSubModuleBase
     {
         base.OnApplicationTick(dt);
         if (!_adapterTried) TryLoadAdapter();
+        if (_sessionTick != null)
+        {
+            try { _sessionTick(); }
+            catch (Exception ex)
+            {
+                _sessionTick = null;
+                Log.Warn("Coop adapter stopped, so players' clicks and records stay local: " + ex.GetBaseException().Message);
+            }
+        }
         if (!Layer.Active || DateTime.UtcNow < _nextTick) return;
         _nextTick = DateTime.UtcNow.AddSeconds(1);
         try { StateMirror.ServerTick(); }
         catch (Exception ex) { Log.Warn("state mirror tick failed: " + ex.GetBaseException().Message); }
     }
 
-    // The adapter references Coop's assemblies, so it can only load where Coop is. Coop discovers its handlers when a
-    // session starts, so loading it any time before then is enough.
+    // The adapter references Coop's assemblies, so it can only load where Coop is. Its handlers are in this module's own
+    // namespace, so Coop doesn't build them: the adapter's Session.Tick, called every tick, arms them per session.
     private static void TryLoadAdapter()
     {
         if (_adapterTried) return;
@@ -67,7 +77,10 @@ public sealed class SubModule : MBSubModuleBase
         {
             var path = Path.Combine(Path.GetDirectoryName(typeof(SubModule).Assembly.Location) ?? ".", AdapterFile);
             if (!File.Exists(path)) { Log.Warn(AdapterFile + " is missing next to the module; players' clicks and records stay local"); return; }
-            var types = Assembly.LoadFrom(path).GetTypes().Length;   // load the types now, inside this try
+            var adapter = Assembly.LoadFrom(path);
+            var types = adapter.GetTypes().Length;   // load the types now, inside this try
+            var tick = adapter.GetType("BetterEconomyCoopCompat.Handlers.Session", true)!.GetMethod("Tick", BindingFlags.Public | BindingFlags.Static);
+            _sessionTick = (Action)Delegate.CreateDelegate(typeof(Action), tick!);
             Log.Info($"Coop adapter loaded ({types} types, protocol {Net.ProtocolVersion}); it arms when a session starts");
         }
         catch (Exception ex) { Log.Warn("Coop adapter did not load, so players' clicks and records stay local: " + ex.GetBaseException().Message); }
