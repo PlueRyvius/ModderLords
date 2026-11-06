@@ -28,7 +28,8 @@ namespace ModderLords.CompatSync.Coop;
 /// screen opened, and for a stash (InventoryScreenHelper.OpenScreenAsStash) the left side is the stash roster itself,
 /// owned by the game or a mod on this player's game only, not a party the server syncs back. The items left the party on
 /// the server and the stash came back empty: Fourberie's donation saw nothing and the loot was lost. The stash's
-/// contents at Done are put back before the event is raised, as single player leaves them.
+/// contents at Done are put back before the event is raised, as single player leaves them. Coop 0.1.7 syncs stashes
+/// itself, so there they are left to Coop (see CoopSyncsRosters).
 /// </para>
 /// </summary>
 public static class InventoryExchangeEvent
@@ -86,7 +87,7 @@ public static class InventoryExchangeEvent
         if (!__result || __runOriginal || __state == null) return;
         try
         {
-            if (__state.Stash != null && __state.StashAtDone != null)
+            if (__state.Stash != null && __state.StashAtDone != null && !CoopSyncsRosters())
             {
                 __state.Stash.Clear();
                 __state.Stash.Add(__state.StashAtDone);
@@ -100,6 +101,32 @@ public static class InventoryExchangeEvent
             _raised++;
         }
         catch (Exception ex) { WarnOnce(ex); }
+    }
+
+    private static bool? _coopSyncsRosters;
+
+    /// <summary>
+    /// Coop 0.1.7 syncs item rosters itself (its ItemRosterLifetimeHandler), stashes included, so the server's deposit
+    /// already reaches this game's stash; putting the stash back as well doubled its contents.
+    /// </summary>
+    private static bool CoopSyncsRosters()
+    {
+        if (_coopSyncsRosters is bool known) return known;
+        var found = false;
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                if (assembly.GetName().Name != "GameInterface") continue;
+                found = assembly.GetTypes().Any(t => t.Name == "ItemRosterLifetimeHandler");
+            }
+            catch (System.Reflection.ReflectionTypeLoadException ex) { found = ex.Types.Any(t => t?.Name == "ItemRosterLifetimeHandler"); }
+            catch { }
+            break;
+        }
+        _coopSyncsRosters = found;
+        Log.Info(found ? "inventory exchange event: Coop syncs stashes itself, so they are not put back" : "inventory exchange event: stashes are put back after Coop's Done");
+        return found;
     }
 
     private static void WarnOnce(Exception ex)
