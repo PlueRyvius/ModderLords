@@ -10,21 +10,57 @@ using GameInterface;
 using GameInterface.Services.GameState.Messages;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Players;
+using Autofac;
 using LiteNetLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 
-// Coop discovers handlers by namespace prefix (Coop.Core.Client.* / Coop.Core.Server.*) and builds them from its
-// container when a session starts; the rest of each name is this module's own. Both exist in every Coop session where
-// this module is loaded, and do nothing without Living Economy (Net.LayerActive).
-namespace Coop.Core.Client.Services.BetterEconomyCoopCompat.Handlers
+// The handlers live in this module's own namespace, so Coop doesn't find them on its own. Session.Tick arms the one for
+// this side whenever Coop's session container appears or changes, and drops it when the session ends. Neither does
+// anything without Living Economy (Net.LayerActive).
+namespace BetterEconomyCoopCompat.Handlers
 {
+    /// <summary>Arms this side's handler for each Coop session. Called every application tick by the module.</summary>
+    public static class Session
+    {
+        private static ILifetimeScope? armedScope;
+        private static IDisposable? handler;
+
+        public static void Tick()
+        {
+            ContainerProvider.TryGetContainer(out var scope);
+            if (ReferenceEquals(scope, armedScope)) return;
+            Drop();
+            if (scope == null) return;
+            armedScope = scope;
+            if (!ContainerProvider.TryResolve<IMessageBroker>(out var broker) || !ContainerProvider.TryResolve<INetwork>(out var network)
+                || broker == null || network == null)
+            {
+                Log.Warn("Coop's session has no message broker or network; players' clicks and records stay local this session");
+                return;
+            }
+            handler = global::BetterEconomyCoopCompat.Coop.IsServer
+                ? new LeServerHandler(broker, network)
+                : new LeClientHandler(broker, network);
+        }
+
+        private static void Drop()
+        {
+            armedScope = null;
+            var old = handler;
+            handler = null;
+            try { old?.Dispose(); }
+            catch (Exception ex) { Log.Warn("handler did not close cleanly: " + ex.GetBaseException().Message); }
+        }
+    }
+
     /// <summary>Player's PC: says hello, and once the server accepts, relays clicks and loads the server's records.</summary>
-    public sealed class LeClientHandler : IHandler
+    public sealed class LeClientHandler : IDisposable
     {
         private readonly IMessageBroker broker;
         private readonly INetwork network;
         private int sequence;
+        private bool helloSent;
 
         public LeClientHandler(IMessageBroker broker, INetwork network)
         {
@@ -36,6 +72,8 @@ namespace Coop.Core.Client.Services.BetterEconomyCoopCompat.Handlers
             broker.Subscribe<LeActionResult>(HandleActionResult);
             broker.Subscribe<LeState>(HandleState);
             broker.Subscribe<LeNotice>(HandleNotice);
+            // Armed after the campaign was already ready: CampaignReady has gone by, so say hello now.
+            if (Campaign.Current != null) SayHello();
         }
 
         public void Dispose()
@@ -48,9 +86,12 @@ namespace Coop.Core.Client.Services.BetterEconomyCoopCompat.Handlers
             Net.SessionEnded();
         }
 
-        private void HandleCampaignReady(MessagePayload<CampaignReady> payload)
+        private void HandleCampaignReady(MessagePayload<CampaignReady> payload) => SayHello();
+
+        private void SayHello()
         {
-            if (!Net.LayerActive) return;
+            if (!Net.LayerActive || helloSent) return;
+            helloSent = true;
             network.SendAll(new LeHello { ProtocolVersion = Net.ProtocolVersion });
         }
 
@@ -94,15 +135,11 @@ namespace Coop.Core.Client.Services.BetterEconomyCoopCompat.Handlers
             GameThread.RunSafe(() => Net.ShowNotice(m.Text, m.Color), false, "Living Economy Coop Compat notice");
         }
     }
-}
-
-namespace Coop.Core.Server.Services.BetterEconomyCoopCompat.Handlers
-{
     /// <summary>
     /// Server: accepts players whose protocol matches, carries out their clicks as them, and sends the records to the
     /// accepted ones only. A player who isn't accepted gets nothing and has nothing run for them.
     /// </summary>
-    public sealed class LeServerHandler : IHandler
+    public sealed class LeServerHandler : IDisposable
     {
         private readonly IMessageBroker broker;
         private readonly INetwork network;

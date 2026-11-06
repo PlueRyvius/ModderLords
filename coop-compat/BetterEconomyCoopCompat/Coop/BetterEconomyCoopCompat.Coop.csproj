@@ -22,6 +22,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
     <ProjectReference Include="..\BetterEconomyCoopCompat.csproj" Private="false" />
+    <Reference Include="Autofac"><HintPath>$(CoopBin)\Autofac.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Microsoft.Bcl.AsyncInterfaces"><HintPath>$(CoopBin)\Microsoft.Bcl.AsyncInterfaces.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Common"><HintPath>$(CoopBin)\Common.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="GameInterface"><HintPath>$(CoopBin)\GameInterface.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="LiteNetLib"><HintPath>$(CoopBin)\LiteNetLib.dll</HintPath><Private>false</Private></Reference>
