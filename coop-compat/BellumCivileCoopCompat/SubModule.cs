@@ -86,7 +86,7 @@ namespace BellumCivileCoopCompat
     }
 
     // Reads Coop's own state by reflection, so this module never compiles against one Coop version:
-    // - GameInterface.ContainerProvider._lifetimeScope is set while a co-op session runs.
+    // - GameInterface.ContainerProvider._lifetimeScope (Coop 0.1.6) or _active (0.1.7) is set while a co-op session runs.
     // - Common.ModInformation.IsServer tells the server from a player.
     // - GameInterface.Services.Heroes.Extensions.HeroExtensions.IsPlayerHero(Hero) and
     //   IPlayerManager.IsOwnerOfHeroDisconnected(Hero) answer "is this a player, and are they here?".
@@ -213,7 +213,7 @@ namespace BellumCivileCoopCompat
             }
 
             _coopLoaded = true;
-            _scope = container == null ? null : AccessTools.Field(container, "_lifetimeScope");
+            _scope = container == null ? null : AccessTools.Field(container, "_lifetimeScope") ?? AccessTools.Field(container, "_active");
             _resolve = container?.GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .FirstOrDefault(m => m.Name == "TryResolve" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1);
             _isServer = info == null ? null : AccessTools.Property(info, "IsServer");

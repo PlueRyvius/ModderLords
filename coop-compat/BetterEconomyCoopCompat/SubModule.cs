@@ -169,7 +169,7 @@ public static class Net
 
 /// <summary>
 /// Reads Coop's own state by reflection, so this module never compiles against one Coop version:
-/// - GameInterface.ContainerProvider._lifetimeScope is set while a co-op session runs.
+/// - GameInterface.ContainerProvider._lifetimeScope (Coop 0.1.6) or _active (0.1.7) is set while a co-op session runs.
 /// - Common.ModInformation.IsServer tells the server from a player (the server's folder is a backup, since IsServer
 ///   can be set late).
 /// - GameInterface.Services.Heroes.Extensions.HeroExtensions.IsPlayerHero(Hero) answers "is this a player?".
@@ -266,7 +266,7 @@ public static class Coop
         }
 
         Loaded = true;
-        _scope = container == null ? null : AccessTools.Field(container, "_lifetimeScope");
+        _scope = container == null ? null : AccessTools.Field(container, "_lifetimeScope") ?? AccessTools.Field(container, "_active");
         _isServer = info == null ? null : AccessTools.Property(info, "IsServer");
         _isPlayerHero = heroes == null ? null : AccessTools.Method(heroes, "IsPlayerHero", new[] { typeof(Hero) });
         if (_scope == null || _isServer == null) Log.Warn("could not read Coop's session state; assuming a player's PC in a session");
