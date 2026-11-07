@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using Helpers;
 using TaleWorlds.CampaignSystem;
@@ -28,6 +30,9 @@ internal static class BuiltInSteps
         InGameTests.Register("game.onMap", StepSide.Any, OnMap);
         InGameTests.Register("game.pause", StepSide.Server, Pause);
         InGameTests.Register("game.whoAmI", StepSide.Client, WhoAmI);
+        InGameTests.Register("game.coopLog", StepSide.Any, CoopLog);
+        InGameTests.Register("settlement.enter", StepSide.Client, SettlementEnter);
+        InGameTests.Register("party.settlement", StepSide.Any, PartySettlement);
         InGameTests.Register("hero.addGold", StepSide.Server, AddGold);
         InGameTests.Register("hero.gold", StepSide.Any, Gold);
         InGameTests.Register("party.addItem", StepSide.Server, AddItem);
@@ -60,6 +65,104 @@ internal static class BuiltInSteps
         ctx.Report("party", MobileParty.MainParty.StringId);
         // The hero's StringId is local ("main_hero" on every player's game), so other sides find it by name.
         ctx.Report("heroName", Hero.MainHero.Name?.ToString());
+    }
+
+    /// <summary>
+    /// Writes a line through Coop's own logger and checks it reaches Coop's log file, so a run never again goes without
+    /// Coop's errors unnoticed. Reflection only (this module references no Coop): Common.Logging.LogManager's logger,
+    /// its sinks, and the file Coop's SizeLimitedFileSink writes to.
+    /// </summary>
+    private static IEnumerable<StepWait?> CoopLog(StepContext ctx)
+    {
+        var commons = AppDomain.CurrentDomain.GetAssemblies().Where(a => a.GetType("Common.Logging.LogManager", false) != null).ToList();
+        ctx.Log("Coop Common assemblies: " + string.Join("; ", commons.Select(SafeLocation)));
+        ctx.Assert(commons.Count > 0, "Coop's Common.Logging.LogManager is not loaded");
+        ctx.Assert(commons.Count == 1, $"{commons.Count} copies of Coop's Common are loaded; Coop sets up logging in one of them only");
+        var manager = commons[0].GetType("Common.Logging.LogManager", true);
+        var lazy = manager.GetField("_logger", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null);
+        ctx.Assert(lazy != null, "LogManager has no _logger field");
+        var logger = lazy!.GetType().GetProperty("Value")!.GetValue(lazy, null);
+        var sinks = new List<object>();
+        CollectSinks(logger, sinks, 0);
+        var names = string.Join(", ", sinks.Select(s => s.GetType().Name));
+        ctx.Report("sinks", names);
+        var fileSink = sinks.FirstOrDefault(s => s.GetType().Name == "SizeLimitedFileSink");
+        ctx.Assert(fileSink != null, $"Coop's logger has no file sink (sinks: {names}): it was built before Coop set up its log, so Coop's log file stays empty");
+        var path = Path.GetFullPath((string)fileSink!.GetType().GetField("filePath", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(fileSink));
+        ctx.Report("file", path);
+        var probe = "ModderLords test probe " + Guid.NewGuid().ToString("N");
+        logger!.GetType().GetMethod("Information", new[] { typeof(string) })!.Invoke(logger, new object[] { probe });
+        yield return ctx.Until(() => FileContains(path, probe), "the probe line in " + path, TimeSpan.FromSeconds(10));
+        ctx.Report("value", "ok");
+    }
+
+    /// <summary>The leaf sinks under a Serilog logger: walks fields holding sinks, loggers, or lists of them.</summary>
+    private static void CollectSinks(object? node, List<object> found, int depth)
+    {
+        if (node == null || depth > 6) return;
+        var name = node.GetType().Name;
+        if (depth > 0 && IsSink(node) && !name.Contains("Aggregate") && !name.Contains("Logger")) found.Add(node);
+        foreach (var field in node.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (field.FieldType.IsPrimitive || field.FieldType == typeof(string)) continue;
+            var value = field.GetValue(node);
+            if (value is System.Collections.IEnumerable list)
+            {
+                foreach (var item in list)
+                    if (item != null && IsSinkOrLogger(item)) CollectSinks(item, found, depth + 1);
+            }
+            else if (value != null && IsSinkOrLogger(value)) CollectSinks(value, found, depth + 1);
+        }
+    }
+
+    private static bool IsSink(object value) => value.GetType().GetInterfaces().Any(i => i.FullName == "Serilog.Core.ILogEventSink");
+
+    private static bool IsSinkOrLogger(object value) => IsSink(value) || value.GetType().FullName == "Serilog.Core.Logger";
+
+    private static bool FileContains(string path, string text)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd().Contains(text);
+        }
+        catch (IOException) { return false; }
+    }
+
+    private static string SafeLocation(Assembly assembly)
+    {
+        try { return assembly.Location; }
+        catch { return assembly.FullName; }
+    }
+
+    // ---- settlements -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Enters <c>town</c> the way arriving at it does: EncounterManager.StartSettlementEncounter for this player's party
+    /// (Coop's own coop.debug.settlements.enter_random_castle does the same), then waits until the game has it there.
+    /// </summary>
+    private static IEnumerable<StepWait?> SettlementEnter(StepContext ctx)
+    {
+        var settlement = SettlementArg(ctx);
+        if (MobileParty.MainParty.CurrentSettlement != settlement)
+        {
+            ctx.Assert(MobileParty.MainParty.CurrentSettlement == null, $"the party is in {MobileParty.MainParty.CurrentSettlement?.StringId}, not on the map");
+            EncounterManager.StartSettlementEncounter(MobileParty.MainParty, settlement);
+        }
+        yield return ctx.Until(() => MobileParty.MainParty.CurrentSettlement == settlement && Settlement.CurrentSettlement == settlement,
+            $"the party to be in {settlement.StringId}", TimeSpan.FromSeconds(60));
+        ctx.Report("menu", Campaign.Current.CurrentMenuContext?.GameMenu?.StringId ?? "none");
+        ctx.Report("value", settlement.StringId);
+    }
+
+    /// <summary>Where a hero's party is (a settlement id, or "none"), settled; with <c>expected</c>, it must be that.</summary>
+    private static IEnumerable<StepWait?> PartySettlement(StepContext ctx)
+    {
+        var party = HeroArg(ctx).PartyBelongedTo ?? throw new StepFailedException("the hero has no party");
+        object? expected = ctx.HasArg("expected") ? ctx.Arg("expected") : null;
+        yield return ctx.Settled(() => party.CurrentSettlement?.StringId ?? "none", $"{party.StringId}'s settlement", expected, timeout: Sync);
+        ctx.Report("value", party.CurrentSettlement?.StringId ?? "none");
     }
 
     // ---- heroes ----------------------------------------------------------------------------------------------
@@ -113,12 +216,13 @@ internal static class BuiltInSteps
     }
 
     /// <summary>
-    /// Opens the town's stash the way the town menu does (InventoryScreenHelper.OpenScreenAsStash), moves
+    /// Opens the town's stash the way the town menu does (InventoryScreenHelper.OpenScreenAsStash on
+    /// Settlement.CurrentSettlement.Stash, so settlement.enter goes first), moves
     /// <c>count</c> of <c>item</c> from the party into it, and presses Done, which is where Coop takes over.
     /// </summary>
     private static IEnumerable<StepWait?> StashDeposit(StepContext ctx)
     {
-        var stash = StashArg(ctx);
+        var stash = MenuStashArg(ctx);
         var item = ItemArg(ctx);
         var count = ctx.ArgInt("count");
         var party = MobileParty.MainParty.ItemRoster;
@@ -146,7 +250,7 @@ internal static class BuiltInSteps
     /// <summary>Opens the stash and presses Done with no change, <c>times</c> times; the stash must read <c>expected</c> after each.</summary>
     private static IEnumerable<StepWait?> StashReopen(StepContext ctx)
     {
-        var stash = StashArg(ctx);
+        var stash = MenuStashArg(ctx);
         var item = ItemArg(ctx);
         var times = ctx.ArgInt("times", 3);
         var expected = ctx.ArgInt("expected");
@@ -208,11 +312,25 @@ internal static class BuiltInSteps
         return MBObjectManager.Instance.GetObject<ItemObject>(id) ?? throw new StepFailedException($"no item '{id}'");
     }
 
-    private static ItemRoster StashArg(StepContext ctx)
+    private static Settlement SettlementArg(StepContext ctx)
     {
         var id = ctx.Arg("town");
-        var settlement = Settlement.Find(id) ?? throw new StepFailedException($"no settlement '{id}'");
-        return settlement.Stash ?? throw new StepFailedException($"{id} has no stash");
+        return Settlement.Find(id) ?? throw new StepFailedException($"no settlement '{id}'");
+    }
+
+    private static ItemRoster StashArg(StepContext ctx)
+    {
+        var settlement = SettlementArg(ctx);
+        return settlement.Stash ?? throw new StepFailedException($"{settlement.StringId} has no stash");
+    }
+
+    /// <summary>The stash as the town menu reaches it (Settlement.CurrentSettlement.Stash), so the party must be in the town.</summary>
+    private static ItemRoster MenuStashArg(StepContext ctx)
+    {
+        var settlement = SettlementArg(ctx);
+        if (Settlement.CurrentSettlement != settlement)
+            throw new StepFailedException($"the party is in {Settlement.CurrentSettlement?.StringId ?? "no settlement"}, not {settlement.StringId}: a player opens the stash from the town menu, so run settlement.enter first");
+        return Settlement.CurrentSettlement.Stash;
     }
 
     private static string Describe(ItemRoster roster)

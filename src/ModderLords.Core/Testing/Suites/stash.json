@@ -1,16 +1,23 @@
 {
   // Coop 0.1.7 finishes the inventory screen's Done itself; ours did too and town stashes doubled (PR #263).
-  // Deposits into a town stash from the player's game, reopens it three times, and checks both games agree.
+  // The player enters a town, deposits into its stash from the town menu's stash, reopens it three times, and both
+  // games must agree on the stash and the party.
   "api": 1,
   "name": "stash",
   "description": "A town stash keeps exactly what was put in it, through Done and three reopenings, on both sides.",
   "steps": [
     { "id": "game.onMap", "side": "server" },
     { "id": "game.onMap", "side": "client:1" },
+    // Coop's own log must work, or a failure below has no Coop errors to explain it. Reported, but the run goes on.
+    { "id": "game.coopLog", "side": "server", "continueOnFail": true },
+    { "id": "game.coopLog", "side": "client:1", "continueOnFail": true },
     { "id": "game.pause", "side": "server" },
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
     { "id": "party.addItem", "side": "server", "as": "given", "args": { "heroName": "$me.heroName", "item": "grain", "count": 5 } },
     { "id": "party.itemCount", "side": "client:1", "args": { "item": "grain", "expected": "$given.value" } },
+    // A player opens the stash from the town menu, so the party goes into the town first, and the server must agree.
+    { "id": "settlement.enter", "side": "client:1", "args": { "town": "town_EN1" } },
+    { "compare": "party.settlement", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName", "expected": "town_EN1" } },
     { "compare": "stash.count", "sides": ["server", "client:1"], "as": "before", "args": { "town": "town_EN1", "item": "grain" } },
     { "id": "stash.deposit", "side": "client:1", "as": "deposit", "continueOnFail": true, "args": { "town": "town_EN1", "item": "grain", "count": 5 } },
     { "id": "stash.reopen", "side": "client:1", "timeoutSeconds": 180, "continueOnFail": true, "args": { "town": "town_EN1", "item": "grain", "times": 3, "expected": "$deposit.value" } },
