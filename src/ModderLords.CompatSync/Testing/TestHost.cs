@@ -42,8 +42,10 @@ internal static class TestHost
     internal static void Construct()
     {
         var isServer = Directory.GetCurrentDirectory().EndsWith("Win64_Shipping_Server", StringComparison.OrdinalIgnoreCase);
-        if (TestRunSwitch.From(Environment.GetCommandLineArgs(), Environment.GetEnvironmentVariable(TestRunSwitch.Variable), isServer) == null) return;
-        CoopWatch.WatchLogger();
+        var runSwitch = TestRunSwitch.From(Environment.GetCommandLineArgs(), Environment.GetEnvironmentVariable(TestRunSwitch.Variable), isServer);
+        if (runSwitch == null) return;
+        // Coop's own log is empty in every run (built before Coop sets it up), so a copy is written into the run folder.
+        CoopWatch.WatchLogger(Path.Combine(runSwitch.Folder, "coop-" + runSwitch.Side.Replace(':', '-') + ".log"));
     }
 
     internal static void Tick()

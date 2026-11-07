@@ -96,9 +96,15 @@ internal static class BuiltInSteps
         CollectSinks(logger, sinks, 0);
         var names = string.Join(", ", sinks.Select(s => s.GetType().Name));
         ctx.Report("sinks", names);
-        var fileSink = sinks.FirstOrDefault(s => s.GetType().Name == "SizeLimitedFileSink");
-        ctx.Assert(fileSink != null, $"Coop's logger has no file sink (sinks: {names}): it was built before Coop set up its log, so Coop's log file stays empty");
-        var path = Path.GetFullPath((string)fileSink!.GetType().GetField("filePath", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(fileSink));
+        string SinkPath(object s) => Path.GetFullPath((string)s.GetType().GetField("filePath", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(s));
+        var fileSinks = sinks.Where(s => s.GetType().Name == "SizeLimitedFileSink").ToList();
+        // The run folder's copy (CoopWatch) is ours; only a sink to any other file is Coop's own log.
+        var rescue = CoopWatch.RescueLog == null ? null : Path.GetFullPath(CoopWatch.RescueLog);
+        ctx.Report("runFolderCopy", rescue != null && fileSinks.Any(s => SinkPath(s) == rescue) ? rescue : "none: " + (CoopWatch.RescueFailed ?? "not attached"));
+        var fileSink = fileSinks.FirstOrDefault(s => SinkPath(s) != rescue);
+        ctx.Assert(fileSink != null, $"Coop's logger has no file sink of its own (sinks: {names}): it was built before Coop set up its log, so Coop's log file stays empty"
+            + (rescue != null ? $"; this run's copy of Coop's log is {Path.GetFileName(rescue)} in the run folder" : ""));
+        var path = SinkPath(fileSink!);
         ctx.Report("file", path);
         var probe = "ModderLords test probe " + Guid.NewGuid().ToString("N");
         logger!.GetType().GetMethod("Information", new[] { typeof(string) })!.Invoke(logger, new object[] { probe });
@@ -300,6 +306,9 @@ internal static class BuiltInSteps
         var element = party.GetElementCopyAtIndex(party.FindIndexOfItem(item));
         logic.AddTransferCommand(TransferCommand.Transfer(count, InventoryLogic.InventorySide.PlayerInventory, InventoryLogic.InventorySide.OtherInventory,
             element, EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject));
+        // What Coop's Done will send: the screen's rosters after the move, before Coop takes over.
+        ctx.Log($"after the move, before Done: stash {stash.GetItemNumber(item)}, party {party.GetItemNumber(item)} {item.StringId}"
+            + $"; the screen's left roster is the stash: {ReferenceEquals(logic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory), stash)}");
         foreach (var wait in DoneAndClose(ctx, logic)) yield return wait;
 
         // Wait for both to stop changing, then say what each holds: a timeout alone would hide which side moved.

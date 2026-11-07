@@ -93,15 +93,24 @@ internal static class CoopWatch
     /// <summary>The stack that first built Coop's logger, when it was built after this module was constructed.</summary>
     internal static string? LoggerFirstBuiltBy { get; private set; }
 
+    /// <summary>The run folder's copy of Coop's log, when it could be attached; null otherwise.</summary>
+    internal static string? RescueLog { get; private set; }
+
+    /// <summary>Why the run folder's copy of Coop's log could not be attached, or null.</summary>
+    internal static string? RescueFailed { get; private set; }
+
     private static object? _originalLazy;
+    private static string? _rescuePath;
 
     /// <summary>
     /// Test runs only, from this module's constructor. Coop's logger is a Lazy that captures its configuration when first
     /// used; used before Coop adds its file sink, Coop's log file stays empty. Records whether it already exists, and if
-    /// not, swaps in a Lazy that notes the stack of whatever builds it and then builds the original, unchanged.
+    /// not, swaps in a Lazy that notes the stack of whatever builds it, adds a copy of Coop's own file sink writing to
+    /// <paramref name="rescuePath"/>, and then builds the original.
     /// </summary>
-    internal static void WatchLogger()
+    internal static void WatchLogger(string rescuePath)
     {
+        _rescuePath = rescuePath;
         try
         {
             var manager = FindType("Common", "Common.Logging.LogManager");
@@ -147,7 +156,39 @@ internal static class CoopWatch
     private static T Build<T>()
     {
         LoggerFirstBuiltBy = Environment.StackTrace;
+        AddRescueSink(typeof(T).Assembly);
         return ((Lazy<T>)_originalLazy!).Value;
+    }
+
+    /// <summary>
+    /// Adds Coop's own SizeLimitedFileSink, writing to the run folder, to LogManager.Configuration just before the logger
+    /// is built from it: Coop's errors then reach a file however early the logger is built. A separate file, so it never
+    /// competes with Coop's own Coop_*.log.
+    /// </summary>
+    private static void AddRescueSink(Assembly serilog)
+    {
+        if (_rescuePath == null) return;
+        try
+        {
+            var manager = FindType("Common", "Common.Logging.LogManager");
+            var sinkType = FindType("Common", "Common.Logging.SizeLimitedFileSink");
+            var sinkInterface = serilog.GetType("Serilog.Core.ILogEventSink", false);
+            if (manager == null || sinkType == null || sinkInterface == null) { RescueFailed = "LogManager, SizeLimitedFileSink or ILogEventSink not found"; return; }
+            var configuration = manager.GetProperty("Configuration", BindingFlags.Public | BindingFlags.Static)?.GetValue(null, null);
+            var writeTo = configuration?.GetType().GetProperty("WriteTo")?.GetValue(configuration, null);
+            var sinkMethod = writeTo?.GetType().GetMethods().FirstOrDefault(m => m.Name == "Sink" && !m.IsGenericMethodDefinition
+                && m.GetParameters().Length >= 1 && m.GetParameters()[0].ParameterType == sinkInterface);
+            if (writeTo == null || sinkMethod == null) { RescueFailed = "LogManager.Configuration.WriteTo.Sink not found"; return; }
+            const string template = "[({ProcessId}) {Timestamp:HH:mm:ss} {Level:u3} {SourceContext}] {Message:lj}{NewLine}{Exception}";
+            var sink = Activator.CreateInstance(sinkType, _rescuePath, template, 30L * 1024 * 1024, 1L * 1024 * 1024, 28L * 1024 * 1024);
+            var args = sinkMethod.GetParameters().Select(p =>
+                p.Position == 0 ? sink
+                : p.ParameterType.IsEnum ? Enum.ToObject(p.ParameterType, p.HasDefaultValue && p.DefaultValue != null ? p.DefaultValue : 0)
+                : p.HasDefaultValue ? p.DefaultValue : null).ToArray();
+            sinkMethod.Invoke(writeTo, args);
+            RescueLog = _rescuePath;
+        }
+        catch (Exception ex) { RescueFailed = ex.GetBaseException().Message; }
     }
 
     private static Type? FindType(string assembly, string name)
