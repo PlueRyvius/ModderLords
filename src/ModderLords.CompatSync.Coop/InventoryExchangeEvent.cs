@@ -28,7 +28,8 @@ namespace ModderLords.CompatSync.Coop;
 /// screen opened, and for a stash (InventoryScreenHelper.OpenScreenAsStash) the left side is the stash roster itself,
 /// owned by the game or a mod on this player's game only, not a party the server syncs back. The items left the party on
 /// the server and the stash came back empty: Fourberie's donation saw nothing and the loot was lost. The stash's
-/// contents at Done are put back before the event is raised, as single player leaves them.
+/// contents at Done are put back before the event is raised, as single player leaves them. Coop 0.1.7 does all
+/// of this itself, so there this stands down (see CoopCompletesTrades).
 /// </para>
 /// </summary>
 public static class InventoryExchangeEvent
@@ -69,7 +70,8 @@ public static class InventoryExchangeEvent
         __state = null;
         try
         {
-            if (__instance.IsPreviewingItem) return;
+            // On Coop 0.1.7 the Postfix stands down, so nothing taken here would be used.
+            if (__instance.IsPreviewingItem || CoopCompletesTrades()) return;
             __state = new Transfer(__instance.GetBoughtItems(), __instance.GetSoldItems(), __instance.IsTrading);
             if (Mode(__instance) == InventoryScreenHelper.InventoryMode.Stash && Rosters(__instance) is { Length: > 0 } rosters && rosters[0] != null)
             {
@@ -83,7 +85,7 @@ public static class InventoryExchangeEvent
     /// <summary>The original Done raises the event itself; only a Done that something replaced (Coop's) needs it raised here.</summary>
     private static void Postfix(bool __result, bool __runOriginal, Transfer? __state)
     {
-        if (!__result || __runOriginal || __state == null) return;
+        if (!__result || __runOriginal || __state == null || CoopCompletesTrades()) return;
         try
         {
             if (__state.Stash != null && __state.StashAtDone != null)
@@ -102,6 +104,33 @@ public static class InventoryExchangeEvent
         catch (Exception ex) { WarnOnce(ex); }
     }
 
+    private static bool? _coopCompletesTrades;
+
+    /// <summary>
+    /// Coop 0.1.7 finishes the inventory screen's Done itself (its NetworkTradeCompleted): the player's game gets the
+    /// server's rosters, stash included, and raises the exchange event. Doing either here too doubled the stash's contents
+    /// and would count delivery quests and Fourberie's donations twice, so this stands down there.
+    /// </summary>
+    private static bool CoopCompletesTrades()
+    {
+        if (_coopCompletesTrades is bool known) return known;
+        var found = false;
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                if (assembly.GetName().Name != "GameInterface") continue;
+                found = assembly.GetTypes().Any(t => t.Name == "NetworkTradeCompleted");
+            }
+            catch (System.Reflection.ReflectionTypeLoadException ex) { found = ex.Types.Any(t => t?.Name == "NetworkTradeCompleted"); }
+            catch { }
+            break;
+        }
+        _coopCompletesTrades = found;
+        Log.Info(found ? "inventory exchange event: Coop finishes the inventory screen itself, so this stands down"
+            : "inventory exchange event: raised, and stashes put back, after Coop's Done");
+        return found;
+    }
     private static void WarnOnce(Exception ex)
     {
         if (_warned) return;

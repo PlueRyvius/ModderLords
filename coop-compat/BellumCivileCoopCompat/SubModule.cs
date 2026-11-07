@@ -31,6 +31,12 @@ namespace BellumCivileCoopCompat
         protected override void OnBeforeInitialModuleScreenSetAsRoot()
         {
             base.OnBeforeInitialModuleScreenSetAsRoot();
+            Setup();
+        }
+
+        // Coop 0.1.7's dedicated server never sets an initial screen, so the first tick does the setup there.
+        private static void Setup()
+        {
             Coop.ModulesLoaded();
             if (_patched)
                 return;
@@ -54,7 +60,8 @@ namespace BellumCivileCoopCompat
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);
-            if (!_patched || Campaign.Current == null || DateTime.UtcNow < _nextTick)
+            if (!_patched) Setup();
+            if (Campaign.Current == null || DateTime.UtcNow < _nextTick)
                 return;
             _nextTick = DateTime.UtcNow.AddSeconds(3);
             try
@@ -79,7 +86,7 @@ namespace BellumCivileCoopCompat
     }
 
     // Reads Coop's own state by reflection, so this module never compiles against one Coop version:
-    // - GameInterface.ContainerProvider._lifetimeScope is set while a co-op session runs.
+    // - GameInterface.ContainerProvider._lifetimeScope (Coop 0.1.6) or _active (0.1.7) is set while a co-op session runs.
     // - Common.ModInformation.IsServer tells the server from a player.
     // - GameInterface.Services.Heroes.Extensions.HeroExtensions.IsPlayerHero(Hero) and
     //   IPlayerManager.IsOwnerOfHeroDisconnected(Hero) answer "is this a player, and are they here?".
@@ -199,14 +206,16 @@ namespace BellumCivileCoopCompat
 
             if (!coop)
             {
-                // Before the main menu Coop may not be loaded yet; look again later.
-                if (_modulesLoaded)
+                // Before the main menu Coop may not be loaded yet; look again later. Coop 0.1.7's dedicated server runs
+                // the setup on its first tick, which can come before Coop has loaded, so "no Coop" is final only once a
+                // campaign exists.
+                if (_modulesLoaded && Campaign.Current != null)
                     _resolved = true;
                 return;
             }
 
             _coopLoaded = true;
-            _scope = container == null ? null : AccessTools.Field(container, "_lifetimeScope");
+            _scope = container == null ? null : AccessTools.Field(container, "_lifetimeScope") ?? AccessTools.Field(container, "_active");
             _resolve = container?.GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .FirstOrDefault(m => m.Name == "TryResolve" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1);
             _isServer = info == null ? null : AccessTools.Property(info, "IsServer");

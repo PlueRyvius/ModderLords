@@ -281,9 +281,7 @@ internal static class HeroAdmin
                 {
                     // Keep the hero's XP threshold consistent with the explicit level, including when lowering it.
                     dev.SetInitialLevel(v);
-                    hero.Level = v;
-                    // Coop relays level changes through this GameInterface event; a direct field write alone would stay server-side.
-                    MessageBroker.Instance.Publish(hero, new HeroLevelChanged(v, hero));
+                    SetLevelSynced(hero, v);
                 };
                 return null;
             case HeroEditKind.Gold:
@@ -364,6 +362,25 @@ internal static class HeroAdmin
             default:
                 return $"Unknown edit {edit}.";
         }
+    }
+
+    /// <summary>
+    /// Sets Hero.Level so players see it. Coop 0.1.7 dropped the HeroLevelChanged event and syncs Hero.Level only for
+    /// writes inside the game methods it patches (HeroDeveloper.CheckLevel / ClearHeroLevel), not a field write from here.
+    /// So this calls Coop's own interceptor for the field, as Coop's KingdomCollectionSync does: it publishes the set to
+    /// players and writes the field. Without one (Coop's sync not in place), the level stays on the server, and says so.
+    /// </summary>
+    private static void SetLevelSynced(Hero hero, int level)
+    {
+        var field = HarmonyLib.AccessTools.Field(typeof(Hero), nameof(Hero.Level));
+        if (field != null && GameInterface.Utils.GenericPatchHelpers.FieldInterceptCache.TryGetValue(field, out var intercept))
+        {
+            using (global::Common.Util.AllowedThread.Suspend())
+                intercept.Invoke(null, new object[] { hero, level });
+            return;
+        }
+        hero.Level = level;
+        Log.Warn($"hero level: Coop's sync for Hero.Level is not in place, so {hero.Name}'s new level {level} stays on the server");
     }
 
     private static int MaximumLevel(CharacterDevelopmentModel model, HeroDeveloper dev)
