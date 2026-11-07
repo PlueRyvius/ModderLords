@@ -32,6 +32,10 @@
   <ItemGroup>
     <!-- The engine-side JSON used for the live-settings files, compiled in so the tests prove both ends read the same bytes. -->
     <Compile Include="..\..\src\ModderLords.CompatSync\MiniJson.cs" Link="Module\MiniJson.cs" />
+    <!-- The in-game test agent and hook API, TaleWorlds-free so the launcher's sequencer is tested against them. -->
+    <Compile Include="..\..\src\ModderLords.CompatSync\Testing\InGameTests.cs" Link="Module\Testing\InGameTests.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync\Testing\StepRunner.cs" Link="Module\Testing\StepRunner.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync\Testing\TestAgent.cs" Link="Module\Testing\TestAgent.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\LegacyRecipePolicy.cs" Link="Module\LegacyRecipePolicy.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\ValueConverter.cs" Link="Module\ValueConverter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\PropertyRef.cs" Link="Module\PropertyRef.cs" />

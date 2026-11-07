@@ -45,7 +45,21 @@ public sealed record SmokeOptions
     /// The game's extra arguments: Coop's <c>/autoconnect host:port</c> joins by itself, and <c>/modderlords-smoke</c>
     /// lets ModderLords.Compat create a character at random when the world has none for this player.
     /// </summary>
-    public IReadOnlyList<string> LaunchArguments => ["/autoconnect", $"{JoinHost}:{JoinPort}", SmokeSignals.SmokeFlag];
+    public IReadOnlyList<string> LaunchArguments => ["/autoconnect", $"{JoinHost}:{JoinPort}", SmokeSignals.SmokeFlag, .. ExtraLaunchArguments];
+
+    /// <summary>More arguments for the game, after the smoke test's own (the test harness's switch).</summary>
+    public IReadOnlyList<string> ExtraLaunchArguments { get; init; } = [];
+
+    /// <summary>
+    /// When set, runs once the game is on the campaign map, in place of the <see cref="SteadyFor"/> watch: the game is
+    /// closed when it completes (or when the game or server exits first). The in-game test harness runs here.
+    /// </summary>
+    public Func<CancellationToken, Task>? WhileOnMap { get; init; }
+
+    /// <summary>Before <see cref="WhileOnMap"/>: how long after the server lists the player on the map.</summary>
+    public TimeSpan JoinSettle { get; init; } = TimeSpan.FromSeconds(15);
+    /// <summary>Before <see cref="WhileOnMap"/>: the longest wait for the server to list the player on the map.</summary>
+    public TimeSpan JoinSettleTimeout { get; init; } = TimeSpan.FromMinutes(3);
 }
 
 /// <summary>
@@ -130,6 +144,7 @@ public sealed class SmokeRunner
         // 3. Watch.
         ClientStage lastStage = ClientStage.Started;
         DateTimeOffset? onMapAt = null;
+        Task? onMapWork = null;
         while (!cancel.IsCancellationRequested)
         {
             await Delay(1000, cancel);
@@ -175,6 +190,28 @@ public sealed class SmokeRunner
                 onMapAt ??= now;
                 facts = facts with { SteadyAchieved = now - onMapAt.Value };
                 if (Locked(() => _observer.PlayerDropped)) { Say("The server dropped the player."); break; }
+                if (_options.WhileOnMap is { } whileOnMap)
+                {
+                    if (onMapWork is null)
+                    {
+                        // The game shows the map before Coop has finished joining it: the server still sends the join
+                        // baseline, and a change made then can be lost. Wait until the server lists the player on the
+                        // map, then a quiet period for the join traffic to drain.
+                        var serverOnMap = Locked(() => _observer.ServerOnMapAt);
+                        if (serverOnMap is null && now - onMapAt.Value < _options.JoinSettleTimeout) continue;
+                        if (serverOnMap is null) notes.Add($"The server never listed the player on the map within {_options.JoinSettleTimeout.TotalSeconds:F0} s; the on-map work started anyway.");
+                        else if (now - serverOnMap.Value < _options.JoinSettle) continue;
+                        Say("Joined and settled; starting the on-map work…");
+                        onMapWork = Task.Run(() => whileOnMap(cancel), CancellationToken.None);
+                    }
+                    if (onMapWork.IsCompleted)
+                    {
+                        if (onMapWork.Exception is { } failed) notes.Add("The on-map work failed: " + failed.GetBaseException().Message);
+                        Say("The on-map work is done; closing the game.");
+                        break;
+                    }
+                    continue;
+                }
                 if (now - onMapAt.Value >= _options.SteadyFor) { Say("Stayed on the map; closing the game."); break; }
                 continue;
             }

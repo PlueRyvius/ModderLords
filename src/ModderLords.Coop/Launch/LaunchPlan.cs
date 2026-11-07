@@ -40,7 +40,20 @@ public sealed class LaunchPlan
     public ServerVisibility? Visibility { get; init; }
     public IReadOnlyDictionary<string, string> ExtraEnvironment { get; init; } = new Dictionary<string, string>();
 
-    public string ModuleToken => "_MODULES_" + string.Concat(ModuleIds.Select(id => "*" + id)) + "*_MODULES_";
+    /// <summary>This plan with one more environment variable (the test harness's switch reaches the server this way).</summary>
+    public LaunchPlan WithEnvironment(string name, string value) => new()
+    {
+        Paths = Paths,
+        ModuleIds = ModuleIds,
+        EnginePort = EnginePort,
+        Region = Region,
+        SaveName = SaveName,
+        Password = Password,
+        Visibility = Visibility,
+        ExtraEnvironment = new Dictionary<string, string>(ExtraEnvironment, StringComparer.OrdinalIgnoreCase) { [name] = value },
+    };
+
+    public string ModuleToken =>"_MODULES_" + string.Concat(ModuleIds.Select(id => "*" + id)) + "*_MODULES_";
 
     public IReadOnlyList<string> Arguments()
     {
