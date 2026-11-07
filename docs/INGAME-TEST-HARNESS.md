@@ -1,14 +1,14 @@
-# In-game test harness (design, for review)
+# In-game test harness (design)
 
-Status: **proposal, 2026-11-06.** Nothing below is built yet. Read it, mark it up, and say go (or change it) before
-the MVP is written.
+Status: **design agreed in discussion with the maintainer, 2026-11-06; MVP not built yet.**
 
 ## Why
 
 Coop 0.1.7 started finishing the inventory screen's Done itself. Our `InventoryExchangeEvent` did it too, and town
 stashes doubled. A player found that, not us. The existing smoke test (`ModderLords.Core.Smoke`) proves a client
 joins and stays on the map; it proves nothing about gameplay. We want: after a Coop or mod update, one command runs
-scripted checks in a real session (dedicated server + one client on this machine) and says pass or fail per check.
+scripted checks in a real session (dedicated server + client on this PC) and says pass or fail per check, with enough
+evidence to diagnose a failure without re-running it.
 
 Checks it must be able to express:
 
@@ -17,140 +17,99 @@ Checks it must be able to express:
 3. Edit a hero's level from the host; the client sees the new level.
 4. A Living Economy menu action on the client is carried out by the server.
 
-(1) and (2) are single-side, (3) and (4) are cross-side: a step on one side, an assertion on the other.
+## Decisions
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **Every run starts from a known world**, copied fresh. A world is named per suite; for mods that change world generation the harness creates the world for that mod set (the CLI's world creation) and caches it by mod list + versions. | Tests change the world; reusing a live save makes results meaningless. |
+| 2 | **Both sides are checked.** A built-in compare primitive reads the same thing on server and client and the launcher compares them. | Coop bugs are mostly desync or double-apply; the server's copy is the one that gets saved. |
+| 3 | **Waits are conditions with a timeout**, and "settled" means the value matched and then stayed unchanged for a quiet period (default 2 s). Campaign time is paused during steps. | No fixed sleeps; works on a slower PC. |
+| 4 | **Steps call game code, not the UI**, entering through the same entry point the menu uses (e.g. the town menu's stash action). A "menu option exists and is enabled" check covers missing-menu bugs. | Speed and repeatability; Coop's patches (where 0.1.7 changed things) still run. |
+| 5 | **Hook API: reference-based only (`InGameTests.Register`), v1, internal-stable.** Only our modules and `coop-compat/` modules use it for now. A reference-free convention for third parties can be added later. | Nobody else uses it yet; don't freeze a contract we haven't lived with. |
+| 6 | **Test mode cannot leak into a real session**: on only with a run folder whose one-off token matches; loud log line and "TEST MODE" in the server's player list; Host mode's normal launch never passes the switch. | Test steps cheat (give items, set levels). |
+| 7 | **Failures carry their evidence**: step log, state dump from both sides, both sides' log slices, a client screenshot. Every report records game, Coop and ModderLords versions, mod list and world. | A red result you can't diagnose is barely better than none; runs must be comparable across Coop versions. |
+| 8 | **Known failures**: a step can be marked known-failing with an issue link. Outcomes: pass, fail, known-fail, unexpectedly-passing (upstream fixed it). | Red must stay meaningful. |
+| 9 | **One PC.** Files are the transport (below), behind a small interface so another transport can come later. | Server and client run on the maintainer's machine. |
+| 10 | **Players are addressed by slot** (`server`, `client:1`, `client:2`...). The MVP starts one client; the format allows more. | Many Coop bugs need two players; changing the plan format later is costly. |
 
 ## Shape
 
 ```
-  launcher (ModderLords.Core.Testing)          shared run folder                  game processes
-  ───────────────────────────────────          ─────────────────                  ──────────────
-  SmokeRunner gets the session to OnMap  ──►   run.json      (plan, read-only)  ──► agent on server
-  TestRunner writes run.json, then for         control.jsonl (launcher appends)     agent on client
-  each step appends "go step N" and waits ◄──  results-server.jsonl  (agent appends)
-  for a result line from that side        ◄──  results-client.jsonl  (agent appends)
-  writes report.json + report.md
+  launcher (ModderLords.Core.Testing)          run folder                          game processes
+  ───────────────────────────────────          ──────────                          ──────────────
+  prepare world (copy / create + cache)
+  SmokeRunner gets the session to OnMap  ──►   run.json      (plan + token)    ──► agent on server
+  TestRunner appends "go step N" and      ──►  control.jsonl (launcher only)       agent on client:1
+  waits for that side's result line       ◄──  results-<side>.jsonl (one writer each)
+  collects evidence, writes report        ◄──  evidence/<step>/... (dumps, screenshot)
 ```
 
-- **Launcher side** (`ModderLords.Core/Testing`, net10, pure and unit-tested): plan model, control/result line
-  codec, the step sequencer, the report. `TestRunner` runs after `SmokeRunner` reaches "steady on map", reusing its
-  launch, its log slices and its report folder. CLI: `ModderLords.Cli test --suite stash [--attach]`; the App gets a
-  button later, not in the MVP.
-- **In-game agent** (`ModderLords.CompatSync`, net472, *no Coop reference*): enabled only by the launch argument
-  `/modderlords-test <run folder>` (server: passed the same way through its launch plan). Ticks from the submodule's
-  `OnApplicationTick` (every frame, not the 3 s `Bridge.Tick`, so waits are precise), reads `control.jsonl`, runs the
-  steps for its side, appends results.
-- **Coop-touching steps** (e.g. "the session is a Coop client", "wait for the server's roster sync") live in
-  `ModderLords.CompatSync.Coop` and register themselves through the same API, so the agent itself never needs Coop.
+- **Launcher side** (`ModderLords.Core/Testing`, net10, unit-tested): plan model, line codec, sequencer, world
+  preparation, report. CLI: `ModderLords.Cli test --suite stash`. An App button can come later.
+- **In-game agent** (`ModderLords.CompatSync`, net472, no Coop reference): inert unless test mode is on (decision 6).
+  Ticks every frame from the submodule's `OnApplicationTick`, reads `control.jsonl`, runs its side's steps, appends
+  results.
+- **Coop-touching steps** live in `ModderLords.CompatSync.Coop` and register through the same API.
 
-## Transport: files in a run folder (chosen)
+### Transport: files in a run folder
 
-`%ProgramData%\ModderLords\tests\<runId>\` — one writer per file, append-only JSON Lines.
+`%ProgramData%\ModderLords\tests\<runId>\`, one writer per file, append-only JSON Lines, readers tail by byte offset
+(as `LogTail` does). No port, no firewall prompt, no listener thread in the game; a crash leaves what happened on
+disk. Polling costs nothing measurable; a handoff takes under a second.
 
-Why files, not a pipe or local HTTP:
-
-- Server and client are on the same machine for this harness, and both already write `ModLogs` there; a folder needs
-  no port, no firewall prompt, no listener thread inside the game, nothing in net472 we don't already ship.
-- A crash or a hung game leaves the evidence on disk: the results so far are the report's raw material, kept with the
-  log slices `SmokeRunner` already saves.
-- One writer per file + append-only means no locking protocol; readers tail by byte offset (`LogTail` already does
-  this for logs).
-- The server's console is still used as it is now (commands, `@DS@` events), not replaced.
-
-Cost: polling (the agent checks the control file's length each tick, ~free; the launcher every 250 ms). Latency of a
-step handoff is under a second, fine for steps that wait on game ticks anyway.
-
-## The hook API (for our modules, `coop-compat/` modules and third-party mods)
-
-Versioned contract: **`ModderLords.Testing` API v1.** A mod can use it two ways, and neither needs a reference to
-Coop:
-
-**A. With a reference** to `ModderLords.CompatSync.dll` (our modules, `coop-compat/` modules):
+## The hook API (v1)
 
 ```csharp
 using ModderLords.Testing;
 
-InGameTests.Register(new InGameStep("stash.put", StepSide.Client, ctx => StashSteps.Put(ctx)));
+InGameTests.Register("stash.putAndDone", StepSide.Client, StashSteps.PutAndDone);
+
+static IEnumerable<StepWait> PutAndDone(StepContext ctx)
+{
+    var count = ctx.Arg<int>("count");
+    // ... open the stash the way the town menu does, move items, Done ...
+    yield return ctx.Until(() => StashCount() == count, TimeSpan.FromSeconds(30));
+    yield return ctx.Settled(() => StashCount());     // matched, then unchanged for the quiet period
+    ctx.Report("stashCount", StashCount());           // value for later steps and for compares
+}
 ```
 
-**B. Without a reference** (third-party mods, which must load whether or not ModderLords is present): a public static
-class whose name ends in `ModderLordsTests`, with public static methods of the shape
-
-```csharp
-// [side]_[name], returns IEnumerable<object> (a step that spans ticks) or void (one tick)
-public static IEnumerable<object> Client_PutItems(IDictionary<string, object> ctx) { ... yield return null; ... }
-```
-
-found by a reflection scan of loaded assemblies when a run starts. `ctx` is a plain dictionary (args, shared state,
-`"log"` → `Action<string>`), so the mod needs no type of ours. The step id is `<ModuleId>.<name>`.
-
-Step semantics (same for A and B):
-
-- A step is a coroutine run on the game's main thread. `yield return null` waits one frame; `yield return
-  TimeSpan`/a `Func<bool>` (A only: `ctx.WaitUntil(...)`) waits; returning ends it passed; **throwing fails it** with
-  the exception's message. `ctx.Assert(cond, message)` throws. A step times out (default 60 s, per-step override in the
-  plan).
-- `ctx.Set(key, value)` / `ctx.Get(key)` share values between steps **on the same side**. Across sides a step
-  *publishes* a value (`ctx.Publish("level", 12)`), which goes into its result line, and the launcher passes it as an
-  argument to later steps (`"args": {"expected": "$hero.edit.level"}`) — the launcher is the only thing both sides
-  talk to.
-- Versioning: `InGameTests.ApiVersion = 1`; the plan says which version it needs; an agent with a lower one refuses
-  the run with a clear result line instead of misreading it. New optional fields only within v1.
+- A step is a coroutine on the game's main thread. Returning passes; throwing fails with the message;
+  `ctx.Assert(cond, msg)` throws. Each step has a timeout (default 60 s, overridable in the plan).
+- `ctx.Report(key, value)` puts a value in the result line; later steps get it as an argument (`"$stepId.key"`), and
+  `compare` steps check two sides' values.
+- `ctx.Dump(name, text)` writes evidence for the report.
+- `InGameTests.ApiVersion = 1`; a plan that needs a higher version is refused with a clear result.
 
 ## Plans (suites)
-
-A suite is JSON, shipped with the launcher (`tests/suites/*.json` in the repo, copied to the output):
 
 ```json
 {
   "api": 1,
   "name": "stash",
+  "world": "vanilla-sturgia-start",
   "steps": [
-    { "id": "game.waitOnMap",       "side": "client" },
-    { "id": "coop.isClient",        "side": "client" },
-    { "id": "stash.prepare",        "side": "server", "args": { "town": "town_EN1", "item": "grain", "count": 5 } },
-    { "id": "stash.putAndDone",     "side": "client", "args": { "count": 5 } },
-    { "id": "stash.reopenAndCount", "side": "client", "args": { "times": 3, "expected": "$stash.putAndDone.stashCount" } }
+    { "id": "stash.prepare",        "side": "server",   "args": { "item": "grain", "count": 5 } },
+    { "id": "stash.putAndDone",     "side": "client:1", "args": { "town": "town_S1", "count": 5 } },
+    { "id": "stash.reopenAndCount", "side": "client:1", "args": { "times": 3, "expected": "$stash.putAndDone.stashCount" } },
+    { "compare": "stash.count",     "sides": ["server", "client:1"] }
   ]
 }
 ```
 
-Steps run strictly in order; the first failure stops the suite (later steps are reported "skipped") unless the step
-says `"continueOnFail": true`.
+Steps run in order; the first failure stops the suite (rest "skipped") unless `"continueOnFail": true`. A step may
+carry `"knownFailing": "<issue url>"`.
 
-## The stash check (MVP), concretely
+## MVP
 
-On the client, no UI clicking: the steps drive the same code the screen does.
+1. Agent, API, file transport, test-mode gating; launcher sequencer, report with versions and evidence; CLI `test`.
+2. World preparation: copy a named world fresh; creating and caching worlds for mod sets comes after the MVP.
+3. **Stash suite** end to end, including the server/client compare. On Coop 0.1.7 it should fail against `main` and
+   pass with PR #263's change: its first job is to verify that PR.
+4. One tiny cross-side check (server sets a value, client sees it) to prove cross-side steps from the start.
+5. Unit tests: plan parsing and validation, `$step.key` substitution, line codec, sequencer against a fake agent
+   (pass, fail, timeout, no result / crash, skipped, known-fail, unexpected pass, API mismatch), settled-wait logic,
+   report. Docs: how to write a step.
 
-- `stash.prepare`: teleport-free — give the main party N of an item (`PartyBase.ItemRoster.AddToCounts`) through the
-  server (a cheat on the client would be overwritten by Coop's roster sync), so this step is **server-side**: find the
-  player's party by the client's hero, add items. Then on the client wait until the party shows them.
-- `stash.putAndDone`: open the stash the way the town menu does (`InventoryScreenHelper.OpenScreenAsStash(town's
-  stash)`), move the items with `InventoryLogic.AddTransferCommand`, call `DoneLogic()`, close the screen. Publishes
-  the stash's count and the party's count.
-- `stash.reopenAndCount`: open/Done/close with no transfers, 3 times, waiting for Coop's roster sync between; assert
-  the stash count equals `expected` each time and the party lost exactly N once.
-
-On Coop 0.1.7 with `main` as it is today this should **fail** (stash doubles) and pass with PR #263's change: the
-harness's first real job is to prove that PR.
-
-The other three checks are the same pattern; they are follow-ups, not MVP: (2) server step completes a quest step,
-client asserts the count; (3) server step sets a level and publishes it, client asserts; (4) client step runs the LE
-menu action, server step asserts the state change.
-
-## What gets unit-tested (net10, tests/ModderLords.Core.Tests)
-
-Plan parsing and validation, `$step.key` argument substitution, the control/result line codec (shared source file,
-linked into the net472 agent like `MiniJson.cs` is), the sequencer against a fake agent (pass, fail, timeout, crash /
-no result, skipped steps, API version mismatch), the naming convention for reflection-found steps, and the report.
-
-## Not in scope / open questions for the maintainer
-
-1. **Server launch flag.** The server needs `/modderlords-test <folder>` (or an env var
-   `MODDERLORDS_TEST_RUN`, which the launch log already lists). Env var is simpler to thread through Host mode; OK?
-2. **Run against the GUI's server or CLI only?** MVP: CLI `test`, with `--attach` to a server the App is hosting (as
-   `smoke --attach` does). App button later.
-3. **Third-party discovery by naming convention (B)** vs. requiring a reference (A only). B costs a reflection scan at
-   run start (only when a run is active). Keep both?
-4. **Test mode never ships enabled**: the agent is inert unless the flag is present; test steps that cheat (give items)
-   run only then. Steps live in the shipping DLLs (small), not a separate test module — OK, or a separate
-   `ModderLords.TestAgent` module that is only installed for runs?
+Follow-ups: delivery-quest, hero-level and Living Economy suites; world creation per mod set; second client; App
+button; reference-free registration for third-party mods.
