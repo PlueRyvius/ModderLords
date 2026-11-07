@@ -547,7 +547,8 @@ switch (cmd)
             Console.WriteLine("[ModderLords] stopping the server…");
             await engine.StopAsync(TimeSpan.FromSeconds(60));
         }
-        return testReport?.Passed == true ? 0 : 1;
+        // Both reports count: steps that pass in a game that then crashed, or where Coop logged a fatal error, still fail.
+        return testReport?.Passed == true && smokeReport.Overall != ModderLords.Core.Smoke.SmokeVerdict.Fail ? 0 : 1;
     }
 
     case "launch" when opts.ContainsKey("profile"):

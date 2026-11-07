@@ -15,6 +15,7 @@ internal static class TestHost
 
     private static bool _modulesLoaded;
     private static bool _isServer;
+    private static DateTime _nextJoinArm;
 
     /// <summary>From OnBeforeInitialModuleScreenSetAsRoot: every module's OnSubModuleLoad, Coop's included, has run.</summary>
     internal static void ModulesLoaded() => _modulesLoaded = true;
@@ -54,8 +55,14 @@ internal static class TestHost
         // The join signal exists on a player's game only. Arm it once every module has loaded: Coop's broker builds Coop's
         // logger when first touched, and touching it before Coop's own load sets up its log empties Coop's log (run 5,
         // where this ran on the server before Coop loaded).
-        if (_modulesLoaded && !_isServer && CoopWatch.JoinUnavailable != null && CoopWatch.JoinReadyAt == null) CoopWatch.ArmJoin();
-        _agent.Tick(DateTime.UtcNow);
+        // Once a second, not every frame: when a Coop update renamed the signal, each try scans every loaded assembly.
+        var now = DateTime.UtcNow;
+        if (_modulesLoaded && !_isServer && CoopWatch.JoinUnavailable != null && CoopWatch.JoinReadyAt == null && now >= _nextJoinArm)
+        {
+            _nextJoinArm = now.AddSeconds(1);
+            CoopWatch.ArmJoin();
+        }
+        _agent.Tick(now);
     }
 
     private static bool TakeScreenshot(string path)
@@ -70,7 +77,8 @@ internal static class TestHost
         try
         {
             var xml = Path.Combine(Path.GetDirectoryName(assembly.Location)!, relative, "SubModule.xml");
-            var match = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(xml), "<Version value=\"([^\"]+)\"");
+            // Native writes <Version value = "v1.4.8"/>, with spaces around the '='.
+            var match = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(xml), "<Version\\s+value\\s*=\\s*[\"']([^\"']+)[\"']");
             return match.Success ? match.Groups[1].Value : null;
         }
         catch { return null; }

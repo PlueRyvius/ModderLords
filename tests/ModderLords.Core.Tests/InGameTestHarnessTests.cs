@@ -207,6 +207,29 @@ public sealed class TestSequencerTests : IDisposable
     }
 
     [Fact]
+    public void A_control_line_read_in_the_middle_of_a_character_keeps_the_character()
+    {
+        // The agent can read control.jsonl while the launcher is still writing a line; a read ending between the two
+        // bytes of 'é' must not turn it into replacement characters.
+        InGameTests.Register("echo", StepSide.Any, ctx => Do(() => ctx.Report("value", ctx.Arg("name"))));
+        var folder = Directory.CreateDirectory(Path.Combine(_root, "split")).FullName;
+        File.WriteAllText(Path.Combine(folder, "run.json"), """{"api":1,"runId":"r","suite":"t","token":"tok"}""");
+        var control = Path.Combine(folder, "control.jsonl");
+        File.WriteAllText(control, "");
+        var agent = new TestAgent(TestRunSwitch.Parse(folder + "|server|tok")!, _ => { });
+        var line = System.Text.Encoding.UTF8.GetBytes("""{"op":"step","seq":1,"side":"server","step":"echo","args":{"name":"Renée"},"timeoutMs":5000}""" + "\n");
+        var cut = Array.IndexOf(line, (byte)0xC3) + 1;   // inside the two bytes of 'é'
+
+        using (var s = new FileStream(control, FileMode.Append)) s.Write(line, 0, cut);
+        agent.Tick(DateTime.UtcNow);
+        using (var s = new FileStream(control, FileMode.Append)) s.Write(line, cut, line.Length - cut);
+        for (int i = 0; i < 5; i++) agent.Tick(DateTime.UtcNow);
+
+        var result = File.ReadAllLines(Path.Combine(folder, TestAgent.ResultsFile("server"))).Last();
+        Assert.Contains("\"value\":\"Renée\"", result);
+    }
+
+    [Fact]
     public async Task Values_flow_between_sides_and_a_compare_passes_when_both_agree()
     {
         var report = await Run("""

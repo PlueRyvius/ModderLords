@@ -84,6 +84,9 @@ internal static class CoopWatch
     {
         if (_traceArmed) return;
         _traceArmed = true;
+        // Labels now, on the game thread, so tracing a roster update costs a lookup instead of a scan of the world.
+        try { LabelRosters(); }
+        catch (Exception ex) { log("coop-trace: rosters not labelled: " + ex.GetBaseException().Message); }
         var missing = new List<string>();
         try
         {
@@ -156,16 +159,28 @@ internal static class CoopWatch
     }
 
     /// <summary>Which roster this is, for the trace: a settlement's stash or roster, or a party's.</summary>
-    private static string RosterLabel(TaleWorlds.CampaignSystem.Roster.ItemRoster roster)
+    private static string RosterLabel(TaleWorlds.CampaignSystem.Roster.ItemRoster roster) =>
+        RosterLabels.TryGetValue(roster, out var label) ? label : "other";
+
+    /// <summary>Every settlement's stash and roster and every party's roster, by reference, taken once when the trace is armed.</summary>
+    private static readonly Dictionary<object, string> RosterLabels = new Dictionary<object, string>(new ByReference());
+
+    private static void LabelRosters()
     {
+        RosterLabels.Clear();
         foreach (var s in TaleWorlds.CampaignSystem.Settlements.Settlement.All)
         {
-            if (ReferenceEquals(s.Stash, roster)) return s.StringId + " stash";
-            if (ReferenceEquals(s.ItemRoster, roster)) return s.StringId;
+            if (s.Stash != null) RosterLabels[s.Stash] = s.StringId + " stash";
+            if (s.ItemRoster != null) RosterLabels[s.ItemRoster] = s.StringId;
         }
         foreach (var p in TaleWorlds.CampaignSystem.Party.MobileParty.All)
-            if (ReferenceEquals(p.ItemRoster, roster)) return p.StringId;
-        return "unknown";
+            if (p.ItemRoster != null) RosterLabels[p.ItemRoster] = p.StringId;
+    }
+
+    private sealed class ByReference : IEqualityComparer<object>
+    {
+        public new bool Equals(object x, object y) => ReferenceEquals(x, y);
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 
     // ---- Coop's object ids -----------------------------------------------------------------------------------

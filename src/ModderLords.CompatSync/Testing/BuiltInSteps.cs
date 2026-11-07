@@ -311,16 +311,19 @@ internal static class BuiltInSteps
         var party = MobileParty.MainParty.ItemRoster;
         var stashBefore = stash.GetItemNumber(item);
         var partyBefore = party.GetItemNumber(item);
-        ctx.Assert(partyBefore >= count, $"the party has {partyBefore} {item.StringId}, fewer than the {count} to deposit");
+        ctx.Assert(count > 0, $"count must be at least 1, not {count}");
+        // One stack is moved, as one drag in the screen does: an item can sit in several stacks (one per modifier), and
+        // the party's total across them is not what a single transfer can move.
+        var stack = party.Where(e => e.EquipmentElement.Item == item).OrderByDescending(e => e.Amount).FirstOrDefault();
+        ctx.Assert(stack.Amount >= count, $"the party's largest stack of {item.StringId} holds {stack.Amount} (of {partyBefore} in all), fewer than the {count} to deposit");
         var stashId = CoopWatch.CoopId(stash);
         ctx.Log($"Coop's id for the stash: {stashId}; for the party's roster: {CoopWatch.CoopId(party)}");
         ctx.Report("stashCoopId", stashId);
 
         foreach (var wait in OpenStash(ctx, stash)) yield return wait;
         var logic = InventoryScreenHelper.GetActiveInventoryState().InventoryLogic;
-        var element = party.GetElementCopyAtIndex(party.FindIndexOfItem(item));
         logic.AddTransferCommand(TransferCommand.Transfer(count, InventoryLogic.InventorySide.PlayerInventory, InventoryLogic.InventorySide.OtherInventory,
-            element, EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject));
+            stack, EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject));
         // What Coop's Done will send: the screen's rosters after the move, before Coop takes over.
         ctx.Log($"after the move, before Done: stash {stash.GetItemNumber(item)}, party {party.GetItemNumber(item)} {item.StringId}"
             + $"; the screen's left roster is the stash: {ReferenceEquals(logic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory), stash)}");

@@ -54,7 +54,7 @@ internal sealed class TestAgent
     private readonly string _resultsPath;
     private readonly Dictionary<string, object?> _state = new Dictionary<string, object?>(StringComparer.Ordinal);
     private long _controlOffset;
-    private readonly StringBuilder _partial = new StringBuilder();
+    private readonly MemoryStream _partial = new MemoryStream();
     private readonly Queue<string> _pending = new Queue<string>();
     private bool _helloSent, _ended, _refused;
     private StepRunner? _running;
@@ -199,7 +199,6 @@ internal sealed class TestAgent
     {
         var path = Path.Combine(_switch.Folder, "control.jsonl");
         if (!File.Exists(path)) return;
-        string chunk;
         using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
         {
             if (stream.Length <= _controlOffset) return;
@@ -207,14 +206,15 @@ internal sealed class TestAgent
             var bytes = new byte[stream.Length - _controlOffset];
             var read = stream.Read(bytes, 0, bytes.Length);
             _controlOffset += read;
-            chunk = Encoding.UTF8.GetString(bytes, 0, read);
+            _partial.Write(bytes, 0, read);
         }
-        _partial.Append(chunk);
-        var text = _partial.ToString();
-        var lastNewline = text.LastIndexOf('\n');
+        // Decode whole lines only: a read can end inside a multi-byte character of a line still being written.
+        var buffer = _partial.ToArray();
+        var lastNewline = Array.LastIndexOf(buffer, (byte)'\n');
         if (lastNewline < 0) return;
-        _partial.Clear().Append(text.Substring(lastNewline + 1));
-        foreach (var line in text.Substring(0, lastNewline).Split('\n'))
+        _partial.SetLength(0);
+        _partial.Write(buffer, lastNewline + 1, buffer.Length - lastNewline - 1);
+        foreach (var line in Encoding.UTF8.GetString(buffer, 0, lastNewline).Split('\n'))
             if (line.Trim().Length > 0) _pending.Enqueue(line.Trim());
     }
 
