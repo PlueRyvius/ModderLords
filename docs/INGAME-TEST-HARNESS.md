@@ -180,10 +180,26 @@ on a player's game (or the reverse).
 | `src/ModderLords.Cli/Program.cs` (`test`) | Ties it together. |
 | `tests/ModderLords.Core.Tests/InGameTestHarnessTests.cs` | Suite parsing, waits, and the sequencer against the real agent through a real run folder. |
 
+## What the first runs taught
+
+The stash suite passes on Coop 0.1.7 with PR #263's change (11 real runs; the last two clean). Each failure on the way
+was the harness, and each lesson is now in it:
+
+- **Wait for Coop's join, not the map.** A change sent while the server still sends the join data is lost:
+  `game.joined` waits for Coop's own `ClientCampaignReady`.
+- **Do what the player does, exactly.** The stash is opened from inside the town (Coop's server refuses an entry from
+  further than the encounter distance, so `party.toTownGate` comes first), and Done is `CloseScreen(false)` alone:
+  that runs `DoneLogic` itself, and calling both sent Coop a second, stale trade that emptied the stash again.
+- **A player's own hero is not in `Campaign.Characters` on their game**; steps find it by name through `Hero.MainHero`.
+- **Coop's own log is empty in every run** (its logger is built before Coop sets up its log file). `game.coopLog`
+  is known-failing on that, and each run keeps a copy, `coop-<side>.log`, in the run folder.
+- **Trace instead of guessing.** `game.trace` logs Coop's trade and item-roster messages on both sides; it found the
+  double Done in one run.
+
 ## Not done yet
 
-- Not run in a real game. The first run is the stash suite on Coop 0.1.7: it should fail on `main` and pass with
-  PR #263's change.
+- A run that shows the stash suite failing without PR #263. This branch cannot build the Coop adapter against the
+  installed 0.1.7 (`HeroLevelChanged`, fixed by #263), and the stash put-back lives in that adapter.
 - Creating and caching a world per mod set (decision 1); for now a world is a `.sav` you put in `test-worlds`.
 - "TEST MODE" in the server's player list (decision 6); the log lines are there.
 - The delivery-quest, hero-level and Living Economy suites; a second player's game; an App button; reference-free
