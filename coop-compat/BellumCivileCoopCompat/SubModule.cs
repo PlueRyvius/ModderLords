@@ -206,8 +206,10 @@ namespace BellumCivileCoopCompat
 
             if (!coop)
             {
-                // Before the main menu Coop may not be loaded yet; look again later.
-                if (_modulesLoaded)
+                // Before the main menu Coop may not be loaded yet; look again later. Coop 0.1.7's dedicated server runs
+                // the setup on its first tick, which can come before Coop has loaded, so "no Coop" is final only once a
+                // campaign exists.
+                if (_modulesLoaded && Campaign.Current != null)
                     _resolved = true;
                 return;
             }

@@ -65,7 +65,7 @@ public sealed class CompatSubModule : MBSubModuleBase
 
     /// <summary>
     /// Coop 0.1.7's dedicated server never sets an initial screen, so OnBeforeInitialModuleScreenSetAsRoot never runs
-    /// there; the first tick does the same setup instead. Every step below already tolerates running more than once.
+    /// there; the first tick does the same setup instead. <c>_screenSetupRan</c> makes it run once either way.
     /// </summary>
     private void ScreenSetup()
     {

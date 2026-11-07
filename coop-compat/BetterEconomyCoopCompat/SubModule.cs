@@ -260,8 +260,10 @@ public static class Coop
 
         if (!coop)
         {
-            // Before the main menu Coop may not be loaded yet; look again later.
-            if (_modulesLoaded) Resolved = true;
+            // Before the main menu Coop may not be loaded yet; look again later. Coop 0.1.7's dedicated server runs the
+            // setup on its first tick, which can come before Coop has loaded, so "no Coop" is final only once a campaign
+            // exists.
+            if (_modulesLoaded && Campaign.Current != null) Resolved = true;
             return;
         }
 

@@ -70,7 +70,8 @@ public static class InventoryExchangeEvent
         __state = null;
         try
         {
-            if (__instance.IsPreviewingItem) return;
+            // On Coop 0.1.7 the Postfix stands down, so nothing taken here would be used.
+            if (__instance.IsPreviewingItem || CoopCompletesTrades()) return;
             __state = new Transfer(__instance.GetBoughtItems(), __instance.GetSoldItems(), __instance.IsTrading);
             if (Mode(__instance) == InventoryScreenHelper.InventoryMode.Stash && Rosters(__instance) is { Length: > 0 } rosters && rosters[0] != null)
             {
