@@ -324,7 +324,7 @@ internal static class BuiltInSteps
         // What Coop's Done will send: the screen's rosters after the move, before Coop takes over.
         ctx.Log($"after the move, before Done: stash {stash.GetItemNumber(item)}, party {party.GetItemNumber(item)} {item.StringId}"
             + $"; the screen's left roster is the stash: {ReferenceEquals(logic.GetElementsInRoster(InventoryLogic.InventorySide.OtherInventory), stash)}");
-        foreach (var wait in DoneAndClose(ctx, logic)) yield return wait;
+        foreach (var wait in DoneAndClose(ctx)) yield return wait;
 
         // Wait for both to stop changing, then say what each holds: a timeout alone would hide which side moved.
         yield return ctx.Settled(() => stash.GetItemNumber(item) * 100000 + party.GetItemNumber(item), "the stash and the party's items", timeout: Sync);
@@ -348,7 +348,7 @@ internal static class BuiltInSteps
         for (int i = 1; i <= times; i++)
         {
             foreach (var wait in OpenStash(ctx, stash)) yield return wait;
-            foreach (var wait in DoneAndClose(ctx, InventoryScreenHelper.GetActiveInventoryState().InventoryLogic)) yield return wait;
+            foreach (var wait in DoneAndClose(ctx)) yield return wait;
             yield return ctx.Settled(() => stash.GetItemNumber(item), $"the stash after reopening {i}", timeout: Sync);
             seen.Add(stash.GetItemNumber(item));
             ctx.Log($"reopen {i}: stash {seen[seen.Count - 1]}, party {MobileParty.MainParty.ItemRoster.GetItemNumber(item)}");
@@ -366,10 +366,11 @@ internal static class BuiltInSteps
         yield return ctx.Until(() => InventoryScreenHelper.GetActiveInventoryState()?.InventoryLogic != null, "the stash screen to open", TimeSpan.FromSeconds(20));
     }
 
-    private static IEnumerable<StepWait?> DoneAndClose(StepContext ctx, InventoryLogic logic)
+    private static IEnumerable<StepWait?> DoneAndClose(StepContext ctx)
     {
-        // What the screen's Done button does: the logic's Done, then the screen closes.
-        logic.DoneLogic();
+        // Exactly what the screen's Done button does (SPInventoryVM.HandleDone): CloseScreen(false), which runs the
+        // logic's DoneLogic once and pops the screen. Calling DoneLogic first as well pressed Done twice: Coop sent a
+        // second, stale trade (stash empty, party as it started) that took the deposit back out of the stash (run 9).
         InventoryScreenHelper.CloseScreen(false);
         yield return ctx.Until(() => !(GameStateManager.Current?.ActiveState is InventoryState), "the stash screen to close", TimeSpan.FromSeconds(20));
     }
