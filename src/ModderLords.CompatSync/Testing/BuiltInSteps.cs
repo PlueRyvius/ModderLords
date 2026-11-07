@@ -38,6 +38,8 @@ internal static class BuiltInSteps
         InGameTests.Register("party.settlement", StepSide.Any, PartySettlement);
         InGameTests.Register("hero.addGold", StepSide.Server, AddGold);
         InGameTests.Register("hero.gold", StepSide.Any, Gold);
+        InGameTests.Register("hero.adminLevel", StepSide.Server, HeroAdminLevel);
+        InGameTests.Register("hero.level", StepSide.Any, HeroLevel);
         InGameTests.Register("party.addItem", StepSide.Server, AddItem);
         InGameTests.Register("party.itemCount", StepSide.Any, PartyItemCount);
         InGameTests.Register("stash.count", StepSide.Any, StashCount);
@@ -227,11 +229,7 @@ internal static class BuiltInSteps
     {
         var party = HeroArg(ctx).PartyBelongedTo ?? throw new StepFailedException("the hero has no party");
         var settlement = SettlementArg(ctx);
-        const string command = "coop.debug.mobile_party.move_to_settlement";
-        ctx.Assert(TaleWorlds.Library.CommandLineFunctionality.HasFunctionForCommand(command), $"Coop's {command} console command is not registered");
-        var output = TaleWorlds.Library.CommandLineFunctionality.CallFunction(command, new List<string> { party.StringId, settlement.StringId, "true" }, out var found);
-        ctx.Log($"{command} {party.StringId} {settlement.StringId} true -> found {found}: {output}");
-        ctx.Assert(found, $"Coop's {command} was not found when called");
+        RunConsole(ctx, "coop.debug.mobile_party.move_to_settlement", party.StringId, settlement.StringId, "true");
         yield return ctx.Settled(() => party.Position.Distance(settlement.GatePosition) < 1f, $"{party.StringId} at {settlement.StringId}'s gate", true, timeout: Sync);
         ctx.Report("value", party.Position.Distance(settlement.GatePosition).ToString("F2"));
     }
@@ -254,6 +252,40 @@ internal static class BuiltInSteps
         ctx.Report("gold", hero.Gold);
         ctx.Report("value", hero.Gold);
         yield break;
+    }
+
+    /// <summary>
+    /// Server: sets a hero's level through ModderLords' own admin command (modderlords.edit REQ hero:ID level=N), the
+    /// path the App's character editor takes, so a suite checks that edit reaches the players.
+    /// </summary>
+    private static IEnumerable<StepWait?> HeroAdminLevel(StepContext ctx)
+    {
+        var hero = HeroArg(ctx);
+        var level = ctx.ArgInt("level");
+        ctx.Assert(hero.Level != level, $"{hero.StringId} is already level {level}; pick another so the edit changes something");
+        var reply = RunConsole(ctx, "modderlords.edit", "test", "hero:" + hero.StringId, "level=" + level);
+        ctx.Assert(reply.Contains("\"ok\":true"), "modderlords.edit refused: " + reply);
+        yield return ctx.Settled(() => hero.Level, $"{hero.StringId}'s level", level, timeout: Sync);
+        ctx.Report("value", hero.Level);
+    }
+
+    /// <summary>A hero's level, settled; with <c>expected</c>, it must be that.</summary>
+    private static IEnumerable<StepWait?> HeroLevel(StepContext ctx)
+    {
+        var hero = HeroArg(ctx);
+        object? expected = ctx.HasArg("expected") ? ctx.ArgInt("expected") : (object?)null;
+        yield return ctx.Settled(() => hero.Level, $"{hero.StringId}'s level", expected, timeout: Sync);
+        ctx.Report("value", hero.Level);
+    }
+
+    /// <summary>Runs a console command in this game (Coop's and ModderLords' commands register there) and logs its output.</summary>
+    private static string RunConsole(StepContext ctx, string command, params string[] args)
+    {
+        ctx.Assert(TaleWorlds.Library.CommandLineFunctionality.HasFunctionForCommand(command), $"the console command {command} is not registered in this game");
+        var output = TaleWorlds.Library.CommandLineFunctionality.CallFunction(command, args.ToList(), out var found);
+        ctx.Log($"{command} {string.Join(" ", args)} -> {output}");
+        ctx.Assert(found, $"the console command {command} was not found when called");
+        return output ?? "";
     }
 
     private static IEnumerable<StepWait?> Gold(StepContext ctx)

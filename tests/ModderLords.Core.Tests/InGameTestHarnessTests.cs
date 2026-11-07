@@ -11,6 +11,7 @@ public class TestPlanTests
     [Theory]
     [InlineData("stash")]
     [InlineData("sync-basics")]
+    [InlineData("hero-level")]
     public void The_built_in_suites_parse(string name)
     {
         var plan = TestSuites.Load(name);
