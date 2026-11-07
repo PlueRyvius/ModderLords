@@ -172,7 +172,7 @@ internal sealed class TestAgent
         {
             var folder = Path.Combine(_switch.Folder, "evidence", $"{_runningSeq:D3}-{Safe(context.StepId)}-{Safe(_switch.Side)}");
             Directory.CreateDirectory(folder);
-            try { if (!_screenshot(Path.Combine(folder, "screenshot.png"))) context.Log("no screenshot taken"); }
+            try { if (!_screenshot(Path.Combine(folder, "screenshot.bmp"))) context.Log("no screenshot taken"); }
             catch (Exception ex) { context.Log("screenshot failed: " + ex.Message); }
         }
         Result(context, outcome, now);

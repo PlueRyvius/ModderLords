@@ -133,9 +133,12 @@ internal static class BuiltInSteps
             element, EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject));
         foreach (var wait in DoneAndClose(ctx, logic)) yield return wait;
 
-        yield return ctx.Settled(() => stash.GetItemNumber(item), "the stash", stashBefore + count, timeout: Sync);
-        yield return ctx.Settled(() => party.GetItemNumber(item), "the party's items", partyBefore - count, timeout: Sync);
+        // Wait for both to stop changing, then say what each holds: a timeout alone would hide which side moved.
+        yield return ctx.Settled(() => stash.GetItemNumber(item) * 100000 + party.GetItemNumber(item), "the stash and the party's items", timeout: Sync);
         ctx.Dump("stash", Describe(stash));
+        ctx.Dump("party-roster", Describe(party));
+        ctx.Assert(stash.GetItemNumber(item) == stashBefore + count && party.GetItemNumber(item) == partyBefore - count,
+            $"after Done the stash holds {stash.GetItemNumber(item)} {item.StringId} (was {stashBefore}, expected {stashBefore + count}) and the party {party.GetItemNumber(item)} (was {partyBefore}, expected {partyBefore - count})");
         ctx.Report("value", stash.GetItemNumber(item));
         ctx.Report("party", party.GetItemNumber(item));
     }
