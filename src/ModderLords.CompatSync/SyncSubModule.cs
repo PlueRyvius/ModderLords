@@ -92,6 +92,7 @@ public sealed class SyncSubModule : MBSubModuleBase
     protected override void OnBeforeInitialModuleScreenSetAsRoot()
     {
         base.OnBeforeInitialModuleScreenSetAsRoot();
+        ModderLords.Testing.TestHost.ModulesLoaded();
         TryLoadAdapter();
     }
 

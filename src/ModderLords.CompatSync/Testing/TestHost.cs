@@ -13,9 +13,15 @@ internal static class TestHost
 {
     private static TestAgent? _agent;
 
+    private static bool _modulesLoaded;
+    private static bool _isServer;
+
+    /// <summary>From OnBeforeInitialModuleScreenSetAsRoot: every module's OnSubModuleLoad, Coop's included, has run.</summary>
+    internal static void ModulesLoaded() => _modulesLoaded = true;
+
     internal static void Init()
     {
-        var isServer = Directory.GetCurrentDirectory().EndsWith("Win64_Shipping_Server", StringComparison.OrdinalIgnoreCase);
+        var isServer = _isServer = Directory.GetCurrentDirectory().EndsWith("Win64_Shipping_Server", StringComparison.OrdinalIgnoreCase);
         var runSwitch = TestRunSwitch.From(Environment.GetCommandLineArgs(), Environment.GetEnvironmentVariable(TestRunSwitch.Variable), isServer);
         if (runSwitch == null) return;
         if ((runSwitch.Side == "server") != isServer)
@@ -43,8 +49,10 @@ internal static class TestHost
     internal static void Tick()
     {
         if (_agent == null || _agent.Ended) return;
-        // Coop's assemblies may load after ours; keep trying until the join listener is on, well before any join.
-        if (CoopWatch.JoinUnavailable != null && CoopWatch.JoinReadyAt == null) CoopWatch.ArmJoin();
+        // The join signal exists on a player's game only. Arm it once every module has loaded: Coop's broker builds Coop's
+        // logger when first touched, and touching it before Coop's own load sets up its log empties Coop's log (run 5,
+        // where this ran on the server before Coop loaded).
+        if (_modulesLoaded && !_isServer && CoopWatch.JoinUnavailable != null && CoopWatch.JoinReadyAt == null) CoopWatch.ArmJoin();
         _agent.Tick(DateTime.UtcNow);
     }
 

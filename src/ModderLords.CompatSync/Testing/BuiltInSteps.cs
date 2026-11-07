@@ -355,7 +355,10 @@ internal static class BuiltInSteps
         if (ctx.HasArg("heroName"))
         {
             var name = ctx.Arg("heroName");
+            // Hero.FindAll searches Campaign.Characters, which on a player's game lacks Coop's local copy of that
+            // player's own hero (run 5), so this player's hero is matched by name too.
             var found = Hero.FindAll(h => h.Name?.ToString() == name).ToList();
+            if (Hero.MainHero != null && Hero.MainHero.Name?.ToString() == name && !found.Contains(Hero.MainHero)) found.Add(Hero.MainHero);
             if (found.Count != 1) throw new StepFailedException(found.Count == 0 ? $"no hero named '{name}' in this world" : $"{found.Count} heroes are named '{name}'");
             return found[0];
         }
