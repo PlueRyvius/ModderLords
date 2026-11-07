@@ -58,7 +58,8 @@ internal static class BuiltInSteps
         yield return ctx.Until(() => Hero.MainHero != null && MobileParty.MainParty != null, "this player's hero");
         ctx.Report("hero", Hero.MainHero.StringId);
         ctx.Report("party", MobileParty.MainParty.StringId);
-        ctx.Report("name", Hero.MainHero.Name?.ToString());
+        // The hero's StringId is local ("main_hero" on every player's game), so other sides find it by name.
+        ctx.Report("heroName", Hero.MainHero.Name?.ToString());
     }
 
     // ---- heroes ----------------------------------------------------------------------------------------------
@@ -179,9 +180,19 @@ internal static class BuiltInSteps
 
     // ---- arguments -------------------------------------------------------------------------------------------
 
-    /// <summary>The <c>hero</c> argument (a StringId), or on a player's game, this player's hero.</summary>
+    /// <summary>
+    /// The <c>heroName</c> argument (a name, as game.whoAmI reports it), or <c>hero</c> (a StringId), or on a player's
+    /// game, this player's hero. A player's hero is found by name: its StringId differs between the server and the game.
+    /// </summary>
     private static Hero HeroArg(StepContext ctx)
     {
+        if (ctx.HasArg("heroName"))
+        {
+            var name = ctx.Arg("heroName");
+            var found = Hero.FindAll(h => h.Name?.ToString() == name).ToList();
+            if (found.Count != 1) throw new StepFailedException(found.Count == 0 ? $"no hero named '{name}' in this world" : $"{found.Count} heroes are named '{name}'");
+            return found[0];
+        }
         if (!ctx.HasArg("hero"))
             return !ctx.IsServer && Hero.MainHero != null ? Hero.MainHero : throw new StepFailedException("the plan gives no argument 'hero'");
         var id = ctx.Arg("hero");

@@ -117,7 +117,7 @@ Rules:
 - Arguments arrive as text: `ctx.Arg`, `ctx.ArgInt`, with or without a fallback.
 
 Built-in steps (`src/ModderLords.CompatSync/Testing/BuiltInSteps.cs`): `game.onMap`, `game.pause`, `game.whoAmI`
-(reports `hero`, `party`), `hero.addGold`, `hero.gold`, `party.addItem`, `party.itemCount`, `stash.count`,
+(reports `heroName`, `hero`, `party`; find a player's hero on another side by `heroName`: its StringId is local), `hero.addGold`, `hero.gold`, `party.addItem`, `party.itemCount`, `stash.count`,
 `stash.deposit`, `stash.reopen`. Steps that need Coop's types go in `ModderLords.CompatSync.Coop` and register the same
 way; nothing in the agent references Coop.
 
@@ -130,7 +130,7 @@ way; nothing in the agent references Coop.
   "world": "vanilla-1",                         // optional: test-worlds\vanilla-1.sav, copied fresh
   "steps": [
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
-    { "id": "party.addItem", "side": "server", "as": "given", "args": { "hero": "$me.hero", "item": "grain", "count": 5 } },
+    { "id": "party.addItem", "side": "server", "as": "given", "args": { "heroName": "$me.heroName", "item": "grain", "count": 5 } },
     { "id": "stash.reopen", "side": "client:1", "timeoutSeconds": 180, "args": { "times": 3, "expected": "$deposit.value" } },
     { "compare": "stash.count", "sides": ["server", "client:1"], "args": { "town": "town_EN1", "item": "grain" } },
     { "id": "some.check", "side": "server", "knownFailing": "https://github.com/.../issues/1", "continueOnFail": true }

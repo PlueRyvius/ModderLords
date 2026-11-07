@@ -8,8 +8,8 @@
     { "id": "game.onMap", "side": "client:1" },
     { "id": "game.pause", "side": "server" },
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
-    { "id": "hero.addGold", "side": "server", "as": "give", "args": { "hero": "$me.hero", "amount": 1234 } },
+    { "id": "hero.addGold", "side": "server", "as": "give", "args": { "heroName": "$me.heroName", "amount": 1234 } },
     { "id": "hero.gold", "side": "client:1", "args": { "expected": "$give.gold" } },
-    { "compare": "hero.gold", "sides": ["server", "client:1"], "args": { "hero": "$me.hero" } }
+    { "compare": "hero.gold", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName" } }
   ]
 }

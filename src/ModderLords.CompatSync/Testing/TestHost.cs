@@ -25,7 +25,8 @@ internal static class TestHost
         }
         BuiltInSteps.Register();
         _agent = new TestAgent(runSwitch, Log.Info, TakeScreenshot, Versions);
-        Log.Warn($"TEST MODE: this game was started for a ModderLords test run ({runSwitch.Side}); test steps may change the world");
+        // Info, not a warning: the smoke test counts warnings while joining as failures.
+        Log.Info($"TEST MODE: this game was started for a ModderLords test run ({runSwitch.Side}); test steps may change the world");
     }
 
     internal static void Tick()
@@ -40,14 +41,28 @@ internal static class TestHost
         return true;
     }
 
+    /// <summary>The Version in the SubModule.xml at <paramref name="relative"/> from the assembly's folder.</summary>
+    private static string? ModuleVersion(System.Reflection.Assembly assembly, string relative)
+    {
+        try
+        {
+            var xml = Path.Combine(Path.GetDirectoryName(assembly.Location)!, relative, "SubModule.xml");
+            var match = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(xml), "<Version value=\"([^\"]+)\"");
+            return match.Success ? match.Groups[1].Value : null;
+        }
+        catch { return null; }
+    }
+
     private static IDictionary<string, string> Versions()
     {
+        // Read from the modules' SubModule.xml: the assemblies' own versions say 1.0.0.0, and the server has no
+        // parameters file to read the game's version from.
         var versions = new Dictionary<string, string> { ["modderlords"] = SyncSubModule.Version };
-        try { versions["game"] = TaleWorlds.Library.ApplicationVersion.FromParametersFile(null).ToString(); } catch { }
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
-            var name = assembly.GetName();
-            if (name.Name == "Coop.Core") versions["coop"] = name.Version?.ToString() ?? "";
+            var name = assembly.GetName().Name;
+            if (name == "TaleWorlds.CampaignSystem") versions["game"] = ModuleVersion(assembly, Path.Combine("..", "..", "Modules", "Native")) ?? "";
+            if (name == "Coop.Core") versions["coop"] = ModuleVersion(assembly, Path.Combine("..", "..")) ?? "";
         }
         return versions;
     }
