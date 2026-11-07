@@ -66,6 +66,21 @@ dotnet test
   modules the fixture creates. Asserting exact mod lists there is fine, and a failure means a real failure rather
   than something about this PC. It used to scan the real Workshop; tests written before 1.0.3 may still hedge.
 
+### 3a. In-game suites (when the release touches the in-game modules or Coop)
+
+CI has no game, so nothing else runs these. On the commit being released, with a Host-mode profile, run each
+built-in suite of the in-game test harness (`docs/INGAME-TEST-HARNESS.md`):
+
+```powershell
+ModderLords.Cli test --profile "My Host" --suite stash
+ModderLords.Cli test --profile "My Host" --suite sync-basics
+ModderLords.Cli test --profile "My Host" --suite hero-level
+```
+
+- Each must exit 0. A step marked known-failing shows as `[known]` and does not count against it.
+- The suites start the server and a game, so **don't run them while the maintainer is using the machine.**
+- Keep each run's summary (the `Test suite ...: PASS` block) for the release notes' validation line.
+
 ### 4. Package
 
 ```powershell

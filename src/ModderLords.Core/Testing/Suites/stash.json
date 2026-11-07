@@ -15,8 +15,8 @@
     // address parse, the dedicated server by its host's early ContainerProvider call), so Coop_*.log stay empty. The
     // run keeps a copy in the run folder (coop-<side>.log). When Coop fixes it these pass, the run fails as an
     // unexpected pass, and the marks come off.
-    { "id": "game.coopLog", "side": "server", "continueOnFail": true, "knownFailing": "Coop 0.1.7 builds its logger before setting up its log file (Coop issue drafted, not yet filed)" },
-    { "id": "game.coopLog", "side": "client:1", "continueOnFail": true, "knownFailing": "Coop 0.1.7 builds its logger before setting up its log file (Coop issue drafted, not yet filed)" },
+    { "id": "game.coopLog", "side": "server", "continueOnFail": true, "knownFailing": "Coop 0.1.7 builds its logger before setting up its log file (reported to the Coop team)" },
+    { "id": "game.coopLog", "side": "client:1", "continueOnFail": true, "knownFailing": "Coop 0.1.7 builds its logger before setting up its log file (reported to the Coop team)" },
     { "id": "game.pause", "side": "server" },
     // Coop's trade and item-roster messages, into each game's ModderLords log, from here on.
     { "id": "game.trace", "side": "server" },
