@@ -26,6 +26,8 @@ public sealed class CompatSubModule : MBSubModuleBase
     /// </summary>
     private WorldCreator? _worldCreator;
 
+    private bool _screenSetupRan;
+
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();
@@ -58,6 +60,16 @@ public sealed class CompatSubModule : MBSubModuleBase
     protected override void OnBeforeInitialModuleScreenSetAsRoot()
     {
         base.OnBeforeInitialModuleScreenSetAsRoot();
+        ScreenSetup();
+    }
+
+    /// <summary>
+    /// Coop 0.1.7's dedicated server never sets an initial screen, so OnBeforeInitialModuleScreenSetAsRoot never runs
+    /// there; the first tick does the same setup instead. <c>_screenSetupRan</c> makes it run once either way.
+    /// </summary>
+    private void ScreenSetup()
+    {
+        _screenSetupRan = true;
         // This used to Environment.Exit(12) on any failure, because serving a mod's map with the vanilla map's
         // bounds is how a server once hosted a TAOM campaign on the wrong map. Killing the process was a blunt way
         // to guarantee that never went unnoticed. HeadlessMapBounds now compares the loaded scene's own bounds
@@ -95,6 +107,7 @@ public sealed class CompatSubModule : MBSubModuleBase
     protected override void OnApplicationTick(float dt)
     {
         base.OnApplicationTick(dt);
+        if (!_screenSetupRan && ServerDetect.IsDedicatedServer) ScreenSetup();
         // The host installs its own IDebugManager well after OnSubModuleLoad, discarding our decorator. Last writer
         // wins, so take it back. Costs a type check per frame on every frame but the one where it actually happens.
         try

@@ -31,6 +31,7 @@ namespace BetterEconomyCoopCompat;
 public sealed class SubModule : MBSubModuleBase
 {
     private const string AdapterFile = "BetterEconomy.CoopCompat.Coop.dll";
+    private static bool _setUp;
     private static bool _adapterTried;
     private static Action? _sessionTick;   // the adapter's Session.Tick: arms its handler for each Coop session
     private static DateTime _nextTick;
@@ -38,6 +39,14 @@ public sealed class SubModule : MBSubModuleBase
     protected override void OnBeforeInitialModuleScreenSetAsRoot()
     {
         base.OnBeforeInitialModuleScreenSetAsRoot();
+        Setup();
+    }
+
+    // Coop 0.1.7's dedicated server never sets an initial screen, so the first tick does the setup there.
+    private static void Setup()
+    {
+        if (_setUp) return;
+        _setUp = true;
         Coop.ModulesLoaded();
         TryLoadAdapter();
         Layer.Start();
@@ -46,6 +55,7 @@ public sealed class SubModule : MBSubModuleBase
     protected override void OnApplicationTick(float dt)
     {
         base.OnApplicationTick(dt);
+        if (!_setUp) Setup();
         if (!_adapterTried) TryLoadAdapter();
         if (_sessionTick != null)
         {
@@ -159,7 +169,7 @@ public static class Net
 
 /// <summary>
 /// Reads Coop's own state by reflection, so this module never compiles against one Coop version:
-/// - GameInterface.ContainerProvider._lifetimeScope is set while a co-op session runs.
+/// - GameInterface.ContainerProvider._lifetimeScope (Coop 0.1.6) or _active (0.1.7) is set while a co-op session runs.
 /// - Common.ModInformation.IsServer tells the server from a player (the server's folder is a backup, since IsServer
 ///   can be set late).
 /// - GameInterface.Services.Heroes.Extensions.HeroExtensions.IsPlayerHero(Hero) answers "is this a player?".
@@ -250,13 +260,15 @@ public static class Coop
 
         if (!coop)
         {
-            // Before the main menu Coop may not be loaded yet; look again later.
-            if (_modulesLoaded) Resolved = true;
+            // Before the main menu Coop may not be loaded yet; look again later. Coop 0.1.7's dedicated server runs the
+            // setup on its first tick, which can come before Coop has loaded, so "no Coop" is final only once a campaign
+            // exists.
+            if (_modulesLoaded && Campaign.Current != null) Resolved = true;
             return;
         }
 
         Loaded = true;
-        _scope = container == null ? null : AccessTools.Field(container, "_lifetimeScope");
+        _scope = container == null ? null : AccessTools.Field(container, "_lifetimeScope") ?? AccessTools.Field(container, "_active");
         _isServer = info == null ? null : AccessTools.Property(info, "IsServer");
         _isPlayerHero = heroes == null ? null : AccessTools.Method(heroes, "IsPlayerHero", new[] { typeof(Hero) });
         if (_scope == null || _isServer == null) Log.Warn("could not read Coop's session state; assuming a player's PC in a session");
