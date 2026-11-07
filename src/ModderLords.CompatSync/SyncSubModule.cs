@@ -67,6 +67,13 @@ public sealed class SyncSubModule : MBSubModuleBase
         _beforeCampaign?.Invoke(null, null);
     }
 
+    public SyncSubModule()
+    {
+        // Nothing thrown from a submodule's constructor may escape either.
+        try { ModderLords.Testing.TestHost.Construct(); }
+        catch { }
+    }
+
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();

@@ -502,6 +502,9 @@ switch (cmd)
             GameRoot = client.GameRoot,
             JoinPort = profile.Server.JoinPort,
             SteadyFor = TimeSpan.Zero,
+            // Still wait for the server to list the player on the map, but not the 15 s guess after it: suites start
+            // with game.joined, which waits for Coop's own join-finished signal on the player's game.
+            JoinSettle = TimeSpan.Zero,
             CloseClientWhenDone = !opts.ContainsKey("keep-client"),
             ReportRoot = channel.Folder,
             // No time command: the steps pause the campaign themselves (game.pause), so the numbers they read hold still.

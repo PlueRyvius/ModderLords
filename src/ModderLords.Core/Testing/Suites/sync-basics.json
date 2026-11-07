@@ -6,6 +6,7 @@
   "steps": [
     { "id": "game.onMap", "side": "server" },
     { "id": "game.onMap", "side": "client:1" },
+    { "id": "game.joined", "side": "client:1" },
     { "id": "game.pause", "side": "server" },
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
     { "id": "hero.addGold", "side": "server", "as": "give", "args": { "heroName": "$me.heroName", "amount": 1234 } },

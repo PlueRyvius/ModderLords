@@ -31,6 +31,8 @@ internal static class BuiltInSteps
         InGameTests.Register("game.pause", StepSide.Server, Pause);
         InGameTests.Register("game.whoAmI", StepSide.Client, WhoAmI);
         InGameTests.Register("game.coopLog", StepSide.Any, CoopLog);
+        InGameTests.Register("game.joined", StepSide.Client, Joined);
+        InGameTests.Register("party.toTownGate", StepSide.Server, PartyToTownGate);
         InGameTests.Register("settlement.enter", StepSide.Client, SettlementEnter);
         InGameTests.Register("party.settlement", StepSide.Any, PartySettlement);
         InGameTests.Register("hero.addGold", StepSide.Server, AddGold);
@@ -76,6 +78,14 @@ internal static class BuiltInSteps
     {
         var commons = AppDomain.CurrentDomain.GetAssemblies().Where(a => a.GetType("Common.Logging.LogManager", false) != null).ToList();
         ctx.Log("Coop Common assemblies: " + string.Join("; ", commons.Select(SafeLocation)));
+        // Who built Coop's logger first, as CoopWatch saw it from this module's constructor.
+        ctx.Log("Coop's logger at ModderLords' construction: " + CoopWatch.LoggerAtConstruction);
+        ctx.Report("loggerAtConstruction", CoopWatch.LoggerAtConstruction);
+        if (CoopWatch.LoggerFirstBuiltBy != null)
+        {
+            ctx.Dump("logger-first-built-by", CoopWatch.LoggerFirstBuiltBy);
+            ctx.Log("first built by: " + FirstForeignFrame(CoopWatch.LoggerFirstBuiltBy));
+        }
         ctx.Assert(commons.Count > 0, "Coop's Common.Logging.LogManager is not loaded");
         ctx.Assert(commons.Count == 1, $"{commons.Count} copies of Coop's Common are loaded; Coop sets up logging in one of them only");
         var manager = commons[0].GetType("Common.Logging.LogManager", true);
@@ -94,6 +104,32 @@ internal static class BuiltInSteps
         logger!.GetType().GetMethod("Information", new[] { typeof(string) })!.Invoke(logger, new object[] { probe });
         yield return ctx.Until(() => FileContains(path, probe), "the probe line in " + path, TimeSpan.FromSeconds(10));
         ctx.Report("value", "ok");
+    }
+
+    /// <summary>The first stack frame outside CoopWatch, Lazy and Coop's LogManager: the code that asked for the logger.</summary>
+    private static string FirstForeignFrame(string stack) =>
+        stack.Split('\n').Select(l => l.Trim())
+            .FirstOrDefault(l => l.StartsWith("at ") && !l.Contains("CoopWatch") && !l.Contains("System.Lazy") && !l.Contains("System.Environment")
+                                 && !l.Contains("Common.Logging.LogManager") && !l.Contains("LazyHelper"))
+        ?? "(not found; see logger-first-built-by.txt)";
+
+    /// <summary>
+    /// Waits for Coop's client to announce the join finished (ClientCampaignReady: join data applied, time caught up,
+    /// loading screen hidden), so steps never race the join. Without the signal (a Coop update renamed it), waits the
+    /// old 15 s after the map and reports the fallback.
+    /// </summary>
+    private static IEnumerable<StepWait?> Joined(StepContext ctx)
+    {
+        if (CoopWatch.JoinUnavailable != null)
+        {
+            ctx.Log("Coop's join signal is unavailable (" + CoopWatch.JoinUnavailable + "); waiting 15 s instead");
+            yield return ctx.Delay(TimeSpan.FromSeconds(15));
+            ctx.Report("value", "fallback: " + CoopWatch.JoinUnavailable);
+            yield break;
+        }
+        yield return ctx.Until(() => CoopWatch.JoinReadyAt != null, "Coop's ClientCampaignReady (the join finished)", TimeSpan.FromMinutes(3));
+        ctx.Report("value", "signal");
+        ctx.Report("readyAt", CoopWatch.JoinReadyAt!.Value.ToString("o"));
     }
 
     /// <summary>The leaf sinks under a Serilog logger: walks fields holding sinks, loggers, or lists of them.</summary>
@@ -145,15 +181,38 @@ internal static class BuiltInSteps
     private static IEnumerable<StepWait?> SettlementEnter(StepContext ctx)
     {
         var settlement = SettlementArg(ctx);
+        // Coop's server refuses an entry from further than the game's encounter distance (party.toTownGate first).
+        var distance = MobileParty.MainParty.Position.Distance(settlement.GatePosition);
+        ctx.Log($"distance to {settlement.StringId}'s gate: {distance:F2}");
+        ctx.Report("gateDistance", distance.ToString("F2"));
         if (MobileParty.MainParty.CurrentSettlement != settlement)
         {
             ctx.Assert(MobileParty.MainParty.CurrentSettlement == null, $"the party is in {MobileParty.MainParty.CurrentSettlement?.StringId}, not on the map");
             EncounterManager.StartSettlementEncounter(MobileParty.MainParty, settlement);
         }
+        // Shorter than the step's own 60 s, so a refusal reads as this wait, with the distance logged above.
         yield return ctx.Until(() => MobileParty.MainParty.CurrentSettlement == settlement && Settlement.CurrentSettlement == settlement,
-            $"the party to be in {settlement.StringId}", TimeSpan.FromSeconds(60));
+            $"the party to be in {settlement.StringId} (Coop's server approves an entry only near the gate; {distance:F2} away)", TimeSpan.FromSeconds(45));
         ctx.Report("menu", Campaign.Current.CurrentMenuContext?.GameMenu?.StringId ?? "none");
         ctx.Report("value", settlement.StringId);
+    }
+
+    /// <summary>
+    /// Server: puts a hero's party at a town's gate with Coop's own console command
+    /// (coop.debug.mobile_party.move_to_settlement PARTY TOWN true), so Coop syncs the move its own way; then checks the
+    /// party is there. Coop's output is logged, not parsed: the position is what counts.
+    /// </summary>
+    private static IEnumerable<StepWait?> PartyToTownGate(StepContext ctx)
+    {
+        var party = HeroArg(ctx).PartyBelongedTo ?? throw new StepFailedException("the hero has no party");
+        var settlement = SettlementArg(ctx);
+        const string command = "coop.debug.mobile_party.move_to_settlement";
+        ctx.Assert(TaleWorlds.Library.CommandLineFunctionality.HasFunctionForCommand(command), $"Coop's {command} console command is not registered");
+        var output = TaleWorlds.Library.CommandLineFunctionality.CallFunction(command, new List<string> { party.StringId, settlement.StringId, "true" }, out var found);
+        ctx.Log($"{command} {party.StringId} {settlement.StringId} true -> found {found}: {output}");
+        ctx.Assert(found, $"Coop's {command} was not found when called");
+        yield return ctx.Settled(() => party.Position.Distance(settlement.GatePosition) < 1f, $"{party.StringId} at {settlement.StringId}'s gate", true, timeout: Sync);
+        ctx.Report("value", party.Position.Distance(settlement.GatePosition).ToString("F2"));
     }
 
     /// <summary>Where a hero's party is (a settlement id, or "none"), settled; with <c>expected</c>, it must be that.</summary>

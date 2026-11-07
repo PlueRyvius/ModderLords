@@ -118,8 +118,12 @@ Rules:
 
 Built-in steps (`src/ModderLords.CompatSync/Testing/BuiltInSteps.cs`): `game.onMap`, `game.pause`, `game.whoAmI`
 (reports `heroName`, `hero`, `party`; find a player's hero on another side by `heroName`: its StringId is local),
-`game.coopLog` (writes a line through Coop's own logger and checks it reaches Coop's log file; reports the file and
-the logger's sinks), `settlement.enter` (the player's party enters a town, as arriving there does),
+`game.coopLog` (writes a line through Coop's own logger and checks it reaches Coop's log file; reports the file, the
+logger's sinks, and in a test run the stack that first built Coop's logger), `game.joined` (waits for Coop's own
+`ClientCampaignReady`, the join finished; every suite starts with it, and the launcher no longer adds a fixed wait),
+`party.toTownGate` (server: Coop's own `coop.debug.mobile_party.move_to_settlement ... true` puts the party at the gate;
+Coop's server refuses a town entry from further away), `settlement.enter` (the player's party enters a town, as
+arriving there does),
 `party.settlement`, `hero.addGold`, `hero.gold`, `party.addItem`, `party.itemCount`, `stash.count`, and
 `stash.deposit` / `stash.reopen` (both open the stash as the town menu does, so the party must be in the town). Steps that need Coop's types go in `ModderLords.CompatSync.Coop` and register the same
 way; nothing in the agent references Coop.

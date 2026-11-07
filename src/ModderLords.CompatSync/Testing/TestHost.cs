@@ -29,9 +29,22 @@ internal static class TestHost
         Log.Info($"TEST MODE: this game was started for a ModderLords test run ({runSwitch.Side}); test steps may change the world");
     }
 
+    /// <summary>
+    /// From the submodule's constructor, before any module loads: in a test run, start watching Coop's logger, which
+    /// must be seen before Coop's own load sets it up. Otherwise only reads the command line and environment.
+    /// </summary>
+    internal static void Construct()
+    {
+        var isServer = Directory.GetCurrentDirectory().EndsWith("Win64_Shipping_Server", StringComparison.OrdinalIgnoreCase);
+        if (TestRunSwitch.From(Environment.GetCommandLineArgs(), Environment.GetEnvironmentVariable(TestRunSwitch.Variable), isServer) == null) return;
+        CoopWatch.WatchLogger();
+    }
+
     internal static void Tick()
     {
         if (_agent == null || _agent.Ended) return;
+        // Coop's assemblies may load after ours; keep trying until the join listener is on, well before any join.
+        if (CoopWatch.JoinUnavailable != null && CoopWatch.JoinReadyAt == null) CoopWatch.ArmJoin();
         _agent.Tick(DateTime.UtcNow);
     }
 

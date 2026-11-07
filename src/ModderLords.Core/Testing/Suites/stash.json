@@ -8,6 +8,8 @@
   "steps": [
     { "id": "game.onMap", "side": "server" },
     { "id": "game.onMap", "side": "client:1" },
+    // Coop's own join-finished signal; an update sent before it can be lost (run 2).
+    { "id": "game.joined", "side": "client:1" },
     // Coop's own log must work, or a failure below has no Coop errors to explain it. Reported, but the run goes on.
     { "id": "game.coopLog", "side": "server", "continueOnFail": true },
     { "id": "game.coopLog", "side": "client:1", "continueOnFail": true },
@@ -16,6 +18,8 @@
     { "id": "party.addItem", "side": "server", "as": "given", "args": { "heroName": "$me.heroName", "item": "grain", "count": 5 } },
     { "id": "party.itemCount", "side": "client:1", "args": { "item": "grain", "expected": "$given.value" } },
     // A player opens the stash from the town menu, so the party goes into the town first, and the server must agree.
+    // Coop's server approves an entry only near the town, so the server first moves the party to the gate.
+    { "id": "party.toTownGate", "side": "server", "args": { "heroName": "$me.heroName", "town": "town_EN1" } },
     { "id": "settlement.enter", "side": "client:1", "args": { "town": "town_EN1" } },
     { "compare": "party.settlement", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName", "expected": "town_EN1" } },
     { "compare": "stash.count", "sides": ["server", "client:1"], "as": "before", "args": { "town": "town_EN1", "item": "grain" } },
