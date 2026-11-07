@@ -399,7 +399,7 @@ public static class SmokeEvaluator
             checks.Add(new SmokeCheck("Expected warnings", SmokeVerdict.Info, "true by design in this run, not counted", o.ExpectedWarnings));
         if (!o.CoopLogSeen)
             checks.Add(new SmokeCheck("Coop's client log", SmokeVerdict.Info,
-                "empty: Coop writes it only when the game exits normally, and the test closes the game; the stages above come from the server and ModderLords"));
+                "empty: Coop 0.1.7 writes each line as it logs, so its logger is not writing here; a test run's game.coopLog step says where it writes. The stages above come from the server and ModderLords"));
         var coopErrors = o.CoopErrorsBySource.Values.Sum();
         if (coopErrors > 0)
             checks.Add(new SmokeCheck("Coop errors in the game's log", SmokeVerdict.Info,

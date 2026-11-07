@@ -1,0 +1,38 @@
+{
+  // Coop 0.1.7 finishes the inventory screen's Done itself; ours did too and town stashes doubled (PR #263).
+  // The player enters a town, deposits into its stash from the town menu's stash, reopens it three times, and both
+  // games must agree on the stash and the party.
+  "api": 1,
+  "name": "stash",
+  "description": "A town stash keeps exactly what was put in it, through Done and three reopenings, on both sides.",
+  "steps": [
+    { "id": "game.onMap", "side": "server" },
+    { "id": "game.onMap", "side": "client:1" },
+    // Coop's own join-finished signal; an update sent before it can be lost (run 2).
+    { "id": "game.joined", "side": "client:1" },
+    // Coop's own log must work, or a failure below has no Coop errors to explain it. Reported, but the run goes on.
+    // Known failing on Coop 0.1.7: its logger is built before Coop sets up its log file (the client by the /autoconnect
+    // address parse, the dedicated server by its host's early ContainerProvider call), so Coop_*.log stay empty. The
+    // run keeps a copy in the run folder (coop-<side>.log). When Coop fixes it these pass, the run fails as an
+    // unexpected pass, and the marks come off.
+    { "id": "game.coopLog", "side": "server", "continueOnFail": true, "knownFailing": "Coop 0.1.7 builds its logger before setting up its log file (Coop issue drafted, not yet filed)" },
+    { "id": "game.coopLog", "side": "client:1", "continueOnFail": true, "knownFailing": "Coop 0.1.7 builds its logger before setting up its log file (Coop issue drafted, not yet filed)" },
+    { "id": "game.pause", "side": "server" },
+    // Coop's trade and item-roster messages, into each game's ModderLords log, from here on.
+    { "id": "game.trace", "side": "server" },
+    { "id": "game.trace", "side": "client:1" },
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "party.addItem", "side": "server", "as": "given", "args": { "heroName": "$me.heroName", "item": "grain", "count": 5 } },
+    { "id": "party.itemCount", "side": "client:1", "args": { "item": "grain", "expected": "$given.value" } },
+    // A player opens the stash from the town menu, so the party goes into the town first, and the server must agree.
+    // Coop's server approves an entry only near the town, so the server first moves the party to the gate.
+    { "id": "party.toTownGate", "side": "server", "args": { "heroName": "$me.heroName", "town": "town_EN1" } },
+    { "id": "settlement.enter", "side": "client:1", "args": { "town": "town_EN1" } },
+    { "compare": "party.settlement", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName", "expected": "town_EN1" } },
+    { "compare": "stash.count", "sides": ["server", "client:1"], "as": "before", "args": { "town": "town_EN1", "item": "grain" } },
+    { "id": "stash.deposit", "side": "client:1", "as": "deposit", "continueOnFail": true, "args": { "town": "town_EN1", "item": "grain", "count": 5 } },
+    { "id": "stash.reopen", "side": "client:1", "timeoutSeconds": 180, "continueOnFail": true, "args": { "town": "town_EN1", "item": "grain", "times": 3, "expected": "$deposit.value" } },
+    { "compare": "stash.count", "sides": ["server", "client:1"], "as": "after", "args": { "town": "town_EN1", "item": "grain" } },
+    { "compare": "party.itemCount", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName", "item": "grain" } }
+  ]
+}
