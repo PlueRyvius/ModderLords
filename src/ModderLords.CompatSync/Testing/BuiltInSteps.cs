@@ -271,6 +271,9 @@ internal static class BuiltInSteps
         object? expected = ctx.HasArg("expected") ? ctx.ArgInt("expected") : (object?)null;
         yield return ctx.Settled(() => stash.GetItemNumber(item), $"the stash's {item.StringId}", expected, timeout: Sync);
         ctx.Dump("stash", Describe(stash));
+        // Coop's id for this stash: without one on a player's game, a deposit reaches the server with no source roster
+        // and only the party is written (run 6 lost the grain that way).
+        ctx.Report("coopId", CoopWatch.CoopId(stash));
         ctx.Report("value", stash.GetItemNumber(item));
     }
 
@@ -288,6 +291,9 @@ internal static class BuiltInSteps
         var stashBefore = stash.GetItemNumber(item);
         var partyBefore = party.GetItemNumber(item);
         ctx.Assert(partyBefore >= count, $"the party has {partyBefore} {item.StringId}, fewer than the {count} to deposit");
+        var stashId = CoopWatch.CoopId(stash);
+        ctx.Log($"Coop's id for the stash: {stashId}; for the party's roster: {CoopWatch.CoopId(party)}");
+        ctx.Report("stashCoopId", stashId);
 
         foreach (var wait in OpenStash(ctx, stash)) yield return wait;
         var logic = InventoryScreenHelper.GetActiveInventoryState().InventoryLogic;

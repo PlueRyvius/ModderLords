@@ -59,6 +59,32 @@ internal static class CoopWatch
         public void OnReady<TPayload>(TPayload _) => JoinReadyAt = DateTime.UtcNow;
     }
 
+    // ---- Coop's object ids -----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The id Coop's object manager has for <paramref name="obj"/>, "unregistered" when it has none, or "unavailable: ..."
+    /// A trade whose source roster has no id reaches the server as "no source roster", and only the party is written.
+    /// </summary>
+    internal static string CoopId(object obj)
+    {
+        try
+        {
+            var provider = FindType("GameInterface", "GameInterface.ContainerProvider");
+            var managerType = FindType("GameInterface", "GameInterface.Services.ObjectManager.IObjectManager");
+            if (provider == null || managerType == null) return "unavailable: ContainerProvider or IObjectManager not loaded";
+            var resolve = provider.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(m => m.Name == "TryResolve" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1);
+            if (resolve == null) return "unavailable: ContainerProvider.TryResolve<T> not found";
+            var args = new object?[] { null };
+            if (!(bool)resolve.MakeGenericMethod(managerType).Invoke(null, args)! || args[0] == null) return "unavailable: no IObjectManager resolved";
+            var tryGetId = managerType.GetMethod("TryGetId", new[] { typeof(object), typeof(string).MakeByRefType() });
+            if (tryGetId == null) return "unavailable: IObjectManager.TryGetId(object, out string) not found";
+            var idArgs = new object?[] { obj, null };
+            return (bool)tryGetId.Invoke(args[0], idArgs)! ? (string)idArgs[1]! : "unregistered";
+        }
+        catch (Exception ex) { return "unavailable: " + ex.GetBaseException().Message; }
+    }
+
     // ---- Coop's logger ---------------------------------------------------------------------------------------
 
     /// <summary>Whether Coop's logger existed when this module was constructed (Coop sets up its log file later, at load).</summary>
