@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
@@ -57,6 +58,114 @@ internal static class CoopWatch
     private sealed class JoinListener
     {
         public void OnReady<TPayload>(TPayload _) => JoinReadyAt = DateTime.UtcNow;
+    }
+
+    // ---- message trace ---------------------------------------------------------------------------------------
+
+    /// <summary>Coop messages a test run logs as they pass through Coop's broker: the trade and the roster writes it causes.</summary>
+    internal static readonly string[] TracedMessages =
+    {
+        "GameInterface.Services.Inventory.Messages.TradeAttempted",       // player's game, at Done: what it is about to send
+        "GameInterface.Services.Inventory.Messages.CompleteTrade",        // server: the trade as it arrived
+        "GameInterface.Services.ItemRosters.Messages.ItemRosterUpdated",  // server: each roster change it sends out
+        "GameInterface.Services.Inventory.Messages.NetworkTradeCompleted",
+    };
+
+    private static readonly List<object> TraceListeners = new List<object>();
+    private static bool _traceArmed;
+    private static int _traceLines;
+    private const int MaxTraceLines = 2000;
+
+    /// <summary>The traced message types that could not be subscribed, or null before arming.</summary>
+    internal static string? TraceMissing { get; private set; }
+
+    /// <summary>Subscribes to <see cref="TracedMessages"/> on Coop's broker, writing each to <paramref name="log"/>. Once.</summary>
+    internal static void ArmTrace(Action<string> log)
+    {
+        if (_traceArmed) return;
+        _traceArmed = true;
+        var missing = new List<string>();
+        try
+        {
+            var brokerType = FindType("Common", "Common.Messaging.MessageBroker");
+            var payloadOpen = FindType("Common", "Common.Messaging.MessagePayload`1");
+            var broker = brokerType?.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static)?.GetValue(null, null);
+            var subscribe = brokerType?.GetMethods().FirstOrDefault(m => m.Name == "Subscribe" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1);
+            if (broker == null || subscribe == null || payloadOpen == null) { TraceMissing = "Coop's MessageBroker not found"; return; }
+            foreach (var name in TracedMessages)
+            {
+                var type = FindType("GameInterface", name);
+                if (type == null) { missing.Add(name); continue; }
+                var payload = payloadOpen.MakeGenericType(type);
+                var listener = new TraceListener(type.Name, log);
+                var handler = Delegate.CreateDelegate(typeof(Action<>).MakeGenericType(payload), listener,
+                    typeof(TraceListener).GetMethod(nameof(TraceListener.On))!.MakeGenericMethod(payload));
+                subscribe.MakeGenericMethod(type).Invoke(broker, new object[] { handler });
+                TraceListeners.Add(listener);   // Coop's broker holds listeners weakly
+            }
+            TraceMissing = missing.Count == 0 ? "" : string.Join(", ", missing);
+        }
+        catch (Exception ex) { TraceMissing = "arming failed: " + ex.GetBaseException().Message; }
+    }
+
+    private sealed class TraceListener
+    {
+        private readonly string _name;
+        private readonly Action<string> _log;
+        public TraceListener(string name, Action<string> log) { _name = name; _log = log; }
+
+        public void On<TPayload>(TPayload payload)
+        {
+            try
+            {
+                if (System.Threading.Interlocked.Increment(ref _traceLines) > MaxTraceLines) return;
+                var what = payload?.GetType().GetProperty("What")?.GetValue(payload, null);
+                _log($"coop-trace {_name}: {Describe(what)}");
+            }
+            catch (Exception ex) { _log($"coop-trace {_name}: could not describe ({ex.GetBaseException().Message})"); }
+        }
+    }
+
+    /// <summary>A message's public fields; rosters and roster data as item x amount, so a trade reads at a glance.</summary>
+    private static string Describe(object? message)
+    {
+        if (message == null) return "(null)";
+        var parts = new List<string>();
+        foreach (var field in message.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var value = field.GetValue(message);
+            parts.Add(field.Name + "=" + DescribeValue(value));
+        }
+        return string.Join("; ", parts);
+    }
+
+    private static string DescribeValue(object? value)
+    {
+        switch (value)
+        {
+            case null: return "null";
+            case string s: return s;
+            case TaleWorlds.CampaignSystem.Roster.ItemRoster roster:
+                return $"roster[{RosterLabel(roster)}]{{{string.Join(", ", roster.Select(e => $"{e.EquipmentElement.Item?.StringId ?? "(empty)"} x{e.Amount}"))}}}";
+            case TaleWorlds.Core.ItemRosterElement[] elements:
+                return $"[{elements.Length}]{{{string.Join(", ", elements.Select(e => $"{e.EquipmentElement.Item?.StringId ?? "(empty)"} x{e.Amount}"))}}}";
+            case TaleWorlds.ObjectSystem.MBObjectBase obj: return obj.StringId;
+            case System.Collections.ICollection c: return $"({c.Count} items)";
+            default: return value.ToString();
+        }
+    }
+
+    /// <summary>Which roster this is, for the trace: a settlement's stash or roster, or a party's.</summary>
+    private static string RosterLabel(TaleWorlds.CampaignSystem.Roster.ItemRoster roster)
+    {
+        foreach (var s in TaleWorlds.CampaignSystem.Settlements.Settlement.All)
+        {
+            if (ReferenceEquals(s.Stash, roster)) return s.StringId + " stash";
+            if (ReferenceEquals(s.ItemRoster, roster)) return s.StringId;
+        }
+        foreach (var p in TaleWorlds.CampaignSystem.Party.MobileParty.All)
+            if (ReferenceEquals(p.ItemRoster, roster)) return p.StringId;
+        return "unknown";
     }
 
     // ---- Coop's object ids -----------------------------------------------------------------------------------

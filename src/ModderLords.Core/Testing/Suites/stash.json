@@ -14,6 +14,9 @@
     { "id": "game.coopLog", "side": "server", "continueOnFail": true },
     { "id": "game.coopLog", "side": "client:1", "continueOnFail": true },
     { "id": "game.pause", "side": "server" },
+    // Coop's trade and item-roster messages, into each game's ModderLords log, from here on.
+    { "id": "game.trace", "side": "server" },
+    { "id": "game.trace", "side": "client:1" },
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
     { "id": "party.addItem", "side": "server", "as": "given", "args": { "heroName": "$me.heroName", "item": "grain", "count": 5 } },
     { "id": "party.itemCount", "side": "client:1", "args": { "item": "grain", "expected": "$given.value" } },

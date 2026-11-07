@@ -32,6 +32,7 @@ internal static class BuiltInSteps
         InGameTests.Register("game.whoAmI", StepSide.Client, WhoAmI);
         InGameTests.Register("game.coopLog", StepSide.Any, CoopLog);
         InGameTests.Register("game.joined", StepSide.Client, Joined);
+        InGameTests.Register("game.trace", StepSide.Any, Trace);
         InGameTests.Register("party.toTownGate", StepSide.Server, PartyToTownGate);
         InGameTests.Register("settlement.enter", StepSide.Client, SettlementEnter);
         InGameTests.Register("party.settlement", StepSide.Any, PartySettlement);
@@ -136,6 +137,20 @@ internal static class BuiltInSteps
         yield return ctx.Until(() => CoopWatch.JoinReadyAt != null, "Coop's ClientCampaignReady (the join finished)", TimeSpan.FromMinutes(3));
         ctx.Report("value", "signal");
         ctx.Report("readyAt", CoopWatch.JoinReadyAt!.Value.ToString("o"));
+    }
+
+    /// <summary>
+    /// From here on, logs Coop's trade and item-roster messages as they pass through its broker (CoopWatch.TracedMessages)
+    /// to this game's ModderLords log. After game.pause, so the AI's trading does not fill the trace first.
+    /// </summary>
+    private static IEnumerable<StepWait?> Trace(StepContext ctx)
+    {
+        CoopWatch.ArmTrace(line => ModderLords.CompatSync.Log.Info(line));
+        ctx.Assert(CoopWatch.TraceMissing != null && !CoopWatch.TraceMissing.StartsWith("arming failed") && !CoopWatch.TraceMissing.StartsWith("Coop's MessageBroker"),
+            "could not trace Coop's messages: " + CoopWatch.TraceMissing);
+        if (CoopWatch.TraceMissing!.Length > 0) ctx.Log("not traced (not in this Coop): " + CoopWatch.TraceMissing);
+        ctx.Report("value", CoopWatch.TraceMissing.Length == 0 ? "all" : "some missing");
+        yield break;
     }
 
     /// <summary>The leaf sinks under a Serilog logger: walks fields holding sinks, loggers, or lists of them.</summary>
