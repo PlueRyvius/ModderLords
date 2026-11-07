@@ -1,0 +1,15 @@
+{
+  // The smallest cross-side check: the server changes this player's hero, the player's game must see it.
+  "api": 1,
+  "name": "sync-basics",
+  "description": "Gold given to the player's hero on the server reaches the player's game.",
+  "steps": [
+    { "id": "game.onMap", "side": "server" },
+    { "id": "game.onMap", "side": "client:1" },
+    { "id": "game.pause", "side": "server" },
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "hero.addGold", "side": "server", "as": "give", "args": { "hero": "$me.hero", "amount": 1234 } },
+    { "id": "hero.gold", "side": "client:1", "args": { "expected": "$give.gold" } },
+    { "compare": "hero.gold", "sides": ["server", "client:1"], "args": { "hero": "$me.hero" } }
+  ]
+}

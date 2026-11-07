@@ -282,6 +282,12 @@ attempt — they "stalled in campaign init" — so it is a long-standing gap in 
 Until it is fixed, smoke-test TAOM through the launcher. The CLI is fine for vanilla and for world creation,
 which is what it was built for.
 
+### In-game checks after a Coop or mod update
+
+`ModderLords.Cli test --profile NAME --suite stash` runs scripted steps inside the server and this PC's game and
+reports pass/fail per step. Modules add their own steps through `ModderLords.Testing.InGameTests.Register`. How to
+run it, write steps and write suites: **`docs/INGAME-TEST-HARNESS.md`**.
+
 ## Phase 4 (2026-09-02): hardening
 
 - `Preflight`: refuses to launch when the join or engine UDP port is in use, an engine from this package is already

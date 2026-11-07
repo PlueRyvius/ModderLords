@@ -1,0 +1,20 @@
+{
+  // Coop 0.1.7 finishes the inventory screen's Done itself; ours did too and town stashes doubled (PR #263).
+  // Deposits into a town stash from the player's game, reopens it three times, and checks both games agree.
+  "api": 1,
+  "name": "stash",
+  "description": "A town stash keeps exactly what was put in it, through Done and three reopenings, on both sides.",
+  "steps": [
+    { "id": "game.onMap", "side": "server" },
+    { "id": "game.onMap", "side": "client:1" },
+    { "id": "game.pause", "side": "server" },
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "party.addItem", "side": "server", "as": "given", "args": { "hero": "$me.hero", "item": "grain", "count": 5 } },
+    { "id": "party.itemCount", "side": "client:1", "args": { "item": "grain", "expected": "$given.value" } },
+    { "compare": "stash.count", "sides": ["server", "client:1"], "as": "before", "args": { "town": "town_EN1", "item": "grain" } },
+    { "id": "stash.deposit", "side": "client:1", "as": "deposit", "args": { "town": "town_EN1", "item": "grain", "count": 5 } },
+    { "id": "stash.reopen", "side": "client:1", "timeoutSeconds": 180, "args": { "town": "town_EN1", "item": "grain", "times": 3, "expected": "$deposit.value" } },
+    { "compare": "stash.count", "sides": ["server", "client:1"], "as": "after", "args": { "town": "town_EN1", "item": "grain" } },
+    { "compare": "party.itemCount", "sides": ["server", "client:1"], "args": { "hero": "$me.hero", "item": "grain" } }
+  ]
+}

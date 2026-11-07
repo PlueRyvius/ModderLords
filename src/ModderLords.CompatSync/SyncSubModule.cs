@@ -77,6 +77,8 @@ public sealed class SyncSubModule : MBSubModuleBase
         catch (Exception ex) { Log.Warn("settings hints failed: " + ex.GetBaseException().Message); }
         try { LiveSettings.Init(); }
         catch (Exception ex) { Log.Warn("live settings init failed: " + ex.GetBaseException().Message); }
+        try { ModderLords.Testing.TestHost.Init(); }
+        catch (Exception ex) { Log.Warn("test run setup failed: " + ex.GetBaseException().Message); }
     }
 
     /// <summary>Every module is loaded by now, so Coop's assemblies are present when Coop is enabled.</summary>
@@ -89,6 +91,8 @@ public sealed class SyncSubModule : MBSubModuleBase
     protected override void OnApplicationTick(float dt)
     {
         base.OnApplicationTick(dt);
+        // Inert unless the launcher started this game for a test run (ModderLords.Testing.TestHost).
+        ModderLords.Testing.TestHost.Tick();
         _sinceTick += dt;
         _sinceVerify += dt;
         _sinceRelay += dt;
