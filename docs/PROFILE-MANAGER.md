@@ -82,8 +82,8 @@ profile**), the green / amber / red badges for Ready / missing / failed. The bad
   (**Report: it works**), through the same intake as compat records (`docs/COMPAT-RECORDS.md`: the intake worker or
   the issue form, a workflow that checks it, a PR the maintainer merges). The report carries the profile id, the game,
   Coop and mod versions and fingerprints, and what the launcher saw (a hosted session on the map, or a passing test
-  run). The workflow counts it only when the versions match the entry. How many reports make green is open
-  (question 2).
+  run). The workflow counts it only when the versions match the entry. **One accepted report makes a profile green**
+  (decided 2026-11-08); the details show how many players have reported it and when the last one did.
 
 ## Build order (proposed)
 
@@ -97,8 +97,7 @@ profile**), the green / amber / red badges for Ready / missing / failed. The bad
 ## Open questions
 
 1. ~~Silver~~: decided 2026-11-08, a PR to this repository that the maintainer merges.
-2. **Green threshold:** one report, or several from different players (e.g. 3), before the green badge shows? A report
-   with a passing test run attached could count more than a report of a hosted session.
+2. ~~Green threshold~~: decided 2026-11-08, one accepted report.
 3. **Can players propose whole profiles,** not only report that ours work? That would be a fourth path into the file
    (a profile submitted, reviewed, then verified).
 4. **Profiles and the app's mode:** today a profile has no mode (Harness is used in both). The Coop badge shows what a
