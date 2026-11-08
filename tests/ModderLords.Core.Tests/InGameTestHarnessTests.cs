@@ -13,6 +13,7 @@ public class TestPlanTests
     [InlineData("sync-basics")]
     [InlineData("hero-level")]
     [InlineData("both-perks")]
+    [InlineData("parity")]
     public void The_built_in_suites_parse(string name)
     {
         var plan = TestSuites.Load(name);

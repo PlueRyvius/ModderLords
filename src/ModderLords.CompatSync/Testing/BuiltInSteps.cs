@@ -50,6 +50,7 @@ internal static class BuiltInSteps
         InGameTests.Register("stash.count", StepSide.Any, StashCount);
         InGameTests.Register("stash.deposit", StepSide.Client, StashDeposit);
         InGameTests.Register("stash.reopen", StepSide.Client, StashReopen);
+        ParitySteps.Register();
     }
 
     // ---- game ------------------------------------------------------------------------------------------------
@@ -535,4 +536,7 @@ internal static class BuiltInSteps
             sb.AppendLine($"{element.EquipmentElement.Item?.StringId}\t{element.Amount}");
         return sb.ToString();
     }
+
+    /// <summary>The <c>heroName</c> / <c>hero</c> argument's hero, for steps in other files (<see cref="ParitySteps"/>).</summary>
+    internal static Hero FindHero(StepContext ctx) => HeroArg(ctx);
 }
