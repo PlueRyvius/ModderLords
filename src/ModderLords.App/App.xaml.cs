@@ -40,6 +40,9 @@ public partial class App : Application
         if (i >= 0 && i + 1 < e.Args.Length) UpdatedFrom = e.Args[i + 1];
         try { ModderLords.Core.Updates.UpdateInstaller.ForThisApp().CleanUpAfterUpdate(); }
         catch (Exception ex) { LogCrash(ex); }
+        // A game started last time may have outlived ModderLords; its intro video goes back once no game is running.
+        try { if (!ModderLords.Core.Launch.ClientLauncher.IsClientRunning()) ModderLords.Core.Launch.IntroVideo.RestoreAll(); }
+        catch (Exception ex) { LogCrash(ex); }
         // Right after an update the old process is usually still exiting, so its renamed exe is still locked and the
         // delete above fails (seen in the end-to-end test). Keep trying briefly in the background rather than leaving
         // ModderLords.exe.old beside the new one until the next start.

@@ -124,6 +124,8 @@ public static class ClientLaunchSession
         if (Unblock(plan) is { } unblocked) note?.Invoke(unblocked);
         // Without this the game stops on a "Mod change detected" box after every change of mods until someone presses OK.
         if (OperatingSystem.IsWindows() && ShaderCacheMapping.Prepare(plan.ModuleIds) is { } shaders) note?.Invoke(shaders);
+        // From the real game folder: a private view links Native to it, so hiding the video there hides it for the view too.
+        if (IntroVideo.Hide(plan.GameRoot) is { } intro) note?.Invoke(intro);
         if (plan.UsesIsolatedView && OperatingSystem.IsWindows())
             plan = plan with { GameRoot = ClientModuleView.Create(plan, Path.Combine(Profiles.ProfileStore.RootDir, "client-launches")) };
         var psi = new System.Diagnostics.ProcessStartInfo
@@ -146,7 +148,11 @@ public static class ClientLaunchSession
             psi.Environment.Remove("MODDERLORDS_OPERATION_PLAN");
         }
         foreach (var argument in plan.Arguments) psi.ArgumentList.Add(argument);
-        return System.Diagnostics.Process.Start(psi) ?? throw new InvalidOperationException("Windows did not start " + plan.Exe);
+        System.Diagnostics.Process game;
+        try { game = System.Diagnostics.Process.Start(psi) ?? throw new InvalidOperationException("Windows did not start " + plan.Exe); }
+        catch { if (!ClientLauncher.IsClientRunning()) IntroVideo.RestoreAll(); throw; }
+        IntroVideo.RestoreWhenExited(game);
+        return game;
     }
 
     /// <summary>

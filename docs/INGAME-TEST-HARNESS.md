@@ -359,11 +359,16 @@ recorded set differs, it deletes the other files in each renderer folder that ha
 keeping the format and build. It says so in the launch log. A file it cannot parse, or one it fails to write, is left to
 the game, which then asks as before. The cache is rebuilt by the game as it would be after OK.
 
-**The intro video.** `Module.SetInitialModuleScreenAsRootScreen` plays `Native/Videos/TWLogo_and_Partners.ivf` unless
-the module's private `_splashScreenPlayed` is set (or a debugger is attached). There is no launch option or config value
-for it. That method calls every submodule's `OnBeforeInitialModuleScreenSetAsRoot` just before it checks, so in a test
-run the agent sets the flag from there (`TestHost.SkipIntroVideo`) and logs `TEST MODE: intro video skipped`. A player's
-own launch keeps the video.
+**The intro video.** `Module.SetInitialModuleScreenAsRootScreen` plays `Native/Videos/TWLogo_and_Partners.ivf` once,
+at the first main menu, if that file exists and no debugger is attached. There is no launch option or config value for
+it, and the player's game runs on .NET Framework, so no startup hook reaches it either. So every launch through
+`ClientLaunchSession.Start` moves that one file aside, to `TWLogo_and_Partners.ivf.modderlords-hidden` (`IntroVideo`).
+It puts the file back when the game exits, or when ModderLords (the app or the CLI) next starts with no game running.
+The path is written to `%LocalAppData%\ModderLords\hidden-intro-video.txt` before the move, so a crash still gets it put back.
+If Steam restores the file meanwhile, its copy wins. While the file is hidden, a launch from the TaleWorlds launcher also
+skips the video. In a test run the agent also sets the module's private `_splashScreenPlayed` from
+`OnBeforeInitialModuleScreenSetAsRoot`, in case the file could not be moved, and logs `TEST MODE: intro video skipped`.
+Checked with `play`: the game log shows no `GauntletVideoPlaybackScreen` before the main menu, where vanilla opens one.
 
 First run with both, after a mod change: `test --profile Harness --modules core --single-player` passed in 38 s with no
 input. The game's only window was its own, and no message box opened.

@@ -29,7 +29,8 @@ internal static class TestHost
     /// The TaleWorlds logo video plays once, from Module.SetInitialModuleScreenAsRootScreen, unless the module's private
     /// _splashScreenPlayed is already set (or a debugger is attached); there is no launch option for it. That method
     /// calls every submodule's OnBeforeInitialModuleScreenSetAsRoot just before it looks, so setting the flag from there
-    /// takes a test run straight to the main menu. Test runs only: a player's own launch keeps the video.
+    /// takes a test run straight to the main menu. Every ModderLords launch already moves the video aside
+    /// (ModderLords.Core.Launch.IntroVideo); this is for a test run where that could not be done.
     /// </summary>
     private static void SkipIntroVideo()
     {
