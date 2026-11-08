@@ -219,6 +219,9 @@ private static IEnumerable<StepWait?> StashCount(StepContext ctx)
   "steps": [
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
     { "id": "party.addItem", "side": "server", "args": { "heroName": "$me.heroName", "item": "grain", "count": 5 } },
+    // The stash is opened from the town menu, so the party must be in the town; the server moves it to the gate first.
+    { "id": "party.toTownGate", "side": "server", "args": { "heroName": "$me.heroName", "town": "town_EN1" } },
+    { "id": "settlement.enter", "side": "client:1", "args": { "town": "town_EN1" } },
     { "id": "stash.deposit", "side": "client:1", "as": "deposit", "timeoutSeconds": 120, "args": { "town": "town_EN1", "item": "grain", "count": 5 } },
     { "compare": "stash.count", "sides": ["server", "client:1"], "args": { "town": "town_EN1", "item": "grain" } }
   ]
