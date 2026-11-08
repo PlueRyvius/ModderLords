@@ -9,7 +9,8 @@ namespace ModderLords.Testing;
 
 /// <summary>
 /// The test-run switch, which only the launcher's <c>test</c> command sets: the player's game gets the launch argument
-/// <c>/modderlords-test "folder|client:1|token"</c>, the server the environment variable <c>MODDERLORDS_TEST_RUN</c>
+/// <c>/modderlords-test "folder|client:1|token"</c> (<c>game</c> in a single-player run, where no server is started),
+/// the server the environment variable <c>MODDERLORDS_TEST_RUN</c>
 /// with the same value (through its launch plan only, so a normal Host launch can never carry it).
 /// </summary>
 internal sealed class TestRunSwitch
@@ -35,7 +36,7 @@ internal sealed class TestRunSwitch
         var parts = value.Trim().Trim('"').Split('|');
         if (parts.Length != 3 || parts.Any(p => p.Length == 0)) return null;
         var side = parts[1];
-        if (side != "server" && !(side.StartsWith("client:", StringComparison.Ordinal) && int.TryParse(side.Substring(7), out var n) && n > 0)) return null;
+        if (side != "server" && side != "game" && !(side.StartsWith("client:", StringComparison.Ordinal) && int.TryParse(side.Substring(7), out var n) && n > 0)) return null;
         return new TestRunSwitch(parts[0], side, parts[2]);
     }
 }

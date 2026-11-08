@@ -51,6 +51,7 @@ internal static class BuiltInSteps
         InGameTests.Register("stash.deposit", StepSide.Client, StashDeposit);
         InGameTests.Register("stash.reopen", StepSide.Client, StashReopen);
         ParitySteps.Register();
+        WorldSteps.Register();
     }
 
     // ---- game ------------------------------------------------------------------------------------------------
@@ -76,6 +77,9 @@ internal static class BuiltInSteps
         ctx.Report("party", MobileParty.MainParty.StringId);
         // The hero's StringId is local ("main_hero" on every player's game), so other sides find it by name.
         ctx.Report("heroName", Hero.MainHero.Name?.ToString());
+        // A suite can check it is still the same hero, e.g. after a save and reload.
+        if (ctx.HasArg("heroName"))
+            ctx.Assert(Hero.MainHero.Name?.ToString() == ctx.Arg("heroName"), $"this player's hero is {Hero.MainHero.Name}, expected {ctx.Arg("heroName")}");
     }
 
     /// <summary>

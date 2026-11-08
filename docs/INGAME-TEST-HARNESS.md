@@ -203,7 +203,7 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 ### Build order (proposed)
 
 1. Spike: single-player launch, the agent loading a named save, and creating a world by code through character
-   creation.
+   creation. **Built 2026-11-07** (`sp-world`, the world steps, the `game` side); see "Single player" below.
 2. `requires`/`mode`/`continuity`, suite selection and the core suite; multi-suite runs with a world reset.
    With it, the cheap core checks: install fingerprints, the loaded copy, `mods.fingerprint`, the time limits and
    `game.noErrors` (decisions 23–25).
@@ -260,6 +260,21 @@ Built-in suites: `stash` (the 0.1.7 stash doubling), `sync-basics` (gold given o
 the same max hit points) and `parity` (changes nothing: every mod that loaded also started, on both sides, and the
 player's hero reads the same on both).
 `stash` uses `town_EN1` and `grain`, both vanilla.
+
+### Single player (v2 build step 1)
+
+A suite whose steps are all on side `game` runs in single player:
+
+```powershell
+ModderLords.Cli test --profile "My Mods" --suite sp-world [--keep-client] [--keep-open-on-fail]
+```
+
+- The profile's game is started with `ModderLords.Compat` added and Coop left out (in memory; the profile on disk is
+  unchanged), and `/modderlords-test` on side `game`. No server, no join.
+- The run starts at launch, so the game has up to 10 minutes to load and announce itself.
+- The suite makes or loads its own world from the main menu with `game.createWorld` / `game.loadSave` (below).
+- Built-in suite: `sp-world` creates a world by code, saves it, goes back to the main menu, loads it again and checks
+  it is the same hero, then runs `mods.started`.
 
 Test mode is visible: each game logs `TEST MODE: ...` at load (`ModderLords.CompatSync` log) and the agent logs each
 step. It is not yet shown in the server's player list (decision 6); that is a follow-up.
@@ -319,6 +334,19 @@ arriving there does),
 character screen does there), `hero.hasPerk`, `hero.maxHitPoints`, `rules.set` (server: turns a ModderLords gameplay
 rule on or off, e.g. `BothPerks`), `party.addItem`, `party.itemCount`, `stash.count`, and
 `stash.deposit` / `stash.reopen` (both open the stash as the town menu does, so the party must be in the town).
+`game.whoAmI` also takes an optional `heroName` and fails if the hero is someone else.
+
+World steps (`WorldSteps.cs`), from the main menu, for single-player runs:
+
+- `game.createWorld` (`name`, optional `overwrite`): starts a new Sandbox campaign as the main menu's Sandbox button
+  does, skips the intro video, and presses Next on each character-creation page through the page's own view-model.
+  When a page can't advance, it takes the first entry of each list the page offers (through the page's own selection
+  method) and fills an empty name field, then tries again; a page that still can't advance, or has no view-model,
+  fails the step, naming it. Saves under `name` once on the map. Reports `save`, `heroName`, `culture` and `pages`;
+  `creation-pages.txt` lists each page and whether a default was chosen.
+- `game.loadSave` (`name`): loads a save as the Load Game screen does, without its pop-ups. The module differences
+  that screen would warn about are logged and counted (`moduleWarnings`).
+- `game.toMainMenu`: leaves the campaign without saving.
 
 Parity steps (`ParitySteps.cs`), for what quietly differs between the sides:
 
