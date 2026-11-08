@@ -51,7 +51,9 @@ actually use after dependencies are sorted out. Frameworks such as Harmony and M
 modules, as the TaleWorlds launcher does.
 
 If a mod is installed twice at different versions (a local copy and the Workshop one), both are listed and you pick
-which loads. **Profiles** keep named mod sets. A profile can be exported to a file and imported on another PC.
+which loads. **Profiles** keep named mod sets. A profile can be exported to a file and imported on another PC. The
+profile button on the top bar switches between pinned and recent ones; its **Manage profiles…** (Ctrl+P) opens the
+Profiles window, with groups, pins and a status per profile (ready, mods missing, or mods changed since its last launch).
 
 ## Hosting
 

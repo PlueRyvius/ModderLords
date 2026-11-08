@@ -43,6 +43,8 @@ public partial class MainWindow : Window
             _ui.Mode = AppMode.Host;
             UiStateStore.Save(_ui);
         }
+        // Ctrl+P opens the Profiles window from anywhere in the main window.
+        InputBindings.Add(new KeyBinding(ViewModel.OpenProfilesCommand, Key.P, ModifierKeys.Control));
         ViewModel.ExperimentalCompat = _ui.ExperimentalCompat;
         ViewModel.AutoSubscribeWorkshop = _ui.AutoSubscribeWorkshop;
         ViewModel.AlwaysSubscribeCoop = _ui.AlwaysSubscribeCoop;
@@ -514,7 +516,55 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void Profiles_DropDownOpened(object sender, System.EventArgs e) => ViewModel.RefreshProfileList();
+    /// <summary>
+    /// The profile button's quick-switch menu (docs/PROFILE-MANAGER.md, decision 2): pinned profiles, recent ones,
+    /// then Manage profiles…. Built when opened, so it always shows the profiles on disk now.
+    /// </summary>
+    private void ProfileButton_Click(object sender, RoutedEventArgs e)
+    {
+        var (pinned, recent) = ViewModel.QuickSwitchLists();
+        var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = ProfileButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        void Section(string title, IReadOnlyList<string> names)
+        {
+            if (names.Count == 0) return;
+            menu.Items.Add(new System.Windows.Controls.MenuItem { Header = title, IsEnabled = false });
+            foreach (var name in names)
+            {
+                var item = new System.Windows.Controls.MenuItem { Header = name, IsChecked = name.Equals(ViewModel.Profile.Name, StringComparison.OrdinalIgnoreCase) };
+                item.Click += (_, _) =>
+                {
+                    if (!ViewModel.SwitchTo(name, out var why) && why is not null) ViewModel.Status = why;
+                };
+                menu.Items.Add(item);
+            }
+        }
+        Section(Loc.T("Pinned"), pinned);
+        Section(Loc.T("Recent"), recent);
+        // Until a few are pinned or recent, the other profiles are listed too: switching must never need the window.
+        // Past that, they wait in a submenu.
+        const int ShortList = 6, OthersShown = 8;
+        var others = ProfileStore.List().Where(n => !pinned.Contains(n, StringComparer.OrdinalIgnoreCase) && !recent.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
+        var shown = pinned.Count + recent.Count < ShortList ? others.Take(OthersShown).ToList() : [];
+        Section(Loc.T("Profiles"), shown);
+        var rest = others.Skip(shown.Count).ToList();
+        if (rest.Count > 0)
+        {
+            var more = new System.Windows.Controls.MenuItem { Header = shown.Count > 0 ? Loc.T("More profiles") : Loc.T("All profiles") };
+            foreach (var name in rest)
+            {
+                var item = new System.Windows.Controls.MenuItem { Header = name };
+                item.Click += (_, _) =>
+                {
+                    if (!ViewModel.SwitchTo(name, out var why) && why is not null) ViewModel.Status = why;
+                };
+                more.Items.Add(item);
+            }
+            menu.Items.Add(more);
+        }
+        if (menu.Items.Count > 0) menu.Items.Add(new System.Windows.Controls.Separator());
+        menu.Items.Add(new System.Windows.Controls.MenuItem { Header = Loc.T("Manage profiles…"), InputGestureText = "Ctrl+P", Command = ViewModel.OpenProfilesCommand });
+        menu.IsOpen = true;
+    }
 
     /// <summary>
     /// Ctrl+C over the console copies the selected rows. Handled here rather than by a command because the selection

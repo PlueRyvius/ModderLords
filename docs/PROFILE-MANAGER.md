@@ -1,6 +1,7 @@
 # Profile manager and verified profiles
 
-Status: **designed 2026-11-08 with the maintainer, not built.** The decisions are below, then the window, the
+Status: **designed 2026-11-08 with the maintainer; build step 1 (the window, groups, pins, quick switch) built
+2026-11-08, verified profiles not yet.** The decisions are below, then the window, the
 verified-profiles file, how a profile earns each badge, player submissions, and the build order. Every open question
 was settled on 2026-11-08 (at the end).
 
@@ -105,7 +106,14 @@ Decided 2026-11-08: players can submit a whole profile, not only report that our
 ## Build order (proposed)
 
 1. Groups and pins in the profile file; the Profiles window with the list, status column, right-click menu, drag to
-   group, search; the quick-switch menu. No verified profiles yet.
+   group, search; the quick-switch menu. No verified profiles yet. **Built 2026-11-08**: `ProfilesWindow`,
+   `ProfilesViewModel`, `ProfileIndex` (recent profiles and group names, `profile-index.json`), and
+   `ProfileStore.Delete` moving files to `deleted-profiles\` with a **Recently deleted** group and **Restore**.
+   Agreed after a review of the first build (2026-11-08): the quick-switch menu lists the other profiles too while
+   few are pinned or recent (the rest in a submenu), so switching never needs the window; groups can be renamed and
+   deleted (a deleted group's profiles move to Ungrouped); **Mods changed** shows in plain text and only **missing**
+   mods in amber; a profile whose game folder or extra mod folders differ from the open one's is checked by its own
+   scan, in the background ("Checking…" until then). Export mod list stays on the Share tab for now.
 2. `verified-profiles.json`, bundled and fetched like the compat database; the Verified section; use directly, copy
    on change, Get missing mods; the version comparison (decision 8).
 3. Gold entries: the maintainer's first verified profiles, from test runs.

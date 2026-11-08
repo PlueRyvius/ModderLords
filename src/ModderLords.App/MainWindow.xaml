@@ -67,13 +67,21 @@
                 <WrapPanel VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{l:T 'Profile'}" VerticalAlignment="Center" Margin="0,0,6,0" />
-                        <ComboBox Width="160" ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfileName}" DropDownOpened="Profiles_DropDownOpened" />
+                        <!-- One button (docs/PROFILE-MANAGER.md, decisions 1 and 2): a quick-switch menu, and Manage profiles…
+                             for everything else (Ctrl+P). -->
+                        <Button x:Name="ProfileButton" Click="ProfileButton_Click" MinWidth="180" HorizontalContentAlignment="Stretch"
+                                ToolTip="{l:T 'Switch profile, or manage them (Ctrl+P)'}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="&#x25BE;" Margin="8,0,0,0" />
+                                <Border DockPanel.Dock="Right" Background="{DynamicResource BadgeBackground}" CornerRadius="3" Padding="6,0" Margin="8,0,0,0"
+                                        Visibility="{Binding ProfileHasCoop, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{l:T 'Coop'}" FontSize="11" />
+                                </Border>
+                                <TextBlock Text="{Binding Profile.Name}" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                        </Button>
                     </StackPanel>
-                    <Button Content="{l:T 'New'}" Command="{Binding NewProfileCommand}" />
                     <Button Content="{l:T 'Save'}" Command="{Binding SaveProfileCommand}" />
-                    <Button Content="{l:T 'Rename'}" Command="{Binding RenameProfileCommand}"
-                            ToolTip="{l:T 'Rename this profile. Its settings, its saved mod-setting overrides and its overlay folder move with it.'}" />
-                    <Button Content="{l:T 'Delete'}" Command="{Binding DeleteProfileCommand}" />
                     <Button Content="{l:T 'Rescan mods'}" Command="{Binding RescanCommand}" />
                     <Button Content="{l:T 'Folders…'}" Command="{Binding EditFoldersCommand}"
                             ToolTip="{l:T 'Choose where this profile finds the game, the coop server and any extra mod folders. Needed only when they are not found automatically.'}" />

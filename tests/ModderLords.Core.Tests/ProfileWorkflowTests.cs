@@ -192,7 +192,7 @@ public class ProfileWorkflowTests
         {
             foreach (var n in new[] { from, to })
             {
-                ProfileStore.Delete(n);
+                ProfileStore.Delete(n, keepCopy: false);
                 if (Directory.Exists(ProfileStore.OverlayDirFor(n))) Directory.Delete(ProfileStore.OverlayDirFor(n), true);
             }
         }
@@ -210,7 +210,7 @@ public class ProfileWorkflowTests
             ProfileStore.Rename(name, name.ToUpperInvariant());
             Assert.Equal(name.ToUpperInvariant(), ProfileStore.Load(name)!.Name);
         }
-        finally { ProfileStore.Delete(name); }
+        finally { ProfileStore.Delete(name, keepCopy: false); }
     }
 
     [Fact]
