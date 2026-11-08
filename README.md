@@ -226,7 +226,7 @@ To play with mods:
 To host a coop server, additionally:
 
 - **Bannerlord Coop** subscribed on the Steam Workshop (item 3770450698). Its dedicated server lives inside that
-  workshop item; ModderLords finds it automatically.
+  workshop item; ModderLords finds it automatically. ModderLords 1.8.0 is built and tested against Coop 0.1.7.
 - Everyone who joins needs the same community mods and versions enabled in their own Bannerlord launcher, and the War
   Sails DLC disabled. Use the Share tab to hand them the list.
 

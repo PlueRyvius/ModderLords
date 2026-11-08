@@ -177,6 +177,8 @@ what works, what to turn on and what does not work. Mods you have installed are 
 - **Updates**: a banner offers each new release. **Update now** downloads it, checks it against GitHub's checksum,
   replaces the app and restarts. Profiles are kept.
 - **Languages**: English and Simplified Chinese.
+- **Coop version**: built and tested against Bannerlord Coop 0.1.7. Coop 0.1.7 syncs town stashes and the inventory
+  screen's trades itself, so ModderLords leaves those to it.
 
 ---
 
@@ -250,6 +252,9 @@ Inside the adapter:
   that fails does not stop the rest.
 - **`GameThread.RunSafe`**: network messages arrive on Coop's thread, and anything that touches the campaign is moved
   onto the game's thread first.
+- **Start-up setup** (world creation, the headless map setup, installing the standalone compat modules) runs when
+  the game sets its first screen. Coop 0.1.7's dedicated server never sets one, so there it runs on the first tick
+  instead.
 
 ### Settings sync
 
@@ -320,7 +325,10 @@ General co-op fixes that are not tied to one mod live here too:
 - **Encounter menus** wait until the server's battle has reached the player, so a click is not lost.
 - **The load-menu guard** stops a saved town menu crashing a game that loads with no town.
 - **Field battles** skip scenes that would crash players' graphics.
-- **The inventory exchange event** is raised in co-op too, so the quests and mods that listen for it work.
+- **The inventory exchange event** is raised in co-op too, so the quests and mods that listen for it work. Coop 0.1.7
+  finishes the inventory screen's Done itself (the player's game gets the server's rosters and raises the event), so
+  on 0.1.7 this patch stands down, and so does putting a town stash back after Done. Doing either again doubled
+  stashes and counted delivery quests twice.
 - **Client optional mods** are left out of Coop's join check.
 - **Offline freeze** and **player kingdom protection** back the Host tab's gameplay rules.
 
@@ -335,6 +343,9 @@ The Characters tab, the Host tab's time buttons and announcements work through t
 
 Where Coop misses something, such as a revived hero's rebuilt skills, or a child left in an old parent's list, the
 server sends it to players itself.
+
+A level edit is one such case. Coop 0.1.7 syncs a hero's level only when the game's own methods change it, so the
+editor's write goes through Coop's own sync for that field rather than setting it directly.
 
 `@DS@` lines report player events: joining, loading, creating a character, on the map. These drive the Characters
 list, pause-on-join and the Performance tab's player count.
@@ -376,6 +387,16 @@ The **Supported mods** tab is separate: written descriptions of how each mod is 
 server, game, Coop, crash folder and mods. It redacts them: folder paths, user and PC names, passwords and keys, IP
 addresses and Steam ids. It packs a zip with a manifest of every file and its hash. A save is only added if you pick
 one, and goes in a second zip. Nothing is uploaded: you attach the zip to the GitHub form yourself.
+
+## The in-game test harness
+
+CI has no game, so co-op behaviour is checked by `ModderLords.Cli test`: it starts the server and a player's game in
+test mode, and a small agent inside `ModderLords.Compat` runs a suite's steps on each side (give an item, enter a
+town, use the stash, compare both sides). Built-in suites cover the stash, gold sync, the editor's level edit and the
+both-perks rule. The `parity` suite changes nothing: it checks that every mod that loaded also started on each side
+(a mod that quietly fails on the server works only on players' games) and that a player's hero reads the same on both.
+Each run leaves a report, evidence and both sides' logs in a run folder. Test mode is off unless the launch switches
+it on. [INGAME-TEST-HARNESS.md](INGAME-TEST-HARNESS.md) has the details.
 
 ## Releases and updates
 
