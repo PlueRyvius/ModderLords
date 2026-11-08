@@ -1,0 +1,108 @@
+namespace ModderLords.Core.Testing;
+
+/// <summary>
+/// Which suites a run with no suite named runs (docs/INGAME-TEST-HARNESS.md, decisions 11–13, 19 and 21), and how
+/// they become one plan: the core suite first, then every suite whose mode fits the run and whose requirements the
+/// profile's mods meet, each on a fresh world unless it opted in to sharing one.
+/// </summary>
+public static class SuiteSelection
+{
+    public const string CoreSuite = "core";
+
+    /// <summary>The single-player run's own world, made once at the start and loaded fresh for each suite.</summary>
+    public const string RunWorld = "mltest-run";
+
+    /// <param name="mods">The profile's enabled mods: id → installed version (null when unknown).</param>
+    /// <param name="onlyMod">With <c>--mod X</c>: only suites that require X, unless <paramref name="withOthers"/>.</param>
+    /// <param name="notes">Told why each suite left out was left out.</param>
+    public static IReadOnlyList<TestPlan> Select(IEnumerable<TestPlan> available, IReadOnlyDictionary<string, string?> mods,
+        bool singlePlayer, string? onlyMod, bool withOthers, List<string> notes)
+    {
+        var all = available.ToList();
+        var core = all.FirstOrDefault(p => p.Name == CoreSuite) ?? throw new InvalidOperationException("the core suite is missing");
+        var picked = new List<TestPlan>();
+        foreach (var plan in all.Where(p => p.Name != CoreSuite).OrderBy(p => p.Name, StringComparer.Ordinal))
+        {
+            // A v1 suite declares neither mode nor requirements, so nothing says where it applies: it runs by name only.
+            if (plan.Api < 2) continue;
+            if (!plan.RunsIn(singlePlayer)) { notes.Add($"{plan.Name}: {(singlePlayer ? "Coop" : "single-player")} only"); continue; }
+            var unmet = plan.Requires.Where(r => !mods.TryGetValue(r.Id, out var version) || !r.MetBy(version)).ToList();
+            if (unmet.Count > 0) { notes.Add($"{plan.Name}: needs {string.Join(", ", unmet.Select(r => Describe(r, mods)))}"); continue; }
+            if (onlyMod is not null && !withOthers && !plan.Requires.Any(r => r.Id.Equals(onlyMod, StringComparison.OrdinalIgnoreCase)))
+            {
+                notes.Add($"{plan.Name}: does not require {onlyMod} (--with-others runs it too)");
+                continue;
+            }
+            picked.Add(plan);
+        }
+        // Fresh worlds first; the suites that share one run together after them, so one reset covers them all.
+        return [core.ForMode(singlePlayer), .. picked.Where(p => !p.SharesWorld).Select(p => p.ForMode(singlePlayer)),
+            .. picked.Where(p => p.SharesWorld).Select(p => p.ForMode(singlePlayer))];
+    }
+
+    private static string Describe(ModRequirement r, IReadOnlyDictionary<string, string?> mods) =>
+        mods.TryGetValue(r.Id, out var version) ? $"{r} (this profile has {version ?? "an unknown version"})" : $"{r} (not in this profile)";
+
+    /// <summary>
+    /// The Coop launches for <paramref name="suites"/> (in order): a suite that needs a fresh world starts a new
+    /// launch, and a suite that shares one joins the launch before it. Restarting the server inside one launch comes
+    /// later; until then a fresh world costs a launch.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<TestPlan>> CoopLaunches(IReadOnlyList<TestPlan> suites)
+    {
+        var launches = new List<List<TestPlan>>();
+        foreach (var suite in suites)
+        {
+            if (launches.Count == 0 || !suite.SharesWorld) launches.Add([]);
+            launches[^1].Add(suite);
+        }
+        return launches;
+    }
+
+    /// <summary>Single player: make the run's world before the first suite, load it fresh before each later one.</summary>
+    public static IReadOnlyList<PlanStep> SinglePlayerSetup(TestPlan suite, int index, string? world)
+    {
+        const string side = TestPlan.GameSide;
+        if (index == 0)
+            return world is null
+                ? [new PlanStep { Id = "game.createWorld", Side = side, As = "world", Timeout = TimeSpan.FromMinutes(15), Args = new Dictionary<string, string> { ["name"] = RunWorld, ["overwrite"] = "true" } }]
+                : [new PlanStep { Id = "game.loadSave", Side = side, As = "world", Timeout = TimeSpan.FromMinutes(15), Args = new Dictionary<string, string> { ["name"] = world } }];
+        if (suite.SharesWorld) return [];
+        return
+        [
+            new PlanStep { Id = "game.toMainMenu", Side = side, As = "leave", Timeout = TimeSpan.FromMinutes(5) },
+            new PlanStep { Id = "game.loadSave", Side = side, As = "world", Timeout = TimeSpan.FromMinutes(15), Args = new Dictionary<string, string> { ["name"] = world ?? RunWorld } },
+            new PlanStep { Id = "game.pause", Side = side, As = "pause" },
+        ];
+    }
+
+    /// <summary>Coop: before the first suite of a launch, wait for the join and stop campaign time, as v1 suites do.</summary>
+    public static IReadOnlyList<PlanStep> CoopSetup(TestPlan suite, int index) => index > 0 ? [] :
+    [
+        new PlanStep { Id = "game.onMap", Side = "server", As = "server.onMap" },
+        new PlanStep { Id = "game.onMap", Side = "client:1", As = "client.onMap" },
+        new PlanStep { Id = "game.joined", Side = "client:1", As = "joined" },
+        new PlanStep { Id = "game.pause", Side = "server", As = "pause" },
+    ];
+
+    /// <summary>
+    /// One plan made of <paramref name="suites"/>, each preceded by its <paramref name="setup"/> steps. Step names
+    /// and their "$name.key" references are prefixed with the suite's name, so two suites can name steps alike.
+    /// </summary>
+    public static TestPlan Compose(string name, IReadOnlyList<TestPlan> suites, Func<TestPlan, int, IReadOnlyList<PlanStep>> setup)
+    {
+        var steps = new List<PlanStep>();
+        for (int i = 0; i < suites.Count; i++)
+        {
+            var suite = suites[i];
+            string Prefix(string stepName) => suite.Name + "/" + stepName;
+            foreach (var step in setup(suite, i).Concat(suite.Steps))
+            {
+                var args = step.Args.ToDictionary(kv => kv.Key,
+                    kv => TestPlan.Reference(kv.Value) is { } r ? $"${Prefix(r.Step)}.{r.Key}" : kv.Value, StringComparer.Ordinal);
+                steps.Add(step with { As = Prefix(step.Name), Args = args, Suite = suite.Name });
+            }
+        }
+        return new TestPlan { Name = name, Api = TestPlan.SupportedApi, Steps = steps, Mode = suites.FirstOrDefault()?.Mode ?? SuiteMode.Coop };
+    }
+}

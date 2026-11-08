@@ -30,6 +30,8 @@ public sealed record StepReport
     public IReadOnlyList<string> Log { get; init; } = [];
     public long Milliseconds { get; init; }
     public string? KnownFailing { get; init; }
+    /// <summary>The suite the step belongs to, in a run made of several suites; empty in a run of one.</summary>
+    public string Suite { get; init; } = "";
 }
 
 public sealed record TestReport
@@ -48,6 +50,12 @@ public sealed record TestReport
 
     public string Verdict => Passed ? "PASS" : "FAIL";
 
+    /// <summary>In a run of several suites: each suite, in run order, and whether all its steps passed.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<(string Suite, bool Passed)> Suites =>
+        Steps.Where(s => s.Suite.Length > 0).GroupBy(s => s.Suite)
+            .Select(g => (g.Key, g.All(s => s.Outcome is StepOutcome.Pass or StepOutcome.KnownFail))).ToList();
+
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
@@ -62,8 +70,14 @@ public sealed record TestReport
         sb.AppendLine($"Test suite {Suite}: {Verdict}   (run {RunId}, {Duration.TotalSeconds:F0} s)");
         foreach (var (side, versions) in Versions)
             sb.AppendLine($"  {side,-9} " + string.Join(", ", versions.Select(kv => $"{kv.Key} {kv.Value}")));
+        string? suite = null;
         foreach (var step in Steps)
         {
+            if (step.Suite.Length > 0 && step.Suite != suite)
+            {
+                suite = step.Suite;
+                sb.AppendLine($"  {suite}:");
+            }
             var mark = step.Outcome switch
             {
                 StepOutcome.Pass => "pass",
@@ -78,6 +92,7 @@ public sealed record TestReport
             if (step.Outcome is not StepOutcome.Pass and not StepOutcome.Skipped)
                 foreach (var line in step.Log) sb.AppendLine("           " + line);
         }
+        if (Suites.Count > 0) sb.AppendLine("  suites: " + string.Join(", ", Suites.Select(s => $"{s.Suite} {(s.Passed ? "PASS" : "FAIL")}")));
         foreach (var note in Notes) sb.AppendLine("  note: " + note);
         return sb.ToString();
     }

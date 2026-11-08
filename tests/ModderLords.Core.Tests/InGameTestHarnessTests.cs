@@ -24,6 +24,99 @@ public class TestPlanTests
     }
 
     [Fact]
+    public void The_core_suite_runs_both_ways()
+    {
+        var core = TestSuites.Load(SuiteSelection.CoreSuite);
+        Assert.Equal(SuiteMode.Both, core.Mode);
+        var single = core.ForMode(singlePlayer: true);
+        Assert.Equal(["game"], single.Sides);
+        Assert.DoesNotContain(single.Steps, s => s.IsCompare || s.Id == "hero.addGold");
+        var coop = core.ForMode(singlePlayer: false);
+        Assert.Equal(["server", "client:1"], coop.Sides);
+        Assert.Contains(coop.Steps, s => s.IsCompare && s.Id == "hero.parity");
+        Assert.Equal(2, coop.Steps.Count(s => s.Id == "mods.started"));
+    }
+
+    [Fact]
+    public void Requirements_and_mode_are_read_from_a_v2_suite()
+    {
+        var plan = TestPlan.Parse("""
+            { "api": 2, "name": "t", "mode": "coop", "continuity": true, "world": "shared",
+              "requires": [ "CoopWarehouses", { "id": "ModularArmor2", "version": ">=1.2" } ],
+              "steps": [ { "id": "a", "side": "server" } ] }
+            """);
+        Assert.Equal(SuiteMode.Coop, plan.Mode);
+        Assert.True(plan.Continuity);
+        Assert.True(plan.SharesWorld);
+        Assert.Equal([new ModRequirement("CoopWarehouses"), new ModRequirement("ModularArmor2", ">=1.2")], plan.Requires);
+    }
+
+    [Theory]
+    [InlineData("v1.2.3", ">=1.2", true)]
+    [InlineData("v1.1.9", ">=1.2", false)]
+    [InlineData("v1.2", "=1.2.0", true)]
+    [InlineData("e1.4.8", "<2", true)]
+    [InlineData("v2.0.0", "<2", false)]
+    [InlineData("v1.3.0", "1.3", true)]
+    [InlineData("v1.3.1", ">1.3", true)]
+    public void Version_ranges_compare_number_by_number(string installed, string range, bool matches) =>
+        Assert.Equal(matches, VersionRange.Matches(installed, range));
+
+    private static TestPlan BothSuite(string name, string extra = "") =>
+        TestPlan.Parse("{ \"api\": 2, \"name\": \"" + name + "\", \"mode\": \"both\"" + extra + ", \"steps\": [ { \"id\": \"a\", \"side\": \"game\" } ] }");
+
+    [Fact]
+    public void Selection_puts_core_first_and_keeps_only_suites_the_mods_meet()
+    {
+        var available = new[]
+        {
+            BothSuite("shared-one", ", \"world\": \"shared\""),
+            BothSuite("needs-armor", ", \"requires\": [ { \"id\": \"ModularArmor2\", \"version\": \">=1.2\" } ]"),
+            BothSuite("needs-old-armor", ", \"requires\": [ { \"id\": \"ModularArmor2\", \"version\": \"<1\" } ]"),
+            BothSuite("needs-warehouses", ", \"requires\": [ \"CoopWarehouses\" ]"),
+            TestPlan.Parse("""{ "api": 2, "name": "coop-only", "mode": "coop", "steps": [ { "id": "a", "side": "server" } ] }"""),
+            TestPlan.Parse("""{ "name": "v1", "steps": [ { "id": "a", "side": "server" } ] }"""),
+            TestSuites.Load(SuiteSelection.CoreSuite),
+        };
+        var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) { ["ModularArmor2"] = "v1.3.0" };
+
+        var notes = new List<string>();
+        var picked = SuiteSelection.Select(available, mods, singlePlayer: true, onlyMod: null, withOthers: false, notes);
+        Assert.Equal(["core", "needs-armor", "shared-one"], picked.Select(p => p.Name));
+        Assert.Contains(notes, n => n.StartsWith("needs-old-armor: needs ModularArmor2 <1 (this profile has v1.3.0)", StringComparison.Ordinal));
+        Assert.Contains(notes, n => n.StartsWith("needs-warehouses: needs CoopWarehouses (not in this profile)", StringComparison.Ordinal));
+        Assert.Contains(notes, n => n.StartsWith("coop-only: Coop only", StringComparison.Ordinal));
+
+        var onlyArmor = SuiteSelection.Select(available, mods, singlePlayer: true, onlyMod: "ModularArmor2", withOthers: false, []);
+        Assert.Equal(["core", "needs-armor"], onlyArmor.Select(p => p.Name));
+        var withOthers = SuiteSelection.Select(available, mods, singlePlayer: true, onlyMod: "ModularArmor2", withOthers: true, []);
+        Assert.Equal(["core", "needs-armor", "shared-one"], withOthers.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void A_fresh_world_starts_a_Coop_launch_and_a_shared_one_joins_the_last()
+    {
+        TestPlan Suite(string name, bool shared) => TestPlan.Parse("{ \"api\": 2, \"name\": \"" + name + "\", \"mode\": \"coop\"" +
+            (shared ? ", \"world\": \"shared\"" : "") + ", \"steps\": [ { \"id\": \"a\", \"side\": \"server\" } ] }");
+        var launches = SuiteSelection.CoopLaunches([Suite("core", false), Suite("a", false), Suite("b", true), Suite("c", true)]);
+        Assert.Equal([["core"], ["a", "b", "c"]], launches.Select(l => l.Select(p => p.Name).ToArray()));
+    }
+
+    [Fact]
+    public void Composing_prefixes_names_and_references_and_adds_each_suites_setup()
+    {
+        var a = TestPlan.Parse("""{ "name": "a", "steps": [ { "id": "x", "side": "game", "as": "me" }, { "id": "y", "side": "game", "args": { "n": "$me.heroName" } } ] }""");
+        var b = TestPlan.Parse("""{ "name": "b", "steps": [ { "id": "x", "side": "game", "as": "me" } ] }""");
+        var plan = SuiteSelection.Compose("selected", [a, b], (suite, i) => SuiteSelection.SinglePlayerSetup(suite, i, world: null));
+        Assert.Equal(["a/world", "a/me", "a/y", "b/leave", "b/world", "b/pause", "b/me"], plan.Steps.Select(s => s.Name));
+        Assert.Equal("$a/me.heroName", plan.Steps[2].Args["n"]);
+        Assert.Equal(SuiteSelection.RunWorld, plan.Steps[0].Args["name"]);
+        Assert.Equal("game.createWorld", plan.Steps[0].Id);
+        Assert.Equal("game.loadSave", plan.Steps[4].Id);
+        Assert.All(plan.Steps.Take(3), s => Assert.Equal("a", s.Suite));
+    }
+
+    [Fact]
     public void A_single_player_suite_runs_on_the_game_alone()
     {
         var plan = TestSuites.Load("sp-world");
@@ -49,10 +142,16 @@ public class TestPlanTests
     [InlineData("""{ "name": "t", "steps": [ { "id": "a", "side": "client" } ] }""", "client:N")]
     [InlineData("""{ "name": "t", "steps": [ { "compare": "a", "sides": ["server"] } ] }""", "two or more")]
     [InlineData("""{ "name": "t", "steps": [ { "id": "a", "side": "server", "args": { "x": "$b.value" } } ] }""", "not an earlier step")]
-    [InlineData("""{ "api": 2, "name": "t", "steps": [ { "id": "a", "side": "server" } ] }""", "v2")]
+    [InlineData("""{ "api": 3, "name": "t", "steps": [ { "id": "a", "side": "server" } ] }""", "v3")]
     [InlineData("""{ "name": "t", "steps": [] }""", "no steps")]
     [InlineData("""{ "name": "t", "steps": [ { "side": "server" } ] }""", "neither")]
     [InlineData("""{ "name": "t", "steps": [ { "id": "a", "side": "game" }, { "id": "b", "side": "server" } ] }""", "one or the other")]
+    [InlineData("""{ "name": "t", "mode": "coop", "steps": [ { "id": "a", "side": "server" } ] }""", "need \"api\": 2")]
+    [InlineData("""{ "api": 2, "name": "t", "mode": "both", "steps": [ { "id": "a", "side": "server" } ] }""", "names \"game\" and \"player\"")]
+    [InlineData("""{ "api": 2, "name": "t", "mode": "coop", "steps": [ { "id": "a", "side": "player" } ] }""", "not \"player\"")]
+    [InlineData("""{ "api": 2, "name": "t", "mode": "coop", "steps": [ { "id": "a", "side": "server", "mode": "coop" } ] }""", "belongs to a suite")]
+    [InlineData("""{ "api": 2, "name": "t", "mode": "sometimes", "steps": [ { "id": "a", "side": "server" } ] }""", "singleplayer, coop or both")]
+    [InlineData("""{ "api": 2, "name": "t", "requires": [ { "id": "X", "version": ">=abc" } ], "steps": [ { "id": "a", "side": "server" } ] }""", "not a version")]
     public void A_bad_suite_names_its_problem(string json, string expected)
     {
         var ex = Assert.Throws<FormatException>(() => TestPlan.Parse(json));
@@ -288,6 +387,17 @@ public sealed class TestSequencerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_failure_skips_the_rest_of_its_suite_and_the_next_suite_still_runs()
+    {
+        var a = TestPlan.Parse("""{ "name": "a", "steps": [ { "id": "fail", "side": "server" }, { "id": "stash.count", "side": "server" } ] }""");
+        var b = TestPlan.Parse("""{ "name": "b", "steps": [ { "id": "stash.count", "side": "server" } ] }""");
+        var report = await Run(SuiteSelection.Compose("selected", [a, b], (_, _) => []));
+        Assert.Equal([CoreOutcome.Fail, CoreOutcome.Skipped, CoreOutcome.Pass], report.Steps.Select(s => s.Outcome));
+        Assert.Equal([("a", false), ("b", true)], report.Suites);
+        Assert.Contains("suites: a FAIL, b PASS", report.ToText());
+    }
+
+    [Fact]
     public async Task Known_failures_do_not_fail_the_run_and_unexpected_passes_do()
     {
         var known = await Run("""
@@ -367,9 +477,10 @@ public sealed class TestSequencerTests : IDisposable
         Assert.Equal(side, TestRunSwitch.From(args, env, isServer)?.Side);
     }
 
-    private async Task<TestReport> Run(string suite, bool stopAgents = false, string? token = null)
+    private Task<TestReport> Run(string suite, bool stopAgents = false, string? token = null) => Run(TestPlan.Parse(suite), stopAgents, token);
+
+    private async Task<TestReport> Run(TestPlan plan, bool stopAgents = false, string? token = null)
     {
-        var plan = TestPlan.Parse(suite);
         var channel = FileTestRunChannel.Create(_root, plan, DateTimeOffset.Now);
         var agents = plan.Sides.Select(side => new TestAgent(
             TestRunSwitch.Parse(token is null ? channel.SwitchValue(side) : $"{channel.Folder}|{side}|{token}")!, _ => { })).ToList();
