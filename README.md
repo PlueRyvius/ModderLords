@@ -641,7 +641,8 @@ picked, no mod showed an error on screen, and in Coop the server and your game a
 - Test worlds are saves you put in `%LOCALAPPDATA%\ModderLords\test-worlds\`.
 
 From a command line: `ModderLords.Cli test --profile NAME --modules stash,sync [--single-player]`, and
-`test --list` for what exists. Writing new checks: `docs/WRITING-TEST-MODULES.md`.
+`test --list` for what exists. Writing new checks: `docs/WRITING-TEST-MODULES.md`; to send someone the links,
+`docs/WRITING-TESTS-LINKS.md`.
 
 ### Smoke test *(Host mode)*
 

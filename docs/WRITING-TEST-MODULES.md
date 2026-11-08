@@ -1,7 +1,8 @@
 # Writing test modules
 
 A guide for an agent (or a person) adding tests to ModderLords' in-game test harness. The design and the reasons
-behind it are in `docs/INGAME-TEST-HARNESS.md`; this file is how to do the work.
+behind it are in `docs/INGAME-TEST-HARNESS.md`; this file is how to do the work. To point someone else at all of
+it, send them `docs/WRITING-TESTS-LINKS.md`: the same pages as full links, ready to paste into a chat.
 
 **In one paragraph:** tests run *inside* the game, as part of ModderLords.Compat, so a test step can do anything the
 game's own code can do, without a mouse. Steps are C# coroutines registered by id. Suites are JSON lists of steps.
