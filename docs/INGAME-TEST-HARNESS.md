@@ -73,8 +73,9 @@ ModderLords.Cli test --profile "My Host" --suite stash [--world NAME] [--keep-cl
 5. `report.txt` / `report.json`, `evidence\`, both sides' result files, the server console and the smoke test's log
    slices are all in the run folder. The exit code is 0 only when every step passed (or failed as known).
 
-Built-in suites: `stash` (the 0.1.7 stash doubling), `sync-basics` (gold given on the server reaches the player) and
-`hero-level` (a level set with the character editor's `modderlords.edit` command reaches the player).
+Built-in suites: `stash` (the 0.1.7 stash doubling), `sync-basics` (gold given on the server reaches the player),
+`hero-level` (a level set with the character editor's `modderlords.edit` command reaches the player) and `parity`
+(changes nothing: every mod that loaded also started, on both sides, and the player's hero reads the same on both).
 `stash` uses `town_EN1` and `grain`, both vanilla.
 
 Test mode is visible: each game logs `TEST MODE: ...` at load (`ModderLords.CompatSync` log) and the agent logs each
@@ -127,8 +128,20 @@ Coop's server refuses a town entry from further away), `settlement.enter` (the p
 arriving there does),
 `party.settlement`, `hero.addGold`, `hero.gold`, `hero.adminLevel` (server: the character editor's
 `modderlords.edit … level=N` command), `hero.level`, `party.addItem`, `party.itemCount`, `stash.count`, and
-`stash.deposit` / `stash.reopen` (both open the stash as the town menu does, so the party must be in the town). Steps that need Coop's types go in `ModderLords.CompatSync.Coop` and register the same
-way; nothing in the agent references Coop.
+`stash.deposit` / `stash.reopen` (both open the stash as the town menu does, so the party must be in the town).
+
+Parity steps (`ParitySteps.cs`), for what quietly differs between the sides:
+
+- `mods.started`: every community mod whose code loaded shows it started: a Harmony patch, a campaign behaviour or a
+  game model from its own DLLs. A mod can load, fail inside its own start-up, catch the error and go quiet; Both
+  Perks does that on a dedicated server, so the player's game grants perks the server never has. `value` is the quiet
+  mods or `none`; `ignore` lists mods allowed to show nothing. `mods-started.txt` has each mod's evidence.
+- `hero.parity`: one line a compare can check: level, health and its maximum, gold, and the attributes, skills, focus
+  and perks (each counted and hashed, so a different set of the same size still differs). The full values are in
+  `hero-parity-<side>.txt` for the diff.
+
+Steps that need Coop's types go in `ModderLords.CompatSync.Coop` and register the same way; nothing in the agent
+references Coop.
 
 ## Writing a suite
 

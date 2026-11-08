@@ -45,6 +45,7 @@ internal static class BuiltInSteps
         InGameTests.Register("stash.count", StepSide.Any, StashCount);
         InGameTests.Register("stash.deposit", StepSide.Client, StashDeposit);
         InGameTests.Register("stash.reopen", StepSide.Client, StashReopen);
+        ParitySteps.Register();
     }
 
     // ---- game ------------------------------------------------------------------------------------------------
@@ -422,8 +423,11 @@ internal static class BuiltInSteps
         {
             var name = ctx.Arg("heroName");
             // Hero.FindAll searches Campaign.Characters, which on a player's game lacks Coop's local copy of that
-            // player's own hero (run 5), so this player's hero is matched by name too.
-            var found = Hero.FindAll(h => h.Name?.ToString() == name).ToList();
+            // player's own hero (run 5), so this player's hero is matched by name too. On the server, a player hero
+            // can be missing from it as well (both-perks run 1), so the campaign's own hero lists are searched too.
+            var found = Hero.FindAll(h => h.Name?.ToString() == name)
+                .Concat(Hero.AllAliveHeroes.Concat(Hero.DeadOrDisabledHeroes).Where(h => h.Name?.ToString() == name))
+                .Distinct().ToList();
             if (Hero.MainHero != null && Hero.MainHero.Name?.ToString() == name && !found.Contains(Hero.MainHero)) found.Add(Hero.MainHero);
             if (found.Count != 1) throw new StepFailedException(found.Count == 0 ? $"no hero named '{name}' in this world" : $"{found.Count} heroes are named '{name}'");
             return found[0];
@@ -468,4 +472,7 @@ internal static class BuiltInSteps
             sb.AppendLine($"{element.EquipmentElement.Item?.StringId}\t{element.Amount}");
         return sb.ToString();
     }
+
+    /// <summary>The <c>heroName</c> / <c>hero</c> argument's hero, for steps in other files (<see cref="ParitySteps"/>).</summary>
+    internal static Hero FindHero(StepContext ctx) => HeroArg(ctx);
 }
