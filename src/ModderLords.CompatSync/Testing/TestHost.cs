@@ -47,6 +47,8 @@ internal static class TestHost
         if (runSwitch == null) return;
         // Coop's own log is empty in every run (built before Coop sets it up), so a copy is written into the run folder.
         CoopWatch.WatchLogger(Path.Combine(runSwitch.Folder, "coop-" + runSwitch.Side.Replace(':', '-') + ".log"));
+        // On-screen errors from the start: a mod's load failure shows before the agent's first tick.
+        ErrorSteps.Arm(DateTime.UtcNow);
     }
 
     internal static void Tick()
@@ -57,6 +59,7 @@ internal static class TestHost
         // where this ran on the server before Coop loaded).
         // Once a second, not every frame: when a Coop update renamed the signal, each try scans every loaded assembly.
         var now = DateTime.UtcNow;
+        ErrorSteps.Arm(now);
         if (_modulesLoaded && !_isServer && CoopWatch.JoinUnavailable != null && CoopWatch.JoinReadyAt == null && now >= _nextJoinArm)
         {
             _nextJoinArm = now.AddSeconds(1);

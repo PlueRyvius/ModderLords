@@ -71,6 +71,8 @@ public sealed record TestPlan
     public bool Continuity { get; init; }
     /// <summary>The suite opted in to running on the previous suite's world (decision 19).</summary>
     public bool SharesWorld => World == SharedWorld;
+    /// <summary>Patterns (regular expressions) <c>game.noErrors</c> also fails on, beyond its default set (decision 25).</summary>
+    public IReadOnlyList<string> ErrorPatterns { get; init; } = [];
 
     /// <summary>Every side a step runs on, server first.</summary>
     public IReadOnlyList<string> Sides =>
@@ -121,8 +123,8 @@ public sealed record TestPlan
         if (api < 1 || api > SupportedApi) throw new FormatException($"the suite needs test API v{api}; this launcher understands up to v{SupportedApi}");
         var name = root["name"]?.GetValue<string>() ?? throw new FormatException("the suite has no name");
         var stepsNode = root["steps"] as JsonArray ?? throw new FormatException("the suite has no steps");
-        if (api == 1 && (root["mode"] is not null || root["requires"] is not null || root["continuity"] is not null))
-            throw new FormatException("\"mode\", \"requires\" and \"continuity\" need \"api\": 2");
+        if (api == 1 && (root["mode"] is not null || root["requires"] is not null || root["continuity"] is not null || root["errorPatterns"] is not null))
+            throw new FormatException("\"mode\", \"requires\", \"continuity\" and \"errorPatterns\" need \"api\": 2");
         var suiteMode = root["mode"] is { } modeNode ? ParseMode(modeNode.GetValue<string>(), "the suite") : (SuiteMode?)null;
 
         var steps = new List<PlanStep>();
@@ -205,6 +207,12 @@ public sealed record TestPlan
                     JsonObject o => new ModRequirement(o["id"]?.GetValue<string>() ?? throw new FormatException("a requirement has no \"id\""), o["version"]?.GetValue<string>()),
                     _ => throw new FormatException("\"requires\" lists module ids or { \"id\", \"version\" } objects"),
                 });
+        var errorPatterns = (root["errorPatterns"] as JsonArray)?.Select(n => n?.GetValue<string>() ?? "").Where(p => p.Length > 0).ToList() ?? [];
+        foreach (var pattern in errorPatterns)
+        {
+            try { _ = new System.Text.RegularExpressions.Regex(pattern); }
+            catch (ArgumentException ex) { throw new FormatException($"errorPatterns: \"{pattern}\" is not a regular expression: {ex.Message}"); }
+        }
         foreach (var r in requires.Where(r => r.Version is not null))
             if (!VersionRange.IsValid(r.Version!)) throw new FormatException($"requirement {r.Id}: \"{r.Version}\" is not a version or range (>=1.2, <2, =1.3.0)");
 
@@ -218,6 +226,7 @@ public sealed record TestPlan
             Mode = mode,
             Requires = requires,
             Continuity = root["continuity"]?.GetValue<bool>() ?? false,
+            ErrorPatterns = errorPatterns,
         };
     }
 

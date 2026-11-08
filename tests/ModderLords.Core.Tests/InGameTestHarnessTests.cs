@@ -108,13 +108,42 @@ public class TestPlanTests
         var a = TestPlan.Parse("""{ "name": "a", "steps": [ { "id": "x", "side": "game", "as": "me" }, { "id": "y", "side": "game", "args": { "n": "$me.heroName" } } ] }""");
         var b = TestPlan.Parse("""{ "name": "b", "steps": [ { "id": "x", "side": "game", "as": "me" } ] }""");
         var plan = SuiteSelection.Compose("selected", [a, b], (suite, i) => SuiteSelection.SinglePlayerSetup(suite, i, world: null));
-        Assert.Equal(["a/world", "a/me", "a/y", "b/leave", "b/world", "b/pause", "b/me"], plan.Steps.Select(s => s.Name));
+        Assert.Equal(["a/world", "a/me", "a/y", "b/leave", "b/world", "b/pause", "b/me", "end/noErrors.game"], plan.Steps.Select(s => s.Name));
+        Assert.Equal("true", plan.Steps[^1].Args["new"]);
         Assert.Equal("$a/me.heroName", plan.Steps[2].Args["n"]);
         Assert.Equal(SuiteSelection.RunWorld, plan.Steps[0].Args["name"]);
         Assert.Equal("game.createWorld", plan.Steps[0].Id);
         Assert.Equal("game.loadSave", plan.Steps[4].Id);
         Assert.All(plan.Steps.Take(3), s => Assert.Equal("a", s.Suite));
     }
+
+    [Fact]
+    public void Every_suites_error_patterns_reach_every_error_check()
+    {
+        var a = TestPlan.Parse("""{ "api": 2, "name": "a", "mode": "coop", "errorPatterns": [ "\\[MSmith\\].*failed" ], "steps": [ { "id": "game.noErrors", "side": "server" } ] }""");
+        var b = TestPlan.Parse("""{ "api": 2, "name": "b", "mode": "coop", "errorPatterns": [ "Armor broke" ], "steps": [ { "id": "x", "side": "client:1" } ] }""");
+        var plan = SuiteSelection.Compose("selected", [a, b], (_, _) => []);
+        var checks = plan.Steps.Where(s => s.Id == "game.noErrors").ToList();
+        Assert.Equal(["a/game.noErrors", "end/noErrors.server", "end/noErrors.client:1"], checks.Select(s => s.Name));
+        Assert.All(checks, s => Assert.Equal("""["\\[MSmith\\].*failed","Armor broke"]""", s.Args["patterns"]));
+    }
+
+    [Fact]
+    public void A_bad_error_pattern_is_caught_when_the_suite_loads()
+    {
+        var ex = Assert.Throws<FormatException>(() => TestPlan.Parse("""{ "api": 2, "name": "t", "errorPatterns": [ "([" ], "steps": [ { "id": "a", "side": "server" } ] }"""));
+        Assert.Contains("not a regular expression", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("[MSmith] catalog load failed: stat 'ammo.missile_speed' not allowed", "", true)]
+    [InlineData("Exception while loading the armour catalog", "", true)]
+    [InlineData("You have gained 5 renown", "", false)]
+    [InlineData("Unfailing loyalty", "", false)]
+    [InlineData("Armor broke in two", "[\"Armor broke\"]", true)]
+    [InlineData("Armor broke in two", "Armor broke", true)]
+    public void On_screen_errors_match_the_default_words_and_a_suites_own_patterns(string message, string extra, bool isError) =>
+        Assert.Equal(isError, ModderLords.Testing.ErrorPatterns.Matches([message], ModderLords.Testing.ErrorPatterns.From(extra)).Count == 1);
 
     [Fact]
     public void A_single_player_suite_runs_on_the_game_alone()
@@ -311,6 +340,7 @@ public sealed class TestSequencerTests : IDisposable
         InGameTests.Register("check", StepSide.Any, ctx => Do(() => ctx.Assert(ctx.Arg("got") == ctx.Arg("want"), $"got {ctx.Arg("got")}, want {ctx.Arg("want")}")));
         InGameTests.Register("fail", StepSide.Any, ctx => Do(() => ctx.Assert(false, "broken upstream")));
         InGameTests.Register("hang", StepSide.Any, ctx => Hang(ctx));
+        InGameTests.Register("game.noErrors", StepSide.Any, ctx => Do(() => ctx.Report("value", "none")));
     }
 
     public void Dispose()
@@ -392,9 +422,10 @@ public sealed class TestSequencerTests : IDisposable
         var a = TestPlan.Parse("""{ "name": "a", "steps": [ { "id": "fail", "side": "server" }, { "id": "stash.count", "side": "server" } ] }""");
         var b = TestPlan.Parse("""{ "name": "b", "steps": [ { "id": "stash.count", "side": "server" } ] }""");
         var report = await Run(SuiteSelection.Compose("selected", [a, b], (_, _) => []));
-        Assert.Equal([CoreOutcome.Fail, CoreOutcome.Skipped, CoreOutcome.Pass], report.Steps.Select(s => s.Outcome));
-        Assert.Equal([("a", false), ("b", true)], report.Suites);
-        Assert.Contains("suites: a FAIL, b PASS", report.ToText());
+        // The closing on-screen error check runs last, whatever failed before it.
+        Assert.Equal([CoreOutcome.Fail, CoreOutcome.Skipped, CoreOutcome.Pass, CoreOutcome.Pass], report.Steps.Select(s => s.Outcome));
+        Assert.Equal([("a", false), ("b", true), ("end", true)], report.Suites);
+        Assert.Contains("suites: a FAIL, b PASS, end PASS", report.ToText());
     }
 
     [Fact]
