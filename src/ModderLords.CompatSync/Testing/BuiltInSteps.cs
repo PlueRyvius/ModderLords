@@ -267,12 +267,13 @@ internal static class BuiltInSteps
 
     /// <summary>
     /// Server: sets a hero's level through ModderLords' own admin command (modderlords.edit REQ hero:ID level=N), the
-    /// path the App's character editor takes, so a suite checks that edit reaches the players.
+    /// path the App's character editor takes, so a suite checks that edit reaches the players. <c>level</c> sets it;
+    /// <c>by</c> raises it from where it is, for a suite that runs on a world another suite may have changed.
     /// </summary>
     private static IEnumerable<StepWait?> HeroAdminLevel(StepContext ctx)
     {
         var hero = HeroArg(ctx);
-        var level = ctx.ArgInt("level");
+        var level = ctx.HasArg("by") ? hero.Level + ctx.ArgInt("by") : ctx.ArgInt("level");
         ctx.Assert(hero.Level != level, $"{hero.StringId} is already level {level}; pick another so the edit changes something");
         var reply = RunConsole(ctx, "modderlords.edit", "test", "hero:" + hero.StringId, "level=" + level);
         ctx.Assert(reply.Contains("\"ok\":true"), "modderlords.edit refused: " + reply);
@@ -337,7 +338,9 @@ internal static class BuiltInSteps
         var property = settings.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
         ctx.Assert(property != null && property.PropertyType == typeof(bool), $"ModderLordsSettings has no bool rule '{name}'");
         var value = string.Equals(ctx.Arg("value"), "true", StringComparison.OrdinalIgnoreCase);
-        property!.SetValue(null, value);
+        // What it was, so a suite on a shared world can put it back for the suites after it.
+        ctx.Report("before", (bool)property!.GetValue(null)! ? "true" : "false");
+        property.SetValue(null, value);
         ctx.Report("value", value ? "true" : "false");
         yield break;
     }

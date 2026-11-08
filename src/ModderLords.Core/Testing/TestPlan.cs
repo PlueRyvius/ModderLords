@@ -83,6 +83,8 @@ public sealed record TestPlan
     public IReadOnlyList<ModuleLoad> Loads { get; init; } = [];
     /// <summary>Patterns (regular expressions) <c>game.noErrors</c> also fails on, beyond its default set (decision 25).</summary>
     public IReadOnlyList<string> ErrorPatterns { get; init; } = [];
+    /// <summary>In a plan made of several suites: their names, grouped by the world they run on (decision 19).</summary>
+    public IReadOnlyList<IReadOnlyList<string>> Worlds { get; init; } = [];
 
     /// <summary>Every side a step runs on, server first.</summary>
     public IReadOnlyList<string> Sides =>

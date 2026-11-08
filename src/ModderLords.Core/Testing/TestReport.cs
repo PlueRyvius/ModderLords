@@ -44,6 +44,8 @@ public sealed record TestReport
     /// <summary>Per side: game, Coop and ModderLords versions as that game reported them.</summary>
     public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Versions { get; init; } = new Dictionary<string, IReadOnlyDictionary<string, string>>();
     public IReadOnlyList<string> Notes { get; init; } = [];
+    /// <summary>In a run of several suites: their names, grouped by the world they ran on (decision 19).</summary>
+    public IReadOnlyList<IReadOnlyList<string>> Worlds { get; init; } = [];
 
     [JsonIgnore]
     public bool Passed => Steps.Count > 0 && Steps.All(s => s.Outcome is StepOutcome.Pass or StepOutcome.KnownFail);
@@ -93,6 +95,8 @@ public sealed record TestReport
                 foreach (var line in step.Log) sb.AppendLine("           " + line);
         }
         if (Suites.Count > 0) sb.AppendLine("  suites: " + string.Join(", ", Suites.Select(s => $"{s.Suite} {(s.Passed ? "PASS" : "FAIL")}")));
+        for (int i = 0; i < Worlds.Count; i++)
+            sb.AppendLine($"  world {i + 1}: {string.Join(", ", Worlds[i])}" + (Worlds[i].Count > 1 ? " (shared)" : ""));
         foreach (var note in Notes) sb.AppendLine("  note: " + note);
         return sb.ToString();
     }

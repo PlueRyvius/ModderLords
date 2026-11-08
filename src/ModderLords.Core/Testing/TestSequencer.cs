@@ -185,6 +185,7 @@ public sealed class TestSequencer
             Steps = steps,
             Versions = versions,
             Notes = notes,
+            Worlds = plan.Worlds,
         };
     }
 

@@ -1,15 +1,14 @@
 {
   // Nothing is changed: each side reports what it runs and how it sees the player's hero, and the sides must agree.
   // A mod that loads but never starts on the server (Both Perks on a dedicated server) leaves the player's game
-  // granting perks, health and XP the server never has; both checks below catch that.
-  "api": 1,
+  // granting perks, health and XP the server never has; both checks below catch that. It changes nothing, so it runs
+  // on the world the suite before it left (decision 19); the run's setup waits for the join and stops time.
+  "api": 2,
   "name": "parity",
+  "mode": "coop",
+  "world": "shared",
   "description": "Every mod that loaded also started, on both sides, and the player's hero is the same on both.",
   "steps": [
-    { "id": "game.onMap", "side": "server" },
-    { "id": "game.onMap", "side": "client:1" },
-    { "id": "game.joined", "side": "client:1" },
-    { "id": "game.pause", "side": "server" },
     { "id": "mods.started", "side": "server", "continueOnFail": true },
     { "id": "mods.started", "side": "client:1", "continueOnFail": true },
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },

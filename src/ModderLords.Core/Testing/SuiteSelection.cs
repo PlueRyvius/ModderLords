@@ -3,7 +3,8 @@ namespace ModderLords.Core.Testing;
 /// <summary>
 /// Which suites a run with no suite named runs (docs/INGAME-TEST-HARNESS.md, decisions 11–13, 19 and 21), and how
 /// they become one plan: the core suite first, then every suite whose mode fits the run and whose requirements the
-/// profile's mods meet, each on a fresh world unless it opted in to sharing one.
+/// profile's mods meet. Suites that opted in to sharing a world run straight after core, on core's world; the rest each
+/// get a fresh one.
 /// </summary>
 public static class SuiteSelection
 {
@@ -18,7 +19,7 @@ public static class SuiteSelection
         return list.Count == 0 ? null : new System.Text.Json.Nodes.JsonArray(list.Select(p => (System.Text.Json.Nodes.JsonNode?)p).ToArray()).ToJsonString();
     }
 
-    /// <summary>The single-player run's own world, made once at the start and loaded fresh for each suite.</summary>
+    /// <summary>The single-player run's own world, made once at the start and loaded fresh for each suite that needs it.</summary>
     public const string RunWorld = "mltest-run";
 
     /// <param name="mods">The profile's enabled mods: id → installed version (null when unknown).</param>
@@ -48,9 +49,10 @@ public static class SuiteSelection
             }
             picked.Add(plan);
         }
-        // Fresh worlds first; the suites that share one run together after them, so one reset covers them all.
-        return [core.ForMode(singlePlayer), .. picked.Where(p => !p.SharesWorld).Select(p => p.ForMode(singlePlayer)),
-            .. picked.Where(p => p.SharesWorld).Select(p => p.ForMode(singlePlayer))];
+        // The suites that share a world ride on core's: core changes little, and in Coop they then cost no launch of
+        // their own. Each suite that needs a fresh world follows, and only it sees the world it leaves.
+        return [core.ForMode(singlePlayer), .. picked.Where(p => p.SharesWorld).Select(p => p.ForMode(singlePlayer)),
+            .. picked.Where(p => !p.SharesWorld).Select(p => p.ForMode(singlePlayer))];
     }
 
     /// <summary>The requirements <paramref name="mods"/> do not meet.</summary>
@@ -134,6 +136,13 @@ public static class SuiteSelection
             if (patterns is not null) args["patterns"] = patterns;
             steps.Add(new PlanStep { Id = NoErrorsStep, Side = side, As = $"{EndSuite}/noErrors.{side}", Args = args, ContinueOnFail = true, Suite = EndSuite });
         }
-        return new TestPlan { Name = name, Api = TestPlan.SupportedApi, Steps = steps, Mode = suites.FirstOrDefault()?.Mode ?? SuiteMode.Coop };
+        // The first suite gets the world its setup gives; each later one shares it unless it asked for a fresh one.
+        var worlds = new List<List<string>>();
+        for (int i = 0; i < suites.Count; i++)
+        {
+            if (i == 0 || !suites[i].SharesWorld) worlds.Add([]);
+            worlds[^1].Add(suites[i].Name);
+        }
+        return new TestPlan { Name = name, Api = TestPlan.SupportedApi, Steps = steps, Mode = suites.FirstOrDefault()?.Mode ?? SuiteMode.Coop, Worlds = worlds };
     }
 }

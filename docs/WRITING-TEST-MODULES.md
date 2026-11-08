@@ -55,7 +55,7 @@ ModderLords.Cli test --profile "My Host" --suite C:\scratch\try-this.json
   - `coop-<side>.log`, `server-console.log` and the smoke report's log slices, in Coop.
 - **A one-off suite file** (`--suite <path>`) is the quickest way to try a step before giving it a home in a module.
 - **Single player** takes about a minute (it creates a world by code each run). **Coop** takes a few minutes per launch
-  and needs a Host profile, the dedicated server, and Coop's automatic join (no server password).
+  (shared suites all run in one) and needs a Host profile, the dedicated server, and Coop's automatic join (no server password).
 - **Never run while someone is using the machine:** a run launches the game, which takes the screen. Check first
   (the last keyboard/mouse input, or ask), and close any running Bannerlord.
 
@@ -229,9 +229,12 @@ private static IEnumerable<StepWait?> StashCount(StepContext ctx)
   are the game, in Coop the server and `client:1`. A step can carry `"mode": "coop"` or `"singleplayer"`. Compares are
   left out in single player.
 - The run's setup puts the world in place: in single player it makes or loads the world and reloads it fresh before
-  each suite; in Coop it waits for the join and stops time. Do not repeat those steps.
-- `"world": "shared"` runs the suite on the world the previous suite left (no reset); then it must not assume starting
-  values: read "before", check the change.
+  each suite that needs one; in Coop it waits for the join and stops time. Do not repeat those steps.
+- `"world": "shared"` runs the suite on core's world, after core and the other shared suites (no reset, and in Coop
+  no launch of its own). Then it must not assume starting values: read "before" and check the change (`stash.deposit`
+  adds to what the stash held; `hero.adminLevel` takes `by`), and put back settings later suites would see
+  (`rules.set` reports `before`). Prefer it: a fresh world in Coop costs a whole launch, a few minutes. Keep a fresh
+  world for a suite that saves and reloads, or makes a change other suites would trip on.
 - `continueOnFail` keeps going after a failure; otherwise a failure skips the rest of *this* suite only.
 - `knownFailing: "<issue link>"` marks a step expected to fail until an upstream fix: it shows `[known]`, and a pass
   becomes `UnexpectedPass`, which fails the run so the mark gets removed.
