@@ -1,7 +1,7 @@
 # In-game test harness
 
-Status: **MVP built 2026-11-06, not yet run in game.** Design agreed with the maintainer the same day; the
-decisions are below, then how to run it and how to write a step.
+Status: **v1 built 2026-11-06 and run in game; v2 designed 2026-11-07, not built.** The v1 decisions are below,
+then the v2 design, then how v1 runs and how to write a step.
 
 ## Why
 
@@ -32,6 +32,128 @@ Checks it must be able to express:
 | 8 | **Known failures**: a step can be marked known-failing with an issue link. Outcomes: pass, fail, known-fail, unexpectedly-passing (upstream fixed it). | Red must stay meaningful. |
 | 9 | **One PC.** Files are the transport (below), behind a small interface so another transport can come later. | Server and client run on the maintainer's machine. |
 | 10 | **Players are addressed by slot** (`server`, `client:1`, `client:2`...). The MVP starts one client; the format allows more. | Many Coop bugs need two players; changing the plan format later is costly. |
+
+## v2: modular suites, single-player runs, tests shipped in mods
+
+Decided with the maintainer 2026-11-07; **not built yet.** One tool, two uses:
+
+- **Fast per-mod development testing**, in single player or Coop: `test --mod ModularArmor2 --single-player`.
+- **The full compatibility matrix**: every suite that applies to a profile, recorded per mod, mod version, Coop
+  version and game version.
+
+### v2 decisions
+
+| # | Decision | Why |
+|---|---|---|
+| 11 | **Suites declare what they need**: `requires` (module ids, each with an optional version range), `mode` (`singleplayer`, `coop` or `both`) and `continuity` (bool). An interaction suite can require several mods, e.g. `ModularArmor2` + `CoopWarehouses`. | A suite runs only where it means something; interaction bugs need both mods present. |
+| 12 | **With no suite named, a run picks suites itself**: the core suite plus every suite whose `requires` the profile's enabled mods meet and whose `mode` fits the run. All of them go into **one launch**, not one launch per suite. | A launch costs minutes; the matrix is many suites. |
+| 13 | **A core suite always runs first**: `game.joined` (Coop), `mods.started` on every side, the `hero.parity` compare (Coop) and the `sync-basics` checks (Coop). In single player only `mods.started` applies. | The cheapest checks catch the broadest failures (a mod that never started, a desync). |
+| 14 | **Tests ship inside the mod, with no runtime dependency for players.** A mod, including a single-player mod that has nothing to do with ModderLords, must never need ModderLords or its compat layer to run. | The maintainer's hard requirement: a test hook must not become a dependency. |
+| 15 | **A single-player run mode**: just the game, no Coop server. Steps run on side `game`. Same run folder, agent, waits and evidence. | Most mod development is single player, and a Coop launch is slow. |
+| 16 | **A clean world per suite by default.** A suite marked `continuity` can use the built-in `game.saveAndReload` step: save, reload (in Coop: restart the server on that save and rejoin), and later steps check what survived. | Isolation by default; save/load bugs need a deliberate reload. |
+| 17 | **Worlds are created and cached per mod set** (the mod list with versions); this builds v1's decision 1. | Overhaul mods change world generation, so a vanilla `.sav` doesn't load or doesn't mean the same thing. |
+| 18 | **Results are recorded across runs**: pass or fail per suite, against each mod's id and version, the Coop version and the game version, in a history file with a summary table. | That history is the compatibility matrix. Later it could feed the Coodsz compat records; v2 only stores it. |
+
+Decision 14 replaces v1's decision 5 for third-party mods: the reference-based API stays, but it now lives in a DLL
+that the game never loads by itself.
+
+### How a mod ships tests (decision 14)
+
+```
+<Module>\
+  SubModule.xml                     lists only the mod's own DLLs, as today
+  bin\Win64_Shipping_Client\ModularArmor2.dll
+  ModuleData\ModderLordsTests\
+    armor-basics.json               suites (the v1 format plus requires/mode/continuity)
+    ModularArmor2.Tests.dll         optional; NOT listed in SubModule.xml
+```
+
+- **The game never loads the test DLL.** It isn't in `SubModule.xml` and isn't under `bin\`, so neither the game nor
+  a loader that scans `bin\` picks it up. A player who installs the mod gets nothing extra running.
+- **ModderLords' agent loads it by hand, in test mode only**, as `SyncSubModule` loads the Coop adapter
+  (`Assembly.LoadFrom` next to a known file). Test mode always adds `ModderLords.Compat` to the launch, so the
+  test DLL's reference to `ModderLords.CompatSync` resolves.
+- **The test DLL registers steps as v1 steps do**, with `InGameTests.Register(...)`. The agent calls every public
+  static `RegisterTests()` method it finds in the DLL (a naming convention, so no attribute type is shared with the
+  mod). The DLL may reference the mod's own DLL to call its code.
+- **One DLL for both sides.** The dedicated server loads the same file, as it loads `ModderLords.CompatSync`, so the
+  DLL targets what `ModderLords.CompatSync` targets.
+- **Discovery** scans the enabled modules' folders for `ModuleData\ModderLordsTests\`. The suites' JSON is read by the
+  launcher; the DLL is loaded by each game's agent when the run starts.
+- **Suite ids are namespaced by module** (`ModularArmor2/armor-basics`) and step ids stay `area.verb`; a mod's step
+  id that clashes with another's fails the run up front instead of silently replacing it (a change from v1).
+
+### Suite file additions
+
+```jsonc
+{
+  "api": 2,
+  "name": "warehouse-armor",
+  "requires": [ { "id": "ModularArmor2", "version": ">=1.2" }, { "id": "CoopWarehouses" } ],
+  "mode": "coop",                  // singleplayer | coop | both (default both)
+  "continuity": false,             // true allows game.saveAndReload
+  "world": "auto",                 // auto (default): the cached world for this mod set; or a named test world
+  "steps": [ ... ]                 // side: game (single player), server, client:N (Coop)
+}
+```
+
+- A `both` suite names `game` for the side that changes the world and `player` for the side that acts as the player.
+  In single player both mean `game`; in Coop they mean `server` and `client:1`. Compares across sides are skipped in
+  single player and say so in the report.
+- `api: 1` suites still load: they mean `mode: coop`, no `requires`, no continuity.
+
+### Running (decisions 12 and 15)
+
+```powershell
+ModderLords.Cli test --profile "My Host"                                   # core + every applicable suite
+ModderLords.Cli test --profile "My Mods" --single-player                   # the same, single-player suites
+ModderLords.Cli test --profile "My Mods" --mod ModularArmor2 --single-player [--keep-open-on-fail]
+ModderLords.Cli test --profile "My Host" --suite stash                    # v1: one named suite, still works
+```
+
+- `--mod X` runs the core suite plus the suites X ships and the suites that require X.
+- `--keep-open-on-fail` leaves the game (and in Coop, the server) running after the first failure, so the developer
+  can look; the run's report is written first.
+- **Single player** launches the profile's game with `ModderLords.Compat` added and `/modderlords-test`, and no Coop
+  module. The agent loads the world itself from the main menu (game code, as the Load Game screen does), since there
+  is no join to wait for. The steps run on side `game`.
+- **One launch, many suites.** The launcher runs the suites in order. Between suites it resets the world: in single
+  player the agent reloads the fresh copy; in Coop the server restarts on the fresh copy and the player's game
+  rejoins (the same machinery as `game.saveAndReload`). The report lists each suite's outcome separately.
+
+### Worlds (decisions 16 and 17)
+
+- The cache key is the sorted list of enabled modules with their versions, hashed; the world lives in
+  `<data>\test-worlds\auto-<hash>.sav`, with a small `.json` beside it recording the list it was made with.
+- On a cache miss the harness creates the world: start a new sandbox campaign from game code with fixed choices
+  (culture, character), save it, close. That run is reported as world creation, not as a test.
+- A named world (`"world": "vanilla-1"`, `--world`) still works as in v1, and skips the cache.
+
+### Results history (decision 18)
+
+- Every run appends one line per suite to `<data>\tests\history.jsonl`: run id, time, suite, outcome, game version,
+  Coop version (or none), ModderLords version, and every enabled mod's id and version.
+- `ModderLords.Cli test --history` prints the summary table: one row per suite and mod set, the last outcome, and
+  when it last passed. The run folders stay the evidence.
+
+### Open questions for the maintainer
+
+1. **Clean world per suite in one launch** (decisions 12 and 16) means a world reset between suites, which in Coop is
+   a server restart and a rejoin each time, about a minute per suite. Should suites that don't change shared state
+   be allowed to share a world (e.g. `"world": "shared"`), or keep a strict fresh world each time?
+2. **How the agent finds a test DLL's entry point**: the proposed convention is a public static `RegisterTests()`
+   method. An alternative is a line in the suite JSON naming the type.
+3. **Single-player world loading** and **world creation** both drive the game from its main menu by code. Neither is
+   proven yet; the first build step is a spike that loads a named save and starts a new campaign in single player.
+4. Should `--mod X` also run suites shipped by other mods that merely don't require X (to check X didn't break them)?
+   That is the full matrix run, which is slower; the proposal is no, and the no-argument run does that.
+
+### Build order (proposed)
+
+1. Spike: single-player launch, the agent loading a named save, and starting a new campaign by code.
+2. `requires`/`mode`/`continuity`, suite selection and the core suite; multi-suite runs with a world reset.
+3. Tests shipped in mods: discovery, loading the test DLL, namespaced ids; one in-tree example module.
+4. The world cache, then `game.saveAndReload`, then the history file and table.
 
 ## Shape
 
@@ -221,5 +343,5 @@ was the harness, and each lesson is now in it:
   installed 0.1.7 (`HeroLevelChanged`, fixed by #263), and the stash put-back lives in that adapter.
 - Creating and caching a world per mod set (decision 1); for now a world is a `.sav` you put in `test-worlds`.
 - "TEST MODE" in the server's player list (decision 6); the log lines are there.
-- The delivery-quest, hero-level and Living Economy suites; a second player's game; an App button; reference-free
-  registration for third-party mods.
+- The delivery-quest and Living Economy suites; a second player's game; an App button.
+- Everything in v2 (above).
