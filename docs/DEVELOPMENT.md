@@ -127,7 +127,10 @@ replaced items move to `.previous\` inside the install folder, and any failure p
 (`src/ModderLords.Core/Compat/CompatDbRemote.cs`): once per app start, after the update check, from
 `https://raw.githubusercontent.com/PlueRyvius/ModderLords/main/src/ModderLords.Core/compat-db.json`. **Merging a change
 to that file into `main` therefore reaches every install on its next start, with no release and no click.** Review
-such a PR as you would a release.
+such a PR as you would a release. `verified-profiles.json` reaches installs the same way
+(`VerifiedProfilesRemote`, sharing `RemoteDataFile` with the compat database, and the same off switches). A
+`gitHub` release it names is downloaded by players who press **Get missing mods…**, so check its SHA-256 against the
+release asset (`gh release download`, `Get-FileHash`) before merging.
 
 What an install does with the file:
 

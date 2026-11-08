@@ -1,7 +1,8 @@
 # Profile manager and verified profiles
 
-Status: **designed 2026-11-08 with the maintainer; build step 1 (the window, groups, pins, quick switch) built
-2026-11-08, verified profiles not yet.** The decisions are below, then the window, the
+Status: **designed 2026-11-08 with the maintainer; build steps 1 (the window, groups, pins, quick switch) and 2 (the
+verified-profiles file, the Verified group, Get missing mods, GitHub downloads of the maintainer's mods) built
+2026-11-08. No profile is verified yet (step 3).** The decisions are below, then the window, the
 verified-profiles file, how a profile earns each badge, player submissions, and the build order. Every open question
 was settled on 2026-11-08 (at the end).
 
@@ -24,8 +25,9 @@ ModderLords to offer profiles that are known to work, with the strength of that 
 | 6 | **Verified profiles come from GitHub** (`src/ModderLords.Core/verified-profiles.json`), fetched like the compat database: a copy ships with each release, refreshed from the default branch with its ETag, "never worse than bundled". | New ones can be added between releases. |
 | 7 | **Three levels of verified**, by who vouches: **gold**, the maintainer; **silver**, Coodsz (by PR to this repository); **green**, players who report it works. A profile shows its highest level; the details list every one with its evidence. | The maintainer's choice: say how strong the claim is, not only that there is one. |
 | 8 | **Every level is tied to exact versions**: the game, Coop and each mod's version (and, where recorded, its install fingerprint). When your installed mods differ, the profile says so ("verified with MS2 0.9.49, you have 0.9.50") instead of claiming it works. | Anyone can download ModderLords; a claim must stay true for the files it was made on. |
-| 9 | **A verified profile can be used directly.** Changing one of its mods asks once to make your own copy. **Get missing mods…** opens the existing Workshop subscribe window for the ones you lack. | No speed bump for someone who just wants to play; the verified profile itself never changes under its badge. |
-| 10 | **Verified profiles are for anyone who downloads ModderLords.** They list mods by id, version and Workshop id; ModderLords never ships or downloads a mod's files itself. | The audience the maintainer chose; it also sets how careful the wording and pinning must be. |
+| 9 | **A verified profile can be used directly.** Saving a change to its mods asks to make a copy of your own instead. **Get missing mods…** opens the existing Workshop subscribe window for the ones you lack (and downloads the maintainer's own, decision 12). | No speed bump for someone who just wants to play; the verified profile itself never changes under its badge. |
+| 10 | **Verified profiles are for anyone who downloads ModderLords.** They list mods by id, version and Workshop id. ModderLords never ships a mod's files, and downloads only the maintainer's own releases (decision 12). | The audience the maintainer chose; it also sets how careful the wording and pinning must be. |
+| 12 | **The maintainer's own mods (Modular Smithing 2, Modular Warehouses + (Coop)) can come from their GitHub releases** when the Workshop does not serve the verified version yet. The entry names the repository, tag, zip and the zip's **SHA-256**; the download is refused unless it matches. Only `PlueRyvius` repositories are accepted. The zip is unpacked into ModderLords' own `mods\<Id>\<version>\<Id>` folder, whole, and the profile pins it; the game's Modules folder and the Workshop folder are never written. Decided 2026-11-08, amending decision 10. | GitHub releases often come before the Workshop upload. The hash in a file only the maintainer merges is what vouches for the download. A developer's own copy in Modules stays untouched. A player on the plain Workshop copy waits for the Workshop upload, and the details say which version players need. |
 | 11 | **Switching is refused with a reason** while the server runs (Host), and asks Save / Discard / Cancel when the current profile has unsaved changes. Delete asks first and moves the file aside (recoverable), never erases it. | Profiles are the user's data; switching under a running server breaks it. |
 
 ## The window
@@ -53,11 +55,15 @@ profile**), the green / amber / red badges for Ready / missing / failed. The bad
       "name": "Coop + Modular Smithing 2",
       "description": "Vanilla campaign in Coop with Modular Smithing 2.",
       "game": "v1.4.8",
-      "mods": [
-        { "id": "CoopNightly", "version": "v0.1.7", "workshopId": 3770450698 },
-        { "id": "ModularSmithing2", "version": "v0.9.49", "workshopId": 3790263286, "fingerprint": "data #… code #…" }
+      "mods": [                                   // in load order
+        { "id": "Coop", "version": "v0.1.7", "workshopId": 3770450698 },
+        {
+          "id": "ModularSmithing2", "version": "v0.9.49", "workshopId": 3790263286, "fingerprint": "data #… code #…",
+          "workshopVersion": "v0.9.48",           // what the Workshop serves; differs, so the release below is fetched
+          "gitHub": { "repo": "PlueRyvius/Modular-Smithing-2-Releases", "tag": "v0.9.49",
+                      "asset": "ModularSmithing2-v0.9.49.zip", "sha256": "c60a…", "size": 462699094 }
+        }
       ],
-      "loadOrder": [ "…" ],                       // as the profile file has it
       "verifications": [
         { "level": "gold", "by": "PlueRyvius", "date": "2026-11-08", "tests": "core, smithing, parity: single player and Coop", "runs": [ "20261108-…" ], "notes": "" },
         { "level": "silver", "by": "Coodsz", "date": "2026-11-09", "notes": "Played 2 hours hosted." },
@@ -70,8 +76,13 @@ profile**), the green / amber / red badges for Ready / missing / failed. The bad
 
 - A verification counts only for the versions the entry lists; a different installed version shows **Mods changed**
   with the difference.
-- Using a verified profile writes a normal profile file (read-only flag set) on first use, so launching works exactly as
-  today.
+- Using a verified profile writes a normal profile file on first use (named after the entry, or "<name> (verified)"
+  when you already have a profile of that name), so launching works exactly as today. It carries `VerifiedId`; using it
+  again refreshes its mods from the entry and keeps your folders, server settings and roles. Saving a change to its
+  mods asks to save a copy of your own instead.
+- `gitHub` and `workshopVersion` are for the maintainer's own mods only (decision 12). A mod with a `gitHub` release
+  is fetched from it when `workshopVersion` is missing or differs from `version`; otherwise from the Workshop.
+- A profile with no verifications is a **draft**: only development builds list it, marked Draft.
 
 ## How a profile earns each level
 
@@ -115,7 +126,11 @@ Decided 2026-11-08: players can submit a whole profile, not only report that our
    mods in amber; a profile whose game folder or extra mod folders differ from the open one's is checked by its own
    scan, in the background ("Checking…" until then). Export mod list stays on the Share tab for now.
 2. `verified-profiles.json`, bundled and fetched like the compat database; the Verified section; use directly, copy
-   on change, Get missing mods; the version comparison (decision 8).
+   on change, Get missing mods; the version comparison (decision 8). **Built 2026-11-08**: `VerifiedProfiles`
+   (the file, its checks, the comparison, the profile file it is used through), `VerifiedProfilesRemote` (the fetch,
+   sharing `RemoteDataFile` with the compat database), `DownloadedMods` and `ModDownloadWindow` (decision 12), the
+   **Verified by ModderLords** group. The file has two drafts: **Core** (Coop with Harmony, ButterLib, UIExtenderEx and
+   MCM) and **Core + Modular Smithing 2 + Warehouses**.
 3. Gold entries: the maintainer's first verified profiles, from test runs.
 4. Green reports and submitted profiles through the intake, and the workflow that checks and counts them.
 

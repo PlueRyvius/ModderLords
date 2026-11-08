@@ -583,6 +583,7 @@ public partial class MainViewModel : ObservableObject
         {
             case MessageBoxResult.Yes:
                 CollectProfileFromRows();
+                if (!KeepVerifiedModsUnchanged()) return false;
                 ProfileStore.Save(Profile);
                 Status = Loc.F("Profile '{0}' saved", Profile.Name);
                 break;
@@ -686,6 +687,74 @@ public partial class MainViewModel : ObservableObject
         SelectedProfileName = Profile.Name;
     }
 
+    /// <summary>
+    /// Asks for a name for a copy of the user's own. Null keeps the verified profile as it is. Replaceable for tests.
+    /// </summary>
+    internal Func<string, string?> AskOwnCopyName { get; set; } = verifiedName =>
+    {
+        if (MessageBox.Show(
+                Loc.F("'{0}' is a verified profile, so its mods stay as they were verified.\n\nSave your changes as a profile of your own?", verifiedName),
+                Loc.T("Verified profile"), MessageBoxButton.OKCancel, MessageBoxImage.Information) != MessageBoxResult.OK) return null;
+        var n = 1;
+        string suggested;
+        do { suggested = n == 1 ? $"{verifiedName} (mine)" : $"{verifiedName} (mine {n})"; n++; } while (ProfileStore.Exists(suggested));
+        var ask = new NameProfileWindow(Loc.T("Name your copy"), suggested, null, s => ProfileStore.NameProblem(s)) { Owner = Application.Current?.MainWindow };
+        return ask.ShowDialog() == true ? ask.ProfileName : null;
+    };
+
+    /// <summary>
+    /// Before the open profile is saved: a verified profile's file keeps the verified mods (docs/PROFILE-MANAGER.md,
+    /// decision 9). When they were changed, the changes go to a copy of the user's own, which becomes the open
+    /// profile. False when the user said no: nothing is to be saved.
+    /// </summary>
+    internal bool KeepVerifiedModsUnchanged()
+    {
+        if (Profile.VerifiedId is not { } id) return true;
+        var entry = VerifiedProfiles.Current.Profiles.FirstOrDefault(p => p.Id == id);
+        if (entry is null || VerifiedProfiles.SameMods(entry, Profile)) return true;
+        if (AskOwnCopyName(Profile.Name) is not { } name) return false;
+        Profile.Name = name;
+        Profile.VerifiedId = null;
+        Profile.Pinned = false;
+        LoadProfileList();
+        SelectedProfileName = name;
+        return true;
+    }
+
+    /// <summary>
+    /// Opens a verified profile through its profile file: written on first use, its mods refreshed from the entry on
+    /// every later one (the entry may have moved on, or a missing mod been downloaded since).
+    /// </summary>
+    internal bool OpenVerified(VerifiedProfile entry, IReadOnlyList<VerifiedModCheck> checks, out string? why)
+    {
+        why = null;
+        var name = VerifiedProfiles.FileNameFor(entry);
+        var isOpen = name.Equals(Profile.Name, StringComparison.OrdinalIgnoreCase);
+        if (Host?.IsRunning == true) { why = Loc.T("Stop the server before switching profiles: it is running this profile's mods."); return false; }
+        if (!ResolveUnsavedChanges()) { why = Loc.T("Kept the current profile."); return false; }
+        var setup = (isOpen ? Profile : ProfileStore.TryLoad(name, out _)) is { } existing && existing.VerifiedId == entry.Id ? existing : Profile;
+        ProfileStore.Save(VerifiedProfiles.ToProfile(entry, name, setup, checks));
+        if (isOpen) { _profileOpened = false; LoadProfile(name); }
+        else if (!SwitchTo(name, out why)) return false;
+        LoadProfileList();
+        SelectedProfileName = Profile.Name;
+        return true;
+    }
+
+    /// <summary>Subscribes to Workshop items for the Profiles window's Get missing mods. True when any finished installing.</summary>
+    internal bool SubscribeToWorkshop(IReadOnlyList<(ulong WorkshopId, string ModId)> items)
+    {
+        if (items.Count == 0) return false;
+        var auto = AutoSubscribeWorkshop || AskToSubscribe();
+        var win = new WorkshopSubscribeWindow(items, [], ClientLauncher.ResolveGameRoot(Profile), auto)
+        {
+            Owner = Application.Current?.Windows.OfType<ProfilesWindow>().FirstOrDefault() ?? Application.Current?.MainWindow,
+        };
+        win.ShowDialog();
+        if (win.AnyInstalled && !IsDirty) Rescan();
+        return win.AnyInstalled;
+    }
+
     /// <summary>Opens the Profiles window (the profile button's Manage profiles…, or Ctrl+P).</summary>
     [RelayCommand]
     private void OpenProfiles()
@@ -720,6 +789,7 @@ public partial class MainViewModel : ObservableObject
     private void SaveProfile()
     {
         CollectProfileFromRows();
+        if (!KeepVerifiedModsUnchanged()) return;
         ProfileStore.Save(Profile);
         LoadProfileList();
         // Clearing ItemsSource clears ComboBox.SelectedItem through its two-way binding.
@@ -1250,6 +1320,14 @@ public partial class MainViewModel : ObservableObject
         // Once per refused file, not once per start: the sidecar remembers which one it was.
         else if (result is { Outcome: CompatDbRemoteOutcome.Rejected, AlreadyReported: false })
             Messages.Add($"compat db: the downloaded database was not used ({result.Reason}); keeping the one in use");
+
+        // The verified profiles come the same way and are read fresh each time the Profiles window opens.
+        var verified = VerifiedProfilesRemote.Default;
+        var bundled = VerifiedProfiles.Load(VerifiedProfiles.BundledPath, null);
+        var file = new VerifiedProfilesFile { Profiles = bundled.Profiles.ToList() };
+        var outcome = await Task.Run(() => verified.RefreshAsync(http, bundled.Problems.Count > 0 ? null : file));
+        if (outcome is { Outcome: CompatDbRemoteOutcome.Rejected, AlreadyReported: false })
+            Messages.Add($"verified profiles: the downloaded file was not used ({outcome.Reason}); keeping the one in use");
     }
 
     private void RefreshCompatBadges()
@@ -2469,6 +2547,7 @@ public partial class MainViewModel : ObservableObject
 
             // Saved first, as Host mode's Launch does: what you played with is what the profile holds next time.
             CollectProfileFromRows();
+            if (!KeepVerifiedModsUnchanged()) return;
             ProfileStore.Save(Profile);
             IsDirty = false;
             // Before Prepare, so a compat module installed now is found rather than reported missing.

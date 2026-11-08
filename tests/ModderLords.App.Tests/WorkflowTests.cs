@@ -296,6 +296,70 @@ public class WorkflowTests
     });
 
     [Fact]
+    public void AVerifiedProfileIsUsedThroughItsOwnFileFetchesWhatIsMissingAndKeepsItsModsUnderTheBadge() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Module("Shared");
+        var vm = fixture.ViewModel();
+        vm.Rescan();
+        var stamp = Guid.NewGuid().ToString("N")[..8];
+        var name = $"ui-verified-{stamp}";
+        var entry = new VerifiedProfile
+        {
+            Id = $"v-{stamp}", Name = name, Game = "v1.4.8",
+            Mods =
+            [
+                new() { Id = "Shared", Version = "v1.0.0", WorkshopId = 1 },
+                new() { Id = $"Mine{stamp}", Version = "v2.0.0", WorkshopId = 2, GitHub = new() { Repo = "PlueRyvius/Mine", Tag = "v2.0.0", Asset = "Mine.zip", Sha256 = new string('a', 64) } },
+                new() { Id = $"Theirs{stamp}", Version = "v3.0.0", WorkshopId = 3 },
+            ],
+            Verifications = [new() { Level = VerificationLevel.Gold, Date = "2026-11-08", Tests = "core" }],
+        };
+        VerifiedProfiles.Override = new VerifiedProfileList([entry], false, []);
+        string? copy = null;
+        try
+        {
+            var profiles = new ProfilesViewModel(vm);
+            var verified = profiles.Groups.Single(g => g.Key == ProfileGroupRow.VerifiedKey);
+            Assert.Equal(1, verified.Count);
+            profiles.SelectedGroup = verified;
+            var row = Assert.Single(profiles.Rows);
+            Assert.Equal((ProfileStatus.Missing, "2 missing", "Verified by ModderLords"), (row.Status, row.StatusText, row.Badge));
+            Assert.False(row.CanEdit);
+            Assert.Contains(row.ModLines, l => l.Contains($"Mine{stamp}") && l.Contains("from GitHub"));
+
+            // Get missing mods: the maintainer's release from GitHub, the other mod from the Workshop.
+            var gitHub = new List<string>();
+            var workshop = new List<ulong>();
+            profiles.DownloadFromGitHub = mods => { gitHub.AddRange(mods.Select(m => m.Id)); return false; };
+            profiles.SubscribeFromWorkshop = items => { workshop.AddRange(items.Select(i => i.WorkshopId)); return false; };
+            profiles.GetMissingCommand.Execute(row);
+            Assert.Equal([$"Mine{stamp}"], gitHub);
+            Assert.Equal([3UL], workshop);
+
+            // Use writes a profile file of its own, tied to the entry, with this PC's game folder.
+            profiles.UseCommand.Execute(row);
+            Assert.Equal(name, vm.Profile.Name);
+            var saved = ProfileStore.Load(name)!;
+            Assert.Equal((entry.Id, vm.Profile.GameRoot), (saved.VerifiedId, saved.GameRoot));
+            Assert.Equal(entry.Mods.Select(m => m.Id), saved.Mods.Select(m => m.Id));
+
+            // A change to its mods is saved as a copy of the user's own; the verified file stays as verified.
+            vm.Profile.Mods[0].Enabled = false;
+            vm.AskOwnCopyName = _ => copy = $"{name} mine";
+            Assert.True(vm.KeepVerifiedModsUnchanged());
+            Assert.Equal((copy, (string?)null), (vm.Profile.Name, vm.Profile.VerifiedId));
+            Assert.True(ProfileStore.Load(name)!.Mods.All(m => m.Enabled));
+        }
+        finally
+        {
+            VerifiedProfiles.Override = null;
+            ProfileStore.Delete(name, keepCopy: false);
+            if (copy is not null) ProfileStore.Delete(copy, keepCopy: false);
+        }
+    });
+
+    [Fact]
     public void SwitchingProfileIsRefusedWhileTheServerRuns() => Sta(() =>
     {
         using var fixture = new Fixture();
