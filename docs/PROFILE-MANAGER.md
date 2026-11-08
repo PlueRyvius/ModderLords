@@ -85,6 +85,22 @@ profile**), the green / amber / red badges for Ready / missing / failed. The bad
   run). The workflow counts it only when the versions match the entry. **One accepted report makes a profile green**
   (decided 2026-11-08); the details show how many players have reported it and when the last one did.
 
+## Players submitting a profile
+
+Decided 2026-11-08: players can submit a whole profile, not only report that ours work.
+
+- **Submit as verified profile…** in a profile's right-click menu sends it through the same intake as reports: the
+  profile's name and description (the player writes them), every mod with its id, version, Workshop id and
+  fingerprint, the load order, the game and Coop versions, and what the launcher saw work (a hosted session on the
+  map, or a passing test run).
+- **The workflow refuses** a profile that others could not reproduce: a mod with no Workshop id (installed by hand or
+  local-only), a mod with no version, or a profile the launcher never saw work. It says why, in plain sentences, as
+  for compat records.
+- **Accepted,** it opens a PR adding the entry to `verified-profiles.json` with one `green` verification from the
+  submitter, so it shows green once the maintainer merges it. Gold and silver can follow as for any entry.
+- The maintainer's review is the gate: the PR shows every mod, so a profile with something unwanted in it is not
+  merged.
+
 ## Build order (proposed)
 
 1. Groups and pins in the profile file; the Profiles window with the list, status column, right-click menu, drag to
@@ -92,13 +108,12 @@ profile**), the green / amber / red badges for Ready / missing / failed. The bad
 2. `verified-profiles.json`, bundled and fetched like the compat database; the Verified section; use directly, copy
    on change, Get missing mods; the version comparison (decision 8).
 3. Gold entries: the maintainer's first verified profiles, from test runs.
-4. Green reports through the intake, and the workflow that counts them; silver once question 1 is settled.
+4. Green reports and submitted profiles through the intake, and the workflow that checks and counts them.
 
 ## Open questions
 
 1. ~~Silver~~: decided 2026-11-08, a PR to this repository that the maintainer merges.
 2. ~~Green threshold~~: decided 2026-11-08, one accepted report.
-3. **Can players propose whole profiles,** not only report that ours work? That would be a fourth path into the file
-   (a profile submitted, reviewed, then verified).
+3. ~~Can players propose whole profiles~~: decided 2026-11-08, yes (see "Players submitting a profile").
 4. **Profiles and the app's mode:** today a profile has no mode (Harness is used in both). The Coop badge shows what a
-   profile contains; should a profile also remember whether it is for Player or Host mode?
+   profile contains; should a profile also remember whether it is for Player or Host mode? Proposed: no, for now.
