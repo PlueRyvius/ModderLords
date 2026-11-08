@@ -68,15 +68,16 @@ dotnet test
 
 ### 3a. In-game suites (when the release touches the in-game modules or Coop)
 
-CI has no game, so nothing else runs these. On the commit being released, with a Host-mode profile, run each
-built-in suite of the in-game test harness (`docs/INGAME-TEST-HARNESS.md`):
+CI has no game, so nothing else runs these. On the commit being released, with a Host-mode profile and a test world, run the
+built-in test modules of the in-game test harness (`docs/INGAME-TEST-HARNESS.md`), in Coop and in single player:
 
 ```powershell
-ModderLords.Cli test --profile "My Host" --suite stash
-ModderLords.Cli test --profile "My Host" --suite sync-basics
-ModderLords.Cli test --profile "My Host" --suite hero-level
-ModderLords.Cli test --profile "My Host" --suite parity
+ModderLords.Cli test --profile "My Host" --modules stash,sync,perks,parity
+ModderLords.Cli test --profile "My Host" --modules world --single-player
 ```
+
+- `core` runs first in each. `test --list` shows every module and whether the profile can run it; run a mod's own
+  module (e.g. `retinues`) when its mod changed.
 
 - Each must exit 0. A step marked known-failing shows as `[known]` and does not count against it.
 - The suites start the server and a game, so **don't run them while the maintainer is using the machine.**

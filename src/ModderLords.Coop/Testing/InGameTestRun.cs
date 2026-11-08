@@ -95,6 +95,15 @@ public static class InGameTestRun
         {
             try { chosen = SuiteSelection.Select(TestSuites.LoadAll(), installed, options.SinglePlayer, options.OnlyMod, options.WithOthers, left, options.Modules); }
             catch (Exception ex) { return Stop("suites: " + ex.Message); }
+            // With nothing picked, a module whose step DLL this build lacks is left out, not failed: a release
+            // packaged on a PC without that mod has no DLL for it. A module picked by name still stops below.
+            if (options.Modules is null)
+                chosen = chosen.Where(p =>
+                {
+                    if (TestSuites.Module(p.Module) is not { } m || MissingStepsDll(m, options.BundledRoot) is not { } dll) return true;
+                    left.Add($"{p.Module}/{p.Name}: this build has no {Path.GetFileName(dll)}");
+                    return false;
+                }).ToList();
         }
         say($"[ModderLords] {(options.SinglePlayer ? "single-player" : "Coop")} suites for {profile.Name}: {string.Join(", ", chosen.Select(p => p.Module.Length > 0 ? p.Module + "/" + p.Name : p.Name))}");
         foreach (var why in left) say("[ModderLords]   left out " + why);
@@ -183,12 +192,22 @@ public static class InGameTestRun
         var loads = new List<ModuleLoad>();
         foreach (var m in plans.Select(p => TestSuites.Module(p.Module)).Where(m => m?.StepsDll is not null).Distinct())
         {
-            var dll = Path.Combine(options.BundledRoot ?? LaunchSession.BundledRoot ?? AppContext.BaseDirectory, "compat", m!.StepsDll!);
-            if (!File.Exists(dll)) return (loads, $"test module {m.Id}: {dll} is missing (is it built into the compat folder?)");
-            loads.Add(new ModuleLoad(m.Id, dll, m.StepsType!, m.Requires.Select(r => r.Id).ToList()));
+            if (MissingStepsDll(m!, options.BundledRoot) is { } missing)
+                return (loads, $"test module {m!.Id}: {missing} is missing (is it built into the compat folder?)");
+            loads.Add(new ModuleLoad(m!.Id, StepsDllPath(m, options.BundledRoot), m.StepsType!, m.Requires.Select(r => r.Id).ToList()));
         }
         return (loads, null);
     }
+
+    private static string StepsDllPath(TestModule m, string? bundledRoot) =>
+        Path.Combine(bundledRoot ?? LaunchSession.BundledRoot ?? AppContext.BaseDirectory, "compat", m.StepsDll!);
+
+    /// <summary>
+    /// Where a module's step DLL should be, when this build lacks it; null when it is there or the module has none.
+    /// Such a DLL is built only on a PC with its mod installed (Directory.Build.props), so a release can lack it.
+    /// </summary>
+    public static string? MissingStepsDll(TestModule m, string? bundledRoot = null) =>
+        m.StepsDll is null || File.Exists(StepsDllPath(m, bundledRoot)) ? null : StepsDllPath(m, bundledRoot);
 
     private static async Task<(int ExitCode, TestReport? Report, string? Folder, string? Problem)> RunCoop(Profile profile, TestPlan testPlan,
         InGameTestOptions options, Action<string> say, CancellationToken cancel)
