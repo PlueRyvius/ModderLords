@@ -639,6 +639,8 @@
                                   ToolTip="{l:T 'AI kingdoms never pick a kingdom a player belongs to as a war target, and any war that still starts against one is ended with peace on the next tick. Wars a player\&#x27;s kingdom declares, and wars caused by a player\&#x27;s own hostility or crime, are allowed.'}" />
                         <CheckBox Content="{l:T 'Also protect them from rebellions'}" IsChecked="{Binding LiveSettings.ProtectFromRebellions}" Margin="20,2,0,2"
                                   IsEnabled="{Binding LiveSettings.ProtectPlayerKingdoms}" />
+                        <CheckBox Content="{l:T 'Heroes get both perks of a pair'}" IsChecked="{Binding LiveSettings.BothPerks}" Margin="0,2"
+                                  ToolTip="{l:T 'Taking a perk also gives the other perk of its pair, to players\&#x27; heroes and the heroes of their clans (family, companions). Perks already taken get their pair too. The server gives them, so the server\&#x27;s health limit and other perk bonuses count both. Turning it off gives no more; perks already given stay.'}" />
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                             <Button Content="{l:T 'Apply'}" Command="{Binding LiveSettings.ApplyHostOptionsCommand}" FontWeight="Bold" />
                             <TextBlock Text="{Binding LiveSettings.HostOptionsReport}" VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SuccessForeground}" />

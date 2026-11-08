@@ -185,6 +185,8 @@
   "Protect player kingdoms from AI wars": "保护玩家王国免受 AI 战争",
   "AI kingdoms never pick a kingdom a player belongs to as a war target, and any war that still starts against one is ended with peace on the next tick. Wars a player's kingdom declares, and wars caused by a player's own hostility or crime, are allowed.": "AI 王国永远不会将玩家所在的王国选为战争目标，任何仍对其发起的战争会在下一个 tick 以和平结束。玩家王国主动宣战的战争，以及因玩家自身敌对行为或犯罪引发的战争，仍然允许。",
   "Also protect them from rebellions": "同时防止叛乱",
+  "Heroes get both perks of a pair": "英雄获得每对技能中的两个",
+  "Taking a perk also gives the other perk of its pair, to players' heroes and the heroes of their clans (family, companions). Perks already taken get their pair too. The server gives them, so the server's health limit and other perk bonuses count both. Turning it off gives no more; perks already given stay.": "选择一个技能时，同时获得同组的另一个技能，适用于玩家的英雄及其家族中的英雄（家人、同伴）。已选技能也会补上同组技能。由服务器授予，因此服务器计算的生命上限和其他技能加成都会计入两者。关闭后不再授予；已授予的技能保留。",
   "Apply": "应用",
   "These run on the server and need Settings sync (Server tab). Apply sends them to a running server at once and keeps them for every launch of this profile.": "这些规则在服务器上运行，需要开启设置同步（\"服务器\"选项卡）。\"应用\"会立即将其发送到运行中的服务器，并在此配置的每次启动时保留。",
   "Gameplay": "游戏玩法",
