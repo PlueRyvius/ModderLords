@@ -296,6 +296,49 @@ public static class ProfileStore
         return target;
     }
 
+    /// <summary>A deleted profile waiting in <see cref="DeletedDir"/>: its folder, its name, and when it was deleted.</summary>
+    public sealed record DeletedProfile(string Folder, string Name, DateTime DeletedAt);
+
+    /// <summary>The profiles in <see cref="DeletedDir"/>, newest first. A folder without a readable profile is skipped.</summary>
+    public static IReadOnlyList<DeletedProfile> ListDeleted()
+    {
+        if (!Directory.Exists(DeletedDir)) return [];
+        var list = new List<DeletedProfile>();
+        foreach (var folder in Directory.EnumerateDirectories(DeletedDir))
+        {
+            var file = Directory.EnumerateFiles(folder, "*.json").FirstOrDefault(f => !f.EndsWith(".settings.json", StringComparison.OrdinalIgnoreCase)
+                && !f.EndsWith(".settings-cache.json", StringComparison.OrdinalIgnoreCase));
+            if (file is null) continue;
+            if (TryLoadFile(file, Path.GetFileNameWithoutExtension(file), out _) is { } profile)
+                list.Add(new DeletedProfile(folder, profile.Name, Directory.GetCreationTime(folder)));
+        }
+        return list.OrderByDescending(d => d.DeletedAt).ToList();
+    }
+
+    /// <summary>
+    /// Puts a deleted profile back where it was, with its sidecars, and returns its name. Refused (with the reason) when
+    /// a profile of that name exists again: rename that one first.
+    /// </summary>
+    public static string Restore(string deletedFolder)
+    {
+        var deleted = ListDeleted().FirstOrDefault(d => PathsMatch(d.Folder, deletedFolder))
+            ?? throw new InvalidOperationException("That deleted profile is no longer there.");
+        if (Exists(deleted.Name)) throw new InvalidOperationException($"A profile called “{deleted.Name}” exists again. Rename it first, then restore this one.");
+        foreach (var (from, to) in new[]
+                 {
+                     (Path.Combine(deletedFolder, Path.GetFileName(PathFor(deleted.Name))), PathFor(deleted.Name)),
+                     (Path.Combine(deletedFolder, Path.GetFileName(SettingsOverridesPath(deleted.Name))), SettingsOverridesPath(deleted.Name)),
+                     (Path.Combine(deletedFolder, Path.GetFileName(SettingsCachePath(deleted.Name))), SettingsCachePath(deleted.Name)),
+                 })
+        {
+            if (!File.Exists(from)) continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(to)!);
+            File.Move(from, to);
+        }
+        if (!Directory.EnumerateFileSystemEntries(deletedFolder).Any()) Directory.Delete(deletedFolder);
+        return deleted.Name;
+    }
+
     /// <summary>
     /// Changes only a profile's place in the Profiles window (its group, its pin) on disk, leaving the rest of the file
     /// as saved: the one open in the app may have unsaved mod edits that this must neither save nor lose.

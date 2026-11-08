@@ -108,9 +108,12 @@ Decided 2026-11-08: players can submit a whole profile, not only report that our
 1. Groups and pins in the profile file; the Profiles window with the list, status column, right-click menu, drag to
    group, search; the quick-switch menu. No verified profiles yet. **Built 2026-11-08**: `ProfilesWindow`,
    `ProfilesViewModel`, `ProfileIndex` (recent profiles and group names, `profile-index.json`), and
-   `ProfileStore.Delete` moving files to `deleted-profiles\`. The status reads the open profile's last scan, so a
-   profile with extra mod folders of its own may show mods as missing until it is opened. Export mod list stays on the
-   Share tab for now.
+   `ProfileStore.Delete` moving files to `deleted-profiles\` with a **Recently deleted** group and **Restore**.
+   Agreed after a review of the first build (2026-11-08): the quick-switch menu lists the other profiles too while
+   few are pinned or recent (the rest in a submenu), so switching never needs the window; groups can be renamed and
+   deleted (a deleted group's profiles move to Ungrouped); **Mods changed** shows in plain text and only **missing**
+   mods in amber; a profile whose game folder or extra mod folders differ from the open one's is checked by its own
+   scan, in the background ("Checking…" until then). Export mod list stays on the Share tab for now.
 2. `verified-profiles.json`, bundled and fetched like the compat database; the Verified section; use directly, copy
    on change, Get missing mods; the version comparison (decision 8).
 3. Gold entries: the maintainer's first verified profiles, from test runs.

@@ -36,6 +36,23 @@ public sealed class ProfileManagerTests : IDisposable
     }
 
     [Fact]
+    public void A_deleted_profile_is_listed_and_restores_unless_its_name_is_taken_again()
+    {
+        ProfileStore.Save(new Profile { Name = _name, Mods = [new() { Id = "CoopNightly" }] });
+        var folder = ProfileStore.Delete(_name)!;
+        _cleanup.Add(folder);
+        Assert.Contains(ProfileStore.ListDeleted(), d => d.Name == _name && d.Folder == folder);
+
+        ProfileStore.Save(new Profile { Name = _name });
+        Assert.Contains("exists again", Assert.Throws<InvalidOperationException>(() => ProfileStore.Restore(folder)).Message);
+        ProfileStore.Delete(_name, keepCopy: false);
+
+        Assert.Equal(_name, ProfileStore.Restore(folder));
+        Assert.Equal(["CoopNightly"], ProfileStore.Load(_name)!.Mods.Select(m => m.Id));
+        Assert.False(Directory.Exists(folder));
+    }
+
+    [Fact]
     public void Moving_to_a_group_or_pinning_changes_only_that()
     {
         ProfileStore.Save(new Profile { Name = _name, Mods = [new() { Id = "CoopNightly" }], SaveName = "world" });

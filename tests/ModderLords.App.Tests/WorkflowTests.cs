@@ -220,8 +220,9 @@ public class WorkflowTests
         var stamp = Guid.NewGuid().ToString("N")[..8];
         var a = $"ui-pm-a-{stamp}";
         var b = $"ui-pm-b-{stamp}";
-        ProfileStore.Save(new Profile { Name = a, Mods = [new() { Id = "TestMod" }, new() { Id = "CoopNightly" }] });
-        ProfileStore.Save(new Profile { Name = b, Mods = [new() { Id = $"Missing{stamp}" }] });
+        // The same game folder as the open profile: the window reuses its scan rather than starting another.
+        ProfileStore.Save(new Profile { Name = a, GameRoot = vm.Profile.GameRoot, Mods = [new() { Id = "TestMod" }, new() { Id = "CoopNightly" }] });
+        ProfileStore.Save(new Profile { Name = b, GameRoot = vm.Profile.GameRoot, Mods = [new() { Id = $"Missing{stamp}" }] });
         try
         {
             var profiles = new ProfilesViewModel(vm);
@@ -250,6 +251,47 @@ public class WorkflowTests
         {
             ProfileStore.Delete(a, keepCopy: false);
             ProfileStore.Delete(b, keepCopy: false);
+        }
+    });
+
+    [Fact]
+    public void GroupsRenameAndDeleteWithoutLosingProfilesAndADeletedProfileComesBack() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var vm = fixture.ViewModel();
+        var stamp = Guid.NewGuid().ToString("N")[..8];
+        var name = $"ui-pm-g-{stamp}";
+        var group = $"Group {stamp}";
+        ProfileStore.Save(new Profile { Name = name, GameRoot = vm.Profile.GameRoot, Group = group });
+        string? deletedFolder = null;
+        try
+        {
+            var profiles = new ProfilesViewModel(vm) { AskName = (_, _, _, _) => group + " renamed", ConfirmDelete = _ => true };
+            profiles.RenameGroupCommand.Execute(profiles.Groups.Single(g => g.Key == group));
+            Assert.Equal(group + " renamed", ProfileStore.Load(name)!.Group);
+            Assert.DoesNotContain(profiles.Groups, g => g.Key == group);
+
+            // Deleting a group keeps its profiles, in Ungrouped.
+            profiles.DeleteGroupCommand.Execute(profiles.Groups.Single(g => g.Key == group + " renamed"));
+            Assert.Equal("", ProfileStore.Load(name)!.Group);
+            Assert.True(ProfileStore.Exists(name));
+
+            // A deleted profile waits in Recently deleted, and Restore brings it back.
+            profiles.Search = name;
+            profiles.DeleteCommand.Execute(profiles.Rows.Single());
+            Assert.False(ProfileStore.Exists(name));
+            profiles.Search = "";
+            profiles.SelectedGroup = profiles.Groups.Single(g => g.Key == ProfileGroupRow.DeletedKey);
+            var deleted = profiles.Rows.First(r => r.Name == name);
+            deletedFolder = deleted.DeletedFolder;
+            profiles.RestoreCommand.Execute(deleted);
+            Assert.True(ProfileStore.Exists(name));
+            Assert.False(Directory.Exists(deletedFolder));
+        }
+        finally
+        {
+            ProfileStore.Delete(name, keepCopy: false);
+            if (deletedFolder is not null && Directory.Exists(deletedFolder)) Directory.Delete(deletedFolder, true);
         }
     });
 

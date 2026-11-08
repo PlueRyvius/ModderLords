@@ -57,10 +57,26 @@ public partial class ProfilesWindow : Window
         return null;
     }
 
-    /// <summary>Fills the right-click menu for the selected profile: Pin or Unpin, and every group to move it to.</summary>
+    /// <summary>Only a group the user made can be renamed or deleted; the others say so instead.</summary>
+    private void GroupMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        var named = _vm.SelectedGroup is { IsNamed: true };
+        RenameGroupItem.Visibility = DeleteGroupItem.Visibility = named ? Visibility.Visible : Visibility.Collapsed;
+        NoGroupMenuItem.Visibility = named ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Fills the right-click menu for the selected profile: Pin or Unpin, and every group to move it to. A deleted
+    /// profile gets Restore alone.
+    /// </summary>
     private void ProfileMenu_Opened(object sender, RoutedEventArgs e)
     {
         if (_vm.Selected is not { } row) return;
+        var deleted = row.IsDeleted ? Visibility.Collapsed : Visibility.Visible;
+        RestoreItem.Visibility = row.IsDeleted ? Visibility.Visible : Visibility.Collapsed;
+        UseItem.Visibility = RenameItem.Visibility = DuplicateItem.Visibility = PinItem.Visibility = MoveToItem.Visibility =
+            DeleteSeparator.Visibility = DeleteItem.Visibility = deleted;
+        if (row.IsDeleted) return;
         PinItem.Header = row.Pinned ? Loc.T("Unpin") : Loc.T("Pin");
         MoveToItem.Items.Clear();
         foreach (var group in _vm.MoveTargets())

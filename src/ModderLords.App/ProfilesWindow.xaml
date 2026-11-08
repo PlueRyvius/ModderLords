@@ -40,6 +40,13 @@
                 <Button DockPanel.Dock="Bottom" Content="{l:T 'New group'}" Command="{Binding NewGroupCommand}" Margin="0,6,0,0" />
                 <ListBox x:Name="GroupList" ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedGroup}" AllowDrop="True"
                          DragOver="Group_DragOver" Drop="Group_Drop">
+                    <ListBox.ContextMenu>
+                        <ContextMenu Opened="GroupMenu_Opened">
+                            <MenuItem x:Name="RenameGroupItem" Header="{l:T 'Rename group…'}" Command="{Binding RenameGroupCommand}" />
+                            <MenuItem x:Name="DeleteGroupItem" Header="{l:T 'Delete group (keeps its profiles)'}" Command="{Binding DeleteGroupCommand}" />
+                            <MenuItem x:Name="NoGroupMenuItem" Header="{l:T 'Only groups you made can be renamed or deleted'}" IsEnabled="False" />
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <DockPanel>
@@ -80,13 +87,14 @@
                     </ListBox.InputBindings>
                 <ListBox.ContextMenu>
                     <ContextMenu Opened="ProfileMenu_Opened">
-                        <MenuItem Header="{l:T 'Use'}" Command="{Binding UseCommand}" FontWeight="Bold" />
-                        <MenuItem Header="{l:T 'Rename…'}" Command="{Binding RenameCommand}" InputGestureText="F2" />
-                        <MenuItem Header="{l:T 'Duplicate…'}" Command="{Binding DuplicateCommand}" />
+                        <MenuItem x:Name="RestoreItem" Header="{l:T 'Restore'}" Command="{Binding RestoreCommand}" FontWeight="Bold" />
+                        <MenuItem x:Name="UseItem" Header="{l:T 'Use'}" Command="{Binding UseCommand}" FontWeight="Bold" />
+                        <MenuItem x:Name="RenameItem" Header="{l:T 'Rename…'}" Command="{Binding RenameCommand}" InputGestureText="F2" />
+                        <MenuItem x:Name="DuplicateItem" Header="{l:T 'Duplicate…'}" Command="{Binding DuplicateCommand}" />
                         <MenuItem x:Name="PinItem" Header="{l:T 'Pin'}" Command="{Binding TogglePinCommand}" />
                         <MenuItem x:Name="MoveToItem" Header="{l:T 'Move to group'}" />
-                        <Separator />
-                        <MenuItem Header="{l:T 'Delete…'}" Command="{Binding DeleteCommand}" InputGestureText="Del" Foreground="{DynamicResource DangerForeground}" />
+                        <Separator x:Name="DeleteSeparator" />
+                        <MenuItem x:Name="DeleteItem" Header="{l:T 'Delete…'}" Command="{Binding DeleteCommand}" InputGestureText="Del" Foreground="{DynamicResource DangerForeground}" />
                     </ContextMenu>
                 </ListBox.ContextMenu>
                     <ListBox.ItemContainerStyle>
@@ -124,7 +132,9 @@
                                                 <Setter Property="Background" Value="{DynamicResource SuccessBackground}" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding Status}" Value="Missing"><Setter Property="Background" Value="{DynamicResource WarningBackground}" /></DataTrigger>
-                                                    <DataTrigger Binding="{Binding Status}" Value="Changed"><Setter Property="Background" Value="{DynamicResource WarningBackground}" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Changed"><Setter Property="Background" Value="Transparent" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Checking"><Setter Property="Background" Value="Transparent" /></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Deleted"><Setter Property="Background" Value="Transparent" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding Status}" Value="Unreadable"><Setter Property="Background" Value="{DynamicResource DangerBackground}" /></DataTrigger>
                                                     <DataTrigger Binding="{Binding StatusText}" Value=""><Setter Property="Background" Value="Transparent" /></DataTrigger>
                                                 </Style.Triggers>
@@ -136,7 +146,9 @@
                                                     <Setter Property="Foreground" Value="{DynamicResource SuccessForeground}" />
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding Status}" Value="Missing"><Setter Property="Foreground" Value="{DynamicResource WarningForeground}" /></DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Changed"><Setter Property="Foreground" Value="{DynamicResource WarningForeground}" /></DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Changed"><Setter Property="Foreground" Value="{DynamicResource MutedForeground}" /></DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Checking"><Setter Property="Foreground" Value="{DynamicResource MutedForeground}" /></DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Deleted"><Setter Property="Foreground" Value="{DynamicResource MutedForeground}" /></DataTrigger>
                                                         <DataTrigger Binding="{Binding Status}" Value="Unreadable"><Setter Property="Foreground" Value="{DynamicResource DangerForeground}" /></DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -151,11 +163,15 @@
             </DockPanel>
             <GridSplitter Grid.Column="3" HorizontalAlignment="Stretch" Background="{DynamicResource SplitterBrush}" />
 
-            <Border Grid.Column="4" Background="{DynamicResource ControlBackground}" BorderBrush="{DynamicResource GridLine}" BorderThickness="1" Padding="10">
+            <Border Grid.Column="4" Background="{DynamicResource ControlBackground}" BorderBrush="{DynamicResource GridLine}" BorderThickness="1" Padding="10"
+                    Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
                 <DockPanel DataContext="{Binding Selected}">
                     <StackPanel DockPanel.Dock="Bottom">
                         <Button Content="{l:T 'Use this profile'}" Command="{Binding DataContext.UseCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                Background="{DynamicResource SelectionBackground}" FontWeight="Bold" Padding="8,4" />
+                                Background="{DynamicResource SelectionBackground}" FontWeight="Bold" Padding="8,4"
+                                Visibility="{Binding CanUse, Converter={StaticResource BoolToVis}}" />
+                        <Button Content="{l:T 'Restore'}" Command="{Binding DataContext.RestoreCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                FontWeight="Bold" Padding="8,4" Visibility="{Binding IsDeleted, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                     <StackPanel>
                         <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />

@@ -181,11 +181,12 @@ about the players' game, which is the copy the host is handing out.
   engine loads a module id once. When necessary, a private launch folder links the selected copies into its own
   `Modules` directory so the game resolves the requested version. The original installations stay in place.
 - **Profiles**: named mod sets with order, saved and switched freely. Share one as a file; import somebody else's.
-  The **profile button** on the top bar switches between pinned and recent profiles; **Manage profiles…** (Ctrl+P)
-  opens the Profiles window: groups, pins, a status per profile (**Ready**, mods **missing**, **Mods changed** since
-  its last launch), search by name or by a mod it contains, and right-click to rename, duplicate, pin, move to a group
-  (or drag it onto one) and delete. A deleted profile is moved to `%LOCALAPPDATA%\ModderLords\deleted-profiles\`, so
-  it can be put back.
+  The **profile button** on the top bar switches profiles: pinned and recent ones first, then the rest.
+  **Manage profiles…** (Ctrl+P) opens the Profiles window: groups, pins, a status per profile (**Ready**, mods
+  **missing**, or mods changed since its last launch), search by name or by a mod it contains, and right-click to
+  rename, duplicate, pin, move to a group (or drag it onto one) and delete. Right-click a group to rename or delete it
+  (its profiles move to Ungrouped). A deleted profile goes to **Recently deleted**, where right-click → **Restore**
+  brings it back.
 
 ### As a coop host
 
