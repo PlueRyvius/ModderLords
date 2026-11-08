@@ -110,7 +110,7 @@ src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2
   saying so.
 - **Health steps** (decision 26): a module for a mod may register `<ModId>.health`; the core suite runs every one it
   finds, on every side, and compares them.
-- The proposed grouping of today's suites is above; it is the maintainer's to adjust.
+- The grouping of today's suites above was agreed with the maintainer 2026-11-08.
 
 ### Suite file additions
 
