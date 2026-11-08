@@ -12,6 +12,9 @@
     // Each game loaded the copy of every mod ModderLords picked; in Coop, both sides run the same mod data.
     { "id": "mods.fingerprint", "side": "game", "mode": "singleplayer", "continueOnFail": true },
     { "compare": "mods.fingerprint", "sides": ["game", "player"], "continueOnFail": true },
+    // Start-up errors a mod shows on screen, even when it started (MS2 v0.9.49's "catalog load failed").
+    { "id": "game.noErrors", "side": "game", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true },
     { "id": "game.whoAmI", "side": "player", "as": "me" },
     { "compare": "hero.parity", "sides": ["game", "player"], "args": { "heroName": "$me.heroName" }, "continueOnFail": true },
     { "id": "hero.addGold", "side": "game", "as": "give", "mode": "coop", "args": { "heroName": "$me.heroName", "amount": 1234 } },

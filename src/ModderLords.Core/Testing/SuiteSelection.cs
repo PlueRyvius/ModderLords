@@ -9,6 +9,15 @@ public static class SuiteSelection
 {
     public const string CoreSuite = "core";
 
+    private const string NoErrorsStep = "game.noErrors";
+
+    /// <summary>The patterns as the JSON array game.noErrors reads, or null when there are none.</summary>
+    internal static string? PatternsArg(IEnumerable<string> patterns)
+    {
+        var list = patterns.Distinct(StringComparer.Ordinal).ToList();
+        return list.Count == 0 ? null : new System.Text.Json.Nodes.JsonArray(list.Select(p => (System.Text.Json.Nodes.JsonNode?)p).ToArray()).ToJsonString();
+    }
+
     /// <summary>The single-player run's own world, made once at the start and loaded fresh for each suite.</summary>
     public const string RunWorld = "mltest-run";
 
@@ -85,12 +94,18 @@ public static class SuiteSelection
         new PlanStep { Id = "game.pause", Side = "server", As = "pause" },
     ];
 
+    /// <summary>The closing check's suite name: on-screen errors after the core suite's check, on every side.</summary>
+    public const string EndSuite = "end";
+
     /// <summary>
     /// One plan made of <paramref name="suites"/>, each preceded by its <paramref name="setup"/> steps. Step names
     /// and their "$name.key" references are prefixed with the suite's name, so two suites can name steps alike.
+    /// Every <c>game.noErrors</c> also fails on every suite's <c>errorPatterns</c>, and the plan ends with one more on
+    /// each side for errors shown since (it runs even when a suite failed, or its world never loaded).
     /// </summary>
     public static TestPlan Compose(string name, IReadOnlyList<TestPlan> suites, Func<TestPlan, int, IReadOnlyList<PlanStep>> setup)
     {
+        var patterns = PatternsArg(suites.SelectMany(s => s.ErrorPatterns));
         var steps = new List<PlanStep>();
         for (int i = 0; i < suites.Count; i++)
         {
@@ -100,8 +115,16 @@ public static class SuiteSelection
             {
                 var args = step.Args.ToDictionary(kv => kv.Key,
                     kv => TestPlan.Reference(kv.Value) is { } r ? $"${Prefix(r.Step)}.{r.Key}" : kv.Value, StringComparer.Ordinal);
+                if (step.Id == NoErrorsStep && patterns is not null) args["patterns"] = patterns;
                 steps.Add(step with { As = Prefix(step.Name), Args = args, Suite = suite.Name });
             }
+        }
+        var sides = steps.SelectMany(s => s.IsCompare ? s.CompareSides : [s.Side]).Distinct().OrderBy(s => s == "server" ? "" : s, StringComparer.Ordinal).ToList();
+        foreach (var side in sides)
+        {
+            var args = new Dictionary<string, string>(StringComparer.Ordinal) { ["new"] = "true" };
+            if (patterns is not null) args["patterns"] = patterns;
+            steps.Add(new PlanStep { Id = NoErrorsStep, Side = side, As = $"{EndSuite}/noErrors.{side}", Args = args, ContinueOnFail = true, Suite = EndSuite });
         }
         return new TestPlan { Name = name, Api = TestPlan.SupportedApi, Steps = steps, Mode = suites.FirstOrDefault()?.Mode ?? SuiteMode.Coop };
     }

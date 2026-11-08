@@ -52,6 +52,7 @@ internal static class BuiltInSteps
         InGameTests.Register("stash.reopen", StepSide.Client, StashReopen);
         ParitySteps.Register();
         WorldSteps.Register();
+        ErrorSteps.Register();
     }
 
     // ---- game ------------------------------------------------------------------------------------------------
