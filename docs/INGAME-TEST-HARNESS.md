@@ -51,9 +51,10 @@ Decided with the maintainer 2026-11-07; **not built yet.** One tool, two uses:
 | 14 | **Tests ship inside the mod, with no runtime dependency for players.** A mod, including a single-player mod that has nothing to do with ModderLords, must never need ModderLords or its compat layer to run. | The maintainer's hard requirement: a test hook must not become a dependency. |
 | 15 | **A single-player run mode**: just the game, no Coop server. Steps run on side `game`. Same run folder, agent, waits and evidence. | Most mod development is single player, and a Coop launch is slow. |
 | 16 | **A clean world per suite by default.** A suite marked `continuity` can use the built-in `game.saveAndReload` step: save, reload (in Coop: restart the server on that save and rejoin), and later steps check what survived. | Isolation by default; save/load bugs need a deliberate reload. |
-| 19 | **A suite can opt in to sharing a world** (`"world": "shared"`): it runs on the world the previous suite left, with no reset. Fresh stays the default; the core suite and `continuity` suites always get a fresh world. A shared suite must not assume starting values: it reads "before" and checks the change. The report says which suites shared a world. | In Coop a reset is a server restart and a rejoin, about a minute per suite; most suites touch state no other suite reads. |
 | 17 | **Worlds are created and cached per mod set** (the mod list with versions); this builds v1's decision 1. | Overhaul mods change world generation, so a vanilla `.sav` doesn't load or doesn't mean the same thing. |
 | 18 | **Results are recorded across runs**: pass or fail per suite, against each mod's id and version, the Coop version and the game version, in a history file with a summary table. | That history is the compatibility matrix. Later it could feed the Coodsz compat records; v2 only stores it. |
+| 19 | **A suite can opt in to sharing a world** (`"world": "shared"`): it runs on the world the previous suite left, with no reset. Fresh stays the default; the core suite and `continuity` suites always get a fresh world. A shared suite must not assume starting values: it reads "before" and checks the change. The report says which suites shared a world. | In Coop a reset is a server restart and a rejoin, about a minute per suite; most suites touch state no other suite reads. |
+| 20 | **A test DLL names its entry type with an assembly attribute** from `ModderLords.CompatSync` (below). | Explicit and in one place; no scan of every type, which throws when one refers to something missing. |
 
 Decision 14 replaces v1's decision 5 for third-party mods: the reference-based API stays, but it now lives in a DLL
 that the game never loads by itself.
@@ -74,9 +75,13 @@ that the game never loads by itself.
 - **ModderLords' agent loads it by hand, in test mode only**, as `SyncSubModule` loads the Coop adapter
   (`Assembly.LoadFrom` next to a known file). Test mode always adds `ModderLords.Compat` to the launch, so the
   test DLL's reference to `ModderLords.CompatSync` resolves.
-- **The test DLL registers steps as v1 steps do**, with `InGameTests.Register(...)`. The agent calls every public
-  static `RegisterTests()` method it finds in the DLL (a naming convention, so no attribute type is shared with the
-  mod). The DLL may reference the mod's own DLL to call its code.
+- **The test DLL names its entry point** with one line, `[assembly: InGameTestsEntry(typeof(Steps))]`
+  (`InGameTestsEntry` is in `ModderLords.CompatSync`, which the DLL references anyway for `InGameTests.Register`).
+  The agent loads only that type and calls its public static `Register()`, which registers steps as v1 steps do. The
+  DLL may reference the mod's own DLL to call its code. Decided 2026-11-07 (decision 20).
+- **Its failures are loud**: a DLL with no entry, or whose entry registers no steps, fails the run with that message.
+  A DLL that fails to load on one side (a client-only mod on the server) has its steps skipped there, with the reason,
+  instead of failing the run. A DLL built for a different harness API version is refused, saying so.
 - **One DLL for both sides.** The dedicated server loads the same file, as it loads `ModderLords.CompatSync`, so the
   DLL targets what `ModderLords.CompatSync` targets.
 - **Discovery** scans the enabled modules' folders for `ModuleData\ModderLordsTests\`. The suites' JSON is read by the
@@ -142,8 +147,7 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 ### Open questions for the maintainer
 
 1. ~~Clean world per suite in one launch~~: decided 2026-11-07, decision 19 (sharing is opt-in, fresh is the default).
-2. **How the agent finds a test DLL's entry point**: the proposed convention is a public static `RegisterTests()`
-   method. An alternative is a line in the suite JSON naming the type.
+2. ~~How the agent finds a test DLL's entry point~~: decided 2026-11-07, decision 20 (an assembly attribute).
 3. **Single-player world loading** and **world creation** both drive the game from its main menu by code. Neither is
    proven yet; the first build step is a spike that loads a named save and starts a new campaign in single player.
 4. Should `--mod X` also run suites shipped by other mods that merely don't require X (to check X didn't break them)?
