@@ -55,6 +55,7 @@ Decided with the maintainer 2026-11-07; **not built yet.** One tool, two uses:
 | 18 | **Results are recorded across runs**: pass or fail per suite, against each mod's id and version, the Coop version and the game version, in a history file with a summary table. | That history is the compatibility matrix. Later it could feed the Coodsz compat records; v2 only stores it. |
 | 19 | **A suite can opt in to sharing a world** (`"world": "shared"`): it runs on the world the previous suite left, with no reset. Fresh stays the default; the core suite and `continuity` suites always get a fresh world. A shared suite must not assume starting values: it reads "before" and checks the change. The report says which suites shared a world. | In Coop a reset is a server restart and a rejoin, about a minute per suite; most suites touch state no other suite reads. |
 | 20 | **A test DLL names its entry type with an assembly attribute** from `ModderLords.CompatSync` (below). | Explicit and in one place; no scan of every type, which throws when one refers to something missing. |
+| 21 | **`--mod X` stays narrow**: the core suite, X's own suites and the suites that require X. `--with-others` adds every other applicable suite. The report marks a suite that also failed in the last recorded run without X as "already failing", so a new failure points at X. | The development loop stays fast; the core suite still catches another mod going quiet or a desync, and the full run (no `--mod`) is the one before a release. |
 
 Decision 14 replaces v1's decision 5 for third-party mods: the reference-based API stays, but it now lives in a DLL
 that the game never loads by itself.
@@ -118,7 +119,8 @@ ModderLords.Cli test --profile "My Mods" --mod ModularArmor2 --single-player [--
 ModderLords.Cli test --profile "My Host" --suite stash                    # v1: one named suite, still works
 ```
 
-- `--mod X` runs the core suite plus the suites X ships and the suites that require X.
+- `--mod X` runs the core suite plus the suites X ships and the suites that require X; `--with-others` adds every
+  other applicable suite (decision 21).
 - `--keep-open-on-fail` leaves the game (and in Coop, the server) running after the first failure, so the developer
   can look; the run's report is written first.
 - **Single player** launches the profile's game with `ModderLords.Compat` added and `/modderlords-test`, and no Coop
@@ -133,8 +135,20 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 
 - The cache key is the sorted list of enabled modules with their versions, hashed; the world lives in
   `<data>\test-worlds\auto-<hash>.sav`, with a small `.json` beside it recording the list it was made with.
-- On a cache miss the harness creates the world: start a new sandbox campaign from game code with fixed choices
-  (culture, character), save it, close. That run is reported as world creation, not as a test.
+- On a cache miss the harness creates the world (proposed, open question 3), by code and without touching the
+  screens:
+  1. Start a new Sandbox campaign as the main menu's Sandbox button does (no tutorial).
+  2. Step through character creation with the game's own creation state: on each page take the first or default
+     choice and move on. The agent doesn't need to know the page, so pages an overhaul mod adds are handled like
+     vanilla ones, as long as they follow the game's page pattern. Required fields get fixed values (a clan name).
+  3. Dismiss or detect pop-ups after creation (a mod's campaign options, a welcome message), as when loading a save.
+  4. On the map, save under the mod set's key. The report lists each page it passed and what it chose. That run is
+     reported as world creation, not as a test.
+- **When creation gets stuck** (a mod's page with its own logic, or an input the agent can't guess), it fails naming
+  that page. The fallback is manual: make the world by hand once in that mod set, and `test world save NAME`, run
+  while the game is open, records it into the cache under that mod set's key.
+- Worlds are not reproducible (world generation is random), so each is created once and kept; the history records
+  which cached world a result came from, since results compare only on the same world.
 - A named world (`"world": "vanilla-1"`, `--world`) still works as in v1, and skips the cache.
 
 ### Results history (decision 18)
@@ -148,14 +162,14 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 
 1. ~~Clean world per suite in one launch~~: decided 2026-11-07, decision 19 (sharing is opt-in, fresh is the default).
 2. ~~How the agent finds a test DLL's entry point~~: decided 2026-11-07, decision 20 (an assembly attribute).
-3. **Single-player world loading** and **world creation** both drive the game from its main menu by code. Neither is
-   proven yet; the first build step is a spike that loads a named save and starts a new campaign in single player.
-4. Should `--mod X` also run suites shipped by other mods that merely don't require X (to check X didn't break them)?
-   That is the full matrix run, which is slower; the proposal is no, and the no-argument run does that.
+3. **World creation by code, with manual capture as the fallback** (Worlds, above): agreed? Loading a named save and
+   creating a world by code are both unproven; the first build step is a spike of both in single player.
+4. ~~What `--mod X` runs~~: decided 2026-11-07, decision 21 (narrow, plus `--with-others`).
 
 ### Build order (proposed)
 
-1. Spike: single-player launch, the agent loading a named save, and starting a new campaign by code.
+1. Spike: single-player launch, the agent loading a named save, and creating a world by code through character
+   creation.
 2. `requires`/`mode`/`continuity`, suite selection and the core suite; multi-suite runs with a world reset.
 3. Tests shipped in mods: discovery, loading the test DLL, namespaced ids; one in-tree example module.
 4. The world cache, then `game.saveAndReload`, then the history file and table.
