@@ -434,7 +434,8 @@ Built-in steps (`src/ModderLords.CompatSync/Testing/BuiltInSteps.cs`): `game.onM
 (reports `heroName`, `hero`, `party`; find a player's hero on another side by `heroName`: its StringId is local),
 `game.coopLog` (writes a line through Coop's own logger and checks it reaches Coop's log file; reports the file, the
 logger's sinks, and in a test run the stack that first built Coop's logger), `game.joined` (waits for Coop's own
-`ClientCampaignReady`, the join finished; every suite starts with it, and the launcher no longer adds a fixed wait),
+`ClientCampaignReady`, the join finished; the run's setup waits on it once per launch, an API 1 suite starts with it
+itself, and the launcher no longer adds a fixed wait),
 `party.toTownGate` (server: Coop's own `coop.debug.mobile_party.move_to_settlement ... true` puts the party at the gate;
 Coop's server refuses a town entry from further away), `settlement.enter` (the player's party enters a town, as
 arriving there does),
@@ -490,24 +491,35 @@ references Coop.
 
 ```jsonc
 {
-  "api": 1,
+  "api": 2,
   "name": "stash",
-  "world": "vanilla-1",                         // optional: test-worlds\vanilla-1.sav, copied fresh
+  "mode": "coop",                               // singleplayer | coop | both
+  "world": "shared",                            // optional: run on core's world (decision 19); default a fresh one
   "steps": [
+    // No game.onMap / game.joined / game.pause: the run's setup does those once per launch.
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
     { "id": "party.addItem", "side": "server", "as": "given", "args": { "heroName": "$me.heroName", "item": "grain", "count": 5 } },
-    { "id": "stash.reopen", "side": "client:1", "timeoutSeconds": 180, "args": { "times": 3, "expected": "$deposit.value" } },
+    // The stash is opened from the town menu, so the party goes into the town first (the server moves it to the gate).
+    { "id": "party.toTownGate", "side": "server", "args": { "heroName": "$me.heroName", "town": "town_EN1" } },
+    { "id": "settlement.enter", "side": "client:1", "args": { "town": "town_EN1" } },
+    { "id": "stash.deposit", "side": "client:1", "as": "deposit", "args": { "town": "town_EN1", "item": "grain", "count": 5 } },
+    { "id": "stash.reopen", "side": "client:1", "timeoutSeconds": 180, "args": { "town": "town_EN1", "item": "grain", "times": 3, "expected": "$deposit.value" } },
     { "compare": "stash.count", "sides": ["server", "client:1"], "args": { "town": "town_EN1", "item": "grain" } },
     { "id": "some.check", "side": "server", "knownFailing": "https://github.com/.../issues/1", "continueOnFail": true }
   ]
 }
 ```
 
-- `side` is `server` or `client:N`. This version starts one player's game; a suite naming `client:2` is refused.
+- `side` is `server` or `client:N` in a Coop suite, `game` in a single-player one, and `game` / `player` in a
+  both-ways one. This version starts one player's game; a suite naming `client:2` is refused.
 - `as` names a step for `$name.key` references (default: its id). A reference must name an earlier step.
 - `timeoutSeconds` (default 60) is enforced by the game; the launcher waits 30 s longer before reporting "no result".
-- The first failure skips the rest unless `continueOnFail`. `knownFailing` turns a failure into `KnownFail` (the
-  run still passes) and a pass into `UnexpectedPass` (the run fails, so the mark gets removed).
+- A failure skips the rest of this suite unless `continueOnFail`; the next suite still runs. `knownFailing` turns a
+  failure into `KnownFail` (the run still passes) and a pass into `UnexpectedPass` (the run fails, so the mark gets
+  removed).
+- `"api": 1` (the first format) still loads, but gets none of the run's setup: such a suite must wait for the map and
+  the join and stop time itself (`game.onMap` on each side, `game.joined` on `client:1`, `game.pause` on the server),
+  and it runs only when its module is picked by name. Write new suites as API 2.
 - Before any step runs, every game must announce itself and have every step the suite names; otherwise nothing runs
   and the report says what is missing.
 
