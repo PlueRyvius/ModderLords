@@ -17,7 +17,8 @@ it is asked for, plus `core`. Everything ships with ModderLords; no other mod ca
 | The step API | `src/ModderLords.CompatSync/Testing/InGameTests.cs` (`InGameTests.Register`, `StepContext`, `StepWait`) |
 | A module's own step DLL (for steps that call a mod's code) | `src/ModderLords.Tests.<Module>/`, built into the launcher's `compat\` folder |
 | Launcher side (suites, selection, sequencer, report) | `src/ModderLords.Core/Testing/` |
-| The `test` command | `src/ModderLords.Cli/Program.cs` (`case "test"`, `RunSinglePlayerTest`, `RunCoopTest`) |
+| The run (picking suites, launching, the reports) | `src/ModderLords.Coop/Testing/InGameTestRun.cs`, used by the CLI's `test` and the app's Tests tab |
+| The Tests tab | `src/ModderLords.App/ViewModels/TestsViewModel.cs`, its `TabItem` in `MainWindow.xaml` |
 | Unit tests | `tests/ModderLords.Core.Tests/InGameTestHarnessTests.cs`, `ModuleFingerprintTests.cs` |
 | Run folders (results, evidence) | `%LOCALAPPDATA%\ModderLords\tests\<runId>\` |
 
@@ -38,6 +39,9 @@ ModderLords.Cli test --profile "My Host" --suite stash/stash
 ModderLords.Cli test --profile "My Host" --suite C:\scratch\try-this.json
 ```
 
+- **In the app:** the Tests tab lists the modules (with what each checks and needs), runs the ticked ones in single
+  player or Coop, and shows a pass or fail per suite and per step. It is the same run as the CLI's; an agent uses the
+  CLI.
 - **Build first:** `dotnet build src\ModderLords.Cli\ModderLords.Cli.csproj` builds the in-game modules into the
   CLI's `compat\` folder, and the run installs the client copy of ModderLords.Compat itself. Run the CLI from
   `src\ModderLords.Cli\bin\Debug\net10.0\`.

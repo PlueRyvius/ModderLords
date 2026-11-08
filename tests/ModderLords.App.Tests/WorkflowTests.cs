@@ -183,6 +183,34 @@ public class WorkflowTests
     }
 
     [Fact]
+    public void TestsTabListsEveryModuleWithTheCoreChecksAlwaysOn() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var tests = fixture.ViewModel().Tests;
+        Assert.Equal("core", tests.Modules[0].Id);
+        Assert.True(tests.Modules[0].IsPicked);
+        Assert.False(tests.Modules[0].CanPick);
+        Assert.Contains(tests.Modules, m => m.Id == "stash" && !m.IsPicked && m.CanPick);
+    });
+
+    [Fact]
+    public void TestsTabRefusesUnsavedChangesAndCoopWithoutATestWorld() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var vm = fixture.ViewModel();
+        vm.IsDirty = true;
+        vm.Tests.RunCommand.ExecuteAsync(null).Wait();
+        Assert.Contains("Save the profile first", vm.Tests.Headline);
+
+        // Coop steps change the world, so a run never uses the profile's own campaign.
+        vm.IsDirty = false;
+        vm.Tests.IsCoop = true;
+        vm.Tests.RunCommand.ExecuteAsync(null).Wait();
+        Assert.Contains("Pick a test world", vm.Tests.Headline);
+        Assert.False(vm.Tests.IsTesting);
+    });
+
+    [Fact]
     public void PlayerHostPlayerUsesClientPreviewAndKeepsSelection() => Sta(() =>
     {
         using var fixture = new Fixture();

@@ -331,6 +331,8 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<ModRow> Mods { get; } = new();
     /// <summary>The Supported mods tab.</summary>
     public SupportedModsViewModel Supported { get; }
+    /// <summary>The Tests tab: the in-game test harness, on this profile.</summary>
+    public TestsViewModel Tests { get; }
     public ObservableCollection<string> Messages { get; } = new();
 
     /// <summary>
@@ -519,6 +521,7 @@ public partial class MainViewModel : ObservableObject
                 foreach (ModRow row in e.NewItems) row.ShowExperimental = ShowExperimentalCompat;
         };
         Supported = new SupportedModsViewModel(Mods);
+        Tests = new TestsViewModel(this);
         if (!initialize) return;
         LoadProfileList();
         LoadProfile(ProfileNames.FirstOrDefault() ?? "default");
@@ -1982,6 +1985,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnProfileChanged(Profile value)
     {
         OnPropertyChanged(nameof(ManualLoadOrder));
+        Tests?.ProfileChanged();
     }
 
     [RelayCommand]

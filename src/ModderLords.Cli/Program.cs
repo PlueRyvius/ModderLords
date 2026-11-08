@@ -454,92 +454,29 @@ switch (cmd)
         {
             var listProfile = opts.TryGetValue("profile", out var listName) ? ProfileStore.Load(listName) : null;
             if (opts.ContainsKey("profile") && listProfile is null) { Console.Error.WriteLine("[ModderLords] profile not found: " + listName); return 2; }
-            var listMods = listProfile is null ? null : InstalledMods(listProfile, opts.ContainsKey("single-player"));
+            var listMods = listProfile is null ? null : ModderLords.Coop.Testing.InGameTestRun.InstalledMods(listProfile, opts.ContainsKey("single-player"), Console.WriteLine);
             Console.WriteLine(ModderLords.Core.Testing.TestCatalog.ToJson(ModderLords.Core.Testing.TestSuites.Modules(), listMods, listProfile?.Name));
             return 0;
         }
         if (!opts.TryGetValue("profile", out var testProfileName)) { Console.Error.WriteLine("test needs --profile NAME"); return 2; }
-        var profile = ProfileStore.Load(testProfileName);
-        if (profile is null) { Console.Error.WriteLine("[ModderLords] profile not found: " + testProfileName); return 2; }
-        if (ModderLords.Core.Launch.ClientLauncher.IsClientRunning()) { Console.Error.WriteLine("Bannerlord is already running; close it first."); return 2; }
-
-        // One suite by name (as v1), or with none named the core suite plus every suite this profile's mods meet.
-        if (opts.TryGetValue("suite", out var suiteArg))
+        // The run itself is shared with the app's Tests tab (ModderLords.Coop.Testing.InGameTestRun).
+        using var testCancel = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; testCancel.Cancel(); };
+        var result = await ModderLords.Coop.Testing.InGameTestRun.RunAsync(new ModderLords.Coop.Testing.InGameTestOptions
         {
-            ModderLords.Core.Testing.TestPlan testPlan;
-            try { testPlan = ModderLords.Core.Testing.TestSuites.Load(suiteArg); }
-            catch (Exception ex) { Console.Error.WriteLine("[ModderLords] suite: " + ex.Message); return 2; }
-            if (testPlan.Mode == ModderLords.Core.Testing.SuiteMode.Both) testPlan = testPlan.ForMode(opts.ContainsKey("single-player"));
-            if (testPlan.Clients > 1) { Console.Error.WriteLine($"[ModderLords] suite {testPlan.Name} needs {testPlan.Clients} players' games; this version starts one."); return 2; }
-            // Steps all on "game": just the player's game, no server (docs/INGAME-TEST-HARNESS.md, decision 15).
-            if (testPlan.SinglePlayer) return await RunSinglePlayerTest(profile, testPlan, opts);
-            return await RunCoopTest(profile, testPlan, opts, paths);
-        }
-
-        var singlePlayer = opts.ContainsKey("single-player");
-        var installed = InstalledMods(profile, singlePlayer);
-        if (installed is null) return 2;
-        // --modules a,b: only those test modules' suites (and core); without it, every module that applies.
-        IReadOnlyCollection<string>? pickedModules = null;
-        if (opts.GetValueOrDefault("modules") is { } moduleList)
-        {
-            pickedModules = moduleList.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-            var unknown = pickedModules.Where(m => ModderLords.Core.Testing.TestSuites.Module(m) is null).ToList();
-            if (unknown.Count > 0)
-            {
-                Console.Error.WriteLine($"[ModderLords] no test module {string.Join(", ", unknown)} (there are: {string.Join(", ", ModderLords.Core.Testing.TestSuites.Modules().Select(m => m.Id))}; test --list says more)");
-                return 2;
-            }
-            foreach (var m in pickedModules.Select(ModderLords.Core.Testing.TestSuites.Module))
-                if (ModderLords.Core.Testing.SuiteSelection.Unmet(m!.Requires, installed) is { Count: > 0 } unmet)
-                    Console.WriteLine($"[ModderLords] test module {m.Id} is unavailable here: needs {string.Join(", ", unmet.Select(r => ModderLords.Core.Testing.SuiteSelection.Describe(r, installed)))}");
-        }
-        var left = new List<string>();
-        IReadOnlyList<ModderLords.Core.Testing.TestPlan> chosen;
-        try { chosen = ModderLords.Core.Testing.SuiteSelection.Select(ModderLords.Core.Testing.TestSuites.LoadAll(), installed, singlePlayer, opts.GetValueOrDefault("mod"), opts.ContainsKey("with-others"), left, pickedModules); }
-        catch (Exception ex) { Console.Error.WriteLine("[ModderLords] suites: " + ex.Message); return 2; }
-        Console.WriteLine($"[ModderLords] {(singlePlayer ? "single-player" : "Coop")} suites for {profile.Name}: {string.Join(", ", chosen.Select(p => p.Module.Length > 0 ? p.Module + "/" + p.Name : p.Name))}");
-        foreach (var why in left) Console.WriteLine("[ModderLords]   left out " + why);
-        // The picked modules' own step DLLs, from the compat folder next to this launcher (decision 30).
-        var loads = new List<ModderLords.Core.Testing.ModuleLoad>();
-        foreach (var m in chosen.Select(p => ModderLords.Core.Testing.TestSuites.Module(p.Module)).Where(m => m?.StepsDll is not null).Distinct())
-        {
-            var dll = Path.Combine(LaunchSession.BundledRoot ?? AppContext.BaseDirectory, "compat", m!.StepsDll!);
-            if (!File.Exists(dll)) { Console.Error.WriteLine($"[ModderLords] test module {m.Id}: {dll} is missing (is it built into the compat folder?)"); return 2; }
-            loads.Add(new ModderLords.Core.Testing.ModuleLoad(m.Id, dll, m.StepsType!, m.Requires.Select(r => r.Id).ToList()));
-        }
-
-        if (singlePlayer)
-        {
-            // One launch: the run makes its world (or loads --world) once, and loads it fresh before each suite.
-            string? spWorld = null;
-            if (opts.GetValueOrDefault("world") is { } named)
-            {
-                var worldFile = ModderLords.Core.Testing.TestSuites.WorldPath(named);
-                if (!File.Exists(worldFile)) { Console.Error.WriteLine($"[ModderLords] test world not found: {worldFile}"); return 2; }
-                spWorld = "mltest-" + named;
-                var saves = Path.Combine(ModderLords.Core.Launch.GamePaths.UserDataDir(), "Game Saves");
-                Directory.CreateDirectory(saves);
-                File.Copy(worldFile, Path.Combine(saves, spWorld + ".sav"), overwrite: true);
-                Console.WriteLine($"[ModderLords] world {named} copied fresh -> {Path.Combine(saves, spWorld + ".sav")}");
-            }
-            var composed = ModderLords.Core.Testing.SuiteSelection.Compose("selected", chosen, (suite, i) => ModderLords.Core.Testing.SuiteSelection.SinglePlayerSetup(suite, i, spWorld)) with { Loads = loads };
-            return await RunSinglePlayerTest(profile, composed, opts);
-        }
-
-        // Coop: a fresh world costs a launch for now (the server restarts on the fresh copy); shared suites join the
-        // launch before them.
-        var launches = ModderLords.Core.Testing.SuiteSelection.CoopLaunches(chosen);
-        var exit = 0;
-        for (int n = 0; n < launches.Count; n++)
-        {
-            Console.WriteLine($"[ModderLords] launch {n + 1}/{launches.Count}: {string.Join(", ", launches[n].Select(p => p.Name))}");
-            var composed = ModderLords.Core.Testing.SuiteSelection.Compose(launches.Count == 1 ? "selected" : $"selected-{n + 1}", launches[n], ModderLords.Core.Testing.SuiteSelection.CoopSetup) with { Loads = loads };
-            var fresh = ProfileStore.Load(testProfileName)!;
-            if (await RunCoopTest(fresh, composed, opts, paths) != 0) exit = 1;
-            if (ModderLords.Core.Launch.ClientLauncher.IsClientRunning()) { Console.Error.WriteLine("[ModderLords] the game is still running (--keep-client?); the remaining launches are skipped."); return 1; }
-        }
-        return exit;
+            ProfileName = testProfileName,
+            Paths = paths,
+            SinglePlayer = opts.ContainsKey("single-player"),
+            Suite = opts.GetValueOrDefault("suite"),
+            Modules = opts.GetValueOrDefault("modules")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            OnlyMod = opts.GetValueOrDefault("mod"),
+            WithOthers = opts.ContainsKey("with-others"),
+            World = opts.GetValueOrDefault("world"),
+            KeepClient = opts.ContainsKey("keep-client"),
+            KeepOpenOnFail = opts.ContainsKey("keep-open-on-fail"),
+            KeepServer = opts.ContainsKey("keep-server"),
+        }, Console.WriteLine, testCancel.Token);
+        return result.ExitCode;
     }
 
     case "launch" when opts.ContainsKey("profile"):
@@ -807,186 +744,6 @@ static List<ModSelection> ParseSelections(string? spec, ModuleCatalog catalog, o
         list.Add(new ModSelection(pick, role));
     }
     return list;
-}
-
-/// <summary>
-/// A Coop test run: the smoke test's server and join, then the plan's steps inside both games, driven through a run
-/// folder, with a pass/fail per step.
-/// </summary>
-static async Task<int> RunCoopTest(Profile profile, ModderLords.Core.Testing.TestPlan testPlan, Dictionary<string, string> opts, ServerPaths paths)
-{
-    if (profile.Server.Password.Length > 0) { Console.Error.WriteLine("This server has a password, and Coop's automatic join cannot send one. Clear it for the test."); return 2; }
-
-    // Every run starts from the same world, copied fresh over the last run's copy.
-    var world = opts.GetValueOrDefault("world") ?? testPlan.World;
-    if (world is not null)
-    {
-        var worldFile = ModderLords.Core.Testing.TestSuites.WorldPath(world);
-        if (!File.Exists(worldFile)) { Console.Error.WriteLine($"[ModderLords] test world not found: {worldFile} (put a .sav there, with its co-op session file beside it)"); return 2; }
-        try
-        {
-            var imported = SavePreparer.ImportFrom(worldFile, paths, "mltest-" + world, overwrite: true);
-            foreach (var w in imported.Warnings) Console.WriteLine("[ModderLords] WARNING " + w);
-            Console.WriteLine($"[ModderLords] world {world} copied fresh -> {imported.SavePath}");
-        }
-        catch (Exception ex) { Console.Error.WriteLine("[ModderLords] could not copy the test world: " + ex.Message); return 2; }
-        profile.SaveName = "mltest-" + world;
-    }
-
-    var channel = ModderLords.Core.Testing.FileTestRunChannel.Create(Path.Combine(ProfileStore.RootDir, "tests"), testPlan, DateTimeOffset.Now);
-    Console.WriteLine($"[ModderLords] test run {channel.RunId} -> {channel.Folder}");
-    var prepared = LaunchSession.Prepare(profile);
-    foreach (var m in prepared.Messages) Console.WriteLine("[ModderLords] " + m);
-    if (!prepared.Selections.Any(sel => sel.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase)))
-    {
-        Console.Error.WriteLine($"[ModderLords] the test agent lives in {LaunchSession.SyncModuleId}, which this profile does not load.");
-        return 2;
-    }
-    Console.WriteLine("[ModderLords] " + ClientModuleInstaller.Ensure(ModderLords.Core.Launch.ClientLauncher.ResolveGameRoot(profile)).Message);
-    ClientLaunchSession.Prepared client;
-    try { client = ServerMatchedClient.Prepare(prepared, profile); }
-    catch (Exception ex) { Console.Error.WriteLine("[ModderLords] client plan: " + ex.Message); return 2; }
-    // The copies picked for each side, hashed now, for mods.fingerprint to check the loaded copies against.
-    foreach (var line in ModderLords.Core.Testing.PickedCopies.Write(channel.Folder, "server", prepared.Selections.Select(s => s.Module))
-        .Concat(ModderLords.Core.Testing.PickedCopies.Write(channel.Folder, "client:1", client.Plan.SelectedModules, client.Plan.ExcludedFolders)))
-        Console.WriteLine("[ModderLords] picked " + line);
-    // The switch reaches the server through its own launch plan only, never this process's environment, so the
-    // player's game (started from here) cannot inherit it and no ordinary Host launch can carry it.
-    var serverPlan = prepared.Plan.WithEnvironment(ModderLords.Core.Testing.FileTestRunChannel.ServerVariable, channel.SwitchValue("server"));
-
-    string? gameGone = null;
-    var sequencer = new ModderLords.Core.Testing.TestSequencer(channel) { Abort = () => gameGone };
-    sequencer.Progress += line => Console.WriteLine("[test] " + line);
-    Task<ModderLords.Core.Testing.TestReport>? testRun = null;
-    var runner = new ModderLords.Core.Smoke.SmokeRunner(new ModderLords.Core.Smoke.SmokeOptions
-    {
-        GameRoot = client.GameRoot,
-        JoinPort = profile.Server.JoinPort,
-        SteadyFor = TimeSpan.Zero,
-        // Still wait for the server to list the player on the map, but not the 15 s guess after it: suites start
-        // with game.joined, which waits for Coop's own join-finished signal on the player's game.
-        JoinSettle = TimeSpan.Zero,
-        CloseClientWhenDone = !opts.ContainsKey("keep-client"),
-        ReportRoot = channel.Folder,
-        // No time command: the steps pause the campaign themselves (game.pause), so the numbers they read hold still.
-        SendServerCommand = null,
-        ExtraLaunchArguments = [ModderLords.Core.Testing.FileTestRunChannel.ClientArgument, channel.SwitchValue("client:1")],
-        WhileOnMap = cancel => testRun = sequencer.RunAsync(testPlan, channel.RunId, cancel),
-    });
-    runner.Progress += line => Console.WriteLine("[smoke] " + line);
-
-    using var testLogWriter = new StreamWriter(Path.Combine(channel.Folder, "server-console.log")) { AutoFlush = true };
-    using var engine = EngineProcess.Start(serverPlan);
-    engine.LineReceived += line =>
-    {
-        runner.ServerLine(line.Text);
-        lock (testLogWriter) testLogWriter.WriteLine($"{line.At:HH:mm:ss.fff} {line.Text}");
-    };
-    _ = engine.Exited.ContinueWith(t => runner.ServerExited(t.Result), TaskScheduler.Default);
-    using var testCancel = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; testCancel.Cancel(); };
-
-    var smokeReport = await runner.RunAsync(args => ClientLaunchSession.Start(client.Plan with { ExtraArguments = args }), testCancel.Token);
-    // The game or server may have gone before the steps finished; the step waiting is then reported as such.
-    gameGone = "the game or the server exited before the step finished";
-    var testReport = testRun is null ? null : await testRun;
-    Console.WriteLine();
-    Console.WriteLine(smokeReport.ToText());
-    if (testReport is null)
-    {
-        Console.WriteLine("[ModderLords] the game never reached the campaign map, so no step ran; see the smoke report above.");
-    }
-    else
-    {
-        await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.json"), testReport.ToJson());
-        await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.txt"), testReport.ToText());
-        Console.WriteLine(testReport.ToText());
-    }
-    Console.WriteLine($"[ModderLords] evidence and logs: {channel.Folder}");
-    if (!opts.ContainsKey("keep-server") && !engine.Exited.IsCompleted)
-    {
-        Console.WriteLine("[ModderLords] stopping the server…");
-        await engine.StopAsync(TimeSpan.FromSeconds(60));
-    }
-    // Both reports count: steps that pass in a game that then crashed, or where Coop logged a fatal error, still fail.
-    return testReport?.Passed == true && smokeReport.Overall != ModderLords.Core.Smoke.SmokeVerdict.Fail ? 0 : 1;
-}
-
-/// <summary>
-/// The profile's enabled mods with the versions that would load, for suite requirements; null (reported) when the
-/// game cannot be found. Single player leaves Coop out, as its run does.
-/// </summary>
-static Dictionary<string, string?>? InstalledMods(Profile profile, bool singlePlayer)
-{
-    try
-    {
-        var client = ClientLaunchSession.Prepare(profile);
-        var mods = client.Mods.ToDictionary(m => m.Id, m => (string?)m.Version, StringComparer.OrdinalIgnoreCase);
-        if (singlePlayer) { mods.Remove("Coop"); mods.Remove("CoopNightly"); }
-        return mods;
-    }
-    catch (Exception ex) { Console.Error.WriteLine("[ModderLords] mods: " + ex.Message); return null; }
-}
-
-/// <summary>
-/// A single-player test run: the profile's game with ModderLords.Compat (where the test agent lives) and without Coop,
-/// started with the test switch on side "game". The suite's own steps load or create the world from the main menu.
-/// </summary>
-static async Task<int> RunSinglePlayerTest(Profile profile, ModderLords.Core.Testing.TestPlan testPlan, Dictionary<string, string> opts)
-{
-    // In memory only: the profile on disk is not changed.
-    var coopIds = new HashSet<string>(["Coop", "CoopNightly"], StringComparer.OrdinalIgnoreCase);
-    foreach (var mod in profile.Mods.Where(m => coopIds.Contains(m.Id) && m.Enabled))
-    {
-        mod.Enabled = false;
-        Console.WriteLine($"[ModderLords] single player: {mod.Id} is left out of this run");
-    }
-    if (profile.Mods.FirstOrDefault(m => m.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase)) is { } sync) sync.Enabled = true;
-    else profile.Mods.Add(new ProfileMod { Id = LaunchSession.SyncModuleId, Role = ServerRole.AsShipped });
-    Console.WriteLine("[ModderLords] " + ClientModuleInstaller.Ensure(ModderLords.Core.Launch.ClientLauncher.ResolveGameRoot(profile)).Message);
-
-    ClientLaunchSession.Prepared client;
-    try { client = ClientLaunchSession.Prepare(profile); }
-    catch (Exception ex) { Console.Error.WriteLine("[ModderLords] client plan: " + ex.Message); return 2; }
-    foreach (var m in client.Messages) Console.WriteLine("[ModderLords] " + m);
-
-    var channel = ModderLords.Core.Testing.FileTestRunChannel.Create(Path.Combine(ProfileStore.RootDir, "tests"), testPlan, DateTimeOffset.Now);
-    Console.WriteLine($"[ModderLords] single-player test run {channel.RunId} -> {channel.Folder}");
-    foreach (var line in ModderLords.Core.Testing.PickedCopies.Write(channel.Folder, ModderLords.Core.Testing.TestPlan.GameSide, client.Plan.SelectedModules, client.Plan.ExcludedFolders))
-        Console.WriteLine("[ModderLords] picked " + line);
-    var plan = client.Plan with { ExtraArguments = [ModderLords.Core.Testing.FileTestRunChannel.ClientArgument, channel.SwitchValue(ModderLords.Core.Testing.TestPlan.GameSide)] };
-    Console.WriteLine("[ModderLords] " + plan.Describe());
-
-    System.Diagnostics.Process game;
-    try { game = ClientLaunchSession.Start(plan, note => Console.WriteLine("[ModderLords] " + note)); }
-    catch (Exception ex) { Console.Error.WriteLine("[ModderLords] could not start the game: " + ex.Message); return 2; }
-
-    using var testCancel = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; testCancel.Cancel(); };
-    // The run starts at launch here, not on the map as in Coop, so the hello waits out the game's start-up; a game
-    // that exits on the way ends the wait sooner.
-    var sequencer = new ModderLords.Core.Testing.TestSequencer(channel, new ModderLords.Core.Testing.TestSequencerOptions { HelloTimeout = TimeSpan.FromMinutes(10) })
-    {
-        Abort = () => game.HasExited ? $"the game exited (code {game.ExitCode})" : null,
-    };
-    sequencer.Progress += line => Console.WriteLine("[test] " + line);
-    var testReport = await sequencer.RunAsync(testPlan, channel.RunId, testCancel.Token);
-
-    await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.json"), testReport.ToJson());
-    await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.txt"), testReport.ToText());
-    Console.WriteLine();
-    Console.WriteLine(testReport.ToText());
-    Console.WriteLine($"[ModderLords] evidence and logs: {channel.Folder}");
-
-    var keep = opts.ContainsKey("keep-client") || (opts.ContainsKey("keep-open-on-fail") && !testReport.Passed);
-    if (keep && !game.HasExited) Console.WriteLine("[ModderLords] the game was left running, as asked");
-    else if (!game.HasExited)
-    {
-        Console.WriteLine("[ModderLords] closing the game…");
-        try { game.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
-        try { await game.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token); } catch (OperationCanceledException) { }
-    }
-    return testReport.Passed ? 0 : 1;
 }
 
 static async Task<int> RunEngine(LaunchPlan plan, Dictionary<string, string> opts, CreationDiagnostics? creationDiagnostics = null)

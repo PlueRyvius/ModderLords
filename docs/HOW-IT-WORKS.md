@@ -39,6 +39,7 @@ Most of ModderLords exists to fix that.
 | **Console** | The server's output, sorted and filterable, plus a box for server commands. [More](../README.md#console-host-mode) |
 | **Characters** | Players, companions and fiefs on the running server: edit, export, import, kick, ban, give fiefs. [Below](#the-characters-tab) |
 | **Smoke test** | Checks on its own that this PC can join the server and stay on it. [More](../README.md#smoke-test-host-mode) |
+| **Tests** | Runs scripted checks inside a real game, single player or Coop, and says pass or fail per check. Pick the test modules you need. [More](../README.md#tests) |
 | **Share** | The exact mod list to send players, and a check that a PC matches the server. [More](../README.md#share) |
 | **Performance** | Tick rate, frame times, CPU, memory and network, compared with this session's own normal range. [More](../README.md#performance) |
 | **Supported mods** | Which popular mods work in co-op, and how ModderLords supports each. [Below](#the-supported-mods-tab) |

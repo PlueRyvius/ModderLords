@@ -63,6 +63,12 @@
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
     </Style>
 
+    <!-- Like CheckBox: the stock RadioButton takes the system text colour, black on the dark window. -->
+    <Style TargetType="RadioButton">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+    </Style>
+
     <!-- The stock Expander takes the system text colour, so in dark mode its header was black on the dark window. -->
     <Style TargetType="Expander">
         <Setter Property="Foreground" Value="{DynamicResource Foreground}" />

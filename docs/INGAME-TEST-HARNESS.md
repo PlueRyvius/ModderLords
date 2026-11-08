@@ -231,7 +231,10 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    1. Modules: today's suites regrouped into `Testing/Modules/<module>/` with `module.json`; `--modules`; `test --list`
       (JSON); module DLL loading through `run.json`; `*.health` steps in the core suite. **Built 2026-11-08**, with
       `docs/WRITING-TEST-MODULES.md`.
-   2. The Tests tab in the app, running the same harness, with live progress and per-suite results.
+   2. The Tests tab in the app, running the same harness, with live progress and per-suite results. **Built
+      2026-11-08**: the run itself moved from the CLI into `ModderLords.Coop.Testing.InGameTestRun`, which the CLI's
+      `test` and the tab both call. The tab runs the profile as saved, refuses Coop without a test world (Coop steps
+      change the world) and while the Server tab's server runs.
    3. The first module for a mod: `smithing` (Modular Smithing 2), with its own DLL and `ModularSmithing2.health`.
       Its suites: `health` (both), `ammo`, `tier-preview` (single player), `heal-on-load` (single player,
       continuity) and `coop-craft` (Coop).

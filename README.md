@@ -611,6 +611,25 @@ Bans are a file, not a server setting, so they can be managed while the server i
 this PC hosts. A game started without Steam has no id of its own, and a game on this PC connects from this PC's own
 address; neither is ever banned, so a ban can never lock out everyone without Steam, or the host.
 
+### Tests
+
+Runs scripted checks inside a real game on this profile, without anyone playing, and says pass or fail per check. The
+checks come in **test modules**, one per area (the stash, server-to-player sync, perks, worlds made by code...); tick
+the ones you want. The **core checks** always run: every mod that loaded also started and loaded the copy ModderLords
+picked, no mod showed an error on screen, and in Coop the server and your game agree on your hero.
+
+- **Single player** starts just the game, with ModderLords.Compat added and Coop left out, and makes a world by code
+  each run (or loads the **Test world** you pick). **Coop** also starts the server and joins it, and needs a test
+  world: Coop checks change the world they run on, so your own campaign is never used.
+- **Run tests** uses the profile as saved; it refuses while the Server tab's server runs (Coop) or Bannerlord is open.
+  Don't use the PC while it runs: the game window comes to the front.
+- After a run: a pass or fail per suite, each step with its message, and the run's log. **Open run folder** shows the
+  report and the evidence (screenshots, logs, what each game saw); **Copy report** puts the report on the clipboard.
+- Test worlds are saves you put in `%LOCALAPPDATA%\ModderLords\test-worlds\`.
+
+From a command line: `ModderLords.Cli test --profile NAME --modules stash,sync [--single-player]`, and
+`test --list` for what exists. Writing new checks: `docs/WRITING-TEST-MODULES.md`.
+
 ### Smoke test *(Host mode)*
 
 Checks, without anyone playing, that this PC's game can join the server and stay on it. **Run smoke test** starts the
