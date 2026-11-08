@@ -1,0 +1,5 @@
+{
+  "id": "sync",
+  "title": "Server-to-player sync",
+  "description": "Coop: gold given and a level set on the server reach the player's game."
+}

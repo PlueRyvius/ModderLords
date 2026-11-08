@@ -12,6 +12,9 @@
     // Each game loaded the copy of every mod ModderLords picked; in Coop, both sides run the same mod data.
     { "id": "mods.fingerprint", "side": "game", "mode": "singleplayer", "continueOnFail": true },
     { "compare": "mods.fingerprint", "sides": ["game", "player"], "continueOnFail": true },
+    // Every test module's <ModId>.health step: what each mod loaded, the same on both sides.
+    { "id": "mods.health", "side": "game", "mode": "singleplayer", "continueOnFail": true },
+    { "compare": "mods.health", "sides": ["game", "player"], "continueOnFail": true },
     // Start-up errors a mod shows on screen, even when it started (MS2 v0.9.49's "catalog load failed").
     { "id": "game.noErrors", "side": "game", "continueOnFail": true },
     { "id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true },

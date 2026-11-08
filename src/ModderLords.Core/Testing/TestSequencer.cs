@@ -40,6 +40,12 @@ public sealed class FileTestRunChannel : ITestRunChannel
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         // The in-game step API, not the suite format: v2 suites changed what the launcher reads, not what a game runs.
         var run = new JsonObject { ["api"] = TestPlan.InGameApi, ["runId"] = runId, ["suite"] = plan.Name, ["token"] = token };
+        if (plan.Loads.Count > 0)
+            run["load"] = new JsonArray(plan.Loads.Select(l => (JsonNode)new JsonObject
+            {
+                ["module"] = l.Module, ["dll"] = l.Dll, ["type"] = l.Type,
+                ["requires"] = new JsonArray(l.Requires.Select(r => (JsonNode?)r).ToArray()),
+            }).ToArray());
         File.WriteAllText(Path.Combine(folder, "run.json"), run.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(folder, "control.jsonl"), "");
         return new FileTestRunChannel(folder, runId, token);
@@ -113,6 +119,8 @@ public sealed class TestSequencer
             if (hello is null) { stopReason = $"{side} never joined the run (no hello within {_options.HelloTimeout.TotalSeconds:F0} s): is ModderLords.CompatSync loaded there, and was it started with the test switch?"; break; }
             if (hello["versions"] is JsonObject v) versions[side] = v.ToDictionary(kv => kv.Key, kv => Str(kv.Value));
             if (Str(hello["refused"]) is { Length: > 0 } refused) { stopReason = $"{side} refused the run: {refused}"; break; }
+            foreach (var skipped in hello["skipped"] as JsonArray ?? []) notes.Add($"{side}: {Str(skipped)}");
+            if (hello["loadErrors"] is JsonArray { Count: > 0 } loadErrors) { stopReason = $"{side} could not load a test module: {string.Join("; ", loadErrors.Select(Str))}"; break; }
             registered[side] = (hello["steps"] as JsonArray ?? []).Select(Str).ToHashSet(StringComparer.Ordinal);
         }
         if (stopReason is null)

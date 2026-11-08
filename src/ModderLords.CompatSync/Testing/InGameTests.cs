@@ -159,6 +159,13 @@ public static class InGameTests
         lock (Gate) return Steps.TryGetValue(id, out var step) ? step : null;
     }
 
+    /// <summary>Every registered <c>&lt;ModId&gt;.health</c> step that runs on <paramref name="side"/> (decision 26), by id.</summary>
+    internal static List<Registered> Health(string side)
+    {
+        lock (Gate) return Steps.Values.Where(s => s.Id.EndsWith(".health", StringComparison.Ordinal) && s.Id != "mods.health" && Runs(s.Side, side))
+            .OrderBy(s => s.Id, StringComparer.Ordinal).ToList();
+    }
+
     internal static List<string> Ids(string side)
     {
         lock (Gate) return Steps.Values.Where(s => Runs(s.Side, side)).Select(s => s.Id).OrderBy(id => id, StringComparer.Ordinal).ToList();

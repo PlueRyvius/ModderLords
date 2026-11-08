@@ -19,8 +19,8 @@
     <Content Include="compat-db.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- The Supported mods tab's list (SupportedModList); inside the assembly, so packaging needs nothing new. -->
     <EmbeddedResource Include="supported-mods.json" LogicalName="ModderLords.Core.supported-mods.json" />
-    <!-- The in-game test harness's built-in suites (ModderLords.Core.Testing.TestSuites). -->
-    <EmbeddedResource Include="Testing/Suites/*.json" LogicalName="ModderLords.Core.TestSuites.%(Filename).json" />
+    <!-- The in-game test harness's test modules, one folder each (ModderLords.Core.Testing.TestSuites). -->
+    <EmbeddedResource Include="Testing/Modules/**/*.json" LogicalName="ModderLords.Core.TestModules.%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- Shared with the in-game agent, which hashes the mod folders it loaded the same way. -->
     <Compile Include="..\Shared\ModuleFingerprint.cs" Link="Testing\ModuleFingerprint.cs" />
   </ItemGroup>

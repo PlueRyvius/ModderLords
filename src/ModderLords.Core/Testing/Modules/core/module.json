@@ -1,0 +1,5 @@
+{
+  "id": "core",
+  "title": "Core checks",
+  "description": "Always runs first: every mod that loaded started and loaded the copy ModderLords picked, no mod showed an error on screen, every module's health step agrees across sides, and in Coop the player's hero and a gold change read the same on the server and the player's game."
+}

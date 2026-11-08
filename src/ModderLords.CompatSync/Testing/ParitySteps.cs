@@ -25,6 +25,30 @@ internal static class ParitySteps
         InGameTests.Register("mods.started", StepSide.Any, ModsStarted);
         InGameTests.Register("hero.parity", StepSide.Any, HeroParity);
         InGameTests.Register("mods.fingerprint", StepSide.Any, ModsFingerprint);
+        InGameTests.Register("mods.health", StepSide.Any, ModsHealth);
+    }
+
+    // ---- mods.health -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Runs every registered <c>&lt;ModId&gt;.health</c> step (decision 26): each reports, as its <c>value</c>, what its
+    /// mod loaded (a catalog's size and hash, say). Reported here as <c>health.&lt;id&gt;</c>, and together as
+    /// <c>value</c>, so a compare fails when the sides disagree. A health step that fails fails this one. value is
+    /// "none" when no test module registered one.
+    /// </summary>
+    private static IEnumerable<StepWait?> ModsHealth(StepContext ctx)
+    {
+        var parts = new List<string>();
+        foreach (var step in InGameTests.Health(ctx.Side))
+        {
+            ctx.Values.Remove("value");
+            foreach (var wait in step.Body(ctx)) yield return wait;
+            var value = ctx.Values.TryGetValue("value", out var v) ? v : "";
+            ctx.Values.Remove("value");
+            ctx.Report("health." + step.Id, value);
+            parts.Add($"{step.Id} {value}");
+        }
+        ctx.Report("value", parts.Count == 0 ? "none" : string.Join("; ", parts));
     }
 
     // ---- mods.fingerprint ------------------------------------------------------------------------------------

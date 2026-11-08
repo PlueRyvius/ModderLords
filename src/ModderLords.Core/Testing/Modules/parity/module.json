@@ -1,0 +1,5 @@
+{
+  "id": "parity",
+  "title": "Server and player agree",
+  "description": "Coop, changes nothing: every mod that loaded also started on both sides, and the player's hero reads the same on both."
+}
