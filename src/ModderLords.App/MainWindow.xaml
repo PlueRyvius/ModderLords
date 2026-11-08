@@ -601,53 +601,59 @@
                  host overrides (LiveSettingsViewModel.OwnSettingsId) and sent live while the server runs. -->
             <TabItem Header="{l:T 'Host'}" DataContext="{Binding Host}" Visibility="{Binding DataContext.IsHost, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="4" MaxWidth="900" HorizontalAlignment="Left">
-                        <TextBlock Text="{l:T 'Server upkeep'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
-                        <Grid Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="320" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
-                            <TextBlock Text="{l:T 'Restart every N hours (0 = off)'}" VerticalAlignment="Center" />
-                            <TextBox Grid.Column="1" Width="80" HorizontalAlignment="Left" Text="{Binding Profile.AutoRestartHours}"
-                                     ToolTip="{l:T 'Once the server has been serving this long, the launcher stops it (the stop saves the campaign) and launches it again. The Console and every player\&#x27;s screen get a warning 10 minutes and 1 minute before.'}" />
-                            <TextBlock Grid.Row="1" Text="{l:T 'Also export ModderLords.Compat to'}" VerticalAlignment="Center" Margin="0,4,0,0" />
-                            <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,4,0,0">
-                                <Button DockPanel.Dock="Right" Content="{l:T 'Clear'}" Margin="4,0,0,0" Command="{Binding ClearCompatExportFolderCommand}" />
-                                <Button DockPanel.Dock="Right" Content="{l:T 'Browse…'}" Margin="6,0,0,0" Command="{Binding BrowseCompatExportFolderCommand}" />
-                                <TextBox IsReadOnly="True" Text="{Binding Profile.CompatExportFolder, Mode=OneWay}"
-                                     ToolTip="{l:T 'A folder (e.g. a shared Dropbox or OneDrive folder) that also gets an up-to-date copy of the client ModderLords.Compat module, at startup and when launching. Friends copy it into their game\&#x27;s Modules folder. Empty = off.'}" />
-                            </DockPanel>
-                        </Grid>
-                        <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,16"
-                                   Text="{l:T 'Saved with the profile (Save, or Launch).'}" />
+                    <!-- Two columns: running the server on the left, gameplay rules on the right. -->
+                    <Grid Margin="4">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900" /><ColumnDefinition Width="*" MaxWidth="700" /></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,24,0">
+                            <TextBlock Text="{l:T 'Server upkeep'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="320" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                <TextBlock Text="{l:T 'Restart every N hours (0 = off)'}" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1" Width="80" HorizontalAlignment="Left" Text="{Binding Profile.AutoRestartHours}"
+                                         ToolTip="{l:T 'Once the server has been serving this long, the launcher stops it (the stop saves the campaign) and launches it again. The Console and every player\&#x27;s screen get a warning 10 minutes and 1 minute before.'}" />
+                                <TextBlock Grid.Row="1" Text="{l:T 'Also export ModderLords.Compat to'}" VerticalAlignment="Center" Margin="0,4,0,0" />
+                                <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,4,0,0">
+                                    <Button DockPanel.Dock="Right" Content="{l:T 'Clear'}" Margin="4,0,0,0" Command="{Binding ClearCompatExportFolderCommand}" />
+                                    <Button DockPanel.Dock="Right" Content="{l:T 'Browse…'}" Margin="6,0,0,0" Command="{Binding BrowseCompatExportFolderCommand}" />
+                                    <TextBox IsReadOnly="True" Text="{Binding Profile.CompatExportFolder, Mode=OneWay}"
+                                         ToolTip="{l:T 'A folder (e.g. a shared Dropbox or OneDrive folder) that also gets an up-to-date copy of the client ModderLords.Compat module, at startup and when launching. Friends copy it into their game\&#x27;s Modules folder. Empty = off.'}" />
+                                </DockPanel>
+                            </Grid>
+                            <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,0,0,16"
+                                       Text="{l:T 'Saved with the profile (Save, or Launch).'}" />
 
-                        <TextBlock Text="{l:T 'Campaign time'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="{l:T 'Pause'}" Command="{Binding SetTimeCommand}" CommandParameter="Pause" MinWidth="60" />
-                            <Button Content="1x" Command="{Binding SetTimeCommand}" CommandParameter="Play_1x" MinWidth="60" Margin="4,0,0,0" />
-                            <Button Content="2x" Command="{Binding SetTimeCommand}" CommandParameter="Play_2x" MinWidth="60" Margin="4,0,0,0" />
-                            <TextBlock Text="{Binding TimeStatus}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                            <TextBlock Text="{l:T 'Campaign time'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="{l:T 'Pause'}" Command="{Binding SetTimeCommand}" CommandParameter="Pause" MinWidth="60" />
+                                <Button Content="1x" Command="{Binding SetTimeCommand}" CommandParameter="Play_1x" MinWidth="60" Margin="4,0,0,0" />
+                                <Button Content="2x" Command="{Binding SetTimeCommand}" CommandParameter="Play_2x" MinWidth="60" Margin="4,0,0,0" />
+                                <TextBlock Text="{Binding TimeStatus}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                            </StackPanel>
+                            <CheckBox Content="{l:T 'Pause while a player is joining'}" IsChecked="{Binding Profile.PauseOnJoin}" Margin="0,6,0,2"
+                                      ToolTip="{l:T 'From the moment a player connects until they reach the campaign map, the server is held at Pause, then goes back to the speed it ran at. Players already on the map are never paused by a battle or a menu.'}" />
+                            <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,4,0,16"
+                                       Text="{l:T 'The buttons work while the server is running. Coop keeps time paused while nobody is connected, and players can still change the speed themselves.'}" />
                         </StackPanel>
-                        <CheckBox Content="{l:T 'Pause while a player is joining'}" IsChecked="{Binding Profile.PauseOnJoin}" Margin="0,6,0,2"
-                                  ToolTip="{l:T 'From the moment a player connects until they reach the campaign map, the server is held at Pause, then goes back to the speed it ran at. Players already on the map are never paused by a battle or a menu.'}" />
-                        <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,4,0,16"
-                                   Text="{l:T 'The buttons work while the server is running. Coop keeps time paused while nobody is connected, and players can still change the speed themselves.'}" />
 
-                        <TextBlock Text="{l:T 'Gameplay rules'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
-                        <CheckBox Content="{l:T 'Freeze offline players\&#x27; gold and XP'}" IsChecked="{Binding LiveSettings.FreezeOfflinePlayers}" Margin="0,2"
-                                  ToolTip="{l:T 'While a player is offline their hero gains and loses no gold and gains no skill XP: caravans, workshops and fiefs stop paying them and trading stops raising Trade. Edits from the Characters tab still apply.'}" />
-                        <CheckBox Content="{l:T 'Protect player kingdoms from AI wars'}" IsChecked="{Binding LiveSettings.ProtectPlayerKingdoms}" Margin="0,2"
-                                  ToolTip="{l:T 'AI kingdoms never pick a kingdom a player belongs to as a war target, and any war that still starts against one is ended with peace on the next tick. Wars a player\&#x27;s kingdom declares, and wars caused by a player\&#x27;s own hostility or crime, are allowed.'}" />
-                        <CheckBox Content="{l:T 'Also protect them from rebellions'}" IsChecked="{Binding LiveSettings.ProtectFromRebellions}" Margin="20,2,0,2"
-                                  IsEnabled="{Binding LiveSettings.ProtectPlayerKingdoms}" />
-                        <CheckBox Content="{l:T 'Heroes get both perks of a pair'}" IsChecked="{Binding LiveSettings.BothPerks}" Margin="0,2"
-                                  ToolTip="{l:T 'Taking a perk also gives the other perk of its pair, to players\&#x27; heroes and the heroes of their clans (family, companions). Perks already taken get their pair too. The server gives them, so the server\&#x27;s health limit and other perk bonuses count both. Turning it off gives no more; perks already given stay.'}" />
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button Content="{l:T 'Apply'}" Command="{Binding LiveSettings.ApplyHostOptionsCommand}" FontWeight="Bold" />
-                            <TextBlock Text="{Binding LiveSettings.HostOptionsReport}" VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SuccessForeground}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{l:T 'Gameplay rules'}" FontWeight="Bold" FontSize="14" Margin="0,0,0,6" />
+                            <CheckBox Content="{l:T 'Freeze offline players\&#x27; gold and XP'}" IsChecked="{Binding LiveSettings.FreezeOfflinePlayers}" Margin="0,2"
+                                      ToolTip="{l:T 'While a player is offline their hero gains and loses no gold and gains no skill XP: caravans, workshops and fiefs stop paying them and trading stops raising Trade. Edits from the Characters tab still apply.'}" />
+                            <CheckBox Content="{l:T 'Protect player kingdoms from AI wars'}" IsChecked="{Binding LiveSettings.ProtectPlayerKingdoms}" Margin="0,2"
+                                      ToolTip="{l:T 'AI kingdoms never pick a kingdom a player belongs to as a war target, and any war that still starts against one is ended with peace on the next tick. Wars a player\&#x27;s kingdom declares, and wars caused by a player\&#x27;s own hostility or crime, are allowed.'}" />
+                            <CheckBox Content="{l:T 'Also protect them from rebellions'}" IsChecked="{Binding LiveSettings.ProtectFromRebellions}" Margin="20,2,0,2"
+                                      IsEnabled="{Binding LiveSettings.ProtectPlayerKingdoms}" />
+                            <CheckBox Content="{l:T 'Heroes get both perks of a pair'}" IsChecked="{Binding LiveSettings.BothPerks}" Margin="0,2"
+                                      ToolTip="{l:T 'Taking a perk also gives the other perk of its pair, to players\&#x27; heroes and the heroes of their clans (family, companions). Perks already taken get their pair too. The server gives them, so the server\&#x27;s health limit and other perk bonuses count both. Turning it off gives no more; perks already given stay.'}" />
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Content="{l:T 'Apply'}" Command="{Binding LiveSettings.ApplyHostOptionsCommand}" FontWeight="Bold" />
+                                <TextBlock Text="{Binding LiveSettings.HostOptionsReport}" VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SuccessForeground}" />
+                            </StackPanel>
+                            <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       Text="{l:T 'These run on the server and need Settings sync (Server tab). Apply sends them to a running server at once and keeps them for every launch of this profile.'}" />
                         </StackPanel>
-                        <TextBlock Foreground="{DynamicResource MutedForeground}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                   Text="{l:T 'These run on the server and need Settings sync (Server tab). Apply sends them to a running server at once and keeps them for every launch of this profile.'}" />
-                    </StackPanel>
+                    </Grid>
                 </ScrollViewer>
             </TabItem>
 
