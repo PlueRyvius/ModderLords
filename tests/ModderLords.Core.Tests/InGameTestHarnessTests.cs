@@ -48,6 +48,22 @@ public class TestPlanTests
     }
 
     [Fact]
+    public void A_module_whose_step_dll_this_build_lacks_is_reported_missing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ml-stepsdll-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var module = TestModule.Parse("""{ "id": "smithing", "title": "Smithing", "steps": "ModderLords.Tests.Smithing.dll" }""", []);
+            Assert.Equal(Path.Combine(root, "compat", "ModderLords.Tests.Smithing.dll"), ModderLords.Coop.Testing.InGameTestRun.MissingStepsDll(module, root));
+            Directory.CreateDirectory(Path.Combine(root, "compat"));
+            File.WriteAllBytes(Path.Combine(root, "compat", "ModderLords.Tests.Smithing.dll"), []);
+            Assert.Null(ModderLords.Coop.Testing.InGameTestRun.MissingStepsDll(module, root));
+            Assert.Null(ModderLords.Coop.Testing.InGameTestRun.MissingStepsDll(TestSuites.Module("stash")!, root));   // no DLL of its own
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void Picking_modules_runs_only_their_suites_and_core_including_v1_suites()
     {
         var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
