@@ -632,7 +632,8 @@ picked, no mod showed an error on screen, and in Coop the server and your game a
 
 - **Single player** starts just the game, with ModderLords.Compat added and Coop left out, and makes a world by code
   each run (or loads the **Test world** you pick). **Coop** also starts the server and joins it, and needs a test
-  world: Coop checks change the world they run on, so your own campaign is never used.
+  world: Coop checks change the world they run on, so your own campaign is never used. The built-in checks run one
+  after another on one world, so a Coop run starts the server and the game once.
 - **Run tests** uses the profile as saved; it refuses while the Server tab's server runs (Coop) or Bannerlord is open.
   Don't use the PC while it runs: the game window comes to the front.
 - After a run: a pass or fail per suite, each step with its message, and the run's log. **Open run folder** shows the

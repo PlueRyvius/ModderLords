@@ -442,6 +442,9 @@ suite's steps on each side (give an item, enter a town, use the stash, compare b
   same on both sides.
 - **Single player** runs leave Coop out and make a world by code; **Coop** runs need a test world, so a real campaign
   is never changed.
+- **Suites share a world where they can.** The built-in Coop checks each read a value before they change it, so they
+  run one after another on the same world, in one launch of the server and the game. A suite that needs a fresh world
+  costs a launch of its own.
 
 Each run leaves a report, evidence and each side's logs in a run folder. Test mode is off unless the launch switches
 it on. [INGAME-TEST-HARNESS.md](INGAME-TEST-HARNESS.md) has the details.
