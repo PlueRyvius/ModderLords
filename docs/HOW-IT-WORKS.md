@@ -109,6 +109,10 @@ ModderLords adds its compat module right after it, and installs it on players' g
     trading stops raising their Trade skill.
   - **Protect player kingdoms from AI wars**: AI kingdoms never target a kingdom a player belongs to. A war that
     starts anyway is ended with peace. Optionally the same for rebellions. Wars a player starts are allowed.
+  - **Heroes get both perks of a pair**: taking a perk also gives the other perk of its pair, to players' heroes and
+    the heroes of their clans. Perks already taken get their pair too. The server gives them and Coop sends them to
+    the players, so the server's health limit counts both (the Both Perks mod only gives them on each player's own
+    game, and its server copy fails to start, so health stopped regenerating at the server's lower limit).
 
 ## The Characters tab
 

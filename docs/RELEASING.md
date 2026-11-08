@@ -75,11 +75,14 @@ built-in suite of the in-game test harness (`docs/INGAME-TEST-HARNESS.md`):
 ModderLords.Cli test --profile "My Host" --suite stash
 ModderLords.Cli test --profile "My Host" --suite sync-basics
 ModderLords.Cli test --profile "My Host" --suite hero-level
+ModderLords.Cli test --profile "My Host" --suite parity
 ```
 
 - Each must exit 0. A step marked known-failing shows as `[known]` and does not count against it.
 - The suites start the server and a game, so **don't run them while the maintainer is using the machine.**
 - Keep each run's summary (the `Test suite ...: PASS` block) for the release notes' validation line.
+- `parity` changes nothing, so it is also worth running on a real hosting profile: a mod it reports as never
+  started on the server is one whose features work on players' games but not in the shared world.
 
 ### 4. Package
 

@@ -7,6 +7,7 @@ using System.Text;
 using Helpers;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.CampaignSystem.Party;
@@ -40,11 +41,16 @@ internal static class BuiltInSteps
         InGameTests.Register("hero.gold", StepSide.Any, Gold);
         InGameTests.Register("hero.adminLevel", StepSide.Server, HeroAdminLevel);
         InGameTests.Register("hero.level", StepSide.Any, HeroLevel);
+        InGameTests.Register("hero.addPerk", StepSide.Server, AddPerk);
+        InGameTests.Register("hero.hasPerk", StepSide.Any, HasPerk);
+        InGameTests.Register("hero.maxHitPoints", StepSide.Any, MaxHitPoints);
+        InGameTests.Register("rules.set", StepSide.Server, RuleSet);
         InGameTests.Register("party.addItem", StepSide.Server, AddItem);
         InGameTests.Register("party.itemCount", StepSide.Any, PartyItemCount);
         InGameTests.Register("stash.count", StepSide.Any, StashCount);
         InGameTests.Register("stash.deposit", StepSide.Client, StashDeposit);
         InGameTests.Register("stash.reopen", StepSide.Client, StashReopen);
+        ParitySteps.Register();
     }
 
     // ---- game ------------------------------------------------------------------------------------------------
@@ -278,6 +284,59 @@ internal static class BuiltInSteps
         ctx.Report("value", hero.Level);
     }
 
+    /// <summary>
+    /// Server: opens a perk for a hero with HeroDeveloper.AddPerk, the call Coop's character-screen handler makes on the
+    /// server when a player confirms a perk. Reports the hero's max hit points after it.
+    /// </summary>
+    private static IEnumerable<StepWait?> AddPerk(StepContext ctx)
+    {
+        var hero = HeroArg(ctx);
+        var perk = PerkArg(ctx);
+        ctx.Assert(!hero.GetPerkValue(perk), $"{hero.StringId} already has {perk.StringId}; pick another so the step changes something");
+        hero.HeroDeveloper.AddPerk(perk);
+        yield return ctx.Settled(() => hero.GetPerkValue(perk) ? "true" : "false", $"{hero.StringId} to have {perk.StringId}", "true", timeout: Sync);
+        ctx.Report("maxHitPoints", hero.MaxHitPoints);
+        ctx.Report("value", "true");
+    }
+
+    /// <summary>Whether a hero has a perk ("true"/"false"), settled; with <c>expected</c>, it must be that.</summary>
+    private static IEnumerable<StepWait?> HasPerk(StepContext ctx)
+    {
+        var hero = HeroArg(ctx);
+        var perk = PerkArg(ctx);
+        object? expected = ctx.HasArg("expected") ? ctx.Arg("expected").ToLowerInvariant() : null;
+        yield return ctx.Settled(() => hero.GetPerkValue(perk) ? "true" : "false", $"whether {hero.StringId} has {perk.StringId}", expected, timeout: Sync);
+        ctx.Report("value", hero.GetPerkValue(perk) ? "true" : "false");
+    }
+
+    /// <summary>A hero's maximum hit points as this game calculates them (perks included), settled; with <c>expected</c>, it must be that.</summary>
+    private static IEnumerable<StepWait?> MaxHitPoints(StepContext ctx)
+    {
+        var hero = HeroArg(ctx);
+        object? expected = ctx.HasArg("expected") ? ctx.ArgInt("expected") : (object?)null;
+        yield return ctx.Settled(() => hero.MaxHitPoints, $"{hero.StringId}'s max hit points", expected, timeout: Sync);
+        ctx.Report("hitPoints", hero.HitPoints);
+        ctx.Report("value", hero.MaxHitPoints);
+    }
+
+    /// <summary>
+    /// Server: turns one of ModderLords' gameplay rules on or off (<c>rule</c>: a ModderLordsSettings property, e.g.
+    /// BothPerks; <c>value</c>: true/false), as the App's Apply does. Reflection: this assembly has no Coop reference.
+    /// </summary>
+    private static IEnumerable<StepWait?> RuleSet(StepContext ctx)
+    {
+        var name = ctx.Arg("rule");
+        var settings = AppDomain.CurrentDomain.GetAssemblies()
+            .Select(a => a.GetType("ModderLords.CompatSync.Coop.ModderLordsSettings", false))
+            .FirstOrDefault(t => t != null) ?? throw new StepFailedException("ModderLordsSettings is not loaded in this game (ModderLords.CompatSync.Coop)");
+        var property = settings.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
+        ctx.Assert(property != null && property.PropertyType == typeof(bool), $"ModderLordsSettings has no bool rule '{name}'");
+        var value = string.Equals(ctx.Arg("value"), "true", StringComparison.OrdinalIgnoreCase);
+        property!.SetValue(null, value);
+        ctx.Report("value", value ? "true" : "false");
+        yield break;
+    }
+
     /// <summary>Runs a console command in this game (Coop's and ModderLords' commands register there) and logs its output.</summary>
     private static string RunConsole(StepContext ctx, string command, params string[] args)
     {
@@ -422,8 +481,11 @@ internal static class BuiltInSteps
         {
             var name = ctx.Arg("heroName");
             // Hero.FindAll searches Campaign.Characters, which on a player's game lacks Coop's local copy of that
-            // player's own hero (run 5), so this player's hero is matched by name too.
-            var found = Hero.FindAll(h => h.Name?.ToString() == name).ToList();
+            // player's own hero (run 5), so this player's hero is matched by name too. On the server, a player hero
+            // can be missing from it as well (both-perks run 1), so the campaign's own hero lists are searched too.
+            var found = Hero.FindAll(h => h.Name?.ToString() == name)
+                .Concat(Hero.AllAliveHeroes.Concat(Hero.DeadOrDisabledHeroes).Where(h => h.Name?.ToString() == name))
+                .Distinct().ToList();
             if (Hero.MainHero != null && Hero.MainHero.Name?.ToString() == name && !found.Contains(Hero.MainHero)) found.Add(Hero.MainHero);
             if (found.Count != 1) throw new StepFailedException(found.Count == 0 ? $"no hero named '{name}' in this world" : $"{found.Count} heroes are named '{name}'");
             return found[0];
@@ -432,6 +494,12 @@ internal static class BuiltInSteps
             return !ctx.IsServer && Hero.MainHero != null ? Hero.MainHero : throw new StepFailedException("the plan gives no argument 'hero'");
         var id = ctx.Arg("hero");
         return Hero.FindFirst(h => h.StringId == id) ?? throw new StepFailedException($"no hero '{id}' in this world");
+    }
+
+    private static PerkObject PerkArg(StepContext ctx)
+    {
+        var id = ctx.Arg("perk");
+        return MBObjectManager.Instance.GetObject<PerkObject>(id) ?? throw new StepFailedException($"no perk '{id}'");
     }
 
     private static ItemObject ItemArg(StepContext ctx)
@@ -468,4 +536,7 @@ internal static class BuiltInSteps
             sb.AppendLine($"{element.EquipmentElement.Item?.StringId}\t{element.Amount}");
         return sb.ToString();
     }
+
+    /// <summary>The <c>heroName</c> / <c>hero</c> argument's hero, for steps in other files (<see cref="ParitySteps"/>).</summary>
+    internal static Hero FindHero(StepContext ctx) => HeroArg(ctx);
 }
