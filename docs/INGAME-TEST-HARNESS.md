@@ -344,6 +344,40 @@ ModderLords.Cli test --profile "My Mods" --suite sp-world [--keep-client] [--kee
 Test mode is visible: each game logs `TEST MODE: ...` at load (`ModderLords.CompatSync` log) and the agent logs each
 step. It is not yet shown in the server's player list (decision 6); that is a follow-up.
 
+### Getting to the main menu with nobody at the keyboard
+
+Two things stood between a launch and the main menu. Both were checked on v1.4.8.119303, 2026-11-08.
+
+**The "Mod change detected" box.** The engine itself shows it (`TaleWorlds.Native.dll`; the TaleWorlds launcher is not
+involved, and we never start it). The engine keeps the module set its runtime shader cache was built for in
+`%ProgramData%\Mount and Blade II Bannerlord\Shaders\CoreShaders\D3D11\shader_mapping.bin`: a uint32 format (`0x783`),
+the game build (`119303`) and the active module ids sorted ordinally and joined with `;` (each string an int32 length
+and its bytes). When the game starts with another set, it shows a Win32 message box ("A change in your active mods was
+detected. Deleting the runtime shader cache to avoid rendering issues.") 1.6 s in. Its only button is OK, and nothing
+else loads until someone presses it. On OK it deletes the other files in that `D3D11` folder and writes the new set.
+`TerrainShaders` is left alone. That was seen by starting vanilla with a sentinel `.sacx` in the folder: pressing OK
+removed the sentinel and rewrote the mapping.
+
+`ClientLaunchSession.Start` now does the same before every client launch (`ShaderCacheMapping.Prepare`). It applies to
+test runs, Play and the smoke test alike, because what it does is exactly what the game would do after OK. When the
+recorded set differs, it deletes the other files in each renderer folder that has a mapping and writes the new set,
+keeping the format and build. It says so in the launch log. A file it cannot parse, or one it fails to write, is left to
+the game, which then asks as before. The cache is rebuilt by the game as it would be after OK.
+
+**The intro video.** `Module.SetInitialModuleScreenAsRootScreen` plays `Native/Videos/TWLogo_and_Partners.ivf` once,
+at the first main menu, if that file exists and no debugger is attached. There is no launch option or config value for
+it, and the player's game runs on .NET Framework, so no startup hook reaches it either. So every launch through
+`ClientLaunchSession.Start` moves that one file aside, to `TWLogo_and_Partners.ivf.modderlords-hidden` (`IntroVideo`).
+It puts the file back when the game exits, or when ModderLords (the app or the CLI) next starts with no game running.
+The path is written to `%LocalAppData%\ModderLords\hidden-intro-video.txt` before the move, so a crash still gets it put back.
+If Steam restores the file meanwhile, its copy wins. While the file is hidden, a launch from the TaleWorlds launcher also
+skips the video. In a test run the agent also sets the module's private `_splashScreenPlayed` from
+`OnBeforeInitialModuleScreenSetAsRoot`, in case the file could not be moved, and logs `TEST MODE: intro video skipped`.
+Checked with `play`: the game log shows no `GauntletVideoPlaybackScreen` before the main menu, where vanilla opens one.
+
+First run with both, after a mod change: `test --profile Harness --modules core --single-player` passed in 38 s with no
+input. The game's only window was its own, and no message box opened.
+
 ## Writing a step (hook API v1)
 
 Reference `ModderLords.CompatSync.dll` (compile-time only, `Private="false"`, like the other modules) and register

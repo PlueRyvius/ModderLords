@@ -19,7 +19,33 @@ internal static class TestHost
     private static DateTime _nextJoinArm;
 
     /// <summary>From OnBeforeInitialModuleScreenSetAsRoot: every module's OnSubModuleLoad, Coop's included, has run.</summary>
-    internal static void ModulesLoaded() => _modulesLoaded = true;
+    internal static void ModulesLoaded()
+    {
+        _modulesLoaded = true;
+        if (_agent != null && !_isServer) SkipIntroVideo();
+    }
+
+    /// <summary>
+    /// The TaleWorlds logo video plays once, from Module.SetInitialModuleScreenAsRootScreen, unless the module's private
+    /// _splashScreenPlayed is already set (or a debugger is attached); there is no launch option for it. That method
+    /// calls every submodule's OnBeforeInitialModuleScreenSetAsRoot just before it looks, so setting the flag from there
+    /// takes a test run straight to the main menu. Every ModderLords launch already moves the video aside
+    /// (ModderLords.Core.Launch.IntroVideo); this is for a test run where that could not be done.
+    /// </summary>
+    private static void SkipIntroVideo()
+    {
+        try
+        {
+            var module = TaleWorlds.MountAndBlade.Module.CurrentModule;
+            var played = typeof(TaleWorlds.MountAndBlade.Module).GetField("_splashScreenPlayed",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (module == null || played == null) { Log.Info("TEST MODE: could not find the intro video's flag; the video plays"); return; }
+            if ((bool)played.GetValue(module)) return;
+            played.SetValue(module, true);
+            Log.Info("TEST MODE: intro video skipped");
+        }
+        catch (Exception ex) { Log.Info("TEST MODE: could not skip the intro video: " + ex.GetBaseException().Message); }
+    }
 
     internal static void Init()
     {

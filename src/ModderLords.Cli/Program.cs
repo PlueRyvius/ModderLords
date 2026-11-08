@@ -28,6 +28,8 @@ using ModderLords.Coop.Config;
 //   trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]
 
 var opts = ParseArgs(args);
+// A game started by an earlier command (launch exits at once) has its intro video put back once no game is running.
+if (!ClientLauncher.IsClientRunning()) IntroVideo.RestoreAll();
 // Diagnostics can run the shared launch path with the exact hook/compat payload from a packaged release. Normal
 // launches leave this unset and continue resolving modules beside the current executable.
 ModderLords.Coop.Launch.LaunchSession.BundledRoot = opts.GetValueOrDefault("bundle-root") is { Length: > 0 } bundleRoot
