@@ -152,6 +152,7 @@ internal sealed class TestAgent
             Directory.CreateDirectory(evidence);
             File.WriteAllText(Path.Combine(evidence, Safe(name) + ".txt"), text);
         });
+        context.RunFolder = _switch.Folder;
         _runningStarted = now;
         var step = InGameTests.Find(id);
         if (step == null || !InGameTests.Runs(step.Side, _switch.Side))

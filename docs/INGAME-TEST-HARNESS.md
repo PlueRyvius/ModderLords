@@ -213,7 +213,9 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    player" below. Not yet tried with mods that add creation pages.
 2. `requires`/`mode`/`continuity`, suite selection and the core suite; multi-suite runs with a world reset.
    **Selection, the core suite and multi-suite runs built and passing in game 2026-11-07** (see "Several suites in
-   one run" below); a fresh world in Coop still costs a launch.
+   one run" below); a fresh world in Coop still costs a launch. **Install fingerprints, the loaded-copy check and
+   `mods.fingerprint` built and passing in game 2026-11-08** (decisions 23 and 24; a mod's own file list waits for
+   step 3, and the history for step 4).
    With it, the cheap core checks: install fingerprints, the loaded copy, `mods.fingerprint`, the time limits and
    `game.noErrors` (decisions 23–25).
 3. Tests shipped in mods: discovery, loading the test DLL, namespaced ids, `*.health` steps. Modular Smithing 2 is
@@ -281,8 +283,8 @@ ModderLords.Cli test --profile "My Mods" --single-player --mod ModularArmor2 [--
 - With no `--suite`, the run takes the core suite (`core.json`) and every `api: 2` suite whose `mode` fits and whose
   `requires` the profile's enabled mods meet (versions as they would load). It prints the suites it picked and why
   each other one was left out. `--mod X` keeps only suites that require X; `--with-others` keeps the rest too.
-- The core suite runs both ways: `mods.started` on every side; in Coop also the `hero.parity` compare and gold given
-  on the server reaching the player.
+- The core suite runs both ways: `mods.started` and `mods.fingerprint` on every side; in Coop also the
+  `mods.fingerprint` and `hero.parity` compares and gold given on the server reaching the player.
 - **Single player:** one launch. Before the first suite the run creates its world (`mltest-run`), or loads
   `--world NAME` (copied fresh into the game's saves as `mltest-NAME`); before each later suite it goes back to the
   main menu and loads that world again. A suite with `"world": "shared"` skips the reload.
@@ -395,6 +397,13 @@ Parity steps (`ParitySteps.cs`), for what quietly differs between the sides:
   game model from its own DLLs. A mod can load, fail inside its own start-up, catch the error and go quiet; Both
   Perks does that on a dedicated server, so the player's game grants perks the server never has. `value` is the quiet
   mods or `none`; `ignore` lists mods allowed to show nothing. `mods-started.txt` has each mod's evidence.
+- `mods.fingerprint`: hashes every community mod folder this game loaded (`src/Shared/ModuleFingerprint.cs`: data
+  and this side's code by content, `SubModule.xml`, every other file by size) and checks each against the copy
+  ModderLords picked, which the launcher hashed before launch into `expected-fingerprints-<side>.txt`. A different
+  copy (a stale Workshop one, an install that left out changed data) fails, naming the mod and both folders. The server
+  is checked on data only: its launch can leave a mod's DLLs out by role. `value` is one hash over the mods' data, so
+  the core suite's compare fails when the server and the player run different data. `mods-fingerprint-<side>.txt`
+  has every mod's fingerprint and folder; a file a launch view lists but cannot read counts as unreadable.
 - `hero.parity`: one line a compare can check: level, health and its maximum, gold, and the attributes, skills, focus
   and perks (each counted and hashed, so a different set of the same size still differs). The full values are in
   `hero-parity-<side>.txt` for the diff.

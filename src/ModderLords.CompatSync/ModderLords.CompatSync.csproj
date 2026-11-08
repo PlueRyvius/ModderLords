@@ -27,6 +27,8 @@
     <!-- One copy of the terrain diagnostic, compiled into both module assemblies: the server loads this module and a
          client can only load the community one, so the probe has to exist in each. -->
     <Compile Include="..\Shared\TerrainProbe.cs" Link="TerrainProbe.cs" />
+    <!-- The launcher hashes the copy it picked the same way the game hashes the copy it loaded. -->
+    <Compile Include="..\Shared\ModuleFingerprint.cs" Link="Testing\ModuleFingerprint.cs" />
   </ItemGroup>
 
 </Project>
