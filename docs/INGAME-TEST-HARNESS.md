@@ -35,7 +35,10 @@ Checks it must be able to express:
 
 ## v2: modular suites, single-player runs, tests shipped in mods
 
-Decided with the maintainer 2026-11-07, decisions 11–22; **not built yet.** One tool, two uses:
+Decided with the maintainer 2026-11-07, decisions 11–27; **not built yet.** Decisions 23–27 come from a real
+failure while testing Modular Smithing 2 v0.9.49 by hand: the install copied the new DLLs but not the changed
+`ModuleData`, so the mod's catalog failed to load and the game never reached the main menu. Every unit test had
+passed, `mods.started` would have passed too, and both installs said v0.9.49. One tool, two uses:
 
 - **Fast per-mod development testing**, in single player or Coop: `test --mod ModularArmor2 --single-player`.
 - **The full compatibility matrix**: every suite that applies to a profile, recorded per mod, mod version, Coop
@@ -47,16 +50,33 @@ Decided with the maintainer 2026-11-07, decisions 11–22; **not built yet.** On
 |---|---|---|
 | 11 | **Suites declare what they need**: `requires` (module ids, each with an optional version range), `mode` (`singleplayer`, `coop` or `both`) and `continuity` (bool). An interaction suite can require several mods, e.g. `ModularArmor2` + `CoopWarehouses`. | A suite runs only where it means something; interaction bugs need both mods present. |
 | 12 | **With no suite named, a run picks suites itself**: the core suite plus every suite whose `requires` the profile's enabled mods meet and whose `mode` fits the run. All of them go into **one launch**, not one launch per suite. | A launch costs minutes; the matrix is many suites. |
-| 13 | **A core suite always runs first**: `game.joined` (Coop), `mods.started` on every side, the `hero.parity` compare (Coop) and the `sync-basics` checks (Coop). In single player only `mods.started` applies. | The cheapest checks catch the broadest failures (a mod that never started, a desync). |
+| 13 | **A core suite always runs first**: `game.joined` (Coop), `mods.started` on every side, the `hero.parity` compare (Coop) and the `sync-basics` checks (Coop), plus the checks of decisions 24–26. In single player the Coop-only ones are left out. | The cheapest checks catch the broadest failures (a mod that never started, a desync). |
 | 14 | **Tests ship inside the mod, with no runtime dependency for players.** A mod, including a single-player mod that has nothing to do with ModderLords, must never need ModderLords or its compat layer to run. | The maintainer's hard requirement: a test hook must not become a dependency. |
 | 15 | **A single-player run mode**: just the game, no Coop server. Steps run on side `game`. Same run folder, agent, waits and evidence. | Most mod development is single player, and a Coop launch is slow. |
 | 16 | **A clean world per suite by default.** A suite marked `continuity` can use the built-in `game.saveAndReload` step: save, reload (in Coop: restart the server on that save and rejoin), and later steps check what survived. | Isolation by default; save/load bugs need a deliberate reload. |
-| 17 | **Worlds are created and cached per mod set** (the mod list with versions); this builds v1's decision 1. | Overhaul mods change world generation, so a vanilla `.sav` doesn't load or doesn't mean the same thing. |
-| 18 | **Results are recorded across runs**: pass or fail per suite, against each mod's id and version, the Coop version and the game version, in a history file with a summary table. | That history is the compatibility matrix. Later it could feed the Coodsz compat records; v2 only stores it. |
+| 17 | **Worlds are created and cached per mod set** (the mod list with each mod's install fingerprint, decision 23); this builds v1's decision 1. | Overhaul mods change world generation, so a vanilla `.sav` doesn't load or doesn't mean the same thing. |
+| 18 | **Results are recorded across runs**: pass or fail per suite, against each mod's id, version and install fingerprint, the Coop version and the game version, in a history file with a summary table. | That history is the compatibility matrix. Later it could feed the Coodsz compat records; v2 only stores it. |
 | 19 | **A suite can opt in to sharing a world** (`"world": "shared"`): it runs on the world the previous suite left, with no reset. Fresh stays the default; the core suite and `continuity` suites always get a fresh world. A shared suite must not assume starting values: it reads "before" and checks the change. The report says which suites shared a world. | In Coop a reset is a server restart and a rejoin, about a minute per suite; most suites touch state no other suite reads. |
 | 20 | **A test DLL names its entry type with an assembly attribute** from `ModderLords.CompatSync` (below). | Explicit and in one place; no scan of every type, which throws when one refers to something missing. |
 | 21 | **`--mod X` stays narrow**: the core suite, X's own suites and the suites that require X. `--with-others` adds every other applicable suite. The report marks a suite that also failed in the last recorded run without X as "already failing", so a new failure points at X. | The development loop stays fast; the core suite still catches another mod going quiet or a desync, and the full run (no `--mod`) is the one before a release. |
 | 22 | **Worlds are created by code**, stepping through character creation with the game's own creation state and taking the default choice on each page (Worlds, below). When that gets stuck, it fails naming the page, and the fallback is a world made by hand and recorded with `test world save NAME`. | A scripted screen path breaks on the overhaul mods the cache is for; the game's own page sequence doesn't care which mod added a page. |
+| 23 | **Every enabled mod gets an install fingerprint** before launch: a hash of `SubModule.xml`, `bin\` and `ModuleData\`, with other folders by size and date. It goes into the report, the history and the world cache key. Results compare on fingerprints, not version strings. A mod may ship its own file list; a mismatch with the installed copy fails the run before launch, naming the files. | A test build and the release can share a version; the MS2 install that broke said the same version as the one that worked. Hashing art folders would make every run slow. |
+| 24 | **The copy that loaded must be the copy ModderLords picked**, on every side, read from the game's own "Loading assembly" log lines. The core suite also compares fingerprints across sides (`mods.fingerprint`). Several copies of one mod are not a failure in themselves: `ModuleSelector` already picks one, and a profile can pin one. | A stale Workshop copy beside a local one was only visible in a log the mod writes itself. A server on another build of a mod than the player is a desync waiting to happen. |
+| 25 | **Start-up errors are failures, even when the mod started.** Time limits to the main menu (single player) and to `game.joined` (Coop), with a screenshot and the last log lines on a miss. In test mode every on-screen message and pop-up is captured, and the core check `game.noErrors` fails on default error patterns plus a suite's or mod's own `errorPatterns`. New lines in the game's error log are kept as evidence only. | MS2's patches and behaviours were in place, so `mods.started` passed; its data load failed afterwards and said so on screen. A game stuck on load must be a fast, explained red, not a hung run. Vanilla's error log is too noisy to fail on. |
+| 26 | **A mod that ships tests can register `<ModId>.health`**, reporting its own load status as values (MS2: catalog loaded, part count, catalog hash). The core suite runs every registered health step on every side and compares them. | Cheap, and it sees data a mod loads after start-up, which `mods.started` can't. |
+| 27 | **Test what ships**: `--package <zip or folder>` installs a mod the way a player would (the whole folder, never DLLs alone) into a scratch copy and runs against it. Saves from each released version are kept as upgrade worlds, and upgrade suites load them with the new build (`continuity`). Once `--package` exists, `docs/RELEASING.md` gets a step that runs the full run against the exact zip and records its SHA-256; mods' own release steps belong in their repos. | The MS2 failure was a hand install that left out data files. Old saves must survive an update, and that is only unit-tested today. |
+
+### The core suite (decisions 13 and 24–26)
+
+| Check | Sides | Fails when |
+|---|---|---|
+| Time limit to the main menu / `game.joined` | every side | the game doesn't get there in time (stuck loading, a crash, a blocking pop-up) |
+| `mods.started` | every side | a mod's code loaded but it shows no patch, behaviour or model |
+| loaded copy | every side | the game loaded a different copy of a mod from the one ModderLords picked |
+| `mods.fingerprint` compare | Coop | the server and the player run different builds of a mod |
+| every `<ModId>.health` compare | every side | a mod reports a failed load, or the sides disagree |
+| `game.noErrors` | every side | an on-screen message or pop-up matches an error pattern |
+| `hero.parity` compare, `sync-basics` | Coop | the player's hero differs between the sides; a change on the server doesn't reach the player |
 
 Decision 14 replaces v1's decision 5 for third-party mods: the reference-based API stays, but it now lives in a DLL
 that the game never loads by itself.
@@ -70,6 +90,7 @@ that the game never loads by itself.
   ModuleData\ModderLordsTests\
     armor-basics.json               suites (the v1 format plus requires/mode/continuity)
     ModularArmor2.Tests.dll         optional; NOT listed in SubModule.xml
+    files.json                      optional: the mod's own file list with hashes (decision 23)
 ```
 
 - **The game never loads the test DLL.** It isn't in `SubModule.xml` and isn't under `bin\`, so neither the game nor
@@ -88,6 +109,8 @@ that the game never loads by itself.
   DLL targets what `ModderLords.CompatSync` targets.
 - **Discovery** scans the enabled modules' folders for `ModuleData\ModderLordsTests\`. The suites' JSON is read by the
   launcher; the DLL is loaded by each game's agent when the run starts.
+- **A health step** (decision 26): the test DLL may register `<ModId>.health` with side `Any`, reporting what the
+  mod loaded as values. The core suite finds and runs it; no suite has to name it.
 - **Suite ids are namespaced by module** (`ModularArmor2/armor-basics`) and step ids stay `area.verb`; a mod's step
   id that clashes with another's fails the run up front instead of silently replacing it (a change from v1).
 
@@ -101,7 +124,9 @@ that the game never loads by itself.
   "mode": "coop",                  // singleplayer | coop | both (default both)
   "continuity": false,             // true allows game.saveAndReload
   "world": "auto",                 // auto (default): a fresh copy of the cached world for this mod set;
-                                   // shared: the previous suite's world, no reset; or a named test world
+                                   // shared: the previous suite's world, no reset; upgrade: each kept
+                                   // upgrade world in turn (decision 27); or a named test world
+  "errorPatterns": [ "\\[MArmor\\].*failed" ],   // added to game.noErrors' defaults (decision 25)
   "steps": [ ... ]                 // side: game (single player), server, client:N (Coop)
 }
 ```
@@ -117,8 +142,12 @@ that the game never loads by itself.
 ModderLords.Cli test --profile "My Host"                                   # core + every applicable suite
 ModderLords.Cli test --profile "My Mods" --single-player                   # the same, single-player suites
 ModderLords.Cli test --profile "My Mods" --mod ModularArmor2 --single-player [--keep-open-on-fail]
+ModderLords.Cli test --profile "My Mods" --mod ModularArmor2 --package MA2-1.3.zip   # test the archive itself
 ModderLords.Cli test --profile "My Host" --suite stash                    # v1: one named suite, still works
 ```
+
+- `--package` installs the zip or folder as a player would, into a scratch copy of the module folders (and the
+  server's, in Coop), so the installed mods are untouched; the report and history record the archive's SHA-256.
 
 - `--mod X` runs the core suite plus the suites X ships and the suites that require X; `--with-others` adds every
   other applicable suite (decision 21).
@@ -134,7 +163,8 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 
 ### Worlds (decisions 16 and 17)
 
-- The cache key is the sorted list of enabled modules with their versions, hashed; the world lives in
+- The cache key is the sorted list of enabled modules with their install fingerprints (decision 23), hashed, so a
+  rebuilt mod with an unchanged version still gets its own world; the world lives in
   `<data>\test-worlds\auto-<hash>.sav`, with a small `.json` beside it recording the list it was made with.
 - On a cache miss the harness creates the world (decision 22), by code and without touching the screens:
   1. Start a new Sandbox campaign as the main menu's Sandbox button does (no tutorial).
@@ -150,11 +180,15 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 - Worlds are not reproducible (world generation is random), so each is created once and kept; the history records
   which cached world a result came from, since results compare only on the same world.
 - A named world (`"world": "vanilla-1"`, `--world`) still works as in v1, and skips the cache.
+- **Upgrade worlds** (decision 27): `<data>\test-worlds\upgrade-<ModId>-<version>.sav`, one kept from each released
+  version of a mod. An upgrade suite (`"world": "upgrade"`, `continuity`) runs once on each, with the new build, and
+  checks that the mod's records survived the load.
 
 ### Results history (decision 18)
 
 - Every run appends one line per suite to `<data>\tests\history.jsonl`: run id, time, suite, outcome, game version,
-  Coop version (or none), ModderLords version, and every enabled mod's id and version.
+  Coop version (or none), ModderLords version, every enabled mod's id, version and install fingerprint, and with
+  `--package` the archive's SHA-256.
 - `ModderLords.Cli test --history` prints the summary table: one row per suite and mod set, the last outcome, and
   when it last passed. The run folders stay the evidence.
 
@@ -171,8 +205,14 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 1. Spike: single-player launch, the agent loading a named save, and creating a world by code through character
    creation.
 2. `requires`/`mode`/`continuity`, suite selection and the core suite; multi-suite runs with a world reset.
-3. Tests shipped in mods: discovery, loading the test DLL, namespaced ids; one in-tree example module.
+   With it, the cheap core checks: install fingerprints, the loaded copy, `mods.fingerprint`, the time limits and
+   `game.noErrors` (decisions 23–25).
+3. Tests shipped in mods: discovery, loading the test DLL, namespaced ids, `*.health` steps. Modular Smithing 2 is
+   the pilot: single player first, with a Coop adapter, so it covers decisions 14, 15 and 11 at once. Its suites:
+   `health` (both), `ammo`, `tier-preview` (single player), `heal-on-load` (single player, continuity) and
+   `coop-craft` (Coop). Its repo is private, which doesn't matter: players never get its test DLL.
 4. The world cache, then `game.saveAndReload`, then the history file and table.
+5. `--package` and upgrade worlds, then the release step in `docs/RELEASING.md` (decision 27).
 
 ## Shape
 
@@ -260,6 +300,11 @@ Rules:
   result and is printed under a failed step. A failed client step also gets a screenshot.
 - `ctx.State` is shared by the steps of one run on one side; across sides, use Report and `$` references.
 - Arguments arrive as text: `ctx.Arg`, `ctx.ArgInt`, with or without a fallback.
+- **Check against the engine, not against your own numbers.** Where a mod predicts what the engine will do (a tier,
+  a price, a stat), do the thing and compare the prediction with what the engine produced, e.g. a crafting preview's
+  tier against `ItemObject.Tier` on the item made.
+- **Prefer property checks** over simulating play: "every crafted ammo item has missile speed 10, like native ammo"
+  catches a whole class of bugs without a battle.
 
 Built-in steps (`src/ModderLords.CompatSync/Testing/BuiltInSteps.cs`): `game.onMap`, `game.pause`, `game.whoAmI`
 (reports `heroName`, `hero`, `party`; find a player's hero on another side by `heroName`: its StringId is local),
@@ -364,3 +409,5 @@ was the harness, and each lesson is now in it:
 - "TEST MODE" in the server's player list (decision 6); the log lines are there.
 - The delivery-quest and Living Economy suites; a second player's game; an App button.
 - Everything in v2 (above).
+- A battle step: start a custom battle with given equipment, run until it ends or a time limit, read hits and kills.
+  For behaviour that property checks can't reach (AI archers actually hitting); the expensive one, so it waits.
