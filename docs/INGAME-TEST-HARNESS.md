@@ -124,7 +124,8 @@ that the game never loads by itself.
   "mode": "coop",                  // singleplayer | coop | both (default both)
   "continuity": false,             // true allows game.saveAndReload
   "world": "auto",                 // auto (default): a fresh copy of the cached world for this mod set;
-                                   // shared: the previous suite's world, no reset; or a named test world
+                                   // shared: the previous suite's world, no reset; upgrade: each kept
+                                   // upgrade world in turn (decision 27); or a named test world
   "errorPatterns": [ "\\[MArmor\\].*failed" ],   // added to game.noErrors' defaults (decision 25)
   "steps": [ ... ]                 // side: game (single player), server, client:N (Coop)
 }
