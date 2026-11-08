@@ -1,7 +1,8 @@
 # Profile manager and verified profiles
 
 Status: **designed 2026-11-08 with the maintainer, not built.** The decisions are below, then the window, the
-verified-profiles file, how a profile earns each badge, and the build order. Open questions are at the end.
+verified-profiles file, how a profile earns each badge, player submissions, and the build order. Every open question
+was settled on 2026-11-08 (at the end).
 
 ## Why
 
@@ -110,10 +111,10 @@ Decided 2026-11-08: players can submit a whole profile, not only report that our
 3. Gold entries: the maintainer's first verified profiles, from test runs.
 4. Green reports and submitted profiles through the intake, and the workflow that checks and counts them.
 
-## Open questions
+## Questions settled with the maintainer
 
 1. ~~Silver~~: decided 2026-11-08, a PR to this repository that the maintainer merges.
 2. ~~Green threshold~~: decided 2026-11-08, one accepted report.
 3. ~~Can players propose whole profiles~~: decided 2026-11-08, yes (see "Players submitting a profile").
-4. **Profiles and the app's mode:** today a profile has no mode (Harness is used in both). The Coop badge shows what a
-   profile contains; should a profile also remember whether it is for Player or Host mode? Proposed: no, for now.
+4. ~~Profiles and the app's mode~~: decided 2026-11-08, no, for now. The Coop badge shows what a profile contains; the
+   app's mode stays global.
