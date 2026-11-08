@@ -52,6 +52,7 @@ internal sealed class TestAgent
     private readonly Action<string> _log;
     private readonly Func<string, bool>? _screenshot;
     private readonly Func<IDictionary<string, string>> _versions;
+    private readonly Func<string, bool> _moduleLoaded;
     private readonly string _resultsPath;
     private readonly Dictionary<string, object?> _state = new Dictionary<string, object?>(StringComparer.Ordinal);
     private long _controlOffset;
@@ -62,8 +63,11 @@ internal sealed class TestAgent
     private long _runningSeq;
     private DateTime _runningStarted;
 
-    public TestAgent(TestRunSwitch runSwitch, Action<string> log, Func<string, bool>? screenshot = null, Func<IDictionary<string, string>>? versions = null)
+    /// <param name="moduleLoaded">Whether this game loaded a module by id, for module step DLLs that need a mod.</param>
+    public TestAgent(TestRunSwitch runSwitch, Action<string> log, Func<string, bool>? screenshot = null, Func<IDictionary<string, string>>? versions = null,
+        Func<string, bool>? moduleLoaded = null)
     {
+        _moduleLoaded = moduleLoaded ?? (_ => false);
         _switch = runSwitch;
         _log = log;
         _screenshot = screenshot;
@@ -114,6 +118,7 @@ internal sealed class TestAgent
         var runPath = Path.Combine(_switch.Folder, "run.json");
         if (!File.Exists(runPath)) return false;
         var run = MiniJson.ParseObject(File.ReadAllText(runPath));
+        var (skipped, loadErrors) = MiniJson.GetString(run, "token") == _switch.Token ? LoadModules(run) : (new List<object?>(), new List<object?>());
         var hello = new Dictionary<string, object?>
         {
             ["op"] = "hello",
@@ -122,6 +127,8 @@ internal sealed class TestAgent
             ["steps"] = InGameTests.Ids(_switch.Side).Cast<object?>().ToList(),
             ["versions"] = _versions().ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
         };
+        if (skipped.Count > 0) hello["skipped"] = skipped;
+        if (loadErrors.Count > 0) hello["loadErrors"] = loadErrors;
         if (MiniJson.GetString(run, "token") != _switch.Token)
         {
             hello["refused"] = "the run folder's token does not match this game's switch";
@@ -137,6 +144,39 @@ internal sealed class TestAgent
         _log(_refused ? "test run: refused: " + hello["refused"] : $"TEST MODE: this game is running a ModderLords test run as {_switch.Side} ({_switch.Folder})");
         if (!_refused) InGameTests.IsActive = true;
         return !_refused;
+    }
+
+    /// <summary>
+    /// Loads the run's module step DLLs (run.json "load", decision 30) whose mods this game has, and registers their
+    /// steps. A side without a module's mods skips it; a DLL that will not load, or registers nothing, is an error the
+    /// launcher stops the run on.
+    /// </summary>
+    private (List<object?> Skipped, List<object?> Errors) LoadModules(Dictionary<string, object?> run)
+    {
+        var skipped = new List<object?>();
+        var errors = new List<object?>();
+        foreach (var entry in MiniJson.GetArray(run, "load") ?? new List<object?>())
+        {
+            if (!(entry is Dictionary<string, object?> load)) continue;
+            var module = MiniJson.GetString(load, "module") ?? "?";
+            var missing = (MiniJson.GetArray(load, "requires") ?? new List<object?>()).Select(r => r as string ?? "").Where(r => r.Length > 0 && !_moduleLoaded(r)).ToList();
+            if (missing.Count > 0) { skipped.Add($"test module {module} not loaded here: this game has no {string.Join(", ", missing)}"); continue; }
+            var dll = MiniJson.GetString(load, "dll") ?? "";
+            var typeName = MiniJson.GetString(load, "type") ?? "";
+            try
+            {
+                var before = InGameTests.Ids(_switch.Side).Count;
+                var type = System.Reflection.Assembly.LoadFrom(dll).GetType(typeName, throwOnError: true)!;
+                var register = type.GetMethod("Register", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, null, Type.EmptyTypes, null)
+                    ?? throw new MissingMethodException(typeName + " has no public static Register()");
+                register.Invoke(null, null);
+                var added = InGameTests.Ids(_switch.Side).Count - before;
+                if (added <= 0) errors.Add($"{module}: {typeName}.Register() registered no steps for {_switch.Side}");
+                else _log($"test run: test module {module} loaded ({added} step(s)) from {dll}");
+            }
+            catch (Exception ex) { errors.Add($"{module}: {Path.GetFileName(dll)}: {ex.GetBaseException().Message}"); }
+        }
+        return (skipped, errors);
     }
 
     private void Start(Dictionary<string, object?> command, DateTime now)

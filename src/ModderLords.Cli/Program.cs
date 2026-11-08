@@ -449,6 +449,15 @@ switch (cmd)
     {
         // The in-game test harness (docs/INGAME-TEST-HARNESS.md): the smoke test's server and join, then a suite's steps
         // run inside both games, driven through a run folder, with a pass/fail per step.
+        // --list: what exists, as JSON, for a person or an AI agent (docs/WRITING-TEST-MODULES.md); no game starts.
+        if (opts.ContainsKey("list"))
+        {
+            var listProfile = opts.TryGetValue("profile", out var listName) ? ProfileStore.Load(listName) : null;
+            if (opts.ContainsKey("profile") && listProfile is null) { Console.Error.WriteLine("[ModderLords] profile not found: " + listName); return 2; }
+            var listMods = listProfile is null ? null : InstalledMods(listProfile, opts.ContainsKey("single-player"));
+            Console.WriteLine(ModderLords.Core.Testing.TestCatalog.ToJson(ModderLords.Core.Testing.TestSuites.Modules(), listMods, listProfile?.Name));
+            return 0;
+        }
         if (!opts.TryGetValue("profile", out var testProfileName)) { Console.Error.WriteLine("test needs --profile NAME"); return 2; }
         var profile = ProfileStore.Load(testProfileName);
         if (profile is null) { Console.Error.WriteLine("[ModderLords] profile not found: " + testProfileName); return 2; }
@@ -470,12 +479,35 @@ switch (cmd)
         var singlePlayer = opts.ContainsKey("single-player");
         var installed = InstalledMods(profile, singlePlayer);
         if (installed is null) return 2;
+        // --modules a,b: only those test modules' suites (and core); without it, every module that applies.
+        IReadOnlyCollection<string>? pickedModules = null;
+        if (opts.GetValueOrDefault("modules") is { } moduleList)
+        {
+            pickedModules = moduleList.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            var unknown = pickedModules.Where(m => ModderLords.Core.Testing.TestSuites.Module(m) is null).ToList();
+            if (unknown.Count > 0)
+            {
+                Console.Error.WriteLine($"[ModderLords] no test module {string.Join(", ", unknown)} (there are: {string.Join(", ", ModderLords.Core.Testing.TestSuites.Modules().Select(m => m.Id))}; test --list says more)");
+                return 2;
+            }
+            foreach (var m in pickedModules.Select(ModderLords.Core.Testing.TestSuites.Module))
+                if (ModderLords.Core.Testing.SuiteSelection.Unmet(m!.Requires, installed) is { Count: > 0 } unmet)
+                    Console.WriteLine($"[ModderLords] test module {m.Id} is unavailable here: needs {string.Join(", ", unmet.Select(r => ModderLords.Core.Testing.SuiteSelection.Describe(r, installed)))}");
+        }
         var left = new List<string>();
         IReadOnlyList<ModderLords.Core.Testing.TestPlan> chosen;
-        try { chosen = ModderLords.Core.Testing.SuiteSelection.Select(ModderLords.Core.Testing.TestSuites.LoadAll(), installed, singlePlayer, opts.GetValueOrDefault("mod"), opts.ContainsKey("with-others"), left); }
+        try { chosen = ModderLords.Core.Testing.SuiteSelection.Select(ModderLords.Core.Testing.TestSuites.LoadAll(), installed, singlePlayer, opts.GetValueOrDefault("mod"), opts.ContainsKey("with-others"), left, pickedModules); }
         catch (Exception ex) { Console.Error.WriteLine("[ModderLords] suites: " + ex.Message); return 2; }
-        Console.WriteLine($"[ModderLords] {(singlePlayer ? "single-player" : "Coop")} suites for {profile.Name}: {string.Join(", ", chosen.Select(p => p.Name))}");
+        Console.WriteLine($"[ModderLords] {(singlePlayer ? "single-player" : "Coop")} suites for {profile.Name}: {string.Join(", ", chosen.Select(p => p.Module.Length > 0 ? p.Module + "/" + p.Name : p.Name))}");
         foreach (var why in left) Console.WriteLine("[ModderLords]   left out " + why);
+        // The picked modules' own step DLLs, from the compat folder next to this launcher (decision 30).
+        var loads = new List<ModderLords.Core.Testing.ModuleLoad>();
+        foreach (var m in chosen.Select(p => ModderLords.Core.Testing.TestSuites.Module(p.Module)).Where(m => m?.StepsDll is not null).Distinct())
+        {
+            var dll = Path.Combine(LaunchSession.BundledRoot ?? AppContext.BaseDirectory, "compat", m!.StepsDll!);
+            if (!File.Exists(dll)) { Console.Error.WriteLine($"[ModderLords] test module {m.Id}: {dll} is missing (is it built into the compat folder?)"); return 2; }
+            loads.Add(new ModderLords.Core.Testing.ModuleLoad(m.Id, dll, m.StepsType!, m.Requires.Select(r => r.Id).ToList()));
+        }
 
         if (singlePlayer)
         {
@@ -491,7 +523,7 @@ switch (cmd)
                 File.Copy(worldFile, Path.Combine(saves, spWorld + ".sav"), overwrite: true);
                 Console.WriteLine($"[ModderLords] world {named} copied fresh -> {Path.Combine(saves, spWorld + ".sav")}");
             }
-            var composed = ModderLords.Core.Testing.SuiteSelection.Compose("selected", chosen, (suite, i) => ModderLords.Core.Testing.SuiteSelection.SinglePlayerSetup(suite, i, spWorld));
+            var composed = ModderLords.Core.Testing.SuiteSelection.Compose("selected", chosen, (suite, i) => ModderLords.Core.Testing.SuiteSelection.SinglePlayerSetup(suite, i, spWorld)) with { Loads = loads };
             return await RunSinglePlayerTest(profile, composed, opts);
         }
 
@@ -502,7 +534,7 @@ switch (cmd)
         for (int n = 0; n < launches.Count; n++)
         {
             Console.WriteLine($"[ModderLords] launch {n + 1}/{launches.Count}: {string.Join(", ", launches[n].Select(p => p.Name))}");
-            var composed = ModderLords.Core.Testing.SuiteSelection.Compose(launches.Count == 1 ? "selected" : $"selected-{n + 1}", launches[n], ModderLords.Core.Testing.SuiteSelection.CoopSetup);
+            var composed = ModderLords.Core.Testing.SuiteSelection.Compose(launches.Count == 1 ? "selected" : $"selected-{n + 1}", launches[n], ModderLords.Core.Testing.SuiteSelection.CoopSetup) with { Loads = loads };
             var fresh = ProfileStore.Load(testProfileName)!;
             if (await RunCoopTest(fresh, composed, opts, paths) != 0) exit = 1;
             if (ModderLords.Core.Launch.ClientLauncher.IsClientRunning()) { Console.Error.WriteLine("[ModderLords] the game is still running (--keep-client?); the remaining launches are skipped."); return 1; }

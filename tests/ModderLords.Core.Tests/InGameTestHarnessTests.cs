@@ -24,6 +24,59 @@ public class TestPlanTests
     }
 
     [Fact]
+    public void The_built_in_suites_are_grouped_into_test_modules_with_core_first()
+    {
+        var modules = TestSuites.Modules();
+        Assert.Equal("core", modules[0].Id);
+        Assert.Equal(["core", "parity", "perks", "stash", "sync", "world"], modules.Select(m => m.Id));
+        Assert.Equal(["hero-level", "sync-basics"], TestSuites.Module("sync")!.Suites.Select(s => s.Name));
+        Assert.All(modules, m => Assert.All(m.Suites, s => Assert.Equal(m.Id, s.Module)));
+        Assert.All(modules, m => Assert.False(string.IsNullOrWhiteSpace(m.Description)));
+        Assert.Equal("sync", TestSuites.Load("sync/hero-level").Module);
+        Assert.Equal("hero-level", TestSuites.Load("hero-level").Name);
+        Assert.Contains("sync/sync-basics", TestSuites.Names());
+    }
+
+    [Fact]
+    public void A_modules_requirements_are_added_to_each_of_its_suites()
+    {
+        var suite = TestPlan.Parse("""{ "api": 2, "name": "ammo", "mode": "singleplayer", "requires": [ "Harmony" ], "steps": [ { "id": "a", "side": "game" } ] }""");
+        var module = TestModule.Parse("""{ "id": "smithing", "title": "Smithing", "requires": [ { "id": "ModularSmithing2", "version": ">=0.9.49" } ], "steps": "ModderLords.Tests.Smithing.dll" }""", [suite]);
+        Assert.Equal([new ModRequirement("ModularSmithing2", ">=0.9.49"), new ModRequirement("Harmony")], module.Suites[0].Requires);
+        Assert.Equal("ModderLords.Tests.Smithing.Steps", module.StepsType);
+        Assert.Throws<FormatException>(() => TestModule.Parse("""{ "id": "x", "steps": "Steps.exe" }""", []));
+    }
+
+    [Fact]
+    public void Picking_modules_runs_only_their_suites_and_core_including_v1_suites()
+    {
+        var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var picked = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: false, onlyMod: null, withOthers: false, [], modules: ["sync"]);
+        Assert.Equal(["core", "hero-level", "sync-basics"], picked.Select(p => p.Name));
+        var none = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: false, onlyMod: null, withOthers: false, []);
+        Assert.Equal(["core"], none.Select(p => p.Name));
+        var notes = new List<string>();
+        var single = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: true, onlyMod: null, withOthers: false, notes, modules: ["sync", "world"]);
+        Assert.Equal(["core", "sp-world"], single.Select(p => p.Name));
+        Assert.Contains("sync/hero-level: Coop only", notes);
+    }
+
+    [Fact]
+    public void The_list_shows_every_module_and_whether_a_profile_can_run_it()
+    {
+        var suite = TestPlan.Parse("""{ "api": 2, "name": "ammo", "mode": "singleplayer", "steps": [ { "id": "smithing.craft", "side": "game" } ] }""");
+        var smithing = TestModule.Parse("""{ "id": "smithing", "title": "Smithing", "description": "MS2", "requires": [ "ModularSmithing2" ] }""", [suite]);
+        var json = System.Text.Json.Nodes.JsonNode.Parse(TestCatalog.ToJson([.. TestSuites.Modules(), smithing], new Dictionary<string, string?>(), "P"))!;
+        var listed = json["modules"]!.AsArray();
+        Assert.Equal("core", listed[0]!["id"]!.GetValue<string>());
+        Assert.True(listed[0]!["available"]!.GetValue<bool>());
+        var ms2 = listed.Single(m => m!["id"]!.GetValue<string>() == "smithing")!;
+        Assert.Equal("ModularSmithing2 (not in this profile)", ms2["available"]![0]!.GetValue<string>());
+        Assert.Equal("smithing/ammo", ms2["suites"]![0]!["name"]!.GetValue<string>());
+        Assert.Equal("smithing.craft", ms2["suites"]![0]!["steps"]![0]!.GetValue<string>());
+    }
+
+    [Fact]
     public void The_core_suite_runs_both_ways()
     {
         var core = TestSuites.Load(SuiteSelection.CoreSuite);
@@ -426,6 +479,26 @@ public sealed class TestSequencerTests : IDisposable
         Assert.Equal([CoreOutcome.Fail, CoreOutcome.Skipped, CoreOutcome.Pass, CoreOutcome.Pass], report.Steps.Select(s => s.Outcome));
         Assert.Equal([("a", false), ("b", true), ("end", true)], report.Suites);
         Assert.Contains("suites: a FAIL, b PASS, end PASS", report.ToText());
+    }
+
+    [Fact]
+    public async Task A_module_dll_is_skipped_on_a_side_without_its_mod()
+    {
+        var plan = TestPlan.Parse("""{ "name": "t", "steps": [ { "id": "stash.count", "side": "server" } ] }""")
+            with { Loads = [new ModuleLoad("smithing", Path.Combine(_root, "missing.dll"), "ModderLords.Tests.Smithing.Steps", ["ModularSmithing2"])] };
+        var report = await Run(plan);
+        Assert.True(report.Passed, report.ToText());
+        Assert.Contains("server: test module smithing not loaded here: this game has no ModularSmithing2", report.Notes);
+    }
+
+    [Fact]
+    public async Task A_module_dll_that_will_not_load_stops_the_run_before_any_step()
+    {
+        var plan = TestPlan.Parse("""{ "name": "t", "steps": [ { "id": "stash.count", "side": "server" } ] }""")
+            with { Loads = [new ModuleLoad("smithing", Path.Combine(_root, "missing.dll"), "ModderLords.Tests.Smithing.Steps", [])] };
+        var report = await Run(plan);
+        Assert.Equal(CoreOutcome.Skipped, report.Steps[0].Outcome);
+        Assert.Contains(report.Notes, n => n.StartsWith("server could not load a test module: smithing: missing.dll", StringComparison.Ordinal));
     }
 
     [Fact]

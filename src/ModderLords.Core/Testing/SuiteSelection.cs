@@ -23,23 +23,27 @@ public static class SuiteSelection
 
     /// <param name="mods">The profile's enabled mods: id → installed version (null when unknown).</param>
     /// <param name="onlyMod">With <c>--mod X</c>: only suites that require X, unless <paramref name="withOthers"/>.</param>
+    /// <param name="modules">With <c>--modules</c>: only these test modules' suites (decision 29); null for every module.</param>
     /// <param name="notes">Told why each suite left out was left out.</param>
     public static IReadOnlyList<TestPlan> Select(IEnumerable<TestPlan> available, IReadOnlyDictionary<string, string?> mods,
-        bool singlePlayer, string? onlyMod, bool withOthers, List<string> notes)
+        bool singlePlayer, string? onlyMod, bool withOthers, List<string> notes, IReadOnlyCollection<string>? modules = null)
     {
         var all = available.ToList();
         var core = all.FirstOrDefault(p => p.Name == CoreSuite) ?? throw new InvalidOperationException("the core suite is missing");
         var picked = new List<TestPlan>();
-        foreach (var plan in all.Where(p => p.Name != CoreSuite).OrderBy(p => p.Name, StringComparer.Ordinal))
+        foreach (var plan in all.Where(p => p.Name != CoreSuite).OrderBy(p => p.Module, StringComparer.Ordinal).ThenBy(p => p.Name, StringComparer.Ordinal))
         {
-            // A v1 suite declares neither mode nor requirements, so nothing says where it applies: it runs by name only.
-            if (plan.Api < 2) continue;
-            if (!plan.RunsIn(singlePlayer)) { notes.Add($"{plan.Name}: {(singlePlayer ? "Coop" : "single-player")} only"); continue; }
-            var unmet = plan.Requires.Where(r => !mods.TryGetValue(r.Id, out var version) || !r.MetBy(version)).ToList();
-            if (unmet.Count > 0) { notes.Add($"{plan.Name}: needs {string.Join(", ", unmet.Select(r => Describe(r, mods)))}"); continue; }
+            var label = plan.Module.Length > 0 ? $"{plan.Module}/{plan.Name}" : plan.Name;
+            if (modules is not null && !modules.Contains(plan.Module, StringComparer.OrdinalIgnoreCase)) continue;
+            // Unpicked, a v1 suite declares neither mode nor requirements, so nothing says where it applies. A module
+            // picked by name runs its v1 suites too, in the mode their sides say.
+            if (plan.Api < 2 && modules is null) continue;
+            if (!plan.RunsIn(singlePlayer)) { notes.Add($"{label}: {(singlePlayer ? "Coop" : "single-player")} only"); continue; }
+            var unmet = Unmet(plan.Requires, mods);
+            if (unmet.Count > 0) { notes.Add($"{label}: needs {string.Join(", ", unmet.Select(r => Describe(r, mods)))}"); continue; }
             if (onlyMod is not null && !withOthers && !plan.Requires.Any(r => r.Id.Equals(onlyMod, StringComparison.OrdinalIgnoreCase)))
             {
-                notes.Add($"{plan.Name}: does not require {onlyMod} (--with-others runs it too)");
+                notes.Add($"{label}: does not require {onlyMod} (--with-others runs it too)");
                 continue;
             }
             picked.Add(plan);
@@ -49,7 +53,11 @@ public static class SuiteSelection
             .. picked.Where(p => p.SharesWorld).Select(p => p.ForMode(singlePlayer))];
     }
 
-    private static string Describe(ModRequirement r, IReadOnlyDictionary<string, string?> mods) =>
+    /// <summary>The requirements <paramref name="mods"/> do not meet.</summary>
+    public static IReadOnlyList<ModRequirement> Unmet(IEnumerable<ModRequirement> requires, IReadOnlyDictionary<string, string?> mods) =>
+        requires.Where(r => !mods.TryGetValue(r.Id, out var version) || !r.MetBy(version)).ToList();
+
+    public static string Describe(ModRequirement r, IReadOnlyDictionary<string, string?> mods) =>
         mods.TryGetValue(r.Id, out var version) ? $"{r} (this profile has {version ?? "an unknown version"})" : $"{r} (not in this profile)";
 
     /// <summary>

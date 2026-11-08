@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using ModderLords.CompatSync;
 
 namespace ModderLords.Testing;
@@ -31,7 +32,8 @@ internal static class TestHost
             return;
         }
         BuiltInSteps.Register();
-        _agent = new TestAgent(runSwitch, Log.Info, TakeScreenshot, Versions);
+        _agent = new TestAgent(runSwitch, Log.Info, TakeScreenshot, Versions,
+            id => TaleWorlds.ModuleManager.ModuleHelper.GetActiveModules().Any(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase)));
         // Info, not a warning: the smoke test counts warnings while joining as failures.
         Log.Info($"TEST MODE: this game was started for a ModderLords test run ({runSwitch.Side}); test steps may change the world");
     }

@@ -10,6 +10,12 @@ release reaches every user at once. Never publish (step 7) without the maintaine
 
 Test builds go out as prereleases with a suffixed tag, which installed copies ignore.
 
+## Testing in the game
+
+The in-game test harness runs scripted checks inside a real game (single player or Coop). **To add tests, follow
+`docs/WRITING-TEST-MODULES.md`**: what a step can reach, the run loop (`ModderLords.Cli test --list`, `--modules`,
+`--single-player`), and how to make a test module. The design is in `docs/INGAME-TEST-HARNESS.md`.
+
 ## Working rules
 
 - **Start from GitHub state.** `git fetch`, branch from `origin/main`, one PR per change.

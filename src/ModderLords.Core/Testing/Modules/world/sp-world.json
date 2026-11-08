@@ -3,6 +3,7 @@
   "name": "sp-world",
   "description": "Single player, no Coop: create a world by code through character creation, save it, go back to the main menu, load it again, and check it is the same hero (docs/INGAME-TEST-HARNESS.md, build step 1).",
   "steps": [
+    { "id": "game.toMainMenu", "side": "game", "timeoutSeconds": 300 },
     { "id": "game.createWorld", "side": "game", "as": "created", "timeoutSeconds": 900, "args": { "name": "mltest-sp-world", "overwrite": "true" } },
     { "id": "game.toMainMenu", "side": "game", "timeoutSeconds": 300 },
     { "id": "game.loadSave", "side": "game", "timeoutSeconds": 900, "args": { "name": "$created.save" } },

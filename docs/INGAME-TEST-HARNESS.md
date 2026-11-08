@@ -1,5 +1,8 @@
 # In-game test harness
 
+**Adding tests? Start with `docs/WRITING-TEST-MODULES.md`**: what a step can reach, the run loop and how to make a
+test module. This file is the design and its decisions.
+
 Status: **v1 built 2026-11-06 and run in game; v2 designed 2026-11-07, not built.** The v1 decisions are below,
 then the v2 design, then how v1 runs and how to write a step.
 
@@ -104,6 +107,10 @@ src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2
   module's.
 - **Suite ids** are `module/suite` (`smithing/ammo`); `--suite stash` still finds a suite by its own name when that is
   unique. Step ids stay `area.verb`, unique across ModderLords.
+- **Picking modules:** `--modules a,b` runs `core` plus those modules' suites, v1 suites included (picked by name, they
+  run in the mode their sides say). Without `--modules`, only `api: 2` suites are picked, as before. `test --list
+  [--profile P]` prints every module, its suites, the steps they name, what each needs, and with a profile whether it
+  can run there.
 - **Loading a module's DLL:** the launcher lists the picked modules' DLLs in `run.json` (`"load"`). Each game's agent
   loads those whose mods are present on its side, before the run's first step, and registers their steps. A DLL that
   will not load, or registers no steps, fails the run up front with the reason; a side without the mod skips it,
@@ -222,7 +229,8 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    `game.noErrors` (decisions 23–25).
 3. Test modules (decisions 28–31), in three PRs:
    1. Modules: today's suites regrouped into `Testing/Modules/<module>/` with `module.json`; `--modules`; `test --list`
-      (JSON); module DLL loading through `run.json`; `*.health` steps in the core suite.
+      (JSON); module DLL loading through `run.json`; `*.health` steps in the core suite. **Built 2026-11-08**, with
+      `docs/WRITING-TEST-MODULES.md`.
    2. The Tests tab in the app, running the same harness, with live progress and per-suite results.
    3. The first module for a mod: `smithing` (Modular Smithing 2), with its own DLL and `ModularSmithing2.health`.
       Its suites: `health` (both), `ammo`, `tier-preview` (single player), `heal-on-load` (single player,
@@ -473,7 +481,7 @@ on a player's game (or the reverse).
 | `src/ModderLords.CompatSync/Testing/InGameTests.cs` | The hook API: `InGameTests`, `StepContext`, `StepWait`. TaleWorlds-free. |
 | `.../Testing/StepRunner.cs`, `TestAgent.cs` | Runs a step's waits; reads control lines, writes results. TaleWorlds-free, linked into the tests. |
 | `.../Testing/TestHost.cs`, `BuiltInSteps.cs` | The game's part: the switch, screenshot, versions; the built-in steps. |
-| `src/ModderLords.Core/Testing/` | Suite parsing, the sequencer, the run folder, the report; built-in suites in `Suites/`. |
+| `src/ModderLords.Core/Testing/` | Suite parsing, the sequencer, the run folder, the report, the catalog (`test --list`); the test modules in `Modules/<module>/`. |
 | `src/ModderLords.Core/Smoke/SmokeRunner.cs` | `WhileOnMap` and `ExtraLaunchArguments`: the test runs inside the smoke test's join. |
 | `src/ModderLords.Cli/Program.cs` (`test`) | Ties it together. |
 | `tests/ModderLords.Core.Tests/InGameTestHarnessTests.cs` | Suite parsing, waits, and the sequencer against the real agent through a real run folder. |

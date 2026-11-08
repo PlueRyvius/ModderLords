@@ -7,6 +7,12 @@ namespace ModderLords.Core.Testing;
 /// <summary>Where a suite (or one of its steps) runs: a single-player game, a Coop session, or either.</summary>
 public enum SuiteMode { Both, SinglePlayer, Coop }
 
+/// <summary>
+/// A test module's own step DLL for a run (decision 30): where it is, the type that registers its steps, and the mods
+/// a game must have loaded for the agent to load it there.
+/// </summary>
+public sealed record ModuleLoad(string Module, string Dll, string Type, IReadOnlyList<string> Requires);
+
 /// <summary>A mod a suite needs, optionally within a version range (">=1.2", "<2", "=1.3.0", or a bare version).</summary>
 public sealed record ModRequirement(string Id, string? Version = null)
 {
@@ -60,6 +66,8 @@ public sealed record TestPlan
     public const string SharedWorld = "shared";
 
     public required string Name { get; init; }
+    /// <summary>The test module the suite belongs to (decision 28); empty for a suite read from a file.</summary>
+    public string Module { get; init; } = "";
     public int Api { get; init; } = 1;
     public string Description { get; init; } = "";
     /// <summary>The world the run starts from, copied fresh (a name under the test-worlds folder); null = the profile's save.</summary>
@@ -71,6 +79,8 @@ public sealed record TestPlan
     public bool Continuity { get; init; }
     /// <summary>The suite opted in to running on the previous suite's world (decision 19).</summary>
     public bool SharesWorld => World == SharedWorld;
+    /// <summary>Module step DLLs the games load for this run (run.json "load"); set by the launcher, not by a suite.</summary>
+    public IReadOnlyList<ModuleLoad> Loads { get; init; } = [];
     /// <summary>Patterns (regular expressions) <c>game.noErrors</c> also fails on, beyond its default set (decision 25).</summary>
     public IReadOnlyList<string> ErrorPatterns { get; init; } = [];
 
