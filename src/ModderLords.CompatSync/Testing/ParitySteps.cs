@@ -44,6 +44,8 @@ internal static class ParitySteps
         // server ModderLords keeps only MCM's settings core (CompatDb.FallbackKeepSubModules), which patches nothing.
         ignore.Add("DedicatedServer.Windows");
         if (ctx.IsServer) ignore.Add("Bannerlord.MBOptionScreen");
+        // A single-player run adds ModderLords.Compat for its test agent; without Coop it has nothing else to start.
+        if (ctx.Side == "game") ignore.Add("ModderLords.Compat");
         var modules = ModuleHelper.GetActiveModules().Where(m => !m.IsOfficial).ToList();
         var owners = new AssemblyOwners(modules);
         string? Owner(Type? t) => t == null ? null : owners.Of(t.Assembly);

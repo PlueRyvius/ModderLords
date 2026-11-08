@@ -203,7 +203,8 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 ### Build order (proposed)
 
 1. Spike: single-player launch, the agent loading a named save, and creating a world by code through character
-   creation. **Built 2026-11-07** (`sp-world`, the world steps, the `game` side); see "Single player" below.
+   creation. **Built and passing in game 2026-11-07** (`sp-world`, the world steps, the `game` side); see "Single
+   player" below. Not yet tried with mods that add creation pages.
 2. `requires`/`mode`/`continuity`, suite selection and the core suite; multi-suite runs with a world reset.
    With it, the cheap core checks: install fingerprints, the loaded copy, `mods.fingerprint`, the time limits and
    `game.noErrors` (decisions 23–25).
@@ -275,6 +276,11 @@ ModderLords.Cli test --profile "My Mods" --suite sp-world [--keep-client] [--kee
 - The suite makes or loads its own world from the main menu with `game.createWorld` / `game.loadSave` (below).
 - Built-in suite: `sp-world` creates a world by code, saves it, goes back to the main menu, loads it again and checks
   it is the same hero, then runs `mods.started`.
+- **First runs, 2026-11-07 (game v1.4.8, vanilla):** `sp-world` passes in 70 s. Creation passed all 7 pages: culture,
+  face, the six life-story menus, banner, clan name, review and options (`creation-pages.txt`). On the way: a page's
+  view-model is found from its view, not by its page index (that isn't always set); the face and banner editors have
+  no stage view-model and advance through their view; and `mods.started` ignores `ModderLords.Compat` in single
+  player, where the run adds it and it has nothing else to start.
 
 Test mode is visible: each game logs `TEST MODE: ...` at load (`ModderLords.CompatSync` log) and the agent logs each
 step. It is not yet shown in the server's player list (decision 6); that is a follow-up.
@@ -339,7 +345,9 @@ rule on or off, e.g. `BothPerks`), `party.addItem`, `party.itemCount`, `stash.co
 World steps (`WorldSteps.cs`), from the main menu, for single-player runs:
 
 - `game.createWorld` (`name`, optional `overwrite`): starts a new Sandbox campaign as the main menu's Sandbox button
-  does, skips the intro video, and presses Next on each character-creation page through the page's own view-model.
+  does, skips the intro video, and presses Next on each character-creation page as its own Next button does: through
+  the page's view-model (found from `CurrentStage.Listener`, the page's view), or through the view itself on a page
+  with no stage view-model (the face and banner editors).
   When a page can't advance, it takes the first entry of each list the page offers (through the page's own selection
   method) and fills an empty name field, then tries again; a page that still can't advance, or has no view-model,
   fails the step, naming it. Saves under `name` once on the map. Reports `save`, `heroName`, `culture` and `pages`;

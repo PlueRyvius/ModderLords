@@ -118,11 +118,22 @@ internal static class WorldSteps
             if (page != _page) { _page = page; _looks = 0; _defaultsTried = false; }
             _looks++;
 
-            var vm = FindStageViewModel(state.Handler, index);
+            // The page's view listens to its stage (CharacterCreationScreen sets stage.Listener), so it is the current one.
+            var view = manager.CurrentStage?.Listener;
+            if (view == null)
+            {
+                // The screen builds the page's view a few frames after the stage starts.
+                if (_looks > 20) throw new StepFailedException($"character creation page {page} has no view to press Next on (a page with its own screen?); make this world by hand and record it");
+                return;
+            }
+            // Next calls the page's view-model, which does the page's work and then the view's NextStage. A page with
+            // no stage view-model (the face editor's) is advanced through its view alone, as its own Next does.
+            var vm = FindStageViewModel(view);
             if (vm == null)
             {
-                // The screen builds the page's view-model a few frames after the stage starts.
-                if (_looks > 20) throw new StepFailedException($"character creation page {page} has no view-model to press Next on (a page with its own screen?); make this world by hand and record it");
+                if (_looks < 3) return;
+                _pages.Add($"{page} ({view.GetType().Name}, through its view)");
+                Invoke<object>(view, "NextStage");
                 return;
             }
             var vmType = vm.GetType();
@@ -179,25 +190,20 @@ internal static class WorldSteps
         }
 
         /// <summary>
-        /// The current page's view-model, found from the screen handling character creation: a field (or a field of a
-        /// field) holding a stage view-model whose page index is the current one. The game's own pages and pages
-        /// built on its base class are found this way; the screen's type is not assumed.
+        /// The page's view-model: a field (or a field of a field) of the page's view holding a stage view-model. The
+        /// game's own pages and pages built on its base class are found this way; the view's type is not assumed.
         /// </summary>
-        private static object? FindStageViewModel(object? handler, int index)
+        private static object? FindStageViewModel(object? view)
         {
-            if (handler == null) return null;
+            if (view == null) return null;
             var seen = new HashSet<object>(ReferenceComparer.Instance);
             var queue = new Queue<(object Value, int Depth)>();
-            queue.Enqueue((handler, 0));
+            queue.Enqueue((view, 0));
             while (queue.Count > 0)
             {
                 var (value, depth) = queue.Dequeue();
                 if (!seen.Add(value)) continue;
-                if (IsStageViewModel(value.GetType()))
-                {
-                    if (Property<int>(value, "CurrentStageIndex") == index) return value;
-                    continue;
-                }
+                if (IsStageViewModel(value.GetType())) return value;
                 if (depth >= 3) continue;
                 for (var t = value.GetType(); t != null && t != typeof(object); t = t.BaseType)
                     foreach (var field in t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
@@ -287,9 +293,6 @@ internal static class WorldSteps
             ?? throw new StepFailedException($"{target.GetType().Name} has no {method}()");
         return (T)m.Invoke(target, null)!;
     }
-
-    private static T Property<T>(object target, string name) =>
-        target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance)?.GetValue(target) is T value ? value : default!;
 
     private sealed class ReferenceComparer : IEqualityComparer<object>
     {
