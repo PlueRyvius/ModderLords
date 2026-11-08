@@ -24,6 +24,59 @@ internal static class ParitySteps
     {
         InGameTests.Register("mods.started", StepSide.Any, ModsStarted);
         InGameTests.Register("hero.parity", StepSide.Any, HeroParity);
+        InGameTests.Register("mods.fingerprint", StepSide.Any, ModsFingerprint);
+    }
+
+    // ---- mods.fingerprint ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Hashes every community mod folder this game loaded (ModuleFingerprint: data, this side's code, manifest), and
+    /// checks each against the copy ModderLords picked, which the launcher wrote into the run folder
+    /// (<c>expected-fingerprints-&lt;side&gt;.txt</c>). A stale Workshop copy beside a local one, or an install that
+    /// left out changed data files, fails here naming the mod and the folder it loaded from. value is one hash over
+    /// every compared mod's data, so a compare across sides fails when the server and the player run different data.
+    /// Args: <c>ignore</c>, comma-separated module ids to leave out of value (DedicatedServer.* always are).
+    /// </summary>
+    private static IEnumerable<StepWait?> ModsFingerprint(StepContext ctx)
+    {
+        yield return ctx.Until(() => Campaign.Current != null, "the campaign");
+        var ignore = new HashSet<string>(ctx.Arg("ignore", "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        var bin = ctx.IsServer ? ModuleFingerprint.ServerBin : ModuleFingerprint.ClientBin;
+        var loaded = new Dictionary<string, (string Folder, ModuleFingerprint Print)>(StringComparer.OrdinalIgnoreCase);
+        var dump = new StringBuilder();
+        foreach (var module in ModuleHelper.GetActiveModules().Where(m => !m.IsOfficial))
+        {
+            var folder = ModuleHelper.GetModuleFullPath(module.Id);
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) { dump.AppendLine($"{module.Id}: no folder ({folder})"); continue; }
+            var print = ModuleFingerprint.Of(folder, bin);
+            loaded[module.Id] = (Path.GetFullPath(folder), print);
+            ctx.Report("fp." + module.Id, $"data #{print.Data} code #{print.Code}");
+            dump.AppendLine($"{module.Id}: {print}  {Path.GetFullPath(folder)}");
+        }
+
+        var wrong = new List<string>();
+        var expectedPath = Path.Combine(ctx.RunFolder, ModuleFingerprint.ExpectedFile(ctx.Side));
+        if (ctx.RunFolder.Length > 0 && File.Exists(expectedPath))
+        {
+            foreach (var want in ModuleFingerprint.ReadExpected(File.ReadAllText(expectedPath)))
+            {
+                if (!loaded.TryGetValue(want.Id, out var got)) { wrong.Add($"{want.Id}: picked {want.Folder}, but the game did not load it"); continue; }
+                var parts = new List<string>();
+                if (got.Print.Data != want.Data) parts.Add($"data #{got.Print.Data}, picked #{want.Data}");
+                if (want.Code.Length > 0 && got.Print.Code != want.Code) parts.Add($"code #{got.Print.Code}, picked #{want.Code}");
+                if (parts.Count > 0) wrong.Add($"{want.Id}: loaded {string.Join(", ", parts)} (loaded from {got.Folder}; picked {want.Folder})");
+            }
+            dump.AppendLine().AppendLine("checked against " + expectedPath);
+        }
+        else dump.AppendLine().AppendLine("no picked copies to check against (" + expectedPath + ")");
+
+        var compared = loaded.Where(kv => !ignore.Contains(kv.Key) && !kv.Key.StartsWith("DedicatedServer.", StringComparison.OrdinalIgnoreCase))
+            .Select(kv => kv.Key + ":" + kv.Value.Print.Data).ToList();
+        ctx.Dump("mods-fingerprint-" + ctx.Side.Replace(':', '-'), dump.ToString());
+        ctx.Report("mods", compared.Count);
+        ctx.Report("value", ModuleFingerprint.Combine(compared));
+        ctx.Assert(wrong.Count == 0, "the game loaded a different copy than ModderLords picked: " + string.Join("; ", wrong));
     }
 
     // ---- mods.started ----------------------------------------------------------------------------------------

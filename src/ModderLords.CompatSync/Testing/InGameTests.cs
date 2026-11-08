@@ -50,6 +50,8 @@ public sealed class StepContext
     /// <summary>"server" or "client:N" in Coop; "game" in a single-player run.</summary>
     public string Side { get; }
     public bool IsServer => Side == "server";
+    /// <summary>The run folder, for files the launcher put there for this run (empty outside one).</summary>
+    public string RunFolder { get; internal set; } = "";
     /// <summary>The plan's arguments for this step, "$step.key" references already filled in.</summary>
     public IReadOnlyDictionary<string, string> Args { get; }
     /// <summary>Shared by every step of this run on this side (not across sides: use <see cref="Report"/>).</summary>

@@ -814,6 +814,10 @@ static async Task<int> RunCoopTest(Profile profile, ModderLords.Core.Testing.Tes
     ClientLaunchSession.Prepared client;
     try { client = ServerMatchedClient.Prepare(prepared, profile); }
     catch (Exception ex) { Console.Error.WriteLine("[ModderLords] client plan: " + ex.Message); return 2; }
+    // The copies picked for each side, hashed now, for mods.fingerprint to check the loaded copies against.
+    foreach (var line in ModderLords.Core.Testing.PickedCopies.Write(channel.Folder, "server", prepared.Selections.Select(s => s.Module))
+        .Concat(ModderLords.Core.Testing.PickedCopies.Write(channel.Folder, "client:1", client.Plan.SelectedModules, client.Plan.ExcludedFolders)))
+        Console.WriteLine("[ModderLords] picked " + line);
     // The switch reaches the server through its own launch plan only, never this process's environment, so the
     // player's game (started from here) cannot inherit it and no ordinary Host launch can carry it.
     var serverPlan = prepared.Plan.WithEnvironment(ModderLords.Core.Testing.FileTestRunChannel.ServerVariable, channel.SwitchValue("server"));
@@ -916,6 +920,8 @@ static async Task<int> RunSinglePlayerTest(Profile profile, ModderLords.Core.Tes
 
     var channel = ModderLords.Core.Testing.FileTestRunChannel.Create(Path.Combine(ProfileStore.RootDir, "tests"), testPlan, DateTimeOffset.Now);
     Console.WriteLine($"[ModderLords] single-player test run {channel.RunId} -> {channel.Folder}");
+    foreach (var line in ModderLords.Core.Testing.PickedCopies.Write(channel.Folder, ModderLords.Core.Testing.TestPlan.GameSide, client.Plan.SelectedModules, client.Plan.ExcludedFolders))
+        Console.WriteLine("[ModderLords] picked " + line);
     var plan = client.Plan with { ExtraArguments = [ModderLords.Core.Testing.FileTestRunChannel.ClientArgument, channel.SwitchValue(ModderLords.Core.Testing.TestPlan.GameSide)] };
     Console.WriteLine("[ModderLords] " + plan.Describe());
 

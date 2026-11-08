@@ -21,6 +21,8 @@
     <EmbeddedResource Include="supported-mods.json" LogicalName="ModderLords.Core.supported-mods.json" />
     <!-- The in-game test harness's built-in suites (ModderLords.Core.Testing.TestSuites). -->
     <EmbeddedResource Include="Testing/Suites/*.json" LogicalName="ModderLords.Core.TestSuites.%(Filename).json" />
+    <!-- Shared with the in-game agent, which hashes the mod folders it loaded the same way. -->
+    <Compile Include="..\Shared\ModuleFingerprint.cs" Link="Testing\ModuleFingerprint.cs" />
   </ItemGroup>
 
 </Project>
