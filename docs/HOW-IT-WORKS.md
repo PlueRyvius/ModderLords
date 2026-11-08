@@ -392,7 +392,9 @@ one, and goes in a second zip. Nothing is uploaded: you attach the zip to the Gi
 
 CI has no game, so co-op behaviour is checked by `ModderLords.Cli test`: it starts the server and a player's game in
 test mode, and a small agent inside `ModderLords.Compat` runs a suite's steps on each side (give an item, enter a
-town, use the stash, compare both sides). Built-in suites cover the stash, gold sync and the editor's level edit.
+town, use the stash, compare both sides). Built-in suites cover the stash, gold sync, the editor's level edit and the
+both-perks rule. The `parity` suite changes nothing: it checks that every mod that loaded also started on each side
+(a mod that quietly fails on the server works only on players' games) and that a player's hero reads the same on both.
 Each run leaves a report, evidence and both sides' logs in a run folder. Test mode is off unless the launch switches
 it on. [INGAME-TEST-HARNESS.md](INGAME-TEST-HARNESS.md) has the details.
 
