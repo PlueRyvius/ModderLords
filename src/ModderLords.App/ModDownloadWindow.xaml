@@ -1,0 +1,18 @@
+<Window x:Class="ModderLords.App.ModDownloadWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:ModderLords.App.Localization"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource Foreground}"
+        Title="{l:T 'Download from GitHub'}" Height="320" Width="640" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" x:Name="Header" FontWeight="Bold" Margin="0,0,0,4" TextWrapping="Wrap" />
+        <TextBlock DockPanel.Dock="Top" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Text="{l:T 'These versions are not on the Workshop yet. Each download is checked against the verified profile before it is used, and goes to the mods folder of ModderLords. The Modules folder of the game and your Workshop mods are left as they are.'}" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Right">
+            <Button x:Name="CloseButton" Content="{l:T 'Cancel'}" Click="Close_Click" MinWidth="80" Margin="4,0" />
+        </StackPanel>
+
+        <ListBox x:Name="Items" FontFamily="Consolas" Background="Transparent" Foreground="{DynamicResource Foreground}" />
+    </DockPanel>
+</Window>

@@ -41,7 +41,8 @@ public partial class ProfilesWindow : Window
 
     private void Group_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(typeof(ProfileRow)) && GroupUnder(e) is { } g && g.Key != ProfileGroupRow.AllKey ? DragDropEffects.Move : DragDropEffects.None;
+        e.Effects = e.Data.GetData(typeof(ProfileRow)) is ProfileRow { CanEdit: true } && GroupUnder(e) is { } g
+            && g.Key is not (ProfileGroupRow.AllKey or ProfileGroupRow.VerifiedKey or ProfileGroupRow.DeletedKey) ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
     }
 
@@ -67,16 +68,18 @@ public partial class ProfilesWindow : Window
 
     /// <summary>
     /// Fills the right-click menu for the selected profile: Pin or Unpin, and every group to move it to. A deleted
-    /// profile gets Restore alone.
+    /// profile gets Restore alone; a verified one Use, Get missing mods and Duplicate (a copy of the user's own).
     /// </summary>
     private void ProfileMenu_Opened(object sender, RoutedEventArgs e)
     {
         if (_vm.Selected is not { } row) return;
-        var deleted = row.IsDeleted ? Visibility.Collapsed : Visibility.Visible;
-        RestoreItem.Visibility = row.IsDeleted ? Visibility.Visible : Visibility.Collapsed;
-        UseItem.Visibility = RenameItem.Visibility = DuplicateItem.Visibility = PinItem.Visibility = MoveToItem.Visibility =
-            DeleteSeparator.Visibility = DeleteItem.Visibility = deleted;
-        if (row.IsDeleted) return;
+        static Visibility Show(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
+        RestoreItem.Visibility = Show(row.IsDeleted);
+        UseItem.Visibility = DuplicateItem.Visibility = Show(!row.IsDeleted);
+        GetMissingItem.Visibility = Show(row.IsVerified);
+        GetMissingItem.IsEnabled = row.CanGetMissing;
+        RenameItem.Visibility = PinItem.Visibility = MoveToItem.Visibility = DeleteSeparator.Visibility = DeleteItem.Visibility = Show(row.CanEdit);
+        if (!row.CanEdit) return;
         PinItem.Header = row.Pinned ? Loc.T("Unpin") : Loc.T("Pin");
         MoveToItem.Items.Clear();
         foreach (var group in _vm.MoveTargets())

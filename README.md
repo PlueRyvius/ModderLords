@@ -187,6 +187,12 @@ about the players' game, which is the copy the host is handing out.
   rename, duplicate, pin, move to a group (or drag it onto one) and delete. Right-click a group to rename or delete it
   (its profiles move to Ungrouped). A deleted profile goes to **Recently deleted**, where right-click → **Restore**
   brings it back.
+  **Verified by ModderLords** lists mod sets we have checked work, each with who vouches for it (gold: the
+  maintainer; silver: Coodsz; green: players' reports) and the exact versions it was checked with; a mod you have at
+  another version says so. **Use this profile** opens one as it is, and **Get missing mods…** subscribes to what you
+  lack on the Workshop. The maintainer's own mods (Modular Smithing 2, Modular Warehouses) come from their GitHub
+  release when the Workshop does not have that version yet: the download is checked against the hash in the verified
+  profile and goes to ModderLords' own `mods` folder, never to your game's Modules folder.
 
 ### As a coop host
 
@@ -709,6 +715,8 @@ Per-profile things without a tab of their own:
 | Profiles | `%LOCALAPPDATA%\ModderLords\profiles\<name>.json` |
 | Recent profiles and group names | `%LOCALAPPDATA%\ModderLords\profile-index.json` |
 | Deleted profiles (to put back by hand) | `%LOCALAPPDATA%\ModderLords\deleted-profiles\<name>-<date-time>\` |
+| Verified profiles | `verified-profiles.json` in the launcher's `data\` folder (bundled); the newer copy downloaded between releases in `%LOCALAPPDATA%\ModderLords\verified-profiles.remote.json` (with `verified-profiles.remote.meta.json`) |
+| Mods downloaded for a verified profile (the maintainer's GitHub releases) | `%LOCALAPPDATA%\ModderLords\mods\<Id>\<version>\<Id>\` |
 | Mode, theme, window size | `%LOCALAPPDATA%\ModderLords\ui-state.json` |
 | Compatibility database | `compat-db.json` next to the launcher (bundled); the newer copy downloaded between releases in `%LOCALAPPDATA%\ModderLords\compat-db.remote.json` (with `compat-db.remote.meta.json`); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
 | Mod settings overrides / cache | `%LOCALAPPDATA%\ModderLords\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModderLords\cache\<profile>.settings-cache.json` |

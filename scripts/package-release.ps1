@@ -59,12 +59,13 @@ if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 $binOut = Join-Path $out 'bin'
 New-Item -ItemType Directory -Path $binOut -Force | Out-Null
 Copy-Item (Join-Path $root 'src\ModderLords.Hook\bin\Release\net6.0\ModderLords.Hook.dll') $binOut -Force
-# The curated compat database is a Content item of Core; publish carries it next to the exe. Copy as a belt-and-braces.
+# The curated compat database and the verified profiles are Content items of Core; publish carries them next to the exe. Copy as a belt-and-braces.
 $dataOut = Join-Path $out 'data'
 New-Item -ItemType Directory -Path $dataOut -Force | Out-Null
 Copy-Item (Join-Path $root 'src\ModderLords.Core\compat-db.json') $dataOut -Force
+Copy-Item (Join-Path $root 'src\ModderLords.Core\verified-profiles.json') $dataOut -Force
 # Publish also drops it beside the exe as a Core content item; one copy is enough, and data\ is the one we read.
-Remove-Item (Join-Path $out 'compat-db.json') -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $out 'compat-db.json'), (Join-Path $out 'verified-profiles.json') -Force -ErrorAction SilentlyContinue
 
 # The Compat module (net472, loaded by the engine) ships under compat\ next to the exe.
 dotnet build (Join-Path $root 'src\ModderLords.Compat\ModderLords.Compat.csproj') -c Release

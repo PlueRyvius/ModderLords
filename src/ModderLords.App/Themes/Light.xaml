@@ -25,6 +25,11 @@
     <SolidColorBrush x:Key="DangerBackground" Color="#F2DEDE" />
     <SolidColorBrush x:Key="DangerForeground" Color="#C62828" />
     <SolidColorBrush x:Key="WarningBackground" Color="#FFF4CE" />
+    <!-- Verified profiles: gold (the maintainer) and silver (Coodsz) badges. -->
+    <SolidColorBrush x:Key="GoldBackground" Color="#FBEFC8" />
+    <SolidColorBrush x:Key="GoldForeground" Color="#7A5A00" />
+    <SolidColorBrush x:Key="SilverBackground" Color="#E6E9ED" />
+    <SolidColorBrush x:Key="SilverForeground" Color="#3D4652" />
     <SolidColorBrush x:Key="WarningBorder" Color="#E0C060" />
     <SolidColorBrush x:Key="WarningForeground" Color="#B26A00" />
     <SolidColorBrush x:Key="BadgeBackground" Color="#DDDDDD" />

@@ -31,17 +31,43 @@ public sealed partial class ProfileRow : ObservableObject
     /// <summary>For a deleted profile: the folder it waits in.</summary>
     public string? DeletedFolder { get; init; }
 
+    /// <summary>For a verified profile (the Verified group): its entry, and how each of its mods stands here.</summary>
+    public VerifiedProfile? Verified { get; init; }
+    public IReadOnlyList<VerifiedModCheck> Checks { get; init; } = [];
+    /// <summary>The details pane's lines: each mod with its verified version and how it stands here.</summary>
+    public IReadOnlyList<string> ModLines { get; init; } = [];
+    /// <summary>The details pane's lines: who verified it, when, and with what.</summary>
+    public IReadOnlyList<string> Claims { get; init; } = [];
+
     public bool IsDeleted => DeletedFolder is not null;
+    public bool IsVerified => Verified is not null;
+    /// <summary>Gold, Silver or Green; null for a draft and for the user's own profiles.</summary>
+    public VerificationLevel? Level => Verified?.Level;
+    /// <summary>The badge beside a verified profile's name.</summary>
+    public string Badge => Verified is null ? "" : Level switch
+    {
+        VerificationLevel.Gold => Loc.T("Verified by ModderLords"),
+        VerificationLevel.Silver => Loc.T("Verified by Coodsz"),
+        VerificationLevel.Green => Loc.T("Works for players"),
+        _ => Loc.T("Draft"),
+    };
+    public string Description => Verified?.Description ?? "";
     public bool CanUse => !IsDeleted && Status != ProfileStatus.Unreadable;
+    /// <summary>Rename, pin, move and delete: the user's own profiles only.</summary>
+    public bool CanEdit => !IsDeleted && !IsVerified;
+    /// <summary>Some mod is missing or at another version, and there is somewhere to get the verified one.</summary>
+    public bool CanGetMissing => Checks.Any(c => c.State != VerifiedModState.Match && c.Fetch != VerifiedFetch.None);
 
     public string Summary => IsDeleted
         ? StatusDetail
-        : Loc.F("{0} mods", ModCount) + (HasCoop ? " · Coop" : "") + (Group.Length > 0 ? " · " + Group : "");
+        : Loc.F("{0} mods", ModCount) + (HasCoop ? " · Coop" : "")
+          + (Verified is { Game.Length: > 0 } v ? " · " + Loc.F("game {0}", v.Game) : Group.Length > 0 ? " · " + Group : "");
 }
 
 /// <summary>One entry in the Profiles window's group list.</summary>
 public sealed record ProfileGroupRow(string Key, string Label, int Count)
 {
+    public const string VerifiedKey = "\u0001verified";
     public const string AllKey = "\u0001all";
     public const string PinnedKey = "\u0001pinned";
     public const string DeletedKey = "\u0001deleted";
@@ -62,6 +88,7 @@ public partial class ProfilesViewModel : ObservableObject
     private readonly MainViewModel _main;
     private List<ProfileRow> _all = [];
     private List<ProfileRow> _deleted = [];
+    private List<ProfileRow> _verified = [];
 
     /// <summary>
     /// The installed mods per mod setup (game folder plus extra mod folders). Nearly every profile shares the open
@@ -73,7 +100,10 @@ public partial class ProfilesViewModel : ObservableObject
     public ProfilesViewModel(MainViewModel main)
     {
         _main = main;
+        SubscribeFromWorkshop = main.SubscribeToWorkshop;
         if (main.ScannedCatalog is { Catalog: var catalog }) _catalogs[SetupKey(main.Profile)] = catalog;
+        // Read fresh, so a file fetched since the app started is the one shown.
+        VerifiedProfiles.Reload();
         Reload();
     }
 
@@ -97,6 +127,17 @@ public partial class ProfilesViewModel : ObservableObject
         var ask = new NameProfileWindow(prompt, initial, current, problemOf) { Owner = System.Windows.Application.Current?.Windows.OfType<ProfilesWindow>().FirstOrDefault() };
         return ask.ShowDialog() == true ? ask.ProfileName : null;
     };
+
+    /// <summary>Downloads GitHub releases with progress; true when any installed. Replaceable for tests.</summary>
+    internal Func<IReadOnlyList<VerifiedMod>, bool> DownloadFromGitHub { get; set; } = mods =>
+    {
+        var window = new ModDownloadWindow(mods) { Owner = System.Windows.Application.Current?.Windows.OfType<ProfilesWindow>().FirstOrDefault() };
+        window.ShowDialog();
+        return window.AnyInstalled;
+    };
+
+    /// <summary>Subscribes to Workshop items; true when any installed. Replaceable for tests.</summary>
+    internal Func<IReadOnlyList<(ulong WorkshopId, string ModId)>, bool> SubscribeFromWorkshop { get; set; }
 
     /// <summary>Asks before a delete. Replaceable for tests.</summary>
     internal Func<string, bool> ConfirmDelete { get; set; } = name => System.Windows.MessageBox.Show(
@@ -122,17 +163,20 @@ public partial class ProfilesViewModel : ObservableObject
             StatusDetail = Loc.F("Deleted {0:g}. Right-click to restore it.", d.DeletedAt),
         }).ToList();
 
+        _verified = VerifiedProfiles.Current.Shown.Select(v => VerifiedRow(v, unscanned)).ToList();
+
         var index = ProfileIndexStore.Load();
         var named = _all.Select(r => r.Group).Where(g => g.Length > 0).Concat(index.Groups)
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(g => g, StringComparer.OrdinalIgnoreCase).ToList();
         Groups.Clear();
+        if (_verified.Count > 0) Groups.Add(new ProfileGroupRow(ProfileGroupRow.VerifiedKey, Loc.T("Verified by ModderLords"), _verified.Count));
         Groups.Add(new ProfileGroupRow(ProfileGroupRow.AllKey, Loc.T("All profiles"), _all.Count));
         Groups.Add(new ProfileGroupRow(ProfileGroupRow.PinnedKey, Loc.T("Pinned"), _all.Count(r => r.Pinned)));
         foreach (var g in named)
             Groups.Add(new ProfileGroupRow(g, g, _all.Count(r => r.Group.Equals(g, StringComparison.OrdinalIgnoreCase))));
         Groups.Add(new ProfileGroupRow(ProfileGroupRow.UngroupedKey, Loc.T("Ungrouped"), _all.Count(r => r.Group.Length == 0)));
         if (_deleted.Count > 0) Groups.Add(new ProfileGroupRow(ProfileGroupRow.DeletedKey, Loc.T("Recently deleted"), _deleted.Count));
-        SelectedGroup = Groups.FirstOrDefault(g => g.Key == keepGroup) ?? Groups[0];
+        SelectedGroup = Groups.FirstOrDefault(g => g.Key == keepGroup) ?? AllGroup;
         Filter();
         Selected = Rows.FirstOrDefault(r => r.Name == keepRow) ?? Rows.FirstOrDefault(r => r.IsCurrent) ?? Rows.FirstOrDefault();
 
@@ -156,6 +200,8 @@ public partial class ProfilesViewModel : ObservableObject
         Reload();
     }
 
+    private ProfileGroupRow AllGroup => Groups.First(g => g.Key == ProfileGroupRow.AllKey);
+
     /// <summary>What decides which mods a profile can find: its game folder and its extra mod folders.</summary>
     private static string SetupKey(Profile p) =>
         (p.GameRoot ?? "") + "|" + string.Join("|", p.CustomModRoots.Select(r => r.Trim()).OrderBy(r => r, StringComparer.OrdinalIgnoreCase));
@@ -170,18 +216,19 @@ public partial class ProfilesViewModel : ObservableObject
         IEnumerable<ProfileRow> rows = _all;
         var term = Search.Trim();
         if (term.Length > 0)
-            rows = rows.Where(r => r.Name.Contains(term, StringComparison.OrdinalIgnoreCase) || r.ModIds.Any(m => m.Contains(term, StringComparison.OrdinalIgnoreCase)));
+            rows = _verified.Concat(rows).Where(r => r.Name.Contains(term, StringComparison.OrdinalIgnoreCase) || r.ModIds.Any(m => m.Contains(term, StringComparison.OrdinalIgnoreCase)));
         else if (SelectedGroup is { } g)
             rows = g.Key switch
             {
+                ProfileGroupRow.VerifiedKey => _verified,
                 ProfileGroupRow.AllKey => rows,
                 ProfileGroupRow.PinnedKey => rows.Where(r => r.Pinned),
                 ProfileGroupRow.DeletedKey => _deleted,
                 _ => rows.Where(r => r.Group.Equals(g.Key, StringComparison.OrdinalIgnoreCase)),
             };
         Rows.Clear();
-        var ordered = SelectedGroup?.Key == ProfileGroupRow.DeletedKey && term.Length == 0
-            ? rows   // newest first, as listed
+        var ordered = SelectedGroup?.Key is ProfileGroupRow.DeletedKey or ProfileGroupRow.VerifiedKey && term.Length == 0
+            ? rows   // newest first, or the file's own order
             : rows.OrderByDescending(r => r.Pinned).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase);
         foreach (var r in ordered) Rows.Add(r);
         Selected = Rows.FirstOrDefault(r => r.Name == keep) ?? Rows.FirstOrDefault();
@@ -225,11 +272,75 @@ public partial class ProfilesViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The installed copies of a mod. Coop's Workshop build has carried the id CoopNightly and now Coop; a profile
-    /// saved with either finds whichever is installed, as the launch does (LoadOrder treats them as one).
+    /// The installed copies of a mod, ModderLords' own downloads included. Coop's Workshop build has carried the id
+    /// CoopNightly and now Coop; a profile saved with either finds whichever is installed, as the launch does
+    /// (LoadOrder treats them as one).
     /// </summary>
     private static IEnumerable<DiscoveredModule> Installed(ModuleCatalog catalog, string id) =>
-        id is "Coop" or "CoopNightly" ? catalog.Candidates("Coop").Concat(catalog.Candidates("CoopNightly")) : catalog.Candidates(id);
+        (id is "Coop" or "CoopNightly" ? catalog.Candidates("Coop").Concat(catalog.Candidates("CoopNightly")) : catalog.Candidates(id))
+        .Concat(DownloadedMods.Copies(id));
+
+    /// <summary>
+    /// A verified profile's row: its mods against what is installed for the open profile's folders, which a first
+    /// use takes over (decision 8: a claim holds for the versions it was made with, so a difference is spelled out).
+    /// </summary>
+    private ProfileRow VerifiedRow(VerifiedProfile v, Dictionary<string, Profile> unscanned)
+    {
+        var key = SetupKey(_main.Profile);
+        _catalogs.TryGetValue(key, out var catalog);
+        if (catalog is null) unscanned.TryAdd(key, _main.Profile);
+        var checks = catalog is null ? [] : VerifiedProfiles.Compare(v, id => Installed(catalog, id));
+        var missing = checks.Where(c => c.State == VerifiedModState.Missing).Select(c => c.Mod.Id).ToList();
+        var different = checks.Where(c => c.State == VerifiedModState.Different)
+            .Select(c => Loc.F("verified with {0} {1}, you have {2}", c.Mod.Id, c.Mod.Version, c.Installed ?? "")).ToList();
+        var (status, text, detail) = (missing.Count, different.Count) switch
+        {
+            _ when catalog is null => (ProfileStatus.Checking, Loc.T("Checking…"), Loc.T("Looking for this profile's mods.")),
+            ( > 0, _) => (ProfileStatus.Missing, Loc.F("{0} missing", missing.Count), Loc.T("Not installed: ") + string.Join(", ", missing)),
+            (_, > 0) => (ProfileStatus.Changed, Loc.T("Mods changed"), string.Join("; ", different)),
+            _ => (ProfileStatus.Ready, Loc.T("Ready"), Loc.T("Every mod is installed at the version it was verified with.")),
+        };
+        return new ProfileRow
+        {
+            Name = v.Name,
+            ModCount = v.Mods.Count,
+            HasCoop = v.Mods.Any(m => m.Id is "Coop" or "CoopNightly"),
+            IsCurrent = _main.Profile.VerifiedId == v.Id,
+            Status = status,
+            StatusText = text,
+            StatusDetail = detail,
+            ModIds = v.Mods.Select(m => m.Id).ToList(),
+            Verified = v,
+            Checks = checks,
+            ModLines = v.Mods.Select(m => ModLine(m, checks.FirstOrDefault(c => c.Mod == m))).ToList(),
+            Claims = v.Verifications.Count == 0 ? [Loc.T("Draft: not verified yet. Only development builds list it.")] : v.Verifications.Select(Claim).ToList(),
+        };
+    }
+
+    private static string ModLine(VerifiedMod m, VerifiedModCheck? check)
+    {
+        var line = $"{m.Id} {m.Version}";
+        if (check is null || check.State == VerifiedModState.Match) return line;
+        line += check.State == VerifiedModState.Missing ? " · " + Loc.T("not installed") : " · " + Loc.F("you have {0}", check.Installed ?? "");
+        return line + check.Fetch switch
+        {
+            VerifiedFetch.GitHub => " · " + Loc.T("from GitHub"),
+            VerifiedFetch.Workshop => " · " + Loc.T("from the Workshop"),
+            _ => "",
+        };
+    }
+
+    private static string Claim(Verification v)
+    {
+        var who = v.Level switch
+        {
+            VerificationLevel.Gold => Loc.T("Verified by ModderLords"),
+            VerificationLevel.Silver => Loc.T("Verified by Coodsz"),
+            _ => Loc.F("Works for {0} players", v.Reports ?? 1),
+        };
+        var when = v.Level == VerificationLevel.Green ? v.LastReport ?? v.Date : v.Date;
+        return string.Join(" · ", new[] { who, when, v.Tests, v.Notes }.Where(x => !string.IsNullOrWhiteSpace(x)));
+    }
 
     // ---- actions on a profile ------------------------------------------------------------------------------
 
@@ -238,8 +349,46 @@ public partial class ProfilesViewModel : ObservableObject
     {
         row ??= Selected;
         if (row is null || !row.CanUse) return;
-        if (!row.IsCurrent && !_main.SwitchTo(row.Name, out var why)) { Message = why ?? ""; return; }
+        if (row.Verified is { } entry)
+        {
+            if (!_main.OpenVerified(entry, row.Checks, out var refused)) { Message = refused ?? ""; return; }
+        }
+        else if (!row.IsCurrent && !_main.SwitchTo(row.Name, out var why)) { Message = why ?? ""; return; }
         Used?.Invoke();
+    }
+
+    /// <summary>
+    /// Gets a verified profile's missing mods, and the verified version of those installed at another one: the
+    /// maintainer's GitHub releases where the Workshop does not serve that version yet (decision 12), the Workshop
+    /// for the rest. A profile file already written for it is brought up to date, so it pins what was downloaded.
+    /// </summary>
+    [RelayCommand]
+    private void GetMissing(ProfileRow? row)
+    {
+        row ??= Selected;
+        if (row?.Verified is not { } entry) return;
+        var need = row.Checks.Where(c => c.State != VerifiedModState.Match).ToList();
+        var fromGitHub = need.Where(c => c.Fetch == VerifiedFetch.GitHub).Select(c => c.Mod).ToList();
+        var fromWorkshop = need.Where(c => c.Fetch == VerifiedFetch.Workshop).Select(c => (c.Mod.WorkshopId!.Value, c.Mod.Id)).ToList();
+        var nowhere = need.Where(c => c.Fetch == VerifiedFetch.None).Select(c => c.Mod.Id).ToList();
+
+        var installed = false;
+        if (fromGitHub.Count > 0) installed |= DownloadFromGitHub(fromGitHub);
+        if (fromWorkshop.Count > 0)
+        {
+            installed |= SubscribeFromWorkshop(fromWorkshop);
+            if (_main.ScannedCatalog is { Catalog: var catalog }) _catalogs[SetupKey(_main.Profile)] = catalog;
+        }
+        Message = nowhere.Count > 0 ? Loc.T("No download is known for: ") + string.Join(", ", nowhere) : "";
+        if (!installed) return;
+
+        Reload();
+        if (_verified.FirstOrDefault(r => r.Verified?.Id == entry.Id) is not { } updated) return;
+        var file = ProfileStore.List().FirstOrDefault(n => ProfileStore.TryLoad(n, out _)?.VerifiedId == entry.Id);
+        if (file is not null && !updated.IsCurrent && ProfileStore.TryLoad(file, out _) is { } existing)
+            ProfileStore.Save(VerifiedProfiles.ToProfile(entry, file, existing, updated.Checks));
+        else if (updated.IsCurrent && !_main.OpenVerified(entry, updated.Checks, out var why)) Message = why ?? "";
+        Reload();
     }
 
     [RelayCommand]
@@ -260,7 +409,7 @@ public partial class ProfilesViewModel : ObservableObject
     private void Rename(ProfileRow? row)
     {
         row ??= Selected;
-        if (row is null || row.IsDeleted) return;
+        if (row is null || !row.CanEdit) return;
         if (AskName(Loc.T("Rename this profile"), row.Name, row.Name, s => ProfileStore.NameProblem(s, row.Name)) is not { } name || name == row.Name) return;
         Message = _main.RenameNamed(row.Name, name) ?? Loc.F("Renamed '{0}' to '{1}'.", row.Name, name);
         Reload();
@@ -275,8 +424,10 @@ public partial class ProfilesViewModel : ObservableObject
         string suggested;
         do { suggested = $"{row.Name} {n++}"; } while (ProfileStore.Exists(suggested));
         if (AskName(Loc.T("Name the copy"), suggested, null, s => ProfileStore.NameProblem(s)) is not { } name) return;
+        // A verified profile's copy is the user's own: its mods are theirs to change.
+        if (row.Verified is { } entry) ProfileStore.Save(VerifiedProfiles.ToProfile(entry, name, _main.Profile, row.Checks, ownCopy: true));
         // The open profile's copy carries its unsaved edits, as a copy of what is on screen.
-        if (row.IsCurrent) { _main.SaveCurrentAs(name); }
+        else if (row.IsCurrent) { _main.SaveCurrentAs(name); }
         else ProfileStore.Duplicate(row.Name, name);
         Message = Loc.F("Copied '{0}' to '{1}'.", row.Name, name);
         Reload();
@@ -286,14 +437,14 @@ public partial class ProfilesViewModel : ObservableObject
     private void TogglePin(ProfileRow? row)
     {
         row ??= Selected;
-        if (row is null || row.IsDeleted) return;
+        if (row is null || !row.CanEdit) return;
         SetPlacement(row, pinned: !row.Pinned);
     }
 
     /// <summary>Moves a profile to a group (from the right-click menu, or a drop onto the group list).</summary>
     public void MoveTo(ProfileRow row, string group)
     {
-        if (row.IsDeleted || group is ProfileGroupRow.AllKey or ProfileGroupRow.DeletedKey) return;
+        if (!row.CanEdit || group is ProfileGroupRow.AllKey or ProfileGroupRow.DeletedKey or ProfileGroupRow.VerifiedKey) return;
         if (group is ProfileGroupRow.PinnedKey) { SetPlacement(row, pinned: true); return; }
         SetPlacement(row, group: group);
     }
@@ -319,7 +470,7 @@ public partial class ProfilesViewModel : ObservableObject
     private void Delete(ProfileRow? row)
     {
         row ??= Selected;
-        if (row is null || row.IsDeleted || !ConfirmDelete(row.Name)) return;
+        if (row is null || !row.CanEdit || !ConfirmDelete(row.Name)) return;
         Message = _main.DeleteNamed(row.Name);
         Reload();
     }
@@ -335,7 +486,7 @@ public partial class ProfilesViewModel : ObservableObject
         _main.RefreshProfileList();
         var name = row.Name;
         Reload();
-        SelectedGroup = Groups[0];
+        SelectedGroup = AllGroup;
         Selected = Rows.FirstOrDefault(r => r.Name == name);
     }
 
@@ -355,7 +506,7 @@ public partial class ProfilesViewModel : ObservableObject
     private void MoveToNewGroup(ProfileRow? row)
     {
         row ??= Selected;
-        if (row is null || row.IsDeleted || AskName(Loc.T("Name this group"), Loc.T("New group"), null, s => GroupProblem(s, null)) is not { } name) return;
+        if (row is null || !row.CanEdit || AskName(Loc.T("Name this group"), Loc.T("New group"), null, s => GroupProblem(s, null)) is not { } name) return;
         ProfileIndexStore.AddGroup(name);
         SetPlacement(row, group: name);
     }

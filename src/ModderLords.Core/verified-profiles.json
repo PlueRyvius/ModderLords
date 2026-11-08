@@ -1,0 +1,48 @@
+// Verified profiles (docs/PROFILE-MANAGER.md). Mod sets known to work, and who says so: gold, the maintainer, after
+// the in-game tests; silver, Coodsz, by PR; green, players' accepted reports. Each claim holds for the versions listed.
+// Mods are in load order. A profile with no verifications is a draft: only dev builds list it.
+// A "gitHub" release may only be one of the maintainer's own, pinned by its SHA-256; it is fetched when the Workshop
+// does not serve "version" ("workshopVersion" differs or is not given).
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "core",
+      "name": "Core",
+      "description": "Bannerlord Coop with the four mods most others need: Harmony, ButterLib, UIExtenderEx and Mod Configuration Menu.",
+      "game": "v1.4.8",
+      "mods": [
+        { "id": "Bannerlord.Harmony", "version": "v2.4.2.248", "workshopId": 2859188632 },
+        { "id": "Bannerlord.ButterLib", "version": "v2.12.0", "workshopId": 2859232415 },
+        { "id": "Bannerlord.UIExtenderEx", "version": "v3.0.3", "workshopId": 2859222409 },
+        { "id": "Bannerlord.MBOptionScreen", "version": "v5.13.1", "workshopId": 2859238197 },
+        { "id": "Coop", "version": "v0.1.7", "workshopId": 3770450698 }
+      ],
+      "verifications": []
+    },
+    {
+      "id": "core-plus-plueryvius",
+      "name": "Core + Modular Smithing 2 + Warehouses",
+      "description": "Core, with the maintainer's own mods: Modular Smithing 2 and Modular Warehouses + (Coop).",
+      "game": "v1.4.8",
+      "mods": [
+        { "id": "Bannerlord.Harmony", "version": "v2.4.2.248", "workshopId": 2859188632 },
+        { "id": "Bannerlord.ButterLib", "version": "v2.12.0", "workshopId": 2859232415 },
+        { "id": "Bannerlord.UIExtenderEx", "version": "v3.0.3", "workshopId": 2859222409 },
+        { "id": "Bannerlord.MBOptionScreen", "version": "v5.13.1", "workshopId": 2859238197 },
+        { "id": "Coop", "version": "v0.1.7", "workshopId": 3770450698 },
+        {
+          "id": "ModularSmithing2", "version": "v0.9.49", "workshopId": 3790263286,
+          "gitHub": { "repo": "PlueRyvius/Modular-Smithing-2-Releases", "tag": "v0.9.49", "asset": "ModularSmithing2-v0.9.49.zip",
+                      "sha256": "c60a7c6622298b6851fedfb8523200111b9604b88829e9f84e43b3180dc5ed36", "size": 462699094 }
+        },
+        {
+          "id": "CoopWarehouses", "version": "v0.1.1", "workshopId": 3821032491, "workshopVersion": "v0.1.1",
+          "gitHub": { "repo": "PlueRyvius/Modular-Warehouses", "tag": "v0.1.1", "asset": "CoopWarehouses-v0.1.1.zip",
+                      "sha256": "cba4c9bca4e0881c4b3c546b0f76c0fc529ea8dedd18763140ab7da144530767", "size": 52104 }
+        }
+      ],
+      "verifications": []
+    }
+  ]
+}

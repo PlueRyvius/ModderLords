@@ -83,6 +83,12 @@ public sealed class Profile
     public string Group { get; set; } = "";
     /// <summary>Shown first in the profile button's quick-switch menu and in the Pinned group.</summary>
     public bool Pinned { get; set; }
+    /// <summary>
+    /// Set on the profile file written when a verified profile is used (docs/PROFILE-MANAGER.md, decision 9): the id
+    /// of its entry in verified-profiles.json. Its mods stay as verified; saving a change to them asks for a copy of
+    /// the user's own instead.
+    /// </summary>
+    public string? VerifiedId { get; set; }
     public string? DedicatedServerRoot { get; set; }
     public string? GameRoot { get; set; }
     public List<string> CustomModRoots { get; set; } = new();
