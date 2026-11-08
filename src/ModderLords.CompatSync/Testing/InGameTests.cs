@@ -47,7 +47,7 @@ public sealed class StepContext
     }
 
     public string StepId { get; }
-    /// <summary>"server" or "client:N".</summary>
+    /// <summary>"server" or "client:N" in Coop; "game" in a single-player run.</summary>
     public string Side { get; }
     public bool IsServer => Side == "server";
     /// <summary>The plan's arguments for this step, "$step.key" references already filled in.</summary>
@@ -162,8 +162,9 @@ public static class InGameTests
         lock (Gate) return Steps.Values.Where(s => Runs(s.Side, side)).Select(s => s.Id).OrderBy(id => id, StringComparer.Ordinal).ToList();
     }
 
+    /// <summary>A single-player game ("game") is both the world and the player, so every step runs there.</summary>
     internal static bool Runs(StepSide registered, string side) =>
-        registered == StepSide.Any || (registered == StepSide.Server) == (side == "server");
+        registered == StepSide.Any || side == "game" || (registered == StepSide.Server) == (side == "server");
 
     /// <summary>Tests only.</summary>
     internal static void Clear()

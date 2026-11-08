@@ -12,7 +12,7 @@ public sealed record PlanStep
 {
     /// <summary>The registered step to run (for a compare, the step each side runs).</summary>
     public required string Id { get; init; }
-    /// <summary>"server" or "client:N"; empty for a compare.</summary>
+    /// <summary>"server" or "client:N" in Coop, "game" in single player; empty for a compare.</summary>
     public string Side { get; init; } = "";
     /// <summary>For a compare: the sides whose values must agree.</summary>
     public IReadOnlyList<string> CompareSides { get; init; } = [];
@@ -46,10 +46,17 @@ public sealed record TestPlan
         Steps.SelectMany(s => s.IsCompare ? s.CompareSides : [s.Side]).Distinct().OrderBy(s => s == "server" ? "" : s, StringComparer.Ordinal).ToList();
 
     /// <summary>The highest client slot used (1 for "client:1").</summary>
-    public int Clients => Sides.Where(s => s != "server").Select(s => int.Parse(s[7..], CultureInfo.InvariantCulture)).DefaultIfEmpty(0).Max();
+    public int Clients => Sides.Where(s => s.StartsWith("client:", StringComparison.Ordinal)).Select(s => int.Parse(s[7..], CultureInfo.InvariantCulture)).DefaultIfEmpty(0).Max();
+
+    /// <summary>A single-player suite: every step runs on "game", and no server is started.</summary>
+    public bool SinglePlayer => Sides.Count == 1 && Sides[0] == GameSide;
+
+    /// <summary>The one side of a single-player run: the game is both the world and the player.</summary>
+    public const string GameSide = "game";
 
     public static bool IsSide(string side) =>
-        side == "server" || (side.StartsWith("client:", StringComparison.Ordinal) && int.TryParse(side[7..], NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n > 0);
+        side == "server" || side == GameSide ||
+        (side.StartsWith("client:", StringComparison.Ordinal) && int.TryParse(side[7..], NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n > 0);
 
     /// <summary>Parses and validates a suite; throws <see cref="FormatException"/> naming the first problem.</summary>
     public static TestPlan Parse(string json)
@@ -75,7 +82,7 @@ public sealed record TestPlan
             var sides = (node["sides"] as JsonArray)?.Select(n => n?.GetValue<string>() ?? "").ToList() ?? [];
             if (compare is null)
             {
-                if (!IsSide(side)) throw new FormatException($"{where}: \"side\" must be \"server\" or \"client:N\", not \"{side}\"");
+                if (!IsSide(side)) throw new FormatException($"{where}: \"side\" must be \"server\", \"client:N\" or \"game\", not \"{side}\"");
                 if (sides.Count > 0) throw new FormatException($"{where}: \"sides\" belongs to a compare");
             }
             else
@@ -114,6 +121,10 @@ public sealed record TestPlan
             steps.Add(step);
         }
         if (steps.Count == 0) throw new FormatException("the suite has no steps");
+        // A single-player game has no server or other players to address; a Coop run has no "game".
+        var allSides = steps.SelectMany(s => s.IsCompare ? s.CompareSides : [s.Side]).Distinct().ToList();
+        if (allSides.Contains(GameSide) && allSides.Count > 1)
+            throw new FormatException($"the suite mixes \"{GameSide}\" (single player) with {string.Join(", ", allSides.Where(s => s != GameSide))} (Coop); a suite is one or the other");
         return new TestPlan
         {
             Name = name,

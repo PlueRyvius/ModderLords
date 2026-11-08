@@ -20,6 +20,16 @@ public class TestPlanTests
         Assert.Equal(name, plan.Name);
         Assert.Equal(["server", "client:1"], plan.Sides);
         Assert.Equal(1, plan.Clients);
+        Assert.False(plan.SinglePlayer);
+    }
+
+    [Fact]
+    public void A_single_player_suite_runs_on_the_game_alone()
+    {
+        var plan = TestSuites.Load("sp-world");
+        Assert.Equal(["game"], plan.Sides);
+        Assert.True(plan.SinglePlayer);
+        Assert.Equal(0, plan.Clients);
     }
 
     [Fact]
@@ -42,6 +52,7 @@ public class TestPlanTests
     [InlineData("""{ "api": 2, "name": "t", "steps": [ { "id": "a", "side": "server" } ] }""", "v2")]
     [InlineData("""{ "name": "t", "steps": [] }""", "no steps")]
     [InlineData("""{ "name": "t", "steps": [ { "side": "server" } ] }""", "neither")]
+    [InlineData("""{ "name": "t", "steps": [ { "id": "a", "side": "game" }, { "id": "b", "side": "server" } ] }""", "one or the other")]
     public void A_bad_suite_names_its_problem(string json, string expected)
     {
         var ex = Assert.Throws<FormatException>(() => TestPlan.Parse(json));
@@ -190,7 +201,7 @@ public class StepRunnerTests
 public sealed class TestSequencerTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "ml-test-harness-" + Guid.NewGuid().ToString("N"));
-    private readonly Dictionary<string, int> _stash = new() { ["server"] = 0, ["client:1"] = 0 };
+    private readonly Dictionary<string, int> _stash = new() { ["server"] = 0, ["client:1"] = 0, ["game"] = 0 };
 
     public TestSequencerTests()
     {
@@ -230,6 +241,20 @@ public sealed class TestSequencerTests : IDisposable
 
         var result = File.ReadAllLines(Path.Combine(folder, TestAgent.ResultsFile("server"))).Last();
         Assert.Contains("\"value\":\"Renée\"", result);
+    }
+
+    [Fact]
+    public async Task A_single_player_game_runs_server_and_client_steps_alike()
+    {
+        // The game is both the world and the player: a Server step and a Client step both run there.
+        InGameTests.Register("world.change", StepSide.Server, ctx => Do(() => ctx.Report("value", "changed")));
+        var report = await Run("""
+            { "name": "t", "steps": [
+              { "id": "world.change", "side": "game", "as": "change" },
+              { "id": "stash.double", "side": "game" },
+              { "id": "check", "side": "game", "args": { "got": "$change.value", "want": "changed" } } ] }
+            """);
+        Assert.True(report.Passed, report.ToText());
     }
 
     [Fact]
@@ -333,6 +358,7 @@ public sealed class TestSequencerTests : IDisposable
     [Theory]
     [InlineData(new[] { "/autoconnect", "127.0.0.1:4200", "/modderlords-test", "C:\\runs\\r1|client:1|abc" }, null, false, "client:1")]
     [InlineData(new string[0], "C:\\runs\\r1|server|abc", true, "server")]
+    [InlineData(new[] { "/modderlords-test", "C:\\runs\\r1|game|abc" }, null, false, "game")]
     [InlineData(new string[0], "C:\\runs\\r1|server|abc", false, null)]     // the environment counts on the server only
     [InlineData(new[] { "/modderlords-test", "C:\\runs\\r1|client|abc" }, null, false, null)]
     [InlineData(new[] { "/modderlords-test", "C:\\runs\\r1|client:1" }, null, false, null)]
