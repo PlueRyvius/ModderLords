@@ -56,6 +56,7 @@ public static class InGameTestRun
         if (ClientLauncher.IsClientRunning()) return Stop("Bannerlord is already running; close it first.");
 
         // One suite by name (as v1), or with none named the core suite plus every suite this profile's mods meet.
+        IReadOnlyList<TestPlan>? namedSuite = null;
         if (options.Suite is { } suiteArg)
         {
             TestPlan testPlan;
@@ -63,16 +64,22 @@ public static class InGameTestRun
             catch (Exception ex) { return Stop("suite: " + ex.Message); }
             if (testPlan.Mode == SuiteMode.Both) testPlan = testPlan.ForMode(options.SinglePlayer);
             if (testPlan.Clients > 1) return Stop($"suite {testPlan.Name} needs {testPlan.Clients} players' games; this version starts one.");
-            // Steps all on "game": just the player's game, no server (decision 15).
-            var one = testPlan.SinglePlayer
-                ? await RunSinglePlayer(profile, testPlan, options, say, cancel)
-                : await RunCoop(profile, testPlan, options, say, cancel);
-            return Collect(one);
+            // An API v2 suite leaves the world and the wait for the map and Coop's join to the run's setup, so it
+            // runs as the one picked suite below. Without that setup its steps started while the game was loading.
+            if (testPlan.Api >= 2) namedSuite = [testPlan];
+            else
+            {
+                // Steps all on "game": just the player's game, no server (decision 15).
+                var one = testPlan.SinglePlayer
+                    ? await RunSinglePlayer(profile, testPlan, options, say, cancel)
+                    : await RunCoop(profile, testPlan, options, say, cancel);
+                return Collect(one);
+            }
         }
 
         var installed = InstalledMods(profile, options.SinglePlayer, say);
         if (installed is null) return Stop("the profile's mods could not be read");
-        if (options.Modules is { } picked)
+        if (namedSuite is null && options.Modules is { } picked)
         {
             var unknown = picked.Where(m => TestSuites.Module(m) is null).ToList();
             if (unknown.Count > 0)
@@ -83,19 +90,17 @@ public static class InGameTestRun
         }
         var left = new List<string>();
         IReadOnlyList<TestPlan> chosen;
-        try { chosen = SuiteSelection.Select(TestSuites.LoadAll(), installed, options.SinglePlayer, options.OnlyMod, options.WithOthers, left, options.Modules); }
-        catch (Exception ex) { return Stop("suites: " + ex.Message); }
+        if (namedSuite is not null) chosen = namedSuite;
+        else
+        {
+            try { chosen = SuiteSelection.Select(TestSuites.LoadAll(), installed, options.SinglePlayer, options.OnlyMod, options.WithOthers, left, options.Modules); }
+            catch (Exception ex) { return Stop("suites: " + ex.Message); }
+        }
         say($"[ModderLords] {(options.SinglePlayer ? "single-player" : "Coop")} suites for {profile.Name}: {string.Join(", ", chosen.Select(p => p.Module.Length > 0 ? p.Module + "/" + p.Name : p.Name))}");
         foreach (var why in left) say("[ModderLords]   left out " + why);
 
-        // The picked modules' own step DLLs, from the compat folder next to this launcher (decision 30).
-        var loads = new List<ModuleLoad>();
-        foreach (var m in chosen.Select(p => TestSuites.Module(p.Module)).Where(m => m?.StepsDll is not null).Distinct())
-        {
-            var dll = Path.Combine(options.BundledRoot ?? LaunchSession.BundledRoot ?? AppContext.BaseDirectory, "compat", m!.StepsDll!);
-            if (!File.Exists(dll)) return Stop($"test module {m.Id}: {dll} is missing (is it built into the compat folder?)");
-            loads.Add(new ModuleLoad(m.Id, dll, m.StepsType!, m.Requires.Select(r => r.Id).ToList()));
-        }
+        var (loads, missingDll) = ModuleLoads(chosen, options);
+        if (missingDll is not null) return Stop(missingDll);
 
         if (options.SinglePlayer)
         {
@@ -168,6 +173,22 @@ public static class InGameTestRun
     /// A Coop test run: the smoke test's server and join, then the plan's steps inside both games, driven through a run
     /// folder, with a pass/fail per step.
     /// </summary>
+    /// <summary>
+    /// The suites' modules' own step DLLs, from the compat folder next to this launcher (decision 30); a problem when
+    /// one is missing.
+    /// </summary>
+    private static (List<ModuleLoad> Loads, string? Problem) ModuleLoads(IEnumerable<TestPlan> plans, InGameTestOptions options)
+    {
+        var loads = new List<ModuleLoad>();
+        foreach (var m in plans.Select(p => TestSuites.Module(p.Module)).Where(m => m?.StepsDll is not null).Distinct())
+        {
+            var dll = Path.Combine(options.BundledRoot ?? LaunchSession.BundledRoot ?? AppContext.BaseDirectory, "compat", m!.StepsDll!);
+            if (!File.Exists(dll)) return (loads, $"test module {m.Id}: {dll} is missing (is it built into the compat folder?)");
+            loads.Add(new ModuleLoad(m.Id, dll, m.StepsType!, m.Requires.Select(r => r.Id).ToList()));
+        }
+        return (loads, null);
+    }
+
     private static async Task<(int ExitCode, TestReport? Report, string? Folder, string? Problem)> RunCoop(Profile profile, TestPlan testPlan,
         InGameTestOptions options, Action<string> say, CancellationToken cancel)
     {
