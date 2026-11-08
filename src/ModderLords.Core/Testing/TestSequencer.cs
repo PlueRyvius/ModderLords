@@ -38,7 +38,8 @@ public sealed class FileTestRunChannel : ITestRunChannel
         var folder = Path.Combine(root, runId);
         Directory.CreateDirectory(folder);
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-        var run = new JsonObject { ["api"] = plan.Api, ["runId"] = runId, ["suite"] = plan.Name, ["token"] = token };
+        // The in-game step API, not the suite format: v2 suites changed what the launcher reads, not what a game runs.
+        var run = new JsonObject { ["api"] = TestPlan.InGameApi, ["runId"] = runId, ["suite"] = plan.Name, ["token"] = token };
         File.WriteAllText(Path.Combine(folder, "run.json"), run.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(folder, "control.jsonl"), "");
         return new FileTestRunChannel(folder, runId, token);
@@ -123,14 +124,16 @@ public sealed class TestSequencer
         }
         if (stopReason is not null) notes.Add(stopReason);
 
-        // 2. The steps, in order.
+        // 2. The steps, in order. In a run of several suites a failure skips the rest of its own suite only; the next
+        // suite starts with its own world setup. A game that stopped answering ends the whole run.
+        string? failedSuite = null;
         for (int i = 0; i < plan.Steps.Count; i++)
         {
             var step = plan.Steps[i];
             var sideText = step.IsCompare ? string.Join(" / ", step.CompareSides) : step.Side;
-            if (stopReason is not null || cancel.IsCancellationRequested)
+            if (stopReason is not null || cancel.IsCancellationRequested || (failedSuite is not null && step.Suite == failedSuite))
             {
-                steps.Add(new StepReport { Index = i + 1, Step = step.Id, Side = sideText, Outcome = StepOutcome.Skipped, KnownFailing = step.KnownFailing });
+                steps.Add(new StepReport { Index = i + 1, Step = step.Id, Side = sideText, Outcome = StepOutcome.Skipped, KnownFailing = step.KnownFailing, Suite = step.Suite });
                 continue;
             }
             Say($"{i + 1}/{plan.Steps.Count}: {step.Describe()}");
@@ -150,14 +153,18 @@ public sealed class TestSequencer
                 }
                 report = Compare(i + 1, step, each, args);
             }
-            report = report with { KnownFailing = step.KnownFailing, Outcome = Known(report.Outcome, step.KnownFailing) };
+            report = report with { KnownFailing = step.KnownFailing, Outcome = Known(report.Outcome, step.KnownFailing), Suite = step.Suite };
             if (report.Outcome == StepOutcome.UnexpectedPass) report = report with { Message = "marked known-failing but passed: the fix may have landed; remove the mark" };
             foreach (var (key, value) in report.Values) values[$"{step.Name}.{key}"] = value;
             steps.Add(report);
             Say($"   {report.Outcome}" + (report.Message.Length > 0 ? ": " + report.Message : ""));
 
             if (report.Outcome == StepOutcome.NoResult) stopReason = $"no result from {sideText}";
-            else if (report.Outcome is StepOutcome.Fail or StepOutcome.UnexpectedPass && !step.ContinueOnFail) stopReason = $"step {i + 1} failed";
+            else if (report.Outcome is StepOutcome.Fail or StepOutcome.UnexpectedPass && !step.ContinueOnFail)
+            {
+                if (step.Suite.Length > 0) failedSuite = step.Suite;
+                else stopReason = $"step {i + 1} failed";
+            }
         }
         _channel.Send(new JsonObject { ["op"] = "end" }.ToJsonString());
         if (cancel.IsCancellationRequested) notes.Add("The run was cancelled.");

@@ -22,6 +22,9 @@ public static class TestSuites
         return TestPlan.Parse(reader.ReadToEnd());
     }
 
+    /// <summary>Every built-in suite, for a run that picks its own (SuiteSelection).</summary>
+    public static IReadOnlyList<TestPlan> LoadAll() => Names().Select(Load).ToList();
+
     /// <summary>Test worlds: saves kept apart from the server's own, copied fresh into it for every run.</summary>
     public static string WorldsDir => Path.Combine(ProfileStore.RootDir, "test-worlds");
 

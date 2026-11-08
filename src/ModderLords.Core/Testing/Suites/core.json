@@ -1,0 +1,18 @@
+{
+  // Always runs first in a run with no suite named (docs/INGAME-TEST-HARNESS.md, decision 13). Cheap checks with the
+  // broadest reach: every mod that loaded also started, and in Coop the player's hero and a server change agree on both
+  // sides. The run's own setup steps put each game on the map first (and in Coop wait for the join).
+  "api": 2,
+  "name": "core",
+  "mode": "both",
+  "description": "Every mod that loaded started; in Coop, the player's hero reads the same on both sides and gold given on the server reaches the player.",
+  "steps": [
+    { "id": "mods.started", "side": "game", "continueOnFail": true },
+    { "id": "mods.started", "side": "player", "mode": "coop", "continueOnFail": true },
+    { "id": "game.whoAmI", "side": "player", "as": "me" },
+    { "compare": "hero.parity", "sides": ["game", "player"], "args": { "heroName": "$me.heroName" }, "continueOnFail": true },
+    { "id": "hero.addGold", "side": "game", "as": "give", "mode": "coop", "args": { "heroName": "$me.heroName", "amount": 1234 } },
+    { "id": "hero.gold", "side": "player", "mode": "coop", "args": { "expected": "$give.gold" } },
+    { "compare": "hero.gold", "sides": ["game", "player"], "args": { "heroName": "$me.heroName" } }
+  ]
+}

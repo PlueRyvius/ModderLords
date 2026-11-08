@@ -134,7 +134,13 @@ that the game never loads by itself.
 - A `both` suite names `game` for the side that changes the world and `player` for the side that acts as the player.
   In single player both mean `game`; in Coop they mean `server` and `client:1`. Compares across sides are skipped in
   single player and say so in the report.
-- `api: 1` suites still load: they mean `mode: coop`, no `requires`, no continuity.
+- `api: 1` suites still load: they mean `mode: coop` (or `singleplayer` when every step is on `game`), no
+  `requires`, no continuity. They run by name only: with no suite named, a run picks `api: 2` suites, since a v1
+  suite says nothing about where it applies.
+- A step in a `both` suite can carry `"mode": "coop"` or `"singleplayer"` to run only in that mode (a join, a gold
+  transfer between sides).
+- The suite format and the in-game step API are versioned apart: `run.json` asks the games for step API 1 whatever
+  the suite's `api`.
 
 ### Running (decisions 12 and 15)
 
@@ -206,6 +212,8 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    creation. **Built and passing in game 2026-11-07** (`sp-world`, the world steps, the `game` side); see "Single
    player" below. Not yet tried with mods that add creation pages.
 2. `requires`/`mode`/`continuity`, suite selection and the core suite; multi-suite runs with a world reset.
+   **Selection, the core suite and multi-suite runs built and passing in game 2026-11-07** (see "Several suites in
+   one run" below); a fresh world in Coop still costs a launch.
    With it, the cheap core checks: install fingerprints, the loaded copy, `mods.fingerprint`, the time limits and
    `game.noErrors` (decisions 23–25).
 3. Tests shipped in mods: discovery, loading the test DLL, namespaced ids, `*.health` steps. Modular Smithing 2 is
@@ -261,6 +269,31 @@ Built-in suites: `stash` (the 0.1.7 stash doubling), `sync-basics` (gold given o
 the same max hit points) and `parity` (changes nothing: every mod that loaded also started, on both sides, and the
 player's hero reads the same on both).
 `stash` uses `town_EN1` and `grain`, both vanilla.
+
+### Several suites in one run (v2 build step 2)
+
+```powershell
+ModderLords.Cli test --profile "My Host"                                   # Coop: core + every suite that applies
+ModderLords.Cli test --profile "My Mods" --single-player [--world NAME]    # the same in single player
+ModderLords.Cli test --profile "My Mods" --single-player --mod ModularArmor2 [--with-others]
+```
+
+- With no `--suite`, the run takes the core suite (`core.json`) and every `api: 2` suite whose `mode` fits and whose
+  `requires` the profile's enabled mods meet (versions as they would load). It prints the suites it picked and why
+  each other one was left out. `--mod X` keeps only suites that require X; `--with-others` keeps the rest too.
+- The core suite runs both ways: `mods.started` on every side; in Coop also the `hero.parity` compare and gold given
+  on the server reaching the player.
+- **Single player:** one launch. Before the first suite the run creates its world (`mltest-run`), or loads
+  `--world NAME` (copied fresh into the game's saves as `mltest-NAME`); before each later suite it goes back to the
+  main menu and loads that world again. A suite with `"world": "shared"` skips the reload.
+- **Coop:** the run's setup waits for the join and stops campaign time before the first suite of a launch. A suite
+  that needs a fresh world starts a new launch (the server starts on a fresh copy); shared suites join the launch
+  before them. Restarting the server inside one launch comes later.
+- Step names are prefixed with their suite (`core/me`), so suites can name steps alike. A failure skips the rest of
+  its own suite; the next suite still runs. The report groups steps by suite and ends with `suites: core PASS, ...`.
+- **First runs, 2026-11-07 (Harness profile, vanilla):** single player picked `core` and passed in 54 s (world
+  created, `mods.started`, `whoAmI`); Coop on `harness-vanilla` picked `core` and passed all 11 steps in 18 s after
+  the join. No mod ships `api: 2` suites yet, so neither run had a second suite to reset for; build step 3 adds them.
 
 ### Single player (v2 build step 1)
 
