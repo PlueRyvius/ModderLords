@@ -51,6 +51,7 @@ Decided with the maintainer 2026-11-07; **not built yet.** One tool, two uses:
 | 14 | **Tests ship inside the mod, with no runtime dependency for players.** A mod, including a single-player mod that has nothing to do with ModderLords, must never need ModderLords or its compat layer to run. | The maintainer's hard requirement: a test hook must not become a dependency. |
 | 15 | **A single-player run mode**: just the game, no Coop server. Steps run on side `game`. Same run folder, agent, waits and evidence. | Most mod development is single player, and a Coop launch is slow. |
 | 16 | **A clean world per suite by default.** A suite marked `continuity` can use the built-in `game.saveAndReload` step: save, reload (in Coop: restart the server on that save and rejoin), and later steps check what survived. | Isolation by default; save/load bugs need a deliberate reload. |
+| 19 | **A suite can opt in to sharing a world** (`"world": "shared"`): it runs on the world the previous suite left, with no reset. Fresh stays the default; the core suite and `continuity` suites always get a fresh world. A shared suite must not assume starting values: it reads "before" and checks the change. The report says which suites shared a world. | In Coop a reset is a server restart and a rejoin, about a minute per suite; most suites touch state no other suite reads. |
 | 17 | **Worlds are created and cached per mod set** (the mod list with versions); this builds v1's decision 1. | Overhaul mods change world generation, so a vanilla `.sav` doesn't load or doesn't mean the same thing. |
 | 18 | **Results are recorded across runs**: pass or fail per suite, against each mod's id and version, the Coop version and the game version, in a history file with a summary table. | That history is the compatibility matrix. Later it could feed the Coodsz compat records; v2 only stores it. |
 
@@ -92,7 +93,8 @@ that the game never loads by itself.
   "requires": [ { "id": "ModularArmor2", "version": ">=1.2" }, { "id": "CoopWarehouses" } ],
   "mode": "coop",                  // singleplayer | coop | both (default both)
   "continuity": false,             // true allows game.saveAndReload
-  "world": "auto",                 // auto (default): the cached world for this mod set; or a named test world
+  "world": "auto",                 // auto (default): a fresh copy of the cached world for this mod set;
+                                   // shared: the previous suite's world, no reset; or a named test world
   "steps": [ ... ]                 // side: game (single player), server, client:N (Coop)
 }
 ```
@@ -117,9 +119,10 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 - **Single player** launches the profile's game with `ModderLords.Compat` added and `/modderlords-test`, and no Coop
   module. The agent loads the world itself from the main menu (game code, as the Load Game screen does), since there
   is no join to wait for. The steps run on side `game`.
-- **One launch, many suites.** The launcher runs the suites in order. Between suites it resets the world: in single
-  player the agent reloads the fresh copy; in Coop the server restarts on the fresh copy and the player's game
-  rejoins (the same machinery as `game.saveAndReload`). The report lists each suite's outcome separately.
+- **One launch, many suites.** The launcher runs the suites in order. Before each suite that needs a fresh world it
+  resets the world: in single player the agent reloads the fresh copy; in Coop the server restarts on the fresh copy
+  and the player's game rejoins (the same machinery as `game.saveAndReload`). Shared suites (decision 19) are run
+  together after the fresh ones, so one reset covers them all. The report lists each suite's outcome separately.
 
 ### Worlds (decisions 16 and 17)
 
@@ -138,9 +141,7 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 
 ### Open questions for the maintainer
 
-1. **Clean world per suite in one launch** (decisions 12 and 16) means a world reset between suites, which in Coop is
-   a server restart and a rejoin each time, about a minute per suite. Should suites that don't change shared state
-   be allowed to share a world (e.g. `"world": "shared"`), or keep a strict fresh world each time?
+1. ~~Clean world per suite in one launch~~: decided 2026-11-07, decision 19 (sharing is opt-in, fresh is the default).
 2. **How the agent finds a test DLL's entry point**: the proposed convention is a public static `RegisterTests()`
    method. An alternative is a line in the suite JSON naming the type.
 3. **Single-player world loading** and **world creation** both drive the game from its main menu by code. Neither is
