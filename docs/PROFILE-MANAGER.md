@@ -20,7 +20,7 @@ ModderLords to offer profiles that are known to work, with the strength of that 
 | 4 | **Groups are one level**, one group per profile, stored in the profile's own file (`"Group"`, `"Pinned"`). Profiles stay where they are on disk. | How people think of profiles; nothing breaks for older versions or scripts. Nesting and tags can come later if one level is not enough. |
 | 5 | **The Status column answers "can I use this?"**: **Ready**, **N missing** (mods not installed), **Mods changed** (since last launch, or since the profile was verified). Test results show in the details pane when a profile has them. | It applies to everyone; most people never run the tests. |
 | 6 | **Verified profiles come from GitHub** (`src/ModderLords.Core/verified-profiles.json`), fetched like the compat database: a copy ships with each release, refreshed from the default branch with its ETag, "never worse than bundled". | New ones can be added between releases. |
-| 7 | **Three levels of verified**, by who vouches: **gold**, the maintainer; **silver**, Coodsz; **green**, players who report it works. A profile shows its highest level; the details list every one with its evidence. | The maintainer's choice: say how strong the claim is, not only that there is one. |
+| 7 | **Three levels of verified**, by who vouches: **gold**, the maintainer; **silver**, Coodsz (by PR to this repository); **green**, players who report it works. A profile shows its highest level; the details list every one with its evidence. | The maintainer's choice: say how strong the claim is, not only that there is one. |
 | 8 | **Every level is tied to exact versions**: the game, Coop and each mod's version (and, where recorded, its install fingerprint). When your installed mods differ, the profile says so ("verified with MS2 0.9.49, you have 0.9.50") instead of claiming it works. | Anyone can download ModderLords; a claim must stay true for the files it was made on. |
 | 9 | **A verified profile can be used directly.** Changing one of its mods asks once to make your own copy. **Get missing mods…** opens the existing Workshop subscribe window for the ones you lack. | No speed bump for someone who just wants to play; the verified profile itself never changes under its badge. |
 | 10 | **Verified profiles are for anyone who downloads ModderLords.** They list mods by id, version and Workshop id; ModderLords never ships or downloads a mod's files itself. | The audience the maintainer chose; it also sets how careful the wording and pinning must be. |
@@ -76,7 +76,8 @@ profile**), the green / amber / red badges for Ready / missing / failed. The bad
 - **Gold (the maintainer):** the maintainer runs the in-game tests on it (`docs/INGAME-TEST-HARNESS.md`), core plus the
   modules that apply, in single player and Coop, then adds or updates the entry in a PR with the run ids, and merges
   it. Nobody else can merge to `main`, so the badge needs no further signature.
-- **Silver (Coodsz):** Coodsz vouches for it; how that reaches the file is open (question 1).
+- **Silver (Coodsz):** Coodsz adds a `silver` verification to the profile's entry in a PR to this repository (a
+  branch of their own or a fork), with the date and what was checked; the maintainer merges it. Decided 2026-11-08.
 - **Green (players):** a player for whom a verified profile works sends a report from the Profiles window
   (**Report: it works**), through the same intake as compat records (`docs/COMPAT-RECORDS.md`: the intake worker or
   the issue form, a workflow that checks it, a PR the maintainer merges). The report carries the profile id, the game,
@@ -95,9 +96,7 @@ profile**), the green / amber / red badges for Ready / missing / failed. The bad
 
 ## Open questions
 
-1. **Silver:** does Coodsz add silver entries by PR to this repository (Coodsz needs write access, or the maintainer
-   merges them), or are they read from a file in Coodsz's compat repository, as the shared compat format already is
-   (`PARITY.md`)?
+1. ~~Silver~~: decided 2026-11-08, a PR to this repository that the maintainer merges.
 2. **Green threshold:** one report, or several from different players (e.g. 3), before the green badge shows? A report
    with a passing test run attached could count more than a report of a hosted session.
 3. **Can players propose whole profiles,** not only report that ours work? That would be a fourth path into the file
