@@ -122,6 +122,8 @@ public static class ClientLaunchSession
         var errors = plan.Validate().ToList();
         if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
         if (Unblock(plan) is { } unblocked) note?.Invoke(unblocked);
+        // Without this the game stops on a "Mod change detected" box after every change of mods until someone presses OK.
+        if (OperatingSystem.IsWindows() && ShaderCacheMapping.Prepare(plan.ModuleIds) is { } shaders) note?.Invoke(shaders);
         if (plan.UsesIsolatedView && OperatingSystem.IsWindows())
             plan = plan with { GameRoot = ClientModuleView.Create(plan, Path.Combine(Profiles.ProfileStore.RootDir, "client-launches")) };
         var psi = new System.Diagnostics.ProcessStartInfo

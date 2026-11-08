@@ -239,7 +239,7 @@ public static class InGameTestRun
         };
         _ = engine.Exited.ContinueWith(t => runner.ServerExited(t.Result), TaskScheduler.Default);
 
-        var smokeReport = await runner.RunAsync(args => ClientLaunchSession.Start(client.Plan with { ExtraArguments = args }), cancel);
+        var smokeReport = await runner.RunAsync(args => ClientLaunchSession.Start(client.Plan with { ExtraArguments = args }, note => say("[ModderLords] " + note)), cancel);
         // The game or server may have gone before the steps finished; the step waiting is then reported as such.
         gameGone = "the game or the server exited before the step finished";
         var testReport = testRun is null ? null : await testRun;
