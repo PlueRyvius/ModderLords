@@ -1,0 +1,7 @@
+{
+  "id": "retinues",
+  "title": "Retinues",
+  "description": "Retinues' troop editor: a player's clan gets its troops, and a rename, a skill point, equipping and unequipping (gold taken once), and adding and removing an upgrade land on that player's own troops. In Coop, both sides then hold the same troops.",
+  "requires": [ { "id": "Retinues" } ],
+  "steps": "ModderLords.Tests.Retinues.dll"
+}

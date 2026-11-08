@@ -34,4 +34,22 @@
     <HasCoopAssemblies Condition="'$(HasCoopAssemblies)' == ''">false</HasCoopAssemblies>
   </PropertyGroup>
 
+  <!--
+    The same for test modules whose steps call a mod's own code (ModderLords.Tests.<Module>): each compiles against
+    that mod's installed DLL and drops out where the mod is not installed. Override with -p:RetinuesRefDir=...
+  -->
+  <PropertyGroup>
+    <RetinuesBin>steamapps\common\Mount &amp; Blade II Bannerlord\Modules\Retinues\bin\Win64_Shipping_Client</RetinuesBin>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RetinuesRefDir)' == ''">
+    <RetinuesRefDir Condition="Exists('C:\Program Files (x86)\Steam\$(RetinuesBin)\Retinues.dll')">C:\Program Files (x86)\Steam\$(RetinuesBin)</RetinuesRefDir>
+    <RetinuesRefDir Condition="'$(RetinuesRefDir)' == '' And Exists('D:\Program Files (x86)\Steam\$(RetinuesBin)\Retinues.dll')">D:\Program Files (x86)\Steam\$(RetinuesBin)</RetinuesRefDir>
+    <RetinuesRefDir Condition="'$(RetinuesRefDir)' == '' And Exists('D:\SteamLibrary\$(RetinuesBin)\Retinues.dll')">D:\SteamLibrary\$(RetinuesBin)</RetinuesRefDir>
+    <RetinuesRefDir Condition="'$(RetinuesRefDir)' == '' And Exists('E:\SteamLibrary\$(RetinuesBin)\Retinues.dll')">E:\SteamLibrary\$(RetinuesBin)</RetinuesRefDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <HasRetinuesAssemblies Condition="'$(RetinuesRefDir)' != '' And Exists('$(RetinuesRefDir)\Retinues.dll')">true</HasRetinuesAssemblies>
+    <HasRetinuesAssemblies Condition="'$(HasRetinuesAssemblies)' == ''">false</HasRetinuesAssemblies>
+  </PropertyGroup>
+
 </Project>

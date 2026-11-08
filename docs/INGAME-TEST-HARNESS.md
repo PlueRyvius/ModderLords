@@ -98,7 +98,9 @@ src/ModderLords.Core/Testing/Modules/          (built in, embedded like today's 
   perks/     module.json  both-perks.json
   parity/    module.json  parity.json
   world/     module.json  sp-world.json
+  retinues/  module.json  editor.json
   smithing/  module.json  health.json  ammo.json  tier-preview.json  heal-on-load.json  coop-craft.json
+src/ModderLords.Tests.Retinues/                (retinues' steps: references Retinues' DLL at compile time only)
 src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2's DLL at compile time only)
 ```
 
@@ -227,7 +229,7 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    by the smoke report only, since the steps start once the player is on the map.
    With it, the cheap core checks: install fingerprints, the loaded copy, `mods.fingerprint`, the time limits and
    `game.noErrors` (decisions 23–25).
-3. Test modules (decisions 28–31), in three PRs:
+3. Test modules (decisions 28–31), in four PRs:
    1. Modules: today's suites regrouped into `Testing/Modules/<module>/` with `module.json`; `--modules`; `test --list`
       (JSON); module DLL loading through `run.json`; `*.health` steps in the core suite. **Built 2026-11-08**, with
       `docs/WRITING-TEST-MODULES.md`.
@@ -235,7 +237,10 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
       2026-11-08**: the run itself moved from the CLI into `ModderLords.Coop.Testing.InGameTestRun`, which the CLI's
       `test` and the tab both call. The tab runs the profile as saved, refuses Coop without a test world (Coop steps
       change the world) and while the Server tab's server runs.
-   3. The first module for a mod: `smithing` (Modular Smithing 2), with its own DLL and `ModularSmithing2.health`.
+   3. The first module for a mod: `retinues` (Retinues and its Coop fork), with its own DLL and `Retinues.health`.
+      **Built 2026-11-08**: the `editor` suite (both) drives the troop editor edit by edit and compares the troops
+      on both sides. It set up the build wiring (`HasRetinuesAssemblies` in `Directory.Build.props`).
+   4. `smithing` (Modular Smithing 2), with its own DLL and `ModularSmithing2.health`.
       Its suites: `health` (both), `ammo`, `tier-preview` (single player), `heal-on-load` (single player,
       continuity) and `coop-craft` (Coop).
 4. The world cache, then `game.saveAndReload`, then the history file and table.

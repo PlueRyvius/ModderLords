@@ -28,7 +28,7 @@ public class TestPlanTests
     {
         var modules = TestSuites.Modules();
         Assert.Equal("core", modules[0].Id);
-        Assert.Equal(["core", "parity", "perks", "stash", "sync", "world"], modules.Select(m => m.Id));
+        Assert.Equal(["core", "parity", "perks", "retinues", "stash", "sync", "world"], modules.Select(m => m.Id));
         Assert.Equal(["hero-level", "sync-basics"], TestSuites.Module("sync")!.Suites.Select(s => s.Name));
         Assert.All(modules, m => Assert.All(m.Suites, s => Assert.Equal(m.Id, s.Module)));
         Assert.All(modules, m => Assert.False(string.IsNullOrWhiteSpace(m.Description)));
