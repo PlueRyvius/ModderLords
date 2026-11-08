@@ -635,6 +635,64 @@ public partial class MainViewModel : ObservableObject
         Rescan();
         if (IsHost) Host?.OnProfileSelected();
         IsDirty = false;
+        if (problem is null) ProfileIndexStore.Used(Profile.Name);
+    }
+
+    /// <summary>
+    /// Opens another profile for the Profiles window and the quick-switch menu (docs/PROFILE-MANAGER.md, decision 11):
+    /// refused while the server runs, since it is serving this profile's mods; unsaved edits are settled first. False,
+    /// with the reason, when it did not switch.
+    /// </summary>
+    internal bool SwitchTo(string name, out string? why)
+    {
+        why = null;
+        if (name.Equals(Profile.Name, StringComparison.OrdinalIgnoreCase)) return true;
+        if (Host?.IsRunning == true) { why = Loc.T("Stop the server before switching profiles: it is running this profile's mods."); return false; }
+        if (!ResolveUnsavedChanges()) { why = Loc.T("Kept the current profile."); return false; }
+        LoadProfile(name);
+        return Profile.Name.Equals(name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The quick-switch menu's lists: pinned profiles, then recent ones that are not pinned.</summary>
+    internal (IReadOnlyList<string> Pinned, IReadOnlyList<string> Recent) QuickSwitchLists()
+    {
+        var names = ProfileStore.List();
+        var pinned = names.Where(n => n.Equals(Profile.Name, StringComparison.OrdinalIgnoreCase) ? Profile.Pinned : ProfileStore.TryLoad(n, out _)?.Pinned == true).ToList();
+        var recent = ProfileIndexStore.Load().Recent
+            .Where(r => names.Contains(r, StringComparer.OrdinalIgnoreCase) && !pinned.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
+        return (pinned, recent);
+    }
+
+    /// <summary>The Profiles window changed the open profile's group or pin on disk: follow it here, without marking it dirty.</summary>
+    internal void SetPlacement(string? group, bool? pinned)
+    {
+        if (group is not null) Profile.Group = group;
+        if (pinned is { } pin) Profile.Pinned = pin;
+        OnPropertyChanged(nameof(ProfileHasCoop));
+    }
+
+    /// <summary>Whether the open profile has the Coop mod enabled, for the badge on the profile button.</summary>
+    public bool ProfileHasCoop => Profile.EnabledMods.Any(m => m.Id is "Coop" or "CoopNightly");
+
+    /// <summary>Saves a copy of the open profile, as it is on screen (unsaved edits included), under another name.</summary>
+    internal void SaveCurrentAs(string name)
+    {
+        CollectProfileFromRows();
+        var copy = ProfileStore.Snapshot(Profile);
+        copy.Name = name;
+        copy.Pinned = false;
+        ProfileStore.Save(copy);
+        LoadProfileList();
+        SelectedProfileName = Profile.Name;
+    }
+
+    /// <summary>Opens the Profiles window (the profile button's Manage profiles…, or Ctrl+P).</summary>
+    [RelayCommand]
+    private void OpenProfiles()
+    {
+        var window = new ProfilesWindow(new ProfilesViewModel(this)) { Owner = Application.Current?.MainWindow };
+        window.ShowDialog();
+        RefreshProfileList();
     }
 
     /// <summary>False until a profile has been opened, so a failure at startup falls back instead of staying put.</summary>
@@ -668,6 +726,7 @@ public partial class MainViewModel : ObservableObject
         // Re-select the saved profile once its item exists again; do not reload its contents.
         SelectedProfileName = Profile.Name;
         IsDirty = false;
+        OnPropertyChanged(nameof(ProfileHasCoop));
         Status = Loc.F("Profile '{0}' saved", Profile.Name);
     }
 
@@ -705,35 +764,71 @@ public partial class MainViewModel : ObservableObject
         var old = Profile.Name;
         var ask = new NameProfileWindow("Rename this profile", old, currentName: old) { Owner = Application.Current?.MainWindow };
         if (ask.ShowDialog() != true || ask.ProfileName == old) return;
+        if (RenameNamed(old, ask.ProfileName) is { } problem) Status = problem;
+    }
 
-        // Save first: a rename must not quietly discard edits made since the last save.
-        CollectProfileFromRows();
-        ProfileStore.Save(Profile);
-        try { ProfileStore.Rename(old, ask.ProfileName); }
-        catch (Exception ex) { Status = Loc.T("Rename failed: ") + ex.Message; return; }
+    /// <summary>
+    /// Renames a profile and the files named after it; null when it worked, else why not. The open one is saved first
+    /// (a rename must not quietly discard edits made since the last save) and is blocked while hosting: the running
+    /// server holds paths under the overlay folder that the rename moves.
+    /// </summary>
+    internal string? RenameNamed(string old, string newName)
+    {
+        var isOpen = old.Equals(Profile.Name, StringComparison.OrdinalIgnoreCase);
+        if (isOpen && Host?.IsRunning == true) return Loc.T("Stop the server before renaming this profile.");
+        if (isOpen)
+        {
+            CollectProfileFromRows();
+            ProfileStore.Save(Profile);
+        }
+        try { ProfileStore.Rename(old, newName); }
+        catch (Exception ex) { return Loc.T("Rename failed: ") + ex.Message; }
 
-        Profile.Name = ask.ProfileName;
+        if (isOpen)
+        {
+            Profile.Name = newName.Trim();
+            IsDirty = false;
+            // Name is a plain property: the profile button shows it through Profile.
+            OnPropertyChanged(nameof(Profile));
+        }
         LoadProfileList();
         SelectedProfileName = Profile.Name;
-        IsDirty = false;
-        Status = Loc.F("Renamed “{0}” to “{1}”", old, Profile.Name);
+        Status = Loc.F("Renamed “{0}” to “{1}”", old, newName.Trim());
+        return null;
     }
 
     [RelayCommand]
     private void DeleteProfile()
     {
         if (MessageBox.Show(Loc.F("Delete profile '{0}'? Junctions it created are removed too.", Profile.Name), Loc.T("Delete profile"), MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        Status = DeleteNamed(Profile.Name);
+    }
+
+    /// <summary>
+    /// Deletes a profile (asked already): its junctions are removed and its files moved to the deleted-profiles
+    /// folder. The open one is replaced by the first other profile. Returns what happened, for the status line.
+    /// </summary>
+    internal string DeleteNamed(string name)
+    {
+        var isOpen = name.Equals(Profile.Name, StringComparison.OrdinalIgnoreCase);
+        if (isOpen && Host?.IsRunning == true) return Loc.T("Stop the server before deleting this profile.");
         string? junctionError = null;
-        try { new OverlayApplier().RemoveAll(ProfileStore.OverlayDirFor(Profile.Name)); }
+        try { new OverlayApplier().RemoveAll(ProfileStore.OverlayDirFor(name)); }
         catch (Exception ex) { junctionError = ex.Message; }
-        var deleted = Profile.Name;
-        ProfileStore.Delete(deleted);
-        IsDirty = false;
+        string? movedTo;
+        try { movedTo = ProfileStore.Delete(name); }
+        catch (Exception ex) { return Loc.T("Delete failed: ") + ex.Message; }
         LoadProfileList();
-        LoadProfile(ProfileNames.First());
+        if (isOpen)
+        {
+            IsDirty = false;
+            LoadProfile(ProfileNames.First());
+        }
+        else SelectedProfileName = Profile.Name;
         // After the reload, which clears Messages: said before it, this would vanish at once.
         if (junctionError is not null)
-            Messages.Add($"profile '{deleted}' deleted, but some of its junctions could not be removed: {junctionError}");
+            Messages.Add($"profile '{name}' deleted, but some of its junctions could not be removed: {junctionError}");
+        return movedTo is null ? Loc.F("Deleted '{0}'.", name) : Loc.F("Deleted '{0}' (moved to {1}).", name, movedTo);
     }
 
     // ---- folders ----------------------------------------------------------------------------------
@@ -1985,6 +2080,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnProfileChanged(Profile value)
     {
         OnPropertyChanged(nameof(ManualLoadOrder));
+        OnPropertyChanged(nameof(ProfileHasCoop));
         Tests?.ProfileChanged();
     }
 

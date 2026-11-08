@@ -181,6 +181,11 @@ about the players' game, which is the copy the host is handing out.
   engine loads a module id once. When necessary, a private launch folder links the selected copies into its own
   `Modules` directory so the game resolves the requested version. The original installations stay in place.
 - **Profiles**: named mod sets with order, saved and switched freely. Share one as a file; import somebody else's.
+  The **profile button** on the top bar switches between pinned and recent profiles; **Manage profiles…** (Ctrl+P)
+  opens the Profiles window: groups, pins, a status per profile (**Ready**, mods **missing**, **Mods changed** since
+  its last launch), search by name or by a mod it contains, and right-click to rename, duplicate, pin, move to a group
+  (or drag it onto one) and delete. A deleted profile is moved to `%LOCALAPPDATA%\ModderLords\deleted-profiles\`, so
+  it can be put back.
 
 ### As a coop host
 
@@ -253,8 +258,8 @@ The release zip is self-contained; no separate .NET install is needed.
    off, set `"CheckForUpdates": false` in `%LOCALAPPDATA%\ModderLords\ui-state.json`.
 
 To uninstall: delete the folder. Playing with mods creates nothing inside your game install, so there is nothing
-else to clean up. If you hosted, remove the links it created inside the server: first click **Delete** on each
-profile (that removes its junctions), or delete `%LOCALAPPDATA%\ModderLords` and the junctions under
+else to clean up. If you hosted, remove the links it created inside the server: first delete each profile in the
+Profiles window (that removes its junctions), or delete `%LOCALAPPDATA%\ModderLords` and the junctions under
 `...\steamapps\workshop\content\261550\3770450698\DedicatedServer\engine\Modules` (they are the entries that are links,
 not the five stock folders `Native`, `SandBoxCore`, `SandBox`, `Coop`, `DedicatedServer.Windows`).
 
@@ -701,6 +706,8 @@ Per-profile things without a tab of their own:
 | What | Where |
 |---|---|
 | Profiles | `%LOCALAPPDATA%\ModderLords\profiles\<name>.json` |
+| Recent profiles and group names | `%LOCALAPPDATA%\ModderLords\profile-index.json` |
+| Deleted profiles (to put back by hand) | `%LOCALAPPDATA%\ModderLords\deleted-profiles\<name>-<date-time>\` |
 | Mode, theme, window size | `%LOCALAPPDATA%\ModderLords\ui-state.json` |
 | Compatibility database | `compat-db.json` next to the launcher (bundled); the newer copy downloaded between releases in `%LOCALAPPDATA%\ModderLords\compat-db.remote.json` (with `compat-db.remote.meta.json`); your records in `%LOCALAPPDATA%\ModderLords\compat-db.local.json` |
 | Mod settings overrides / cache | `%LOCALAPPDATA%\ModderLords\profiles\<profile>.settings.json`, `%LOCALAPPDATA%\ModderLords\cache\<profile>.settings-cache.json` |

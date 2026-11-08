@@ -211,6 +211,61 @@ public class WorkflowTests
     });
 
     [Fact]
+    public void ProfilesWindowFindsByModMovesToGroupsAndPins() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Module("TestMod");
+        var vm = fixture.ViewModel();
+        vm.Rescan();
+        var stamp = Guid.NewGuid().ToString("N")[..8];
+        var a = $"ui-pm-a-{stamp}";
+        var b = $"ui-pm-b-{stamp}";
+        ProfileStore.Save(new Profile { Name = a, Mods = [new() { Id = "TestMod" }, new() { Id = "CoopNightly" }] });
+        ProfileStore.Save(new Profile { Name = b, Mods = [new() { Id = $"Missing{stamp}" }] });
+        try
+        {
+            var profiles = new ProfilesViewModel(vm);
+            profiles.Search = stamp;
+            Assert.Equal([a, b], profiles.Rows.Select(r => r.Name));
+
+            // The search matches mods too, and the status says what this PC lacks.
+            profiles.Search = $"Missing{stamp}";
+            var rowB = Assert.Single(profiles.Rows);
+            Assert.Equal(ProfileStatus.Missing, rowB.Status);
+            Assert.Equal("1 missing", rowB.StatusText);
+
+            profiles.Search = a;
+            var rowA = Assert.Single(profiles.Rows);
+            Assert.True(rowA.HasCoop);
+
+            profiles.MoveTo(rowA, $"Group {stamp}");
+            profiles.TogglePinCommand.Execute(profiles.Rows.Single());
+            var saved = ProfileStore.Load(a)!;
+            Assert.Equal($"Group {stamp}", saved.Group);
+            Assert.True(saved.Pinned);
+            Assert.Contains(profiles.Groups, g => g.Key == $"Group {stamp}" && g.Count == 1);
+            Assert.Contains(a, vm.QuickSwitchLists().Pinned);
+        }
+        finally
+        {
+            ProfileStore.Delete(a, keepCopy: false);
+            ProfileStore.Delete(b, keepCopy: false);
+        }
+    });
+
+    [Fact]
+    public void SwitchingProfileIsRefusedWhileTheServerRuns() => Sta(() =>
+    {
+        using var fixture = new Fixture();
+        var vm = fixture.ViewModel();
+        vm.Mode = AppMode.Host;
+        vm.Host!.IsRunning = true;
+        Assert.False(vm.SwitchTo("some-other-profile", out var why));
+        Assert.Contains("Stop the server", why);
+        vm.Host.IsRunning = false;
+    });
+
+    [Fact]
     public void PlayerHostPlayerUsesClientPreviewAndKeepsSelection() => Sta(() =>
     {
         using var fixture = new Fixture();
