@@ -26,6 +26,7 @@ public static class Bridge
         Steps.Run("EncounterOptionGate.Tick", () => EncounterOptionGate.Tick());
         Steps.Run("OfflineFreeze.Tick", () => OfflineFreeze.Tick());
         Steps.Run("PlayerKingdomProtection.Tick", () => PlayerKingdomProtection.Tick());
+        Steps.Run("BothPerks.Tick", () => BothPerks.Tick());
         Steps.Run("BattleScenePick.EnsureInstalled", () => BattleScenePick.EnsureInstalled());
         // The standalone Bellum Civile Coop Compat module carries these same patches; with it loaded, it runs them.
         if (StandaloneBellum.Present)

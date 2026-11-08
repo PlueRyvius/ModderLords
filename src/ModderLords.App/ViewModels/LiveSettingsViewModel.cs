@@ -208,6 +208,7 @@ public partial class LiveSettingsViewModel : ObservableObject
     [ObservableProperty] private bool _freezeOfflinePlayers;
     [ObservableProperty] private bool _protectPlayerKingdoms;
     [ObservableProperty] private bool _protectFromRebellions;
+    [ObservableProperty] private bool _bothPerks;
     [ObservableProperty] private string _hostOptionsReport = "";
 
     /// <summary>Server value, else stored override, else off.</summary>
@@ -219,6 +220,7 @@ public partial class LiveSettingsViewModel : ObservableObject
         FreezeOfflinePlayers = Read(nameof(FreezeOfflinePlayers));
         ProtectPlayerKingdoms = Read(nameof(ProtectPlayerKingdoms));
         ProtectFromRebellions = Read(nameof(ProtectFromRebellions));
+        BothPerks = Read(nameof(BothPerks));
     }
 
     /// <summary>Stores the Host tab's options as overrides (applied at every launch) and, while the server runs, sends them live.</summary>
@@ -230,6 +232,7 @@ public partial class LiveSettingsViewModel : ObservableObject
             [nameof(FreezeOfflinePlayers)] = FreezeOfflinePlayers ? "true" : "false",
             [nameof(ProtectPlayerKingdoms)] = ProtectPlayerKingdoms ? "true" : "false",
             [nameof(ProtectFromRebellions)] = ProtectFromRebellions ? "true" : "false",
+            [nameof(BothPerks)] = BothPerks ? "true" : "false",
         };
         _overrides.Set(OwnSettingsId, values);
         try { SettingsOverridesStore.Save(_profileName, _overrides); }

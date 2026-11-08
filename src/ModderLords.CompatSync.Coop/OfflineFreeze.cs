@@ -30,6 +30,12 @@ public static class ModderLordsSettings
 
     /// <summary>With <see cref="ProtectPlayerKingdoms"/>: also undo a rebellion's war on a player's kingdom.</summary>
     public static bool ProtectFromRebellions { get; set; }
+
+    /// <summary>
+    /// Players' heroes and the heroes of their clans get both perks of every pair: taking one perk also gives the
+    /// other. Perks already given stay when this is turned off.
+    /// </summary>
+    public static bool BothPerks { get; set; }
 }
 
 /// <summary>
