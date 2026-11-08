@@ -74,8 +74,10 @@ ModderLords.Cli test --profile "My Host" --suite stash [--world NAME] [--keep-cl
    slices are all in the run folder. The exit code is 0 only when every step passed (or failed as known).
 
 Built-in suites: `stash` (the 0.1.7 stash doubling), `sync-basics` (gold given on the server reaches the player),
-`hero-level` (a level set with the character editor's `modderlords.edit` command reaches the player) and `parity`
-(changes nothing: every mod that loaded also started, on both sides, and the player's hero reads the same on both).
+`hero-level` (a level set with the character editor's `modderlords.edit` command reaches the player),
+`both-perks` (with the both-perks rule on, a perk confirmed on the server gives its pair on both sides, and both count
+the same max hit points) and `parity` (changes nothing: every mod that loaded also started, on both sides, and the
+player's hero reads the same on both).
 `stash` uses `town_EN1` and `grain`, both vanilla.
 
 Test mode is visible: each game logs `TEST MODE: ...` at load (`ModderLords.CompatSync` log) and the agent logs each
@@ -127,7 +129,9 @@ logger's sinks, and in a test run the stack that first built Coop's logger), `ga
 Coop's server refuses a town entry from further away), `settlement.enter` (the player's party enters a town, as
 arriving there does),
 `party.settlement`, `hero.addGold`, `hero.gold`, `hero.adminLevel` (server: the character editor's
-`modderlords.edit … level=N` command), `hero.level`, `party.addItem`, `party.itemCount`, `stash.count`, and
+`modderlords.edit … level=N` command), `hero.level`, `hero.addPerk` (server: `HeroDeveloper.AddPerk`, as Coop's
+character screen does there), `hero.hasPerk`, `hero.maxHitPoints`, `rules.set` (server: turns a ModderLords gameplay
+rule on or off, e.g. `BothPerks`), `party.addItem`, `party.itemCount`, `stash.count`, and
 `stash.deposit` / `stash.reopen` (both open the stash as the town menu does, so the party must be in the town).
 
 Parity steps (`ParitySteps.cs`), for what quietly differs between the sides:
