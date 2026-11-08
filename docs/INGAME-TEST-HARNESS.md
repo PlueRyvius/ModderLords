@@ -35,7 +35,7 @@ Checks it must be able to express:
 
 ## v2: modular suites, single-player runs, tests shipped in mods
 
-Decided with the maintainer 2026-11-07; **not built yet.** One tool, two uses:
+Decided with the maintainer 2026-11-07, decisions 11–22; **not built yet.** One tool, two uses:
 
 - **Fast per-mod development testing**, in single player or Coop: `test --mod ModularArmor2 --single-player`.
 - **The full compatibility matrix**: every suite that applies to a profile, recorded per mod, mod version, Coop
@@ -56,6 +56,7 @@ Decided with the maintainer 2026-11-07; **not built yet.** One tool, two uses:
 | 19 | **A suite can opt in to sharing a world** (`"world": "shared"`): it runs on the world the previous suite left, with no reset. Fresh stays the default; the core suite and `continuity` suites always get a fresh world. A shared suite must not assume starting values: it reads "before" and checks the change. The report says which suites shared a world. | In Coop a reset is a server restart and a rejoin, about a minute per suite; most suites touch state no other suite reads. |
 | 20 | **A test DLL names its entry type with an assembly attribute** from `ModderLords.CompatSync` (below). | Explicit and in one place; no scan of every type, which throws when one refers to something missing. |
 | 21 | **`--mod X` stays narrow**: the core suite, X's own suites and the suites that require X. `--with-others` adds every other applicable suite. The report marks a suite that also failed in the last recorded run without X as "already failing", so a new failure points at X. | The development loop stays fast; the core suite still catches another mod going quiet or a desync, and the full run (no `--mod`) is the one before a release. |
+| 22 | **Worlds are created by code**, stepping through character creation with the game's own creation state and taking the default choice on each page (Worlds, below). When that gets stuck, it fails naming the page, and the fallback is a world made by hand and recorded with `test world save NAME`. | A scripted screen path breaks on the overhaul mods the cache is for; the game's own page sequence doesn't care which mod added a page. |
 
 Decision 14 replaces v1's decision 5 for third-party mods: the reference-based API stays, but it now lives in a DLL
 that the game never loads by itself.
@@ -135,8 +136,7 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 
 - The cache key is the sorted list of enabled modules with their versions, hashed; the world lives in
   `<data>\test-worlds\auto-<hash>.sav`, with a small `.json` beside it recording the list it was made with.
-- On a cache miss the harness creates the world (proposed, open question 3), by code and without touching the
-  screens:
+- On a cache miss the harness creates the world (decision 22), by code and without touching the screens:
   1. Start a new Sandbox campaign as the main menu's Sandbox button does (no tutorial).
   2. Step through character creation with the game's own creation state: on each page take the first or default
      choice and move on. The agent doesn't need to know the page, so pages an overhaul mod adds are handled like
@@ -158,12 +158,12 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 - `ModderLords.Cli test --history` prints the summary table: one row per suite and mod set, the last outcome, and
   when it last passed. The run folders stay the evidence.
 
-### Open questions for the maintainer
+### Questions settled with the maintainer
 
 1. ~~Clean world per suite in one launch~~: decided 2026-11-07, decision 19 (sharing is opt-in, fresh is the default).
 2. ~~How the agent finds a test DLL's entry point~~: decided 2026-11-07, decision 20 (an assembly attribute).
-3. **World creation by code, with manual capture as the fallback** (Worlds, above): agreed? Loading a named save and
-   creating a world by code are both unproven; the first build step is a spike of both in single player.
+3. ~~World creation~~: decided 2026-11-07, decision 22 (by code, with manual capture as the fallback). Loading a
+   named save and creating a world by code are both unproven; the first build step is a spike of both.
 4. ~~What `--mod X` runs~~: decided 2026-11-07, decision 21 (narrow, plus `--with-others`).
 
 ### Build order (proposed)
