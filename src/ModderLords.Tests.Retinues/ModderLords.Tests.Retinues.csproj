@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The retinues test module's own steps (docs/WRITING-TEST-MODULES.md, section 7). The test agent loads it by hand,
+       into a game that already has ModderLords.Compat and Retinues loaded, so neither is copied next to it. Built only
+       where Retinues is installed (HasRetinuesAssemblies, Directory.Build.props); the launcher copies it into its
+       compat folder. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ModderLords.Tests.Retinues</AssemblyName>
+    <RootNamespace>ModderLords.Tests.Retinues</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Bannerlord.ReferenceAssemblies.Core" Version="1.4.8.119303" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\ModderLords.CompatSync\ModderLords.CompatSync.csproj" Private="false" />
+    <Reference Include="Retinues">
+      <HintPath>$(RetinuesRefDir)\Retinues.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

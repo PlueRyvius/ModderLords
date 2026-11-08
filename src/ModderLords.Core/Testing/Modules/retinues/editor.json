@@ -1,0 +1,44 @@
+{
+  // Retinues' troop editor, edit by edit, as a player clicks it. In Coop (Retinues' Coop fork) the server owns every
+  // custom troop: the player's game relays each edit, the server runs it as that player and sends the troops back, so
+  // every edit is checked on the player's game and then compared with the server. In single player the same edits
+  // run locally.
+  "api": 2,
+  "name": "editor",
+  "mode": "both",
+  "description": "A player's troops are created, renamed, trained, equipped, unequipped and given an upgrade that is then removed; both sides agree after each.",
+  "requires": [ { "id": "Retinues" } ],
+  "steps": [
+    // Where Retinues' log ends, so retinues.noErrors reads only this suite's lines.
+    { "id": "Retinues.health", "side": "game" },
+    { "id": "Retinues.health", "side": "player", "mode": "coop" },
+    { "id": "game.whoAmI", "side": "player", "as": "me" },
+    { "id": "hero.addGold", "side": "game", "args": { "heroName": "$me.heroName", "amount": 20000 } },
+    { "id": "retinues.ready", "side": "player" },
+    { "id": "retinues.coopRules", "side": "player", "mode": "coop", "continueOnFail": true },
+    // Retinues makes a clan's regular troops (the ones that take upgrades) only once it holds a fief.
+    { "id": "retinues.giveFief", "side": "game", "args": { "heroName": "$me.heroName", "town": "town_EN1" } },
+    { "id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": { "regulars": "true" } },
+    // The editor reads every skill and slot of the troop it shows. Coop run 1: a troop from the server's snapshot had
+    // no skill table on the player's game, and the editor closed on its equipment page.
+    { "id": "retinues.editorPages", "side": "player", "args": { "troop": "$troops.retinue" } },
+    { "id": "retinues.noErrors", "side": "player", "continueOnFail": true },
+    { "id": "retinues.rename", "side": "player", "args": { "troop": "$troops.retinue", "name": "Harness Guard" } },
+    { "compare": "retinues.troop", "sides": ["game", "player"], "as": "renamed", "args": { "troop": "$troops.retinue", "expectedName": "Harness Guard" } },
+    { "id": "retinues.giveXp", "side": "game", "args": { "troop": "$troops.retinue", "amount": 5000 } },
+    { "id": "retinues.skillUp", "side": "player", "args": { "troop": "$troops.retinue", "skill": "OneHanded" } },
+    { "id": "retinues.equip", "side": "player", "as": "equip", "args": { "troop": "$troops.retinue", "slot": "Head" } },
+    { "compare": "hero.gold", "sides": ["game", "player"], "args": { "heroName": "$me.heroName" } },
+    { "compare": "retinues.troop", "sides": ["game", "player"], "as": "equipped", "args": { "troop": "$troops.retinue" } },
+    { "id": "retinues.unequip", "side": "player", "args": { "troop": "$troops.retinue", "slot": "Head" } },
+    { "compare": "retinues.troop", "sides": ["game", "player"], "as": "unequipped", "args": { "troop": "$troops.retinue" } },
+    { "id": "retinues.addUpgrade", "side": "player", "as": "upgrade", "args": { "troop": "$troops.basicRoot", "name": "Harness Veteran" } },
+    { "compare": "retinues.troop", "sides": ["game", "player"], "as": "upgraded", "args": { "troop": "$upgrade.parent" } },
+    { "id": "retinues.remove", "side": "player", "args": { "troop": "$upgrade.value", "parent": "$upgrade.parent" } },
+    { "compare": "retinues.troop", "sides": ["game", "player"], "as": "removed", "args": { "troop": "$upgrade.parent" } },
+    { "id": "retinues.noErrors", "side": "game", "continueOnFail": true },
+    { "id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "game", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true }
+  ]
+}

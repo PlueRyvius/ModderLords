@@ -268,7 +268,11 @@ private static IEnumerable<StepWait?> StashCount(StepContext ctx)
 
    The agent loads it only when the run picked the module and the mod is loaded on that side; a side without the mod
    skips it with a note, and a DLL that will not load, or registers nothing, stops the run before any step. The first
-   such module (`smithing`, for Modular Smithing 2) sets up the build wiring; copy it.
+   such module (`retinues`) sets up the build wiring; copy it: a `<Mod>RefDir` / `Has<Mod>Assemblies` pair in
+   `Directory.Build.props` (the project builds only where the mod is installed, so CI and other PCs skip it), a
+   conditioned `ProjectReference` and a `Copy` into `compat\` in both `ModderLords.Cli.csproj` and
+   `ModderLords.App.csproj`. Reach anything only some versions of the mod have (another fork's API, its screen
+   types that need UIExtenderEx to compile) by reflection, so the DLL builds against any installed copy.
 5. **A health step** for a mod's module: register `<ModId>.health` (side `Any`), reporting what the mod loaded as its
    `value` (a catalog's size and hash, say). The core suite's `mods.health` runs every one on every side and compares
    them, in every run that loads the module.
