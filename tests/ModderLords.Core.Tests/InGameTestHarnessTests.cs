@@ -21,6 +21,24 @@ public class TestPlanTests
         Assert.Equal(["server", "client:1"], plan.Sides);
         Assert.Equal(1, plan.Clients);
         Assert.False(plan.SinglePlayer);
+        // The run's setup waits for the join and stops time; the suite runs on the world the suite before it left.
+        Assert.Equal(2, plan.Api);
+        Assert.Equal(SuiteMode.Coop, plan.Mode);
+        Assert.True(plan.SharesWorld);
+        Assert.DoesNotContain(plan.Steps, s => s.Id is "game.onMap" or "game.joined" or "game.pause");
+    }
+
+    [Fact]
+    public void The_built_in_Coop_suites_run_in_one_launch_on_cores_world()
+    {
+        var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var picked = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: false, onlyMod: null, withOthers: false, [],
+            modules: ["stash", "sync", "perks", "parity"]);
+        var launches = SuiteSelection.CoopLaunches(picked);
+        Assert.Equal([["core", "parity", "both-perks", "stash", "hero-level", "sync-basics"]], launches.Select(l => l.Select(p => p.Name).ToArray()));
+        var plan = SuiteSelection.Compose("selected", launches[0], SuiteSelection.CoopSetup);
+        Assert.Equal([["core", "parity", "both-perks", "stash", "hero-level", "sync-basics"]], plan.Worlds.Select(w => w.ToArray()));
+        Assert.Single(plan.Steps, s => s.Id == "game.joined");
     }
 
     [Fact]
@@ -48,13 +66,13 @@ public class TestPlanTests
     }
 
     [Fact]
-    public void Picking_modules_runs_only_their_suites_and_core_including_v1_suites()
+    public void Picking_modules_runs_only_their_suites_and_core()
     {
         var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var picked = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: false, onlyMod: null, withOthers: false, [], modules: ["sync"]);
         Assert.Equal(["core", "hero-level", "sync-basics"], picked.Select(p => p.Name));
         var none = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: false, onlyMod: null, withOthers: false, []);
-        Assert.Equal(["core"], none.Select(p => p.Name));
+        Assert.Equal(["core", "parity", "both-perks", "stash", "hero-level", "sync-basics"], none.Select(p => p.Name));
         var notes = new List<string>();
         var single = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: true, onlyMod: null, withOthers: false, notes, modules: ["sync", "world"]);
         Assert.Equal(["core", "sp-world"], single.Select(p => p.Name));
@@ -135,7 +153,7 @@ public class TestPlanTests
 
         var notes = new List<string>();
         var picked = SuiteSelection.Select(available, mods, singlePlayer: true, onlyMod: null, withOthers: false, notes);
-        Assert.Equal(["core", "needs-armor", "shared-one"], picked.Select(p => p.Name));
+        Assert.Equal(["core", "shared-one", "needs-armor"], picked.Select(p => p.Name));
         Assert.Contains(notes, n => n.StartsWith("needs-old-armor: needs ModularArmor2 <1 (this profile has v1.3.0)", StringComparison.Ordinal));
         Assert.Contains(notes, n => n.StartsWith("needs-warehouses: needs CoopWarehouses (not in this profile)", StringComparison.Ordinal));
         Assert.Contains(notes, n => n.StartsWith("coop-only: Coop only", StringComparison.Ordinal));
@@ -143,7 +161,7 @@ public class TestPlanTests
         var onlyArmor = SuiteSelection.Select(available, mods, singlePlayer: true, onlyMod: "ModularArmor2", withOthers: false, []);
         Assert.Equal(["core", "needs-armor"], onlyArmor.Select(p => p.Name));
         var withOthers = SuiteSelection.Select(available, mods, singlePlayer: true, onlyMod: "ModularArmor2", withOthers: true, []);
-        Assert.Equal(["core", "needs-armor", "shared-one"], withOthers.Select(p => p.Name));
+        Assert.Equal(["core", "shared-one", "needs-armor"], withOthers.Select(p => p.Name));
     }
 
     [Fact]
@@ -165,6 +183,7 @@ public class TestPlanTests
         Assert.Equal("true", plan.Steps[^1].Args["new"]);
         Assert.Equal("$a/me.heroName", plan.Steps[2].Args["n"]);
         Assert.Equal(SuiteSelection.RunWorld, plan.Steps[0].Args["name"]);
+        Assert.Equal([["a"], ["b"]], plan.Worlds.Select(w => w.ToArray()));
         Assert.Equal("game.createWorld", plan.Steps[0].Id);
         Assert.Equal("game.loadSave", plan.Steps[4].Id);
         Assert.All(plan.Steps.Take(3), s => Assert.Equal("a", s.Suite));
@@ -479,6 +498,18 @@ public sealed class TestSequencerTests : IDisposable
         Assert.Equal([CoreOutcome.Fail, CoreOutcome.Skipped, CoreOutcome.Pass, CoreOutcome.Pass], report.Steps.Select(s => s.Outcome));
         Assert.Equal([("a", false), ("b", true), ("end", true)], report.Suites);
         Assert.Contains("suites: a FAIL, b PASS, end PASS", report.ToText());
+    }
+
+    [Fact]
+    public async Task The_report_says_which_suites_shared_a_world()
+    {
+        var a = TestPlan.Parse("""{ "name": "a", "steps": [ { "id": "stash.count", "side": "server" } ] }""");
+        var b = TestPlan.Parse("""{ "name": "b", "world": "shared", "steps": [ { "id": "stash.count", "side": "server" } ] }""");
+        var c = TestPlan.Parse("""{ "name": "c", "steps": [ { "id": "stash.count", "side": "server" } ] }""");
+        var report = await Run(SuiteSelection.Compose("selected", [a, b, c], (_, _) => []));
+        Assert.Equal([["a", "b"], ["c"]], report.Worlds.Select(w => w.ToArray()));
+        Assert.Contains("world 1: a, b (shared)", report.ToText());
+        Assert.Contains("world 2: c" + Environment.NewLine, report.ToText());
     }
 
     [Fact]

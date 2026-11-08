@@ -171,8 +171,9 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
   is no join to wait for. The steps run on side `game`.
 - **One launch, many suites.** The launcher runs the suites in order. Before each suite that needs a fresh world it
   resets the world: in single player the agent reloads the fresh copy; in Coop the server restarts on the fresh copy
-  and the player's game rejoins (the same machinery as `game.saveAndReload`). Shared suites (decision 19) are run
-  together after the fresh ones, so one reset covers them all. The report lists each suite's outcome separately.
+  and the player's game rejoins (the same machinery as `game.saveAndReload`). Shared suites (decision 19) run straight
+  after the core suite, on its world, so they need no reset of their own. The report lists each suite's outcome
+  separately and which suites shared a world.
 
 ### Worlds (decisions 16 and 17)
 
@@ -312,9 +313,18 @@ ModderLords.Cli test --profile "My Mods" --single-player --mod ModularArmor2 [--
 - **Single player:** one launch. Before the first suite the run creates its world (`mltest-run`), or loads
   `--world NAME` (copied fresh into the game's saves as `mltest-NAME`); before each later suite it goes back to the
   main menu and loads that world again. A suite with `"world": "shared"` skips the reload.
+- **Shared suites run right after core,** on core's world; the suites that need a fresh world follow. The report ends
+  with `world 1: core, parity, ... (shared)`, one line per world.
 - **Coop:** the run's setup waits for the join and stops campaign time before the first suite of a launch. A suite
-  that needs a fresh world starts a new launch (the server starts on a fresh copy); shared suites join the launch
-  before them. Restarting the server inside one launch comes later.
+  that needs a fresh world starts a new launch (the server starts on a fresh copy); shared suites run in core's
+  launch. Restarting the server inside one launch comes later.
+- **The built-in Coop suites share a world** (2026-11-08): `parity`, `perks/both-perks`, `stash`, `sync/hero-level`
+  and `sync/sync-basics` are API 2 with `"world": "shared"`, so `--modules stash,sync,perks,parity` is one launch
+  instead of six. Each reads its "before" value or checks a total the server reports: `hero.adminLevel` raises the
+  level `by` 3 instead of setting 7, and `both-perks` puts the `BothPerks` rule back as it found it. `both-perks` still
+  needs a hero without Morning Exercise or Well Built; no other built-in suite opens perks, and its first checks fail
+  if one did. `retinues/editor` keeps a fresh world: it gives the player `town_EN1` and 20,000 gold, which the
+  shared suites would then run on, and it has not been run shared.
 - Step names are prefixed with their suite (`core/me`), so suites can name steps alike. A failure skips the rest of
   its own suite; the next suite still runs. The report groups steps by suite and ends with `suites: core PASS, ...`.
 - **First runs, 2026-11-07 (Harness profile, vanilla):** single player picked `core` and passed in 54 s (world
@@ -429,9 +439,9 @@ logger's sinks, and in a test run the stack that first built Coop's logger), `ga
 Coop's server refuses a town entry from further away), `settlement.enter` (the player's party enters a town, as
 arriving there does),
 `party.settlement`, `hero.addGold`, `hero.gold`, `hero.adminLevel` (server: the character editor's
-`modderlords.edit … level=N` command), `hero.level`, `hero.addPerk` (server: `HeroDeveloper.AddPerk`, as Coop's
+`modderlords.edit … level=N` command; `by: N` raises the level from where it is), `hero.level`, `hero.addPerk` (server: `HeroDeveloper.AddPerk`, as Coop's
 character screen does there), `hero.hasPerk`, `hero.maxHitPoints`, `rules.set` (server: turns a ModderLords gameplay
-rule on or off, e.g. `BothPerks`), `party.addItem`, `party.itemCount`, `stash.count`, and
+rule on or off, e.g. `BothPerks`; reports the rule's `before` value, to put it back), `party.addItem`, `party.itemCount`, `stash.count`, and
 `stash.deposit` / `stash.reopen` (both open the stash as the town menu does, so the party must be in the town).
 `game.whoAmI` also takes an optional `heroName` and fails if the hero is someone else.
 

@@ -2,22 +2,23 @@
   // The "Heroes get both perks of a pair" rule. The server gives the other perk of a pair, and Coop sends it to the
   // player, so both sides count it in the hero's max hit points. (With the Both Perks mod, the second perk existed on
   // the player's game only, and the server stopped health regen at its own, lower limit.)
-  // Athletics: Morning Exercise pairs with Well Built (+5 hit points).
-  "api": 1,
+  // Athletics: Morning Exercise pairs with Well Built (+5 hit points). On a shared world the hero must not have either
+  // perk yet (no other built-in suite opens perks; the steps fail loudly if one did), and the rule is put back as it
+  // was for the suites after this one.
+  "api": 2,
   "name": "both-perks",
+  "mode": "coop",
+  "world": "shared",
   "description": "With the both-perks rule on, a perk confirmed on the server gives its pair on both sides, and both count the same max hit points.",
   "steps": [
-    { "id": "game.onMap", "side": "server" },
-    { "id": "game.onMap", "side": "client:1" },
-    { "id": "game.joined", "side": "client:1" },
-    { "id": "game.pause", "side": "server" },
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
-    { "id": "rules.set", "side": "server", "args": { "rule": "BothPerks", "value": "true" } },
+    { "id": "rules.set", "side": "server", "as": "rule", "args": { "rule": "BothPerks", "value": "true" } },
     { "id": "hero.hasPerk", "side": "server", "as": "pairBefore", "args": { "heroName": "$me.heroName", "perk": "AthleticsWellBuilt", "expected": "false" } },
     { "compare": "hero.maxHitPoints", "sides": ["server", "client:1"], "as": "before", "args": { "heroName": "$me.heroName" } },
     { "id": "hero.addPerk", "side": "server", "as": "picked", "args": { "heroName": "$me.heroName", "perk": "AthleticsMorningExercise" } },
     { "id": "hero.hasPerk", "side": "server", "as": "pairServer", "args": { "heroName": "$me.heroName", "perk": "AthleticsWellBuilt", "expected": "true" } },
     { "id": "hero.hasPerk", "side": "client:1", "as": "pairClient", "args": { "heroName": "$me.heroName", "perk": "AthleticsWellBuilt", "expected": "true" } },
-    { "compare": "hero.maxHitPoints", "sides": ["server", "client:1"], "as": "after", "args": { "heroName": "$me.heroName" } }
+    { "compare": "hero.maxHitPoints", "sides": ["server", "client:1"], "as": "after", "args": { "heroName": "$me.heroName" } },
+    { "id": "rules.set", "side": "server", "as": "restore", "args": { "rule": "BothPerks", "value": "$rule.before" } }
   ]
 }

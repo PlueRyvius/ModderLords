@@ -104,7 +104,8 @@ public static class InGameTestRun
 
         if (options.SinglePlayer)
         {
-            // One launch: the run makes its world (or loads the test world) once, and loads it fresh before each suite.
+            // One launch: the run makes its world (or loads the test world) once, and loads it fresh before each suite
+            // that needs a fresh world.
             string? spWorld = null;
             if (options.World is { } named)
             {
@@ -120,8 +121,8 @@ public static class InGameTestRun
             return Collect(await RunSinglePlayer(profile, composed, options, say, cancel));
         }
 
-        // Coop: a fresh world costs a launch for now (the server restarts on the fresh copy); shared suites join the
-        // launch before them.
+        // Coop: a fresh world costs a launch for now (the server restarts on the fresh copy); shared suites run in
+        // core's launch.
         var launches = SuiteSelection.CoopLaunches(chosen);
         var exit = 0;
         for (int n = 0; n < launches.Count && !cancel.IsCancellationRequested; n++)

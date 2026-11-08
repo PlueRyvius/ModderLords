@@ -1,18 +1,17 @@
 {
   // Coop 0.1.7 dropped the HeroLevelChanged event, and syncs Hero.Level only for writes inside the game methods it
   // patches. The App's character editor sets a level with ModderLords' modderlords.edit command on the server; the
-  // player's game must see the new level (PR #263 routes the write through Coop's own interceptor).
-  "api": 1,
+  // player's game must see the new level (PR #263 routes the write through Coop's own interceptor). The level is
+  // raised from where it is, not set to a fixed one, so the edit changes something on a shared world.
+  "api": 2,
   "name": "hero-level",
+  "mode": "coop",
+  "world": "shared",
   "description": "A level set with the character editor's server command reaches the player's game.",
   "steps": [
-    { "id": "game.onMap", "side": "server" },
-    { "id": "game.onMap", "side": "client:1" },
-    { "id": "game.joined", "side": "client:1" },
-    { "id": "game.pause", "side": "server" },
     { "id": "game.whoAmI", "side": "client:1", "as": "me" },
     { "compare": "hero.level", "sides": ["server", "client:1"], "as": "before", "args": { "heroName": "$me.heroName" } },
-    { "id": "hero.adminLevel", "side": "server", "as": "set", "args": { "heroName": "$me.heroName", "level": 7 } },
+    { "id": "hero.adminLevel", "side": "server", "as": "set", "args": { "heroName": "$me.heroName", "by": 3 } },
     { "id": "hero.level", "side": "client:1", "args": { "heroName": "$me.heroName", "expected": "$set.value" } },
     { "compare": "hero.level", "sides": ["server", "client:1"], "as": "after", "args": { "heroName": "$me.heroName" } }
   ]
