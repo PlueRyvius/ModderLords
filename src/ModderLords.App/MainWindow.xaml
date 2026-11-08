@@ -1041,6 +1041,115 @@
                     </Grid>
                 </DockPanel>
             </TabItem>
+            <TabItem Header="{l:T 'Tests'}" DataContext="{Binding Tests}">
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
+                               Text="{l:T 'Runs scripted checks inside a real game on this profile (as saved), and says pass or fail per suite. Tick the test modules you want; the core checks always run. Single player starts just the game; Coop also starts the server and joins it. Don\&#x27;t use the PC while it runs: the game window comes to the front. The same runs are on the command line: ModderLords.Cli test --modules NAME (docs/WRITING-TEST-MODULES.md).'}" />
+                    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <RadioButton Content="{l:T 'Single player'}" IsChecked="{Binding SinglePlayer}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <RadioButton Content="{l:T 'Coop'}" IsChecked="{Binding IsCoop}" VerticalAlignment="Center" Margin="0,0,20,0" />
+                        <TextBlock Text="{l:T 'Test world:'}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ComboBox ItemsSource="{Binding Worlds}" SelectedItem="{Binding World}" MinWidth="160" Margin="0,0,20,0"
+                                  ToolTip="{l:T 'A save under test-worlds, copied fresh for every launch. Empty: single player makes its own world; Coop needs one, so your campaign is never touched.'}" />
+                        <CheckBox Content="{l:T 'Leave the game open if something fails'}" IsChecked="{Binding KeepOpenOnFail}" VerticalAlignment="Center" />
+                    </WrapPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="{l:T 'Run tests'}" Command="{Binding RunCommand}" Padding="14,4" Margin="0,0,8,0" />
+                        <Button Content="{l:T 'Cancel'}" Command="{Binding CancelCommand}" Padding="10,4" Margin="0,0,8,0" />
+                        <Button Content="{l:T 'Refresh'}" Command="{Binding RefreshCommand}" Padding="10,4" Margin="0,0,8,0"
+                                ToolTip="{l:T 'Lists the test modules and test worlds again, and checks which modules this profile can run.'}" />
+                        <Button Content="{l:T 'Open run folder'}" Command="{Binding OpenRunFolderCommand}" Padding="10,4" Margin="0,0,8,0" />
+                        <Button Content="{l:T 'Copy report'}" Command="{Binding CopyReportCommand}" Padding="10,4" />
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Headline}" FontWeight="Bold" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" MinWidth="220" />
+                            <ColumnDefinition Width="5" />
+                            <ColumnDefinition Width="3*" />
+                        </Grid.ColumnDefinitions>
+                        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Modules}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{DynamicResource ButtonBorder}" BorderThickness="0,0,0,1" Padding="4,6">
+                                            <DockPanel>
+                                                <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsPicked}" IsEnabled="{Binding CanPick}" VerticalAlignment="Top" Margin="0,2,8,0" />
+                                                <StackPanel>
+                                                    <TextBlock TextWrapping="Wrap"><Run Text="{Binding Title, Mode=OneWay}" FontWeight="Bold" /><Run Text="  " /><Run Text="{Binding Id, Mode=OneWay}" Foreground="{DynamicResource MutedForeground}" FontFamily="Consolas" /></TextBlock>
+                                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                                    <TextBlock Text="{Binding Needs}" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,2,0,0"
+                                                               Visibility="{Binding HasNeeds, Converter={StaticResource BoolToVis}}" />
+                                                    <TextBlock Text="{Binding Unavailable}" TextWrapping="Wrap" Foreground="{DynamicResource WarningForeground}" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="{DynamicResource SplitterBrush}" />
+                        <Grid Grid.Column="2">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="2*" />
+                                <RowDefinition Height="5" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <ItemsControl Grid.Row="0" ItemsSource="{Binding Suites}" Margin="0,0,0,6">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{DynamicResource ButtonBorder}" BorderThickness="1" CornerRadius="3" Padding="6,2" Margin="0,0,6,4">
+                                            <TextBlock><Run Text="{Binding Suite, Mode=OneWay}" /><Run Text=" " /><Run Text="{Binding Verdict, Mode=OneWay}" FontWeight="Bold">
+                                                <Run.Style>
+                                                    <Style TargetType="Run">
+                                                        <Setter Property="Foreground" Value="{DynamicResource SuccessForeground}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Verdict}" Value="FAIL"><Setter Property="Foreground" Value="{DynamicResource DangerForeground}" /></DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Run.Style>
+                                            </Run></TextBlock>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Steps}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{DynamicResource ButtonBorder}" BorderThickness="0,0,0,1" Padding="4,3">
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Verdict}" Width="52" FontFamily="Consolas" FontWeight="Bold">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource MutedForeground}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Verdict}" Value="PASS"><Setter Property="Foreground" Value="{DynamicResource SuccessForeground}" /></DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Verdict}" Value="KNOWN"><Setter Property="Foreground" Value="{DynamicResource WarningForeground}" /></DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Verdict}" Value="FAIL"><Setter Property="Foreground" Value="{DynamicResource DangerForeground}" /></DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Verdict}" Value="NONE"><Setter Property="Foreground" Value="{DynamicResource DangerForeground}" /></DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Verdict}" Value="PASS?"><Setter Property="Foreground" Value="{DynamicResource DangerForeground}" /></DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <TextBlock TextWrapping="Wrap"><Run Text="{Binding Suite, Mode=OneWay}" Foreground="{DynamicResource MutedForeground}" /><Run Text="  " /><Run Text="{Binding Step, Mode=OneWay}" FontWeight="Bold" /><Run Text=" on " /><Run Text="{Binding Side, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Message, Mode=OneWay}" /></TextBlock>
+                                                </DockPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch" Background="{DynamicResource SplitterBrush}" />
+                            <ListBox Grid.Row="3" ItemsSource="{Binding Progress}" FontFamily="Consolas" FontSize="11" />
+                        </Grid>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
             <TabItem Header="{l:T 'Share'}">
                 <Grid>
                     <Grid.ColumnDefinitions>
