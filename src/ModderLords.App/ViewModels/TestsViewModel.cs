@@ -22,7 +22,10 @@ public sealed partial class TestModuleRow : ObservableObject
         Needs = module.Requires.Count == 0 ? "" : Loc.T("Needs: ") + string.Join(", ", module.Requires);
         IsCore = module.Id == SuiteSelection.CoreSuite;
         _isPicked = IsCore;
+        if (InGameTestRun.MissingStepsDll(module) is not null) _unavailable = NoStepsDll;
     }
+
+    internal static string NoStepsDll => Loc.T("Unavailable: this build of ModderLords does not include its test steps");
 
     public string Id { get; }
     public string Title { get; }
@@ -126,7 +129,8 @@ public partial class TestsViewModel : ObservableObject
         {
             var module = TestSuites.Module(row.Id)!;
             var unmet = SuiteSelection.Unmet(module.Requires, mods);
-            row.Unavailable = unmet.Count == 0 ? "" : Loc.T("Unavailable: needs ") + string.Join(", ", unmet.Select(r => SuiteSelection.Describe(r, mods)));
+            row.Unavailable = InGameTestRun.MissingStepsDll(module) is not null ? TestModuleRow.NoStepsDll
+                : unmet.Count == 0 ? "" : Loc.T("Unavailable: needs ") + string.Join(", ", unmet.Select(r => SuiteSelection.Describe(r, mods)));
             if (!row.IsAvailable) row.IsPicked = false;
         }
     }

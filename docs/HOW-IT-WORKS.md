@@ -55,6 +55,12 @@ which loads. **Profiles** keep named mod sets. A profile can be exported to a fi
 profile button on the top bar switches between pinned and recent ones; its **Manage profiles…** (Ctrl+P) opens the
 Profiles window, with groups, pins and a status per profile (ready, mods missing, or mods changed since its last launch).
 
+**Verified by ModderLords**, in the Profiles window, lists mod sets the maintainer has checked work together, each
+with its badge (gold: tested by the maintainer). Use one directly; **Get missing mods…** subscribes to the ones you
+lack on the Workshop, and downloads the maintainer's own mods from their GitHub release when the Workshop does not
+have that version yet. Changing a verified profile's mods saves a copy of your own; the verified one never changes
+under its badge. [Below](#verified-profiles)
+
 ## Hosting
 
 1. Tick the server's mods on **Mods** and save.
@@ -179,6 +185,9 @@ what works, what to turn on and what does not work. Mods you have installed are 
   [the support report](#the-support-report).
 - **Updates**: a banner offers each new release. **Update now** downloads it, checks it against GitHub's checksum,
   replaces the app and restarts. Profiles are kept.
+- **Straight to the main menu**: games started from ModderLords skip the intro video, and no longer stop on the
+  game's "Mod change detected" box after the mod set changes. ModderLords does what pressing OK would have done
+  before the game starts. [How](#your-own-game)
 - **Languages**: English and Simplified Chinese.
 - **Coop version**: built and tested against Bannerlord Coop 0.1.7. Coop 0.1.7 syncs town stashes and the inventory
   screen's trades itself, so ModderLords leaves those to it.
@@ -212,6 +221,18 @@ launcher's selection is never touched. When two copies of a mod exist, or a mod 
 started from a private folder of links (`client-launches`) that points at exactly the chosen copies. That folder copies
 Steam's layout (the game under `common\<game folder>`, beside a `workshop` link to the real `steamapps\workshop`), so
 mods that find Workshop files by counting folders up from the game's exe still find them.
+
+Two things happen before the game starts, so it reaches the main menu with nobody at the keyboard:
+
+- **The shader cache's module list.** The engine keeps the module set its shader cache was built for in
+  `%ProgramData%\Mount and Blade II Bannerlord\Shaders\CoreShaders\<api>\shader_mapping.bin`, and shows an OK-only
+  "Mod change detected" box when the set differs. `ShaderCacheMapping.Prepare` does what OK does: it clears that
+  folder's cached shaders and records the new set. A file it cannot read is left to the game, which then asks as
+  before.
+- **The intro video.** The game plays `Native\Videos\TWLogo_and_Partners.ivf` only if the file exists, and has no
+  launch option for it. `IntroVideo.Hide` renames it for the launch and puts it back when the game exits, or at the
+  next start of the app with no game running. A ledger written before the rename makes sure a crash still gets it
+  back.
 
 ### The server
 
@@ -384,6 +405,22 @@ server or the game). A mod new to a profile takes those defaults; mods already i
 
 The **Supported mods** tab is separate: written descriptions of how each mod is supported, embedded in the app.
 
+## Verified profiles
+
+`verified-profiles.json` lists mod sets by id, version and Workshop id, each with its verifications (who checked it,
+when, and which tests passed). It is bundled and fetched between releases the same way as the compatibility database,
+through the shared `RemoteDataFile`. A downloaded copy is refused if it lists far fewer profiles than the bundled one
+or is older than it. A profile with no verifications is a draft, which only development builds list.
+
+- **Using one** writes a normal profile file tied to the entry (`VerifiedId`), with this PC's game folder, so
+  launching works as for any profile. Saving a change to its mods saves a copy of your own instead.
+- **Each mod is compared** with the version the entry names: matches, a different version, or missing.
+- **The maintainer's own mods** can carry a GitHub release: repository (only `PlueRyvius` ones are accepted), tag,
+  zip and the zip's SHA-256. When the Workshop does not serve that version, **Get missing mods…** downloads the zip,
+  refuses it unless the hash matches, checks the mod's id and version inside, and unpacks it whole into
+  `%LOCALAPPDATA%\ModderLords\mods\<Id>\<version>\<Id>`. The profile pins that folder. The game's Modules folder and
+  the Workshop folder are never written. [PROFILE-MANAGER.md](PROFILE-MANAGER.md) has the design.
+
 ## The support report
 
 **Report a problem…** gathers the launch plan, profile, module list and the recent logs that matter from the launcher,
@@ -393,12 +430,20 @@ one, and goes in a second zip. Nothing is uploaded: you attach the zip to the Gi
 
 ## The in-game test harness
 
-CI has no game, so co-op behaviour is checked by `ModderLords.Cli test`: it starts the server and a player's game in
-test mode, and a small agent inside `ModderLords.Compat` runs a suite's steps on each side (give an item, enter a
-town, use the stash, compare both sides). Built-in suites cover the stash, gold sync, the editor's level edit and the
-both-perks rule. The `parity` suite changes nothing: it checks that every mod that loaded also started on each side
-(a mod that quietly fails on the server works only on players' games) and that a player's hero reads the same on both.
-Each run leaves a report, evidence and both sides' logs in a run folder. Test mode is off unless the launch switches
+CI has no game, so behaviour in a real game is checked by the **Tests** tab, or `ModderLords.Cli test`. It starts a
+player's game in test mode (and, for Coop, the server too), and a small agent inside `ModderLords.Compat` runs a
+suite's steps on each side (give an item, enter a town, use the stash, compare both sides).
+
+- **Test modules** group suites by area (the stash, server-to-player sync, perks, worlds made by code, Retinues).
+  Each ships as a DLL with ModderLords; a mod's own module can be added the same way
+  ([WRITING-TEST-MODULES.md](WRITING-TEST-MODULES.md)).
+- **The core checks** always run and change nothing: every mod that loaded also started, each game loaded the mod
+  copies ModderLords picked (by fingerprint), no mod showed an error on screen, and in Coop a player's hero reads the
+  same on both sides.
+- **Single player** runs leave Coop out and make a world by code; **Coop** runs need a test world, so a real campaign
+  is never changed.
+
+Each run leaves a report, evidence and each side's logs in a run folder. Test mode is off unless the launch switches
 it on. [INGAME-TEST-HARNESS.md](INGAME-TEST-HARNESS.md) has the details.
 
 ## Releases and updates
