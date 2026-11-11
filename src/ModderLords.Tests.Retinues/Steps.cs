@@ -14,7 +14,11 @@ using Retinues.Game;
 using Retinues.Game.Wrappers;
 using Retinues.Managers;
 using Retinues.Troops;
+using Helpers;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameState;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Inventory;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
@@ -59,6 +63,9 @@ public static class Steps
         InGameTests.Register("retinues.isUnlocked", StepSide.Any, IsUnlocked);
         InGameTests.Register("retinues.watchPopups", StepSide.Client, WatchPopups);
         InGameTests.Register("retinues.unlockPopup", StepSide.Client, UnlockPopup);
+        InGameTests.Register("retinues.setOption", StepSide.Any, SetOption);
+        InGameTests.Register("retinues.reportKills", StepSide.Client, ReportKills);
+        InGameTests.Register("retinues.discard", StepSide.Client, Discard);
         InGameTests.Register("retinues.remove", StepSide.Client, Remove);
         InGameTests.Register("retinues.noErrors", StepSide.Any, NoErrors);
     }
@@ -458,12 +465,88 @@ public static class Steps
         var seen = ctx.State.TryGetValue(Popups, out var s) ? (List<InquiryData>)s! : throw new StepFailedException("retinues.watchPopups did not run first");
         var name = ItemArg(ctx).Name.ToString();
         InquiryData? popup = null;
-        yield return ctx.Until(() => { lock (seen) popup = seen.LastOrDefault(d => d.TitleText == "New Gear Unlocked"); return popup != null; }, "the New Gear Unlocked pop-up", Sync);
+        yield return ctx.Until(() => { lock (seen) popup = seen.LastOrDefault(d => d.TitleText == "New Gear Unlocked" && d.Text.Contains(name)); return popup != null; }, $"the New Gear Unlocked pop-up naming {name}", Sync);
         ctx.Log("pop-up text: " + popup!.Text);
         InformationManager.HideInquiry();
         popup.AffirmativeAction?.Invoke();
         ctx.Assert(popup.Text.Contains(name), $"the pop-up does not name {name}: {popup.Text}");
         ctx.Report("value", popup.Text);
+    }
+
+    /// <summary>
+    /// Sets one of Retinues' options (<c>option</c>, its name in Retinues.Configuration.Config) to <c>value</c> on this
+    /// game. In Coop a player's game runs with the server's settings (session overrides), so set it on both sides.
+    /// </summary>
+    private static IEnumerable<StepWait?> SetOption(StepContext ctx)
+    {
+        var name = ctx.Arg("option");
+        var option = typeof(Config).GetField(name, BindingFlags.Public | BindingFlags.Static)?.GetValue(null)
+            ?? throw new StepFailedException($"Retinues has no option '{name}'");
+        var valueProperty = option.GetType().GetProperty("Value")!;
+        var value = Convert.ChangeType(ctx.Arg("value"), valueProperty.PropertyType, System.Globalization.CultureInfo.InvariantCulture);
+        valueProperty.SetValue(option, value);
+        // The fork's session overrides (the server's settings on a player's game) win over the stored value.
+        var key = option.GetType().GetProperty("Key")?.GetValue(option) as string;
+        var overrides = typeof(Player).Assembly.GetType("Retinues.Configuration.SessionOverrides", false);
+        if (key != null && overrides != null)
+        {
+            var args = new object?[] { key, null };
+            if ((bool)overrides.GetMethod("TryGet")!.Invoke(null, args)!)
+                overrides.GetMethod("Set")!.Invoke(null, new object[] { key, value });
+        }
+        var now = valueProperty.GetValue(option);
+        ctx.Assert(Equals(now, value), $"{name} reads {now} after setting it to {value}");
+        ctx.Report("value", now);
+        yield break;
+    }
+
+    /// <summary>
+    /// Player: reports kills of an item (<c>item</c>, <c>count</c> kills; "auto" = what unlocks it) the way Retinues
+    /// does at the end of a won battle: on a co-op player's game the battle runs there, and its kills go to the server
+    /// (Retinues coop.2: they were counted nowhere). A test run cannot fight a battle yet, so this calls the same
+    /// report the battle's end makes.
+    /// </summary>
+    private static IEnumerable<StepWait?> ReportKills(StepContext ctx)
+    {
+        var item = ItemArg(ctx);
+        var count = ctx.Arg("count", "auto") == "auto" ? (int)Config.RequiredKillsPerItem : ctx.ArgInt("count");
+        var counts = new Dictionary<ItemObject, int> { [item] = count };
+        var report = typeof(UnlocksBehavior).GetMethod("ReportToServer", BindingFlags.NonPublic | BindingFlags.Static);
+        if (report == null || !(bool)report.Invoke(null, new object[] { counts, true })!)
+        {
+            // Single player, or a Retinues without the co-op report: the battle's end adds them here.
+            typeof(UnlocksBehavior).GetMethod("AddUnlockCounts", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(UnlocksBehavior.Instance, new object[] { counts, true });
+        }
+        ctx.Report("value", count);
+        yield break;
+    }
+
+    /// <summary>
+    /// Player: discards <c>count</c> of an item (<c>item</c>; "auto" = what unlocks it) from the party's inventory, as
+    /// dragging it to the discard side and pressing Done does. Retinues counts discards toward unlocks (when its
+    /// UnlockItemsFromDiscards option is on); Retinues coop.2: in Coop the game's discard event fires on neither side.
+    /// </summary>
+    private static IEnumerable<StepWait?> Discard(StepContext ctx)
+    {
+        var item = ItemArg(ctx);
+        var count = ctx.Arg("count", "auto") == "auto" ? (int)Config.RequiredDiscardsPerItem : ctx.ArgInt("count");
+        var party = MobileParty.MainParty.ItemRoster;
+        yield return ctx.Until(() => party.GetItemNumber(item) >= count, $"the party to hold {count} {item.StringId} (holds {party.GetItemNumber(item)})", Sync);
+        var before = party.GetItemNumber(item);
+        var stack = party.Where(e => e.EquipmentElement.Item == item).OrderByDescending(e => e.Amount).First();
+
+        InventoryScreenHelper.OpenScreenAsInventory();
+        yield return ctx.Until(() => InventoryScreenHelper.GetActiveInventoryState() != null, "the inventory screen to open", TimeSpan.FromSeconds(20));
+        var logic = InventoryScreenHelper.GetActiveInventoryState().InventoryLogic;
+        ctx.Assert(logic.CanGainXpFromDiscarding, "the party inventory does not count discards here");
+        logic.AddTransferCommand(TransferCommand.Transfer(count, InventoryLogic.InventorySide.PlayerInventory, InventoryLogic.InventorySide.OtherInventory,
+            stack, EquipmentIndex.None, EquipmentIndex.None, Hero.MainHero.CharacterObject));
+        // Exactly what the screen's Done does (see BuiltInSteps' stash steps).
+        InventoryScreenHelper.CloseScreen(false);
+        yield return ctx.Until(() => !(GameStateManager.Current?.ActiveState is InventoryState), "the inventory screen to close", TimeSpan.FromSeconds(20));
+        yield return ctx.Settled(() => party.GetItemNumber(item), $"the party's {item.StringId}", before - count, timeout: Sync);
+        ctx.Report("value", count);
     }
 
     private static ItemObject ItemArg(StepContext ctx)

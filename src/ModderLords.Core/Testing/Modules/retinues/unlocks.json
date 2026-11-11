@@ -1,0 +1,36 @@
+{
+  // Retinues unlocks gear from kills in won battles and, when its option is on, from discarded items. In Coop the
+  // server holds the campaign's unlocks, but battles and the inventory screen run on the players' games: each reports
+  // what it counted, the server adds it, and every player sees the unlock and its pop-up. Retinues coop.2: kills and
+  // discards were counted nowhere in Coop.
+  "api": 2,
+  "name": "unlocks",
+  "mode": "both",
+  "description": "Kills reported at a battle's end and items discarded from the inventory unlock gear, on both sides, with the unlock pop-up on the player's game.",
+  "requires": [ { "id": "Retinues" } ],
+  "steps": [
+    { "id": "Retinues.health", "side": "game" },
+    { "id": "Retinues.health", "side": "player", "mode": "coop" },
+    { "id": "game.whoAmI", "side": "player", "as": "me" },
+    { "id": "retinues.ready", "side": "player" },
+    { "id": "retinues.watchPopups", "side": "player", "mode": "coop" },
+    // Kills: a test run cannot fight a battle yet, so the player's game makes the report a won battle's end makes.
+    { "id": "retinues.lockedItem", "side": "game", "as": "killed", "args": { "slot": "Head" } },
+    { "id": "retinues.isUnlocked", "side": "player", "args": { "item": "$killed.value", "expected": "false" } },
+    { "id": "retinues.reportKills", "side": "player", "args": { "item": "$killed.value", "count": "auto" } },
+    { "compare": "retinues.isUnlocked", "sides": ["game", "player"], "as": "killUnlocked", "args": { "item": "$killed.value", "expected": "true" } },
+    { "id": "retinues.unlockPopup", "side": "player", "mode": "coop", "args": { "item": "$killed.value" } },
+    // Discards, through the inventory screen's Done: off by default in Retinues, so switched on for both sides.
+    { "id": "retinues.setOption", "side": "game", "args": { "option": "UnlockItemsFromDiscards", "value": "true" } },
+    { "id": "retinues.setOption", "side": "player", "mode": "coop", "args": { "option": "UnlockItemsFromDiscards", "value": "true" } },
+    { "id": "retinues.lockedItem", "side": "game", "as": "discarded", "args": { "slot": "Head" } },
+    { "id": "party.addItem", "side": "game", "args": { "heroName": "$me.heroName", "item": "$discarded.value", "count": 10 } },
+    { "id": "retinues.discard", "side": "player", "args": { "item": "$discarded.value", "count": 10 } },
+    { "compare": "retinues.isUnlocked", "sides": ["game", "player"], "as": "discardUnlocked", "args": { "item": "$discarded.value", "expected": "true" } },
+    { "id": "retinues.unlockPopup", "side": "player", "mode": "coop", "args": { "item": "$discarded.value" } },
+    { "id": "retinues.noErrors", "side": "game", "continueOnFail": true },
+    { "id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "game", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true }
+  ]
+}
