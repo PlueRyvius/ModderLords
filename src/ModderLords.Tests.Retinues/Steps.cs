@@ -16,6 +16,7 @@ using Retinues.Managers;
 using Retinues.Troops;
 using Helpers;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Inventory;
@@ -66,6 +67,8 @@ public static class Steps
         InGameTests.Register("retinues.setOption", StepSide.Any, SetOption);
         InGameTests.Register("retinues.reportKills", StepSide.Client, ReportKills);
         InGameTests.Register("retinues.discard", StepSide.Client, Discard);
+        InGameTests.Register("retinues.recruit", StepSide.Client, Recruit);
+        InGameTests.Register("retinues.troopKind", StepSide.Any, TroopKind);
         InGameTests.Register("retinues.remove", StepSide.Client, Remove);
         InGameTests.Register("retinues.noErrors", StepSide.Any, NoErrors);
     }
@@ -547,6 +550,71 @@ public static class Steps
         yield return ctx.Until(() => !(GameStateManager.Current?.ActiveState is InventoryState), "the inventory screen to close", TimeSpan.FromSeconds(20));
         yield return ctx.Settled(() => party.GetItemNumber(item), $"the party's {item.StringId}", before - count, timeout: Sync);
         ctx.Report("value", count);
+    }
+
+    /// <summary>
+    /// Player, Coop: recruits one volunteer of the settlement the party is in, as the recruit screen's Done does on a
+    /// Coop player's game (Coop replaces RecruitmentVM.OnDone with its own message carrying the cart; the screen is
+    /// Coop's and unchanged), then waits for the hire to land and reports the troop that joined (<c>value</c>) and the
+    /// culture troop that was in the slot (<c>culture</c>). Retinues coop.2: with Recruit Anywhere on, a player got the
+    /// culture troop outside their own fiefs.
+    /// </summary>
+    private static IEnumerable<StepWait?> Recruit(StepContext ctx)
+    {
+        var settlement = Settlement.CurrentSettlement;
+        ctx.Assert(settlement != null, "the party is in no settlement: run settlement.enter first");
+        var slot = settlement!.Notables
+            .SelectMany(n => (n.VolunteerTypes ?? Array.Empty<CharacterObject>()).Select((c, i) => (Hero: n, Troop: c, Index: i)))
+            .FirstOrDefault(s => s.Troop != null);
+        ctx.Assert(slot.Troop != null, $"no notable in {settlement.StringId} has a volunteer");
+        var roster = MobileParty.MainParty.MemberRoster;
+        var before = Counts(roster);
+
+        var messageType = AppDomain.CurrentDomain.GetAssemblies()
+            .Select(a => a.GetType("GameInterface.Services.TroopRosters.Messages.RecruitmentAttempted", false)).FirstOrDefault(x => x != null)
+            ?? throw new StepFailedException("Coop's RecruitmentAttempted is not loaded (run this in Coop)");
+        var brokerType = messageType.Assembly.GetType("Common.Messaging.MessageBroker", false)
+            ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType("Common.Messaging.MessageBroker", false)).First(x => x != null);
+        var cart = new[] { (slot.Hero, slot.Troop, slot.Index) };
+        var message = Activator.CreateInstance(messageType, MobileParty.MainParty, (IEnumerable<(Hero, CharacterObject, int)>)cart);
+        var broker = brokerType.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static)!.GetValue(null);
+        brokerType.GetMethod("Publish")!.MakeGenericMethod(messageType).Invoke(broker, new[] { (object)typeof(Steps), message });
+        ctx.Log($"recruiting {slot.Troop.StringId} from {slot.Hero.Name} (slot {slot.Index}) in {settlement.StringId}");
+
+        CharacterObject? joined = null;
+        yield return ctx.Until(() => (joined = Counts(roster).FirstOrDefault(kv => kv.Value > (before.TryGetValue(kv.Key, out var b) ? b : 0)).Key) != null,
+            "a recruit to join the party", Sync);
+        yield return ctx.Settled(() => string.Join(",", Counts(roster).OrderBy(kv => kv.Key.StringId).Select(kv => kv.Key.StringId + "=" + kv.Value)), "the party's troops");
+        joined = Counts(roster).FirstOrDefault(kv => kv.Value > (before.TryGetValue(kv.Key, out var b) ? b : 0)).Key;
+        ctx.Report("culture", slot.Troop.StringId);
+        ctx.Report("value", joined?.StringId);
+    }
+
+    /// <summary>
+    /// A troop (<c>troop</c>) belongs to the player's own clan or kingdom tree (a custom troop of theirs), or with
+    /// <c>expected</c> "culture", is not custom at all.
+    /// </summary>
+    private static IEnumerable<StepWait?> TroopKind(StepContext ctx)
+    {
+        var troop = TroopArg(ctx);
+        var kind = troop.IsCustom ? "custom" : "culture";
+        ctx.Log($"{troop.StringId} '{troop.Name}' is a {kind} troop");
+        if (ctx.HasArg("expected"))
+            ctx.Assert(kind == ctx.Arg("expected"), $"{troop.StringId} '{troop.Name}' is a {kind} troop, expected {ctx.Arg("expected")}");
+        ctx.Report("value", kind);
+        yield break;
+    }
+
+    private static Dictionary<CharacterObject, int> Counts(TroopRoster roster)
+    {
+        var counts = new Dictionary<CharacterObject, int>();
+        for (int i = 0; i < roster.Count; i++)
+        {
+            var e = roster.GetElementCopyAtIndex(i);
+            if (e.Character != null && !e.Character.IsHero)
+                counts[e.Character] = (counts.TryGetValue(e.Character, out var c) ? c : 0) + e.Number;
+        }
+        return counts;
     }
 
     private static ItemObject ItemArg(StepContext ctx)

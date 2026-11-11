@@ -1,0 +1,36 @@
+{
+  // Recruit Anywhere: with Retinues' "Restrict To Owned Settlements" off, a player recruiting outside their own fiefs
+  // gets their clan's troops. In Coop the volunteers are everyone's and Coop hires on the server against the
+  // notable's slot, so the server turns the culture troops just hired into the player's clan troops. Retinues coop.2:
+  // a Coop player always got the culture troop.
+  "api": 2,
+  "name": "recruit",
+  "mode": "coop",
+  "description": "Coop: a volunteer recruited in a town the player does not own joins as the player's clan troop with Recruit Anywhere on, and as the culture troop with it off.",
+  "requires": [ { "id": "Retinues" } ],
+  "steps": [
+    { "id": "Retinues.health", "side": "server" },
+    { "id": "Retinues.health", "side": "client:1" },
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "hero.addGold", "side": "server", "args": { "heroName": "$me.heroName", "amount": 20000 } },
+    { "id": "retinues.ready", "side": "client:1" },
+    // The clan needs regular troops to recruit as: Retinues makes them once the clan holds a fief.
+    { "id": "retinues.giveFief", "side": "server", "args": { "heroName": "$me.heroName", "town": "town_EN1" } },
+    { "id": "retinues.ensureTroops", "side": "client:1", "args": { "regulars": "true" } },
+    { "id": "retinues.setOption", "side": "server", "args": { "option": "RestrictToOwnedSettlements", "value": "false" } },
+    { "id": "retinues.setOption", "side": "client:1", "args": { "option": "RestrictToOwnedSettlements", "value": "false" } },
+    { "id": "party.toTownGate", "side": "server", "args": { "heroName": "$me.heroName", "town": "town_EN2" } },
+    { "id": "settlement.enter", "side": "client:1", "args": { "town": "town_EN2" } },
+    { "id": "retinues.recruit", "side": "client:1", "as": "anywhere" },
+    { "compare": "retinues.troopKind", "sides": ["server", "client:1"], "args": { "troop": "$anywhere.value", "expected": "custom" } },
+    // With Recruit Anywhere off, the same hire stays the culture's troop.
+    { "id": "retinues.setOption", "side": "server", "args": { "option": "RestrictToOwnedSettlements", "value": "true" } },
+    { "id": "retinues.setOption", "side": "client:1", "args": { "option": "RestrictToOwnedSettlements", "value": "true" } },
+    { "id": "retinues.recruit", "side": "client:1", "as": "owned" },
+    { "compare": "retinues.troopKind", "sides": ["server", "client:1"], "args": { "troop": "$owned.value", "expected": "culture" } },
+    { "id": "retinues.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "retinues.noErrors", "side": "client:1", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
