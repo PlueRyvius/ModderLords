@@ -6,7 +6,7 @@
   "api": 2,
   "name": "editor",
   "mode": "both",
-  "description": "A player's troops are created, renamed, trained, equipped, unequipped and given an upgrade that is then removed; both sides agree after each.",
+  "description": "With the editor open, a player's troops are created, renamed, trained, equipped, unequipped, given a higher join limit and an upgrade that is then removed; both sides agree after each.",
   "requires": [ { "id": "Retinues" } ],
   "steps": [
     // Where Retinues' log ends, so retinues.noErrors reads only this suite's lines.
@@ -23,6 +23,9 @@
     // no skill table on the player's game, and the editor closed on its equipment page.
     { "id": "retinues.editorPages", "side": "player", "args": { "troop": "$troops.retinue" } },
     { "id": "retinues.noErrors", "side": "player", "continueOnFail": true },
+    // From here the editor stays open, as it does while a player makes edits: in Coop each change the server sends
+    // back refreshes the open editor.
+    { "id": "retinues.openEditor", "side": "player", "args": { "troop": "$troops.retinue" } },
     { "id": "retinues.rename", "side": "player", "args": { "troop": "$troops.retinue", "name": "Harness Guard" } },
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "renamed", "args": { "troop": "$troops.retinue", "expectedName": "Harness Guard" } },
     { "id": "retinues.giveXp", "side": "game", "args": { "troop": "$troops.retinue", "amount": 5000 } },
@@ -32,10 +35,15 @@
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "equipped", "args": { "troop": "$troops.retinue" } },
     { "id": "retinues.unequip", "side": "player", "args": { "troop": "$troops.retinue", "slot": "Head" } },
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "unequipped", "args": { "troop": "$troops.retinue" } },
+    // Retinues coop.1: the join limit went to the server but never came back, so the editor stayed at 0 and a second
+    // click asked for 1 again.
+    { "id": "retinues.raiseJoinCap", "side": "player", "args": { "troop": "$troops.retinue", "times": 2 } },
+    { "compare": "retinues.troop", "sides": ["game", "player"], "as": "joinLimit", "args": { "troop": "$troops.retinue" } },
     { "id": "retinues.addUpgrade", "side": "player", "as": "upgrade", "args": { "troop": "$troops.basicRoot", "name": "Harness Veteran" } },
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "upgraded", "args": { "troop": "$upgrade.parent" } },
     { "id": "retinues.remove", "side": "player", "args": { "troop": "$upgrade.value", "parent": "$upgrade.parent" } },
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "removed", "args": { "troop": "$upgrade.parent" } },
+    { "id": "retinues.closeEditor", "side": "player" },
     { "id": "retinues.noErrors", "side": "game", "continueOnFail": true },
     { "id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true },
     { "id": "game.noErrors", "side": "game", "continueOnFail": true },

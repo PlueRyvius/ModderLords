@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using ModderLords.Testing;
 using Retinues.Configuration;
+using Retinues.Features.AutoJoin;
 using Retinues.Features.Experience;
 using Retinues.Game;
 using Retinues.Game.Wrappers;
@@ -47,6 +48,9 @@ public static class Steps
         InGameTests.Register("retinues.unequip", StepSide.Client, Unequip);
         InGameTests.Register("retinues.addUpgrade", StepSide.Client, AddUpgrade);
         InGameTests.Register("retinues.editorPages", StepSide.Client, EditorPages);
+        InGameTests.Register("retinues.openEditor", StepSide.Client, OpenEditorStep);
+        InGameTests.Register("retinues.closeEditor", StepSide.Client, CloseEditorStep);
+        InGameTests.Register("retinues.raiseJoinCap", StepSide.Client, RaiseJoinCap);
         InGameTests.Register("retinues.remove", StepSide.Client, Remove);
         InGameTests.Register("retinues.noErrors", StepSide.Any, NoErrors);
     }
@@ -315,16 +319,64 @@ public static class Steps
         ctx.Report("value", string.Join(",", parent.UpgradeTargets.Select(t => t.StringId)));
     }
 
+    /// <summary>
+    /// Player: opens the troop editor on a troop and leaves it open, as a player does while making several edits, so the
+    /// steps after it run with the editor showing (in Coop, each snapshot then refreshes the open editor).
+    /// </summary>
+    private static IEnumerable<StepWait?> OpenEditorStep(StepContext ctx)
+    {
+        var troop = TroopArg(ctx);
+        foreach (var wait in OpenEditor(ctx, troop)) yield return wait;
+        ctx.State[EditorKept] = true;
+    }
+
+    /// <summary>Player: closes the troop editor retinues.openEditor left open.</summary>
+    private static IEnumerable<StepWait?> CloseEditorStep(StepContext ctx)
+    {
+        ctx.State.Remove(EditorKept);
+        foreach (var wait in CloseEditor(ctx)) yield return wait;
+    }
+
+    /// <summary>
+    /// Player: raises a retinue's join limit with the editor's raise button, <c>times</c> times, waiting each time until
+    /// the editor shows the new limit (a player clicks again only after seeing it). Coop 0.1.7 / Retinues coop.1: the
+    /// limit was relayed to the server but never came back, so the editor stayed at 0 and every click asked for 1.
+    /// </summary>
+    private static IEnumerable<StepWait?> RaiseJoinCap(StepContext ctx)
+    {
+        var troop = TroopArg(ctx);
+        var times = ctx.ArgInt("times", 2);
+        foreach (var wait in OpenEditor(ctx, troop)) yield return wait;
+        var before = AutoJoinBehavior.GetJoinCap(troop);
+        for (var i = 1; i <= times; i++)
+        {
+            ctx.Assert(Editor.Get<bool>("TroopScreen", "CanRaiseRetinueCap"), $"the raise button is off at {AutoJoinBehavior.GetJoinCap(troop)} (max {Editor.Get<int>("TroopScreen", "RetinueCapMax")})");
+            Editor.Invoke("TroopScreen", "ExecuteRaiseRetinueCap");
+            var want = before + i;
+            yield return ctx.Until(() => Editor.Get<int>("TroopScreen", "RetinueCapValue") == want, $"the editor to show a join limit of {want} (shows {Editor.Get<int>("TroopScreen", "RetinueCapValue")})", Sync);
+        }
+        foreach (var wait in CloseEditor(ctx)) yield return wait;
+        ctx.Report("before", before);
+        ctx.Report("value", AutoJoinBehavior.GetJoinCap(troop));
+    }
+
+    private const string EditorKept = "retinues.editorKept";
+
     private static IEnumerable<StepWait?> OpenEditor(StepContext ctx, WCharacter troop)
     {
-        Editor.Launch();
-        yield return ctx.Until(() => Editor.IsOpen, "the troop editor to open", TimeSpan.FromSeconds(20));
+        if (!Editor.IsOpen)
+        {
+            Editor.Launch();
+            yield return ctx.Until(() => Editor.IsOpen, "the troop editor to open", TimeSpan.FromSeconds(20));
+        }
         Editor.SelectTroop(troop);
         yield return ctx.Delay(TimeSpan.FromSeconds(1));
     }
 
+    /// <summary>Closes the editor, unless retinues.openEditor asked for it to stay open.</summary>
     private static IEnumerable<StepWait?> CloseEditor(StepContext ctx)
     {
+        if (ctx.State.ContainsKey(EditorKept)) yield break;
         var manager = TaleWorlds.Core.Game.Current?.GameStateManager;
         if (manager?.ActiveState is TaleWorlds.CampaignSystem.GameState.ClanState) manager.PopState();
         yield return ctx.Until(() => !(TaleWorlds.Core.Game.Current?.GameStateManager?.ActiveState is TaleWorlds.CampaignSystem.GameState.ClanState), "the clan screen to close", TimeSpan.FromSeconds(10));
@@ -408,6 +460,7 @@ public static class Steps
         sb.Append(" battle:").Append(string.Join(",", Enumerable.Range(0, (int)EquipmentIndex.NumEquipmentSetSlots)
             .Select(i => set.Get((EquipmentIndex)i)?.Base?.StringId ?? "-")));
         sb.Append(" upgrades:").Append(string.Join(",", troop.UpgradeTargets.Select(t => t.StringId).OrderBy(x => x)));
+        if (troop.IsRetinue) sb.Append(" joinLimit:").Append(AutoJoinBehavior.GetJoinCap(troop));
         return sb.ToString();
     }
 
@@ -464,6 +517,14 @@ public static class Steps
             var vm = Vm ?? throw new StepFailedException("the troop editor is not open");
             var type = Retinues.GetType("Retinues.GUI.Editor.VM.Screen", true)!;
             vm.GetType().GetMethod("SwitchScreen")!.Invoke(vm, new[] { Enum.Parse(type, screen) });
+        }
+
+        /// <summary>Reads a property of one of the editor's pages, as its screen binds it.</summary>
+        public static T Get<T>(string page, string property)
+        {
+            var vm = Vm ?? throw new StepFailedException("the troop editor is not open");
+            var screen = vm.GetType().GetProperty(page)?.GetValue(vm) ?? throw new StepFailedException($"the editor has no {page}");
+            return (T)(screen.GetType().GetProperty(property)?.GetValue(screen) ?? throw new StepFailedException($"{page} has no {property}"));
         }
 
         /// <summary>Calls a button's method on one of the editor's pages (TroopScreen, EquipmentScreen).</summary>
