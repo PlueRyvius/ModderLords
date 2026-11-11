@@ -6,7 +6,7 @@
   "api": 2,
   "name": "editor",
   "mode": "both",
-  "description": "With the editor open, a player's troops are created, renamed, trained, equipped, unequipped, given a higher join limit and an upgrade that is then removed; both sides agree after each.",
+  "description": "With the editor open, a player's troops are created, renamed, trained, equipped, unequipped, given a higher join limit and an upgrade that is then removed, and an item is unlocked; both sides agree after each.",
   "requires": [ { "id": "Retinues" } ],
   "steps": [
     // Where Retinues' log ends, so retinues.noErrors reads only this suite's lines.
@@ -15,6 +15,7 @@
     { "id": "game.whoAmI", "side": "player", "as": "me" },
     { "id": "hero.addGold", "side": "game", "args": { "heroName": "$me.heroName", "amount": 20000 } },
     { "id": "retinues.ready", "side": "player" },
+    { "id": "retinues.watchPopups", "side": "player" },
     { "id": "retinues.coopRules", "side": "player", "mode": "coop", "continueOnFail": true },
     // Retinues makes a clan's regular troops (the ones that take upgrades) only once it holds a fief.
     { "id": "retinues.giveFief", "side": "game", "args": { "heroName": "$me.heroName", "town": "town_EN1" } },
@@ -35,6 +36,9 @@
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "equipped", "args": { "troop": "$troops.retinue" } },
     { "id": "retinues.unequip", "side": "player", "args": { "troop": "$troops.retinue", "slot": "Head" } },
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "unequipped", "args": { "troop": "$troops.retinue" } },
+    // The unequipped item goes into the campaign's stock. Retinues coop.2: stocks stayed as they were when the player
+    // joined, so the editor quoted the wrong price.
+    { "compare": "retinues.stock", "sides": ["game", "player"], "as": "stocked", "args": { "item": "$equip.item" } },
     // Retinues coop.1: the join limit went to the server but never came back, so the editor stayed at 0 and a second
     // click asked for 1 again.
     { "id": "retinues.raiseJoinCap", "side": "player", "args": { "troop": "$troops.retinue", "times": 2 } },
@@ -43,7 +47,14 @@
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "upgraded", "args": { "troop": "$upgrade.parent" } },
     { "id": "retinues.remove", "side": "player", "args": { "troop": "$upgrade.value", "parent": "$upgrade.parent" } },
     { "compare": "retinues.troop", "sides": ["game", "player"], "as": "removed", "args": { "troop": "$upgrade.parent" } },
+    // An item unlocked on the server reaches the player's open editor. Retinues coop.2: it never did until rejoining.
+    { "id": "retinues.lockedItem", "side": "game", "as": "locked", "args": { "slot": "Head" } },
+    { "id": "retinues.isUnlocked", "side": "player", "args": { "item": "$locked.value", "expected": "false" } },
+    { "id": "retinues.unlock", "side": "game", "args": { "item": "$locked.value", "announce": "true" } },
+    { "compare": "retinues.isUnlocked", "sides": ["game", "player"], "as": "unlocked", "args": { "item": "$locked.value", "expected": "true" } },
     { "id": "retinues.closeEditor", "side": "player" },
+    // Retinues shows "New Gear Unlocked" on the world map. Retinues coop.2: in Coop it showed only on the server.
+    { "id": "retinues.unlockPopup", "side": "player", "mode": "coop", "args": { "item": "$locked.value" } },
     { "id": "retinues.noErrors", "side": "game", "continueOnFail": true },
     { "id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true },
     { "id": "game.noErrors", "side": "game", "continueOnFail": true },
