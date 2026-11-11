@@ -8,6 +8,8 @@ using ModderLords.Testing;
 using Retinues.Configuration;
 using Retinues.Features.AutoJoin;
 using Retinues.Features.Experience;
+using Retinues.Features.Stocks;
+using Retinues.Features.Unlocks;
 using Retinues.Game;
 using Retinues.Game.Wrappers;
 using Retinues.Managers;
@@ -51,6 +53,12 @@ public static class Steps
         InGameTests.Register("retinues.openEditor", StepSide.Client, OpenEditorStep);
         InGameTests.Register("retinues.closeEditor", StepSide.Client, CloseEditorStep);
         InGameTests.Register("retinues.raiseJoinCap", StepSide.Client, RaiseJoinCap);
+        InGameTests.Register("retinues.stock", StepSide.Any, Stock);
+        InGameTests.Register("retinues.lockedItem", StepSide.Server, LockedItem);
+        InGameTests.Register("retinues.unlock", StepSide.Server, Unlock);
+        InGameTests.Register("retinues.isUnlocked", StepSide.Any, IsUnlocked);
+        InGameTests.Register("retinues.watchPopups", StepSide.Client, WatchPopups);
+        InGameTests.Register("retinues.unlockPopup", StepSide.Client, UnlockPopup);
         InGameTests.Register("retinues.remove", StepSide.Client, Remove);
         InGameTests.Register("retinues.noErrors", StepSide.Any, NoErrors);
     }
@@ -358,6 +366,110 @@ public static class Steps
         foreach (var wait in CloseEditor(ctx)) yield return wait;
         ctx.Report("before", before);
         ctx.Report("value", AutoJoinBehavior.GetJoinCap(troop));
+    }
+
+    // ---- unlocks and stocks -----------------------------------------------------------------------------
+
+    /// <summary>
+    /// How many of an item (<c>item</c>) are in stock, settled. Stocks are the campaign's, shared by every player: in
+    /// Coop the server holds them and the editor on each player's game quotes prices from them, so a compare checks
+    /// both sides agree.
+    /// </summary>
+    private static IEnumerable<StepWait?> Stock(StepContext ctx)
+    {
+        var id = ctx.Arg("item");
+        if (ctx.HasArg("expected"))
+            yield return ctx.Settled(() => StocksBehavior.Get(id), $"the stock of {id}", ctx.ArgInt("expected"), timeout: Sync);
+        else
+            yield return ctx.Settled(() => StocksBehavior.Get(id), $"the stock of {id}");
+        ctx.Report("value", StocksBehavior.Get(id));
+    }
+
+    /// <summary>Server: an item of a slot (<c>slot</c>, Head by default) that is not unlocked yet, cheapest first.</summary>
+    private static IEnumerable<StepWait?> LockedItem(StepContext ctx)
+    {
+        var slot = SlotArg(ctx);
+        var item = MBObjectManager.Instance.GetObjectTypeList<ItemObject>()
+            .Where(i => i.Value > 0 && Equipment.IsItemFitsToSlot(slot, i) && !UnlocksBehavior.IsUnlocked(i.StringId))
+            .OrderBy(i => i.Value).ThenBy(i => i.StringId)
+            .FirstOrDefault();
+        ctx.Assert(item != null, $"every {slot} item is already unlocked");
+        ctx.Report("value", item!.StringId);
+        yield break;
+    }
+
+    /// <summary>
+    /// Server: unlocks an item for the campaign, as reaching its kill or discard count does. With <c>announce</c>
+    /// true it is also announced, as those unlocks are (a troop's own gear unlocks silently).
+    /// </summary>
+    private static IEnumerable<StepWait?> Unlock(StepContext ctx)
+    {
+        var item = ItemArg(ctx);
+        UnlocksBehavior.Unlock(item);
+        if (ctx.Arg("announce", "false") == "true")
+        {
+            var queue = typeof(UnlocksBehavior).GetMethod("QueueUnlockNotification", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?? throw new StepFailedException("this Retinues has no UnlocksBehavior.QueueUnlockNotification");
+            queue.Invoke(UnlocksBehavior.Instance, new object[] { new List<ItemObject> { item } });
+        }
+        ctx.Report("value", UnlocksBehavior.IsUnlocked(item.StringId));
+        yield break;
+    }
+
+    /// <summary>
+    /// Whether an item (<c>item</c>) is unlocked here, settled; with <c>expected</c>, it must be that. Retinues coop.2:
+    /// items unlocked on the server during a session never reached the players' editors.
+    /// </summary>
+    private static IEnumerable<StepWait?> IsUnlocked(StepContext ctx)
+    {
+        var id = ctx.Arg("item");
+        if (ctx.HasArg("expected"))
+            yield return ctx.Settled(() => UnlocksBehavior.IsUnlocked(id), $"whether {id} is unlocked", ctx.Arg("expected") == "true", timeout: Sync);
+        else
+            yield return ctx.Settled(() => UnlocksBehavior.IsUnlocked(id), $"whether {id} is unlocked");
+        ctx.Report("value", UnlocksBehavior.IsUnlocked(id));
+    }
+
+    private const string Popups = "retinues.popups";
+
+    /// <summary>
+    /// Player: from here on, records the title of every pop-up this game shows (until the run ends), so a later step
+    /// can check one appeared while other steps ran.
+    /// </summary>
+    private static IEnumerable<StepWait?> WatchPopups(StepContext ctx)
+    {
+        if (!ctx.State.ContainsKey(Popups))
+        {
+            var seen = new List<InquiryData>();
+            ctx.State[Popups] = seen;
+            InformationManager.OnShowInquiry += (data, pause, priority) => { lock (seen) seen.Add(data); };
+        }
+        yield break;
+    }
+
+    /// <summary>
+    /// Player, Coop: waits for Retinues' "New Gear Unlocked" pop-up (shown on the world map), checks it names
+    /// <c>item</c>, and closes it as the player's OK does. Needs retinues.watchPopups earlier. In single player Retinues
+    /// shows it from the campaign tick, which a test run's paused time stops, so suites check it in Coop only.
+    /// </summary>
+    private static IEnumerable<StepWait?> UnlockPopup(StepContext ctx)
+    {
+        ctx.Assert(Config.UnlockPopup, "Retinues' unlock pop-up is off in its settings (UnlockPopup)");
+        var seen = ctx.State.TryGetValue(Popups, out var s) ? (List<InquiryData>)s! : throw new StepFailedException("retinues.watchPopups did not run first");
+        var name = ItemArg(ctx).Name.ToString();
+        InquiryData? popup = null;
+        yield return ctx.Until(() => { lock (seen) popup = seen.LastOrDefault(d => d.TitleText == "New Gear Unlocked"); return popup != null; }, "the New Gear Unlocked pop-up", Sync);
+        ctx.Log("pop-up text: " + popup!.Text);
+        InformationManager.HideInquiry();
+        popup.AffirmativeAction?.Invoke();
+        ctx.Assert(popup.Text.Contains(name), $"the pop-up does not name {name}: {popup.Text}");
+        ctx.Report("value", popup.Text);
+    }
+
+    private static ItemObject ItemArg(StepContext ctx)
+    {
+        var id = ctx.Arg("item");
+        return MBObjectManager.Instance.GetObject<ItemObject>(id) ?? throw new StepFailedException($"no item '{id}'");
     }
 
     private const string EditorKept = "retinues.editorKept";
