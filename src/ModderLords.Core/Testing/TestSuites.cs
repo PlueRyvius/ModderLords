@@ -18,6 +18,12 @@ public sealed record TestModule
     /// <summary>The module's own step DLL (in ModderLords' compat folder), for steps that call a mod's code; null for none.</summary>
     public string? StepsDll { get; init; }
     public required IReadOnlyList<TestPlan> Suites { get; init; }
+    /// <summary>
+    /// For checking a release zip (<c>test --package</c>): the fewest files the mod folder must hold under each path
+    /// ("" for all of it), so a zip missing a payload fails before it is published. From module.json's
+    /// <c>"package": { "atLeast": { "": 1300, "ModuleData/Dyes/masks": 1000 } }</c>.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> PackageAtLeast { get; init; } = new Dictionary<string, int>();
 
     /// <summary>Parses <c>module.json</c>; throws <see cref="FormatException"/> naming the problem.</summary>
     public static TestModule Parse(string json, IReadOnlyList<TestPlan> suites)
@@ -40,6 +46,12 @@ public sealed record TestModule
         var stepsDll = root["steps"]?.GetValue<string>();
         if (stepsDll is not null && !stepsDll.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             throw new FormatException($"module {id}: \"steps\" names a DLL, not \"{stepsDll}\"");
+        var atLeast = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (root["package"]?["atLeast"] is JsonObject counts)
+            foreach (var (path, n) in counts)
+                atLeast[path.Replace('\\', '/').Trim('/')] = n is JsonValue v && v.TryGetValue<int>(out var count) && count >= 0
+                    ? count
+                    : throw new FormatException($"module {id}: package.atLeast \"{path}\" is a number of files");
         return new TestModule
         {
             Id = id,
@@ -47,6 +59,7 @@ public sealed record TestModule
             Description = root["description"]?.GetValue<string>() ?? "",
             Requires = requires,
             StepsDll = stepsDll,
+            PackageAtLeast = atLeast,
             // A suite carries its module, and needs what its module needs as well as its own.
             Suites = suites.Select(s => s with { Module = id, Requires = [.. requires, .. s.Requires.Where(r => !requires.Any(m => m.Id.Equals(r.Id, StringComparison.OrdinalIgnoreCase)))] }).ToList(),
         };

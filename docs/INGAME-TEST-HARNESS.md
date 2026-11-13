@@ -156,12 +156,23 @@ src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2
 ModderLords.Cli test --profile "My Host"                                   # core + every applicable suite
 ModderLords.Cli test --profile "My Mods" --single-player                   # the same, single-player suites
 ModderLords.Cli test --profile "My Mods" --mod ModularArmor2 --single-player [--keep-open-on-fail]
-ModderLords.Cli test --profile "My Mods" --mod ModularArmor2 --package MA2-1.3.zip   # test the archive itself
+ModderLords.Cli test --profile "My Mods" --package MS2-v0.9.50.zip --single-player   # test the release zip itself
+ModderLords.Cli test --package MS2-v0.9.50.zip --package-version v0.9.50 --package-check   # only check the zip
 ModderLords.Cli test --profile "My Host" --suite stash                    # v1: one named suite, still works
 ```
 
-- `--package` installs the zip or folder as a player would, into a scratch copy of the module folders (and the
-  server's, in Coop), so the installed mods are untouched; the report and history record the archive's SHA-256.
+- `--package ZIP` checks the release zip first (`PackageCheck`), and stops the run if it is not fit to publish:
+  - it must be a real zip (MS2's first v0.9.50 zip was a tar archive named .zip; the check says so by its bytes);
+  - it must hold the mod's folder and nothing beside it, with `<ModId>/SubModule.xml` naming that id and, with
+    `--package-version`, that version;
+  - it must hold at least the files the mod's test module says a release has (`"package": { "atLeast": ... }` in
+    module.json: smithing asks for 1200 files, 1000 of them dye masks);
+  - its SHA-256 is printed, to compare with the published digest.
+- Then it unpacks the zip into `%LOCALAPPDATA%\ModderLords\package-tests\<Mod>-<version>-<hash>\<Mod>` and pins that
+  copy in the profile for the run, in memory, so the installed copy is never touched. With no `--suite` or
+  `--modules`, the run picks the test modules that require the mod. `--package-check` stops after the check, with no
+  profile and no game. Single player only for now: a Coop run pins the player's copy, and the server keeps its own.
+- The steps for a mod's release are in [RELEASING-A-MOD.md](RELEASING-A-MOD.md).
 
 - `--mod X` runs the core suite plus the suites X ships and the suites that require X; `--with-others` adds every
   other applicable suite (decision 21).
@@ -255,7 +266,9 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 4. The world cache, then `game.saveAndReload`, then the history file and table. **Single player's save and reload
    built 2026-11-13** as steps (`game.save`, then `game.toMainMenu` and `game.loadSave`); Coop's waits.
 5. `--package` and upgrade worlds, then the release step in `docs/RELEASING.md` (decision 27). **Upgrade worlds built
-   for single player 2026-11-13**, with `game.keepWorld` and `manual` suites to make them.
+   for single player 2026-11-13**, with `game.keepWorld` and `manual` suites to make them. **`--package` built
+   2026-11-13** (the zip check, an unpacked copy pinned for the run), with a mod's release steps in
+   `docs/RELEASING-A-MOD.md`. Running against the mod's Workshop copy is deferred: Steam takes weeks to update it.
 
 ## Shape
 

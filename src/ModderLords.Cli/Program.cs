@@ -23,7 +23,7 @@ using ModderLords.Coop.Config;
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
 //   smoke    --profile NAME [--save NAME] [--steady SECONDS] [--no-time] [--keep-client] [--keep-server]
 //   smoke    --attach --server-log PATH [--server-commands PATH] (--profile-file PATH | --profile NAME) [--join-host H] [--join-port N] [--steady SECONDS] [--no-time] [--keep-client]
-//   test     --profile NAME --suite NAME|PATH [--world NAME] [--keep-client] [--keep-server] [--minimized] [--skip-api-check] | test --profile NAME --api-check [--single-player]
+//   test     --profile NAME --suite NAME|PATH [--world NAME] [--keep-client] [--keep-server] [--minimized] [--skip-api-check] [--package ZIP [--package-version V]] | test --profile NAME --api-check [--single-player] | test --package ZIP --package-check
 //   authority --mod ID [--all] [--json] [--out PATH]
 //   trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]
 
@@ -46,7 +46,7 @@ if (!opts.TryGetValue("cmd", out var cmd))
     Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--join-port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
     Console.WriteLine("          play --profile NAME|--profile-file PATH [--dry-run]   (start the player's own game with a profile's mods)");
     Console.WriteLine("          smoke --profile NAME [--save NAME] [--steady SECONDS] [--keep-client] [--keep-server]   (start the server, join it with this PC's game, report)");
-    Console.WriteLine("          test --profile NAME --suite NAME|PATH [--world NAME] [--keep-client] [--keep-server] [--minimized] [--skip-api-check] | test --profile NAME --api-check [--single-player]   (run in-game checks on server + this PC's game; docs/INGAME-TEST-HARNESS.md)");
+    Console.WriteLine("          test --profile NAME --suite NAME|PATH [--world NAME] [--keep-client] [--keep-server] [--minimized] [--skip-api-check] [--package ZIP [--package-version V]] | test --profile NAME --api-check [--single-player] | test --package ZIP --package-check   (run in-game checks on server + this PC's game; docs/INGAME-TEST-HARNESS.md)");
     Console.WriteLine("          analyze --profile NAME [--root DedicatedServer] [--json] [--cache-dir PATH]   (read-only operation analysis)");
     Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH] [--bundle-root PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
@@ -460,6 +460,19 @@ switch (cmd)
             Console.WriteLine(ModderLords.Core.Testing.TestCatalog.ToJson(ModderLords.Core.Testing.TestSuites.Modules(), listMods, listProfile?.Name));
             return 0;
         }
+        // --package ZIP --package-check: check a mod's release zip before publishing it (decision 27); no game starts.
+        if (opts.ContainsKey("package-check") && opts.GetValueOrDefault("package") is { } checkZip)
+        {
+            if (!File.Exists(checkZip)) { Console.Error.WriteLine("[ModderLords] package not found: " + checkZip); return 2; }
+            var checkMod = ModderLords.Core.Testing.PackageCheck.ModIdOf(checkZip);
+            var floors = ModderLords.Core.Testing.TestSuites.Modules()
+                .Where(m => checkMod is not null && m.Requires.Any(r => r.Id.Equals(checkMod, StringComparison.OrdinalIgnoreCase)))
+                .SelectMany(m => m.PackageAtLeast).GroupBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Max(kv => kv.Value), StringComparer.OrdinalIgnoreCase);
+            var package = ModderLords.Core.Testing.PackageCheck.Inspect(checkZip, checkMod, opts.GetValueOrDefault("package-version"), floors);
+            Console.WriteLine(package.ToText());
+            return package.Ok ? 0 : 1;
+        }
         if (!opts.TryGetValue("profile", out var testProfileName)) { Console.Error.WriteLine("test needs --profile NAME"); return 2; }
         // --api-check: only check the profile's mods' calls into the installed game, as a run does before launching; no
         // game starts. Exit 1 when something is missing.
@@ -490,6 +503,8 @@ switch (cmd)
             KeepServer = opts.ContainsKey("keep-server"),
             Minimized = opts.ContainsKey("minimized"),
             SkipApiCheck = opts.ContainsKey("skip-api-check"),
+            Package = opts.GetValueOrDefault("package"),
+            PackageVersion = opts.GetValueOrDefault("package-version"),
         }, Console.WriteLine, testCancel.Token);
         return result.ExitCode;
     }

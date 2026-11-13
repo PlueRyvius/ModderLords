@@ -272,7 +272,9 @@ private static IEnumerable<StepWait?> StashCount(StepContext ctx)
 
    `description` is what the Tests tab and `test --list` show: say what the module checks. `requires` lists the mods
    every suite in it needs (with optional version ranges); without them in the profile the module is unavailable, not
-   failed.
+   failed. A module for one mod can add `"package": { "atLeast": { "": 1200, "ModuleData/Dyes/masks": 1000 } }`: the
+   fewest files a release zip of that mod must hold under each path, which `test --package` checks before publishing
+   ([RELEASING-A-MOD.md](RELEASING-A-MOD.md)).
 2. **Suites** beside it, one file per suite (`<name>.json`). They are embedded in the launcher by the folder, with no
    project change.
 3. **Steps:** general steps go in `src/ModderLords.CompatSync/Testing/` (a new `<Area>Steps.cs`, registered from
