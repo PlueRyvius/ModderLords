@@ -86,13 +86,24 @@ public static class Steps
 
     // ---- crafting -------------------------------------------------------------------------------------------------
 
-    /// <summary>The player's hero gets Smithing <c>skill</c> (default 330: every part unlocked) and full stamina.</summary>
+    /// <summary>
+    /// The player's hero gets Smithing <c>skill</c> (default 330: every part unlocked) and full stamina. Crafts charge
+    /// materials at 100% at least, in memory only: a player's config may make them free (require_materials off, or
+    /// material_cost_pct 0), and the checks on what a craft charges would then have nothing to read.
+    /// </summary>
     private static IEnumerable<StepWait?> Prepare(StepContext ctx)
     {
         ctx.Assert(Hero.MainHero != null, "there is no player hero");
         var skill = ctx.ArgInt("skill", 330);
         Hero.MainHero!.SetSkillValue(DefaultSkills.Crafting, skill);
         TopUpStamina();
+        var settings = MSmithConfig.Settings;
+        if (!settings.RequireMaterials || settings.MaterialCostPct <= 0)
+        {
+            ctx.Log($"this config makes crafts free (require_materials {settings.RequireMaterials}, material_cost_pct {settings.MaterialCostPct}); charging 100% for the run, in memory only");
+            settings.RequireMaterials = true;
+            settings.MaterialCostPct = 100;
+        }
         ctx.Report("value", CraftDiagnostics.SafeCraftingSkill(Hero.MainHero));
         yield break;
     }
