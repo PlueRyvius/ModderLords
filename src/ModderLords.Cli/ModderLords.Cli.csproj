@@ -18,6 +18,7 @@
     <ProjectReference Include="..\ModderLords.CompatSync.Coop\ModderLords.CompatSync.Coop.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(HasCoopAssemblies)' == 'true'" />
     <!-- Test modules' own step DLLs, each built only where its mod is installed (Directory.Build.props). -->
     <ProjectReference Include="..\ModderLords.Tests.Retinues\ModderLords.Tests.Retinues.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(HasRetinuesAssemblies)' == 'true'" />
+    <ProjectReference Include="..\ModderLords.Tests.Smithing\ModderLords.Tests.Smithing.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(HasSmithingAssemblies)' == 'true'" />
   </ItemGroup>
 
   <Target Name="CopyHelpers" AfterTargets="Build">
@@ -29,6 +30,7 @@
     <Copy SourceFiles="@(CompatModuleFiles)" DestinationFiles="@(CompatModuleFiles->'$(OutDir)compat\DedicatedServer.ModderLordsCompat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(CompatSyncFiles)" DestinationFiles="@(CompatSyncFiles->'$(OutDir)compat\ModderLords.Compat\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModderLords.Tests.Retinues\bin\$(Configuration)\ModderLords.Tests.Retinues.dll" DestinationFolder="$(OutDir)compat\" SkipUnchangedFiles="true" Condition="'$(HasRetinuesAssemblies)' == 'true'" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModderLords.Tests.Smithing\bin\$(Configuration)\ModderLords.Tests.Smithing.dll" DestinationFolder="$(OutDir)compat\" SkipUnchangedFiles="true" Condition="'$(HasSmithingAssemblies)' == 'true'" />
   </Target>
 
 </Project>

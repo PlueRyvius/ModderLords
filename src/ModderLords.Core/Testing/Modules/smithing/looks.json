@@ -1,0 +1,12 @@
+{
+  // A player with Dismemberment (Plus) got crafted boots that rendered as a single left boot: that mod's hidden
+  // left/right limb halves (no armor, no weight) were candidates for a crafted look. Meaningful with such a mod loaded.
+  "api": 2,
+  "name": "looks",
+  "mode": "singleplayer",
+  "world": "shared",
+  "description": "No weightless, armorless helper piece from another mod can become a crafted armor's look.",
+  "steps": [
+    { "id": "smithing.noHelperDonors", "side": "game" }
+  ]
+}

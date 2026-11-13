@@ -1,0 +1,27 @@
+{
+  // An ongoing save: one made with MS2's last release (an upgrade world, kept by keep-upgrade-world). After updating,
+  // every crafted item comes back, old armor keeps the stats it was made with (MS2 never rebuilds old items), new
+  // crafts use today's formulas, and a save and reload keeps all of it.
+  "api": 2,
+  "name": "upgrade",
+  "mode": "singleplayer",
+  "world": "upgrade",
+  "continuity": true,
+  "description": "On a save made with MS2's last release, every crafted item loads with its old stats, new crafts work, and a save and reload keeps both.",
+  "errorPatterns": [ "\\[MSmith\\].*(failed|error)" ],
+  "steps": [
+    { "id": "ModularSmithing2.health", "side": "game" },
+    { "id": "smithing.records", "side": "game", "as": "before", "args": { "atLeast": 4 } },
+    { "id": "smithing.oldItemsKeepStats", "side": "game", "as": "old", "args": { "atLeast": 4 } },
+    { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },
+    { "id": "smithing.craft", "side": "game", "as": "helmet", "args": { "slot": "head", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "maxKg": "3.5" } },
+    { "id": "game.save", "side": "game", "args": { "name": "mltest-smithing-upgrade" } },
+    { "id": "game.toMainMenu", "side": "game", "timeoutSeconds": 300 },
+    { "id": "game.loadSave", "side": "game", "timeoutSeconds": 900, "args": { "name": "mltest-smithing-upgrade" } },
+    { "id": "game.pause", "side": "game" },
+    { "id": "smithing.itemSame", "side": "game", "as": "helmetBack", "args": { "item": "$helmet.value", "weight": "$helmet.weight", "armor": "$helmet.armor" } },
+    { "id": "smithing.records", "side": "game", "as": "after", "args": { "atLeast": 5 } },
+    { "id": "smithing.oldItemsKeepStats", "side": "game", "as": "oldAfter", "args": { "atLeast": 5 } },
+    { "id": "game.noErrors", "side": "game", "continueOnFail": true }
+  ]
+}
