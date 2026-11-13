@@ -46,7 +46,14 @@ public class TestPlanTests
     {
         var modules = TestSuites.Modules();
         Assert.Equal("core", modules[0].Id);
-        Assert.Equal(["core", "parity", "perks", "retinues", "stash", "sync", "world"], modules.Select(m => m.Id));
+        Assert.Equal(["core", "parity", "perks", "retinues", "smithing", "stash", "sync", "world"], modules.Select(m => m.Id));
+        // The smithing module (Modular Smithing 2): a new world (armor), an ongoing one (upgrade), and the manual
+        // suite that keeps the upgrade world.
+        var smithing = TestSuites.Module("smithing")!;
+        Assert.Equal("ModderLords.Tests.Smithing.dll", smithing.StepsDll);
+        Assert.True(smithing.Suites.Single(s => s.Name == "upgrade").OnUpgradeWorlds);
+        Assert.True(smithing.Suites.Single(s => s.Name == "keep-upgrade-world").Manual);
+        Assert.All(smithing.Suites, s => Assert.Contains(s.Requires, r => r.Id == "ModularSmithing2"));
         Assert.Equal(["hero-level", "sync-basics"], TestSuites.Module("sync")!.Suites.Select(s => s.Name));
         Assert.All(modules, m => Assert.All(m.Suites, s => Assert.Equal(m.Id, s.Module)));
         Assert.All(modules, m => Assert.False(string.IsNullOrWhiteSpace(m.Description)));
@@ -98,16 +105,16 @@ public class TestPlanTests
     [Fact]
     public void The_list_shows_every_module_and_whether_a_profile_can_run_it()
     {
-        var suite = TestPlan.Parse("""{ "api": 2, "name": "ammo", "mode": "singleplayer", "steps": [ { "id": "smithing.craft", "side": "game" } ] }""");
-        var smithing = TestModule.Parse("""{ "id": "smithing", "title": "Smithing", "description": "MS2", "requires": [ "ModularSmithing2" ] }""", [suite]);
-        var json = System.Text.Json.Nodes.JsonNode.Parse(TestCatalog.ToJson([.. TestSuites.Modules(), smithing], new Dictionary<string, string?>(), "P"))!;
+        var json = System.Text.Json.Nodes.JsonNode.Parse(TestCatalog.ToJson(TestSuites.Modules(), new Dictionary<string, string?>(), "P"))!;
         var listed = json["modules"]!.AsArray();
         Assert.Equal("core", listed[0]!["id"]!.GetValue<string>());
         Assert.True(listed[0]!["available"]!.GetValue<bool>());
         var ms2 = listed.Single(m => m!["id"]!.GetValue<string>() == "smithing")!;
         Assert.Equal("ModularSmithing2 (not in this profile)", ms2["available"]![0]!.GetValue<string>());
-        Assert.Equal("smithing/ammo", ms2["suites"]![0]!["name"]!.GetValue<string>());
-        Assert.Equal("smithing.craft", ms2["suites"]![0]!["steps"]![0]!.GetValue<string>());
+        var ammo = ms2["suites"]!.AsArray().Single(s => s!["name"]!.GetValue<string>() == "smithing/ammo")!;
+        Assert.Contains("smithing.craft", ammo["steps"]!.AsArray().Select(s => s!.GetValue<string>()));
+        var keep = ms2["suites"]!.AsArray().Single(s => s!["name"]!.GetValue<string>() == "smithing/keep-upgrade-world")!;
+        Assert.True(keep["manual"]!.GetValue<bool>());
     }
 
     [Fact]

@@ -1,0 +1,35 @@
+{
+  // A new world: crafting armor the first time. Each craft is checked against MS2's own calculator for the quality it
+  // rolled (protection, weight, the materials taken, the designer's tier against the game's), then against the armor
+  // rebalance's numbers (docs/armor-rebalance-design.md in MS2): small pieces near vanilla weight, padding and leather
+  // charging no metal, a metal stack charging each layer's own ingot grade, thickness down to 50% with a 0.1 kg floor.
+  // Then a save and reload: every piece comes back as it was.
+  "api": 2,
+  "name": "armor",
+  "mode": "singleplayer",
+  "continuity": true,
+  "description": "On a new world, armor crafts with the weights, protection and materials MS2 says, and survives a save and reload.",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
+  "steps": [
+    { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },
+    { "id": "smithing.craft", "side": "game", "as": "helmet", "args": { "slot": "head", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "maxKg": "3.5", "ingotGrades": 2 } },
+    { "id": "smithing.craft", "side": "game", "as": "body", "args": { "slot": "body", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "maxKg": "26", "ingotGrades": 2 } },
+    { "id": "smithing.craft", "side": "game", "as": "boots", "args": { "slot": "legs", "inner": "gambeson_quilted", "middle": "leather_middle", "outer": "leather_outer", "maxKg": "1", "noIngots": "true" } },
+    { "id": "smithing.craft", "side": "game", "as": "gloves", "args": { "slot": "hands", "inner": "padding_heavy", "outer": "plate_harness", "maxKg": "2.5" } },
+    { "id": "smithing.craft", "side": "game", "as": "thin", "args": { "slot": "head", "inner": "padding_light", "outer": "leather_outer", "size": 50, "minKg": "0.1", "maxKg": "0.15", "noIngots": "true" } },
+    { "id": "smithing.coverageChoice", "side": "game", "as": "legsChoice", "args": { "slot": "legs", "expected": "false" } },
+    { "id": "smithing.coverageChoice", "side": "game", "as": "handsChoice", "args": { "slot": "hands", "expected": "false" } },
+    { "id": "smithing.coverageChoice", "side": "game", "as": "bodyChoice", "args": { "slot": "body", "expected": "true" } },
+    { "id": "game.save", "side": "game", "args": { "name": "mltest-smithing-armor" } },
+    { "id": "game.toMainMenu", "side": "game", "timeoutSeconds": 300 },
+    { "id": "game.loadSave", "side": "game", "timeoutSeconds": 900, "args": { "name": "mltest-smithing-armor" } },
+    { "id": "game.pause", "side": "game" },
+    { "id": "smithing.itemSame", "side": "game", "as": "helmetBack", "args": { "item": "$helmet.value", "weight": "$helmet.weight", "armor": "$helmet.armor" } },
+    { "id": "smithing.itemSame", "side": "game", "as": "bodyBack", "args": { "item": "$body.value", "weight": "$body.weight", "armor": "$body.armor" } },
+    { "id": "smithing.itemSame", "side": "game", "as": "bootsBack", "args": { "item": "$boots.value", "weight": "$boots.weight", "armor": "$boots.armor" } },
+    { "id": "smithing.itemSame", "side": "game", "as": "glovesBack", "args": { "item": "$gloves.value", "weight": "$gloves.weight", "armor": "$gloves.armor" } },
+    { "id": "smithing.itemSame", "side": "game", "as": "thinBack", "args": { "item": "$thin.value", "weight": "$thin.weight", "armor": "$thin.armor" } },
+    { "id": "smithing.records", "side": "game", "args": { "atLeast": 5 } },
+    { "id": "game.noErrors", "side": "game", "continueOnFail": true }
+  ]
+}

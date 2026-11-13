@@ -1,0 +1,20 @@
+{
+  // The optional damage types: a mail-only body piece turns blades but not arrows. Checks the multipliers the combat
+  // patch applies; it needs MS2's NativeUI adapter (UIExtenderEx and Harmony). The setting is put back after.
+  "api": 2,
+  "name": "damage-types",
+  "mode": "singleplayer",
+  "world": "shared",
+  "description": "With damage types on, crafted mail is stronger against cuts and weaker against arrows and thrusts; plain leather is neither.",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
+  "steps": [
+    { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },
+    { "id": "smithing.setSetting", "side": "game", "as": "on", "args": { "name": "damage_types", "value": "true" } },
+    { "id": "smithing.craft", "side": "game", "as": "mail", "args": { "slot": "body", "middle": "chainmail_middle" } },
+    { "id": "smithing.damageProfile", "side": "game", "as": "mailPierce", "continueOnFail": true, "args": { "item": "$mail.value", "zone": "body", "kind": "pierce", "expect": "below" } },
+    { "id": "smithing.damageProfile", "side": "game", "as": "mailCut", "continueOnFail": true, "args": { "item": "$mail.value", "zone": "body", "kind": "cut", "expect": "above" } },
+    { "id": "smithing.craft", "side": "game", "as": "leather", "args": { "slot": "body", "outer": "leather_outer" } },
+    { "id": "smithing.damageProfile", "side": "game", "as": "leatherPierce", "continueOnFail": true, "args": { "item": "$leather.value", "zone": "body", "kind": "pierce", "expect": "plain" } },
+    { "id": "smithing.setSetting", "side": "game", "as": "back", "args": { "name": "damage_types", "value": "$on.before" } }
+  ]
+}

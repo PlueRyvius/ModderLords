@@ -1,0 +1,24 @@
+{
+  // Makes the world the upgrade suite loads. Run it by name on MS2's RELEASED build, before installing a new one:
+  //   ModderLords.Cli test --profile "<profile>" --suite smithing/keep-upgrade-world --single-player
+  // It crafts a piece in every armor slot and some ammo, then keeps the save as upgrade-ModularSmithing2-<version>.
+  // No property checks: the release's own numbers are what they are; each craft is still checked against that
+  // release's calculator.
+  "api": 2,
+  "name": "keep-upgrade-world",
+  "mode": "singleplayer",
+  "manual": true,
+  "description": "Run on MS2's released build: crafts a piece in every slot and some ammo, then keeps the save as that version's upgrade world.",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
+  "steps": [
+    { "id": "ModularSmithing2.health", "side": "game" },
+    { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },
+    { "id": "smithing.craft", "side": "game", "as": "helmet", "args": { "slot": "head", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "checkTier": "false" } },
+    { "id": "smithing.craft", "side": "game", "as": "body", "args": { "slot": "body", "inner": "gambeson_quilted", "middle": "chainmail_middle", "outer": "lamellar_outer", "checkTier": "false" } },
+    { "id": "smithing.craft", "side": "game", "as": "boots", "args": { "slot": "legs", "inner": "linen_lining", "outer": "leather_outer", "checkTier": "false" } },
+    { "id": "smithing.craft", "side": "game", "as": "gloves", "args": { "slot": "hands", "inner": "padding_heavy", "outer": "plate_harness", "coverage": "extended", "checkTier": "false" } },
+    { "id": "smithing.craft", "side": "game", "as": "shoulders", "args": { "slot": "shoulders", "middle": "chainmail_middle", "outer": "scale_outer", "size": 150, "checkTier": "false" } },
+    { "id": "smithing.craft", "side": "game", "as": "arrows", "args": { "family": "ammo", "slot": "arrow", "inner": "arrow_shaft_hardwood", "middle": "arrow_head_steel", "outer": "arrow_fletching_cloth", "batch": 20 } },
+    { "id": "game.keepWorld", "side": "game", "args": { "upgradeOf": "ModularSmithing2" } }
+  ]
+}
