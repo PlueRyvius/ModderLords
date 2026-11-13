@@ -58,7 +58,8 @@ internal static class WorldSteps
             var id = ctx.Arg("upgradeOf");
             var module = TaleWorlds.ModuleManager.ModuleHelper.GetModules().FirstOrDefault(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
             ctx.Assert(module != null, $"module {id} is not loaded, so there is no version to keep an upgrade world of");
-            world = "upgrade-" + module!.Id + "-" + module.Version;
+            // The game's version string carries a change set ("v0.9.49.0"); the mod's own SubModule.xml says v0.9.49.
+            world = "upgrade-" + module!.Id + "-" + System.Text.RegularExpressions.Regex.Replace(module.Version.ToString(), @"^(\D*\d+\.\d+\.\d+)\.0$", "$1");
         }
         else world = ctx.Arg("name");
         ctx.Assert(world.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) < 0, $"\"{world}\" is not a file name");
