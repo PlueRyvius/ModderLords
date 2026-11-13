@@ -14,9 +14,16 @@ internal static class ErrorPatterns
 {
     /// <summary>
     /// Words a mod's own error message carries. Whole words, any case: "failed", not "unfailing". Vanilla shows none of
-    /// these during play; its asserts go to the error log, which is kept as evidence instead.
+    /// these during play; its asserts go to the error log, which is kept as evidence instead. A count of none is not an
+    /// error: "Rehydrated 4 item(s), 0 failed", "no errors".
     /// </summary>
-    public const string Default = @"\b(error|errors|exception|failed|failure|crash|crashed)\b";
+    public const string Default = NotNone + @"\b(error|errors|exception|failed|failure|crash|crashed)\b";
+
+    /// <summary>
+    /// Put in front of a pattern's error word: skips it when "0", "no" or "zero" stands just before it. A suite's own
+    /// patterns can use it the same way, e.g. <c>\[MSmith\].*(?&lt;!\b(?:0|no|zero)\s)\b(failed|error)</c>.
+    /// </summary>
+    public const string NotNone = @"(?<!\b(?:0|no|zero)\s)";
 
     /// <summary>The default pattern plus <paramref name="extra"/>: a JSON array of patterns, or one pattern, or empty.</summary>
     public static IReadOnlyList<Regex> From(string extra)

@@ -230,6 +230,11 @@ public class TestPlanTests
     [InlineData("Unfailing loyalty", "", false)]
     [InlineData("Armor broke in two", "[\"Armor broke\"]", true)]
     [InlineData("Armor broke in two", "Armor broke", true)]
+    // A count of none is not an error; a count of some is. MS2 shows the first after every load.
+    [InlineData("[MSmith] Rehydrated 0 crafted item(s) on load, 0 failed.", "", false)]
+    [InlineData("[MSmith] Rehydrated 3 crafted item(s) on load, 1 failed.", "", true)]
+    [InlineData("Loaded with no errors", "", false)]
+    [InlineData("0 failed, but an exception was thrown", "", true)]
     public void On_screen_errors_match_the_default_words_and_a_suites_own_patterns(string message, string extra, bool isError) =>
         Assert.Equal(isError, ModderLords.Testing.ErrorPatterns.Matches([message], ModderLords.Testing.ErrorPatterns.From(extra)).Count == 1);
 
