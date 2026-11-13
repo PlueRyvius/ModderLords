@@ -15,6 +15,10 @@ namespace ModderLords.Core.Launch;
 /// (each an int32 length then the bytes), the ids sorted ordinally and joined with ';'. Starting the game with another
 /// set showed the box 1.6 s in; pressing OK removed a sentinel file from D3D11, rewrote the mapping, and left
 /// TerrainShaders alone. See docs/INGAME-TEST-HARNESS.md.
+///
+/// VERIFIED 2026-11-13 against v1.5.7.125802: format 0x784 is the same, followed by one 24-byte record per cached shader
+/// the game has compiled since (two of them after a short session). After its prompt the game wrote the header alone,
+/// with the new set and no records, and deleted the other files in D3D11; so does <see cref="Prepare"/>.
 /// </summary>
 public static class ShaderCacheMapping
 {
@@ -23,7 +27,12 @@ public static class ShaderCacheMapping
     public static string DefaultRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "Mount and Blade II Bannerlord", "Shaders", "CoreShaders");
 
-    public sealed record Mapping(uint Format, string Build, string Modules);
+    /// <param name="Records">What follows the module list: nothing in format 0x783; in 0x784, the compiled shaders'
+    /// 24-byte records, kept as they are. Null when there are none.</param>
+    public sealed record Mapping(uint Format, string Build, string Modules, byte[]? Records = null);
+
+    /// <summary>The formats whose layout is known, with the size of each record after the module list (0: none).</summary>
+    private static readonly Dictionary<uint, int> RecordSizes = new() { [0x783] = 0, [0x784] = 24 };
 
     /// <summary>The module list as the engine stores it: ids sorted ordinally, joined with ';'.</summary>
     public static string ModulesKey(IEnumerable<string> moduleIds) => string.Join(";", moduleIds.Order(StringComparer.Ordinal));
@@ -32,8 +41,12 @@ public static class ShaderCacheMapping
     public static Mapping? Parse(byte[] bytes)
     {
         var at = 0;
-        if (!UInt(out var format) || !Text(out var build) || !Text(out var modules) || at != bytes.Length) return null;
-        return new Mapping(format, build, modules);
+        if (!UInt(out var format) || !Text(out var build) || !Text(out var modules)) return null;
+        // Another format is read as 0x783 was, with nothing after the module list.
+        var recordSize = RecordSizes.GetValueOrDefault(format);
+        var rest = bytes.Length - at;
+        if (rest > 0 && (recordSize == 0 || rest % recordSize != 0)) return null;
+        return new Mapping(format, build, modules, rest == 0 ? null : bytes[at..]);
 
         bool UInt(out uint value)
         {
@@ -65,6 +78,7 @@ public static class ShaderCacheMapping
             writer.Write(build);
             writer.Write(modules.Length);
             writer.Write(modules);
+            if (mapping.Records is { } records) writer.Write(records);
         }
         return stream.ToArray();
     }
@@ -72,7 +86,7 @@ public static class ShaderCacheMapping
     /// <summary>
     /// For every renderer folder that has a mapping for another module set: deletes the other files in that folder
     /// (the runtime shader cache the game would delete) and records <paramref name="moduleIds"/>, keeping the format
-    /// and build as they were. Says what it did, or null when nothing needed doing. Never throws: on any failure the
+    /// and build as they were and dropping the records of the deleted shaders. Says what it did, or null when nothing needed doing. Never throws: on any failure the
     /// game simply asks, as it always has.
     /// </summary>
     public static string? Prepare(IEnumerable<string> moduleIds, string? root = null)
@@ -97,7 +111,7 @@ public static class ShaderCacheMapping
                     cleared++;
                 }
                 var temp = path + ".modderlords";
-                File.WriteAllBytes(temp, Serialize(mapping with { Modules = key }));
+                File.WriteAllBytes(temp, Serialize(mapping with { Modules = key, Records = null }));
                 File.Move(temp, path, overwrite: true);
                 notes.Add($"the mod set changed since the game last ran: cleared {cleared} cached shader file(s) in {folder} and recorded the new set, " +
                           "as the game does after its \"Mod change detected\" prompt");

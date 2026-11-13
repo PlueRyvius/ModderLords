@@ -26,6 +26,46 @@ public class ShaderCacheMappingTests : IDisposable
         Assert.Equal(Vanilla, ShaderCacheMapping.Serialize(mapping!));
     }
 
+    /// <summary>The file v1.5.7.125802 wrote after its prompt for the harness's single-player set: the header alone.</summary>
+    private static readonly byte[] V157 = Convert.FromHexString(
+        "84070000" + "06000000" + "313235383032" + "44000000" +
+        "437573746F6D426174746C653B4D6F646465724C6F7264732E436F6D7061743B4E61746976653B53616E64426F78436F72653B53616E64626F783B53746F72794D6F6465");
+
+    /// <summary>Two of the 24-byte records v1.5.7 adds after the module list as it compiles shaders (from a real file).</summary>
+    private const string V157Records =
+        "2458721100000000" + "8210400000000040" + "0B0000D505040000" +
+        "2458721100000000" + "8210400000000040" + "0B0001D563960000";
+
+    [Fact]
+    public void Reads_the_v157_file_with_and_without_its_shader_records()
+    {
+        var bare = ShaderCacheMapping.Parse(V157)!;
+        Assert.Equal(new ShaderCacheMapping.Mapping(0x784, "125802", "CustomBattle;ModderLords.Compat;Native;SandBoxCore;Sandbox;StoryMode"), bare);
+        Assert.Equal(V157, ShaderCacheMapping.Serialize(bare));
+
+        var withRecords = Convert.FromHexString(Convert.ToHexString(V157) + V157Records);
+        var mapping = ShaderCacheMapping.Parse(withRecords)!;
+        Assert.Equal(bare.Modules, mapping.Modules);
+        Assert.Equal(Convert.FromHexString(V157Records), mapping.Records);
+        Assert.Equal(withRecords, ShaderCacheMapping.Serialize(mapping));
+
+        // Part of a record is not the known layout.
+        Assert.Null(ShaderCacheMapping.Parse(withRecords[..^1]));
+    }
+
+    [Fact]
+    public void A_new_mod_set_on_v157_writes_what_the_game_writes_after_its_prompt()
+    {
+        File.WriteAllBytes(MappingPath, Convert.FromHexString(
+            Convert.ToHexString(ShaderCacheMapping.Serialize(new(0x784, "125802", "CustomBattle;Native;SandBoxCore;Sandbox;StoryMode"))) + V157Records));
+        File.WriteAllText(Path.Combine(D3D11, "12v.sacx"), "compiled");
+
+        Assert.NotNull(ShaderCacheMapping.Prepare([.. VanillaIds, "ModderLords.Compat"], _root));
+
+        Assert.Equal([MappingPath], Directory.GetFiles(D3D11));
+        Assert.Equal(V157, File.ReadAllBytes(MappingPath));
+    }
+
     [Fact]
     public void Sorts_ids_ordinally_as_the_engine_does()
     {
