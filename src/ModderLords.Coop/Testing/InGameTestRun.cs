@@ -26,6 +26,10 @@ public sealed record InGameTestOptions
     public bool KeepClient { get; init; }
     public bool KeepOpenOnFail { get; init; }
     public bool KeepServer { get; init; }
+    /// <summary>Minimize the game's window for the run instead of keeping it behind other windows.</summary>
+    public bool Minimized { get; init; }
+    /// <summary>The game's Configs folder, whose two settings files the run changes and puts back; null for the player's own.</summary>
+    public string? GameConfigsDir { get; init; }
     /// <summary>Where the launcher's compat folder is (module step DLLs); null for next to this process.</summary>
     public string? BundledRoot { get; init; }
 }
@@ -46,6 +50,37 @@ public static class InGameTestRun
     private static readonly HashSet<string> CoopIds = new(["Coop", "CoopNightly"], StringComparer.OrdinalIgnoreCase);
 
     public static async Task<InGameTestResult> RunAsync(InGameTestOptions options, Action<string> say, CancellationToken cancel)
+    {
+        if (ClientLauncher.IsClientRunning())
+        {
+            say("[ModderLords] Bannerlord is already running; close it first.");
+            return new InGameTestResult(2, [], [], "Bannerlord is already running; close it first.");
+        }
+        // The game opens in a small window and keeps running unfocused, so the PC stays usable; the player's settings
+        // files are put back byte for byte at the end, however the run ends.
+        var settings = TestRunGameSettings.Apply(options.GameConfigsDir ?? TestRunGameSettings.DefaultConfigsDir, out var applied);
+        foreach (var note in applied) say("[ModderLords] " + note);
+        try { return await Run(options, say, cancel); }
+        finally
+        {
+            // A game just closed can still be listed for a moment.
+            for (var i = 0; i < 20 && ClientLauncher.IsClientRunning(); i++) await Task.Delay(500, CancellationToken.None);
+            foreach (var note in settings.Restore()) say("[ModderLords] " + note);
+            if (ClientLauncher.IsClientRunning())
+            {
+                // A game kept open saves its settings (the test window) when it closes. The app is still running then
+                // and puts them back again; the CLI has exited by then.
+                say("[ModderLords] the game is still open and may save the test window size when it closes; if it opens windowed next time, set Display mode back in its options.");
+                _ = Task.Run(async () =>
+                {
+                    foreach (var game in System.Diagnostics.Process.GetProcessesByName("Bannerlord")) await game.WaitForExitAsync();
+                    settings.Restore();
+                });
+            }
+        }
+    }
+
+    private static async Task<InGameTestResult> Run(InGameTestOptions options, Action<string> say, CancellationToken cancel)
     {
         var reports = new List<TestReport>();
         var folders = new List<string>();
@@ -331,10 +366,18 @@ public static class InGameTestRun
         };
         _ = engine.Exited.ContinueWith(t => runner.ServerExited(t.Result), TaskScheduler.Default);
 
-        var smokeReport = await runner.RunAsync(args => ClientLaunchSession.Start(client.Plan with { ExtraArguments = args }, note => say("[ModderLords] " + note)), cancel);
+        using var windowWatch = new CancellationTokenSource();
+        var smokeReport = await runner.RunAsync(args =>
+        {
+            var started = ClientLaunchSession.Start(client.Plan with { ExtraArguments = args }, note => say("[ModderLords] " + note));
+            _ = TestGameWindow.Watch(started, options.Minimized, note => say("[ModderLords] " + note), windowWatch.Token);
+            return started;
+        }, cancel);
         // The game or server may have gone before the steps finished; the step waiting is then reported as such.
         gameGone = "the game or the server exited before the step finished";
         var testReport = testRun is null ? null : await testRun;
+        // A game kept open is the player's from here.
+        windowWatch.Cancel();
         say("");
         say(smokeReport.ToText());
         if (testReport is null) say("[ModderLords] the game never reached the campaign map, so no step ran; see the smoke report above.");
@@ -390,6 +433,8 @@ public static class InGameTestRun
         System.Diagnostics.Process game;
         try { game = ClientLaunchSession.Start(plan, note => say("[ModderLords] " + note)); }
         catch (Exception ex) { return Stop("could not start the game: " + ex.Message); }
+        using var windowWatch = new CancellationTokenSource();
+        _ = TestGameWindow.Watch(game, options.Minimized, note => say("[ModderLords] " + note), windowWatch.Token);
 
         // The run starts at launch here, not on the map as in Coop, so the hello waits out the game's start-up; a game
         // that exits or crashes on the way ends the wait sooner.
@@ -399,6 +444,7 @@ public static class InGameTestRun
         };
         sequencer.Progress += line => say("[test] " + line);
         var testReport = await sequencer.RunAsync(testPlan, channel.RunId, cancel);
+        windowWatch.Cancel();
 
         await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.json"), testReport.ToJson(), CancellationToken.None);
         await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.txt"), testReport.ToText(), CancellationToken.None);

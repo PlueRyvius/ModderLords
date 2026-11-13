@@ -92,6 +92,7 @@ public partial class TestsViewModel : ObservableObject
     /// <summary>The test world a run starts from (test-worlds\NAME.sav); empty: single player makes its own.</summary>
     [ObservableProperty] private string _world = "";
     [ObservableProperty] private bool _keepOpenOnFail;
+    [ObservableProperty] private bool _minimized;
     [ObservableProperty] private string _headline = "Pick the modules to test, then Run.";
 
     [ObservableProperty]
@@ -163,9 +164,10 @@ public partial class TestsViewModel : ObservableObject
             Modules = Modules.Where(m => m.IsPicked && !m.IsCore).Select(m => m.Id).ToList(),
             World = World.Length == 0 ? null : World,
             KeepOpenOnFail = KeepOpenOnFail,
+            Minimized = Minimized,
         };
         IsTesting = true;
-        Headline = Loc.T("Running… don't use the PC: the game window comes to the front.");
+        Headline = Loc.T("Running… the game runs in a small window behind your other windows; you can keep using the PC.");
         _cancel = new CancellationTokenSource();
         var dispatcher = Application.Current.Dispatcher;
         try

@@ -38,6 +38,6 @@ Repository: https://github.com/PlueRyvius/ModderLords (public). All links below 
 
 - **Coop:** you need a Host-mode profile and a test world: a `.sav` in `%LOCALAPPDATA%\ModderLords\test-worlds\`.
 - **Single player:** no test world is needed; the run makes a world itself.
-- **The game takes the screen** while a run is going, so don't run tests while someone is using the PC.
+- **The game runs in a small window behind your others** while a run is going, so you can keep using the PC.
 - **Write new suites in the API 2 format.** The run then waits for the game to load (and in Coop for the player to join) and pauses campaign time once per launch, so your suite starts with its own checks.
 - **Add `"world": "shared"`** when your suite reads its "before" values instead of assuming them. It then runs on the same world as the other checks, and costs no Coop launch of its own.

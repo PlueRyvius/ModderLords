@@ -282,6 +282,44 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 (as `LogTail` does). No port, no firewall prompt, no listener thread in the game; a crash leaves what happened on
 disk. Polling costs nothing measurable; a handoff takes under a second.
 
+### The game runs behind other work
+
+Steps run on the game's own tick, never on input, so the game does not need the focus. For the length of a run
+(`InGameTestRun.RunAsync`, single player and Coop), `TestRunGameSettings` changes two of the player's files under
+`Documents\Mount and Blade II Bannerlord\Configs` and puts both back byte for byte (attributes too) however the run ends:
+
+- `engine_config.txt`: `display_mode = 0`, `display_width = 1280`, `display_height = 720`. The game's own strings name
+  the modes (`str_options_type_DisplayMode_N` in Native's `global_strings.xml`): 0 Windowed, 1 Borderless Fullscreen,
+  2 Fullscreen.
+- `BannerlordConfig.txt`: `StopGameOnFocusLost=False`, or the campaign pauses whenever the game is not in front.
+
+Coop's automatic join has its own guard for `engine_config.txt` (`EngineConfigGuard`, in `SmokeRunner`). It starts
+after the run's settings are written and restores them; the run then restores the player's own, so the two nest.
+
+`TestGameWindow` watches the game's windows. Each time the game takes the focus (at start, and again on loading
+screens: six times in one single-player run) it gives the focus back to the window that had it and puts the game
+behind it. A click on the game window leaves it in front. Win32 dialogs (class `#32770`, as the engine's message boxes
+and the crash watchdog) are left in front: they wait for a person. A game kept open (`--keep-client`) is the player's
+from the end of the run. If it then saves its settings on close, the test window size may stick; the app puts the files
+back again when that game exits.
+
+`--minimized` (or **Minimize the game** in the Tests tab) minimizes the game window instead, and minimizes it again if
+it comes back. The steps still advance: the game's tick does not stop while minimized once `StopGameOnFocusLost` is
+off, and a minimized game draws almost nothing, so runs are faster.
+
+Runs on 2026-11-13 (v1.5.7.125802), `test --profile Harness --modules world --single-player`, while the maintainer
+used the PC:
+
+| Run | Window | Result | Time |
+|---|---|---|---|
+| `20261113-004345-selected-44b8` | 1280x720 behind other windows; took the focus 6 times, put back each time | 17/17 passed | 417 s (about 3 of them waiting on the engine's mod-change box) |
+| `20261113-005858-selected-215e` | `--minimized`: minimized throughout | 17/17 passed | 104 s |
+
+Both config files hashed the same before and after each run. The Coop run
+(`--modules stash,sync,parity --world harness-vanilla`, `20261113-005219-selected-5034`) opened the game windowed and
+behind, and restored both files byte for byte, but the Workshop's Coop does not load on v1.5.7
+(`TypeLoadException` for `SandBox.ViewModelCollection.Map.Tracker.MapTrackerProvider`), so no step ran.
+
 ### A crash ends the run at once
 
 A hard crash leaves the process alive: the engine's watchdog asks whether to gather logs, and writes its crash report
