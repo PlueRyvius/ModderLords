@@ -32,6 +32,16 @@ public sealed record InGameTestOptions
     public string? GameConfigsDir { get; init; }
     /// <summary>Where the launcher's compat folder is (module step DLLs); null for next to this process.</summary>
     public string? BundledRoot { get; init; }
+    /// <summary>
+    /// A mod's release zip (decision 27): checked (PackageCheck), unpacked into ModderLords' own folder and pinned for
+    /// this run in memory, never written over the player's copy. With no suite or modules named, the run picks the
+    /// test modules that require that mod.
+    /// </summary>
+    public string? Package { get; init; }
+    /// <summary>The version the package's SubModule.xml must say; null for any.</summary>
+    public string? PackageVersion { get; init; }
+    /// <summary>Only check the package; start no game.</summary>
+    public bool PackageCheckOnly { get; init; }
 }
 
 /// <summary>How a run ended: the exit code the CLI returns, every launch's report and run folder, and why it stopped early.</summary>
@@ -88,6 +98,11 @@ public static class InGameTestRun
 
         var profile = ProfileStore.Load(options.ProfileName);
         if (profile is null) return Stop("profile not found: " + options.ProfileName);
+        if (options.Package is { } zip)
+        {
+            if (PreparePackage(zip, profile, ref options, say) is { } packageProblem) return Stop(packageProblem);
+            if (options.PackageCheckOnly) return new InGameTestResult(0, reports, folders, null);
+        }
         if (ClientLauncher.IsClientRunning()) return Stop("Bannerlord is already running; close it first.");
 
         // One suite by name (as v1), or with none named the core suite plus every suite this profile's mods meet.
@@ -255,6 +270,42 @@ public static class InGameTestRun
             said.Add($"kept world {world}{(replaced ? " (replaced the one there)" : "")} -> {to}");
         }
         return said;
+    }
+
+    /// <summary>
+    /// <c>--package</c>: checks the release zip; if it is fit to publish, unpacks it into
+    /// %LOCALAPPDATA%\ModderLords\package-tests\&lt;Mod&gt;-&lt;version&gt;-&lt;hash&gt; and pins that copy in the profile, in memory.
+    /// With no suite or modules named, the run then picks the test modules that require the mod. Null when ready; the
+    /// reason to stop otherwise.
+    /// </summary>
+    private static string? PreparePackage(string zip, Profile profile, ref InGameTestOptions options, Action<string> say)
+    {
+        if (!File.Exists(zip)) return "package not found: " + zip;
+        var modId = PackageCheck.ModIdOf(zip);
+        var modules = modId is null ? [] : TestSuites.Modules().Where(m => m.Requires.Any(r => r.Id.Equals(modId, StringComparison.OrdinalIgnoreCase))).ToList();
+        var atLeast = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (path, n) in modules.SelectMany(m => m.PackageAtLeast)) atLeast[path] = Math.Max(n, atLeast.GetValueOrDefault(path));
+        var report = PackageCheck.Inspect(zip, modId, options.PackageVersion, atLeast);
+        foreach (var line in report.ToText().Split('\n')) say("[ModderLords] " + line.TrimEnd());
+        if (!report.Ok) return "the release zip is not fit to publish: " + string.Join("; ", report.Problems);
+        if (options.PackageCheckOnly) return null;
+
+        var parent = Path.Combine(ProfileStore.RootDir, "package-tests", $"{report.ModId}-{report.Version}-{report.Sha256[..8]}");
+        string folder;
+        try { folder = PackageCheck.Unpack(zip, report.ModId!, parent); }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { return "could not unpack the release zip: " + ex.Message; }
+        var mod = profile.Mods.FirstOrDefault(m => m.Id.Equals(report.ModId, StringComparison.OrdinalIgnoreCase));
+        if (mod is null) profile.Mods.Add(mod = new ProfileMod { Id = report.ModId!, Role = ServerRole.AsShipped });
+        mod.Enabled = true;
+        mod.SourcePath = folder;   // in memory: the profile on disk is not changed
+        say($"[ModderLords] package unpacked to {folder}; this run loads {report.ModId} from there");
+        if (options.Suite is null && options.Modules is null)
+        {
+            if (modules.Count == 0) return $"no test module requires {report.ModId}, so there is nothing to run the package against (name --modules or --suite)";
+            options = options with { Modules = modules.Select(m => m.Id).ToList() };
+            say("[ModderLords] testing it with " + string.Join(", ", modules.Select(m => m.Id)));
+        }
+        return null;
     }
 
     /// <summary>The test worlds kept under test-worlds, by name.</summary>

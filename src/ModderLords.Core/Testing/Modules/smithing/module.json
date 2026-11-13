@@ -3,5 +3,8 @@
   "title": "Modular Smithing 2",
   "description": "Modular Smithing 2's crafting on a new world and on a save made with its last release: armor weighs and costs what MS2 says, the designer's tier matches the game's, ammo flies at native speed, crafted items survive a save and reload, old items keep their stats after an update, damage types and their one-time notice work, and no helper piece from another mod becomes a crafted look.",
   "requires": [ { "id": "ModularSmithing2" } ],
-  "steps": "ModderLords.Tests.Smithing.dll"
+  "steps": "ModderLords.Tests.Smithing.dll",
+  // test --package: a release zip of v0.9.50 holds 1305 files, 1073 of them dye masks (and 207 for the dye
+  // reconstruction tool). These floors catch a zip that lost its payload, not a release that changed a few files.
+  "package": { "atLeast": { "": 1200, "ModuleData/Dyes/masks": 1000, "Tools/DyeReconstruct": 150 } }
 }
