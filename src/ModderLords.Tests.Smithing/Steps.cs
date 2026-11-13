@@ -53,7 +53,16 @@ public static class Steps
         InGameTests.Register("smithing.configRestore", StepSide.Any, ConfigRestore);
         InGameTests.Register("smithing.watchNotice", StepSide.Client, WatchNotice);
         InGameTests.Register("smithing.answerNotice", StepSide.Client, AnswerNotice);
+        QuietNotice();
     }
+
+    /// <summary>
+    /// Marks MS2's one-time damage types notice as already shown, in memory only. It would otherwise open on the first
+    /// map tick of every world the run makes or loads and wait for an answer nobody gives. The notice suite turns it
+    /// back on for its own check. MS2 builds without the notice have no such setting, and this does nothing.
+    /// </summary>
+    private static void QuietNotice() =>
+        typeof(MSmithSettings).GetField("DamageTypesNoticeShown")?.SetValue(MSmithConfig.Settings, true);
 
     // ---- health ---------------------------------------------------------------------------------------------------
 
@@ -412,6 +421,8 @@ public static class Steps
         if (ctx.State["smithing.config"] is string text) File.WriteAllText(path, text);
         else if (File.Exists(path)) File.Delete(path);
         ctx.Report("value", MSmithConfig.Reload());
+        // The reload brought the file's "not shown yet" back; the rest of the run must not see the notice.
+        QuietNotice();
         yield break;
     }
 
