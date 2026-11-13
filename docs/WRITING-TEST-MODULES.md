@@ -57,8 +57,10 @@ ModderLords.Cli test --profile "My Host" --suite C:\scratch\try-this.json
 - **A one-off suite file** (`--suite <path>`) is the quickest way to try a step before giving it a home in a module.
 - **Single player** takes about a minute (it creates a world by code each run). **Coop** takes a few minutes per launch
   (shared suites all run in one) and needs a Host profile, the dedicated server, and Coop's automatic join (no server password).
-- **Never run while someone is using the machine:** a run launches the game, which takes the screen. Check first
-  (the last keyboard/mouse input, or ask), and close any running Bannerlord.
+- **The PC stays usable during a run:** the game opens in a 1280x720 window, is put back behind whatever window had
+  the focus each time it takes it, and keeps running there (`--minimized` minimizes it instead). Its settings files
+  are put back afterwards. A message box from the game (a crash, a prompt the harness does not know yet) is left in
+  front, since it waits for a person. Close any running Bannerlord first: a run refuses to start beside one.
 
 ## 3. What a step can reach
 
