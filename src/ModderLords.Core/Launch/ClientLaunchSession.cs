@@ -73,6 +73,9 @@ public static class ClientLaunchSession
         // Roles are a dedicated-server concept (they decide what the overlay strips out of a manifest). On the
         // player's own machine every enabled mod simply loads, so the selection is used for its module list only.
         var mods = ModuleSelector.Select(profile, catalog, messages, ModuleSelector.ModuleSide.Client).Select(s => s.Module).ToList();
+        // A Coop built for another game version crashes this game as it loads; say so before it does.
+        if (mods.FirstOrDefault(m => CoopGameSupport.IsCoop(m.Id)) is { } coop && CoopGameSupport.Warning(coop, gameRoot, installedOfficials) is { } coopWarning)
+            messages.Add(coopWarning);
 
         var order = LoadOrder.Compute(officials, mods, profile.Mods.Select(m => m.Id).ToList(), LoadOrder.Profile.Client,
             profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest,

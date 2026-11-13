@@ -155,6 +155,20 @@ public sealed class ApiIndex
         return index;
     }
 
+    private static readonly ConcurrentDictionary<string, ApiIndex> Indexes = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// <see cref="Of"/>, kept per set of files (names, sizes and times): a launch preview asks for the same game's index
+    /// every time the profile changes, and building it reads about a hundred assemblies.
+    /// </summary>
+    public static ApiIndex OfCached(IEnumerable<string> dlls)
+    {
+        var list = dlls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var key = string.Join("\n", list.Select(f => new FileInfo(f)).Where(f => f.Exists)
+            .Select(f => $"{f.FullName}:{f.Length}:{f.LastWriteTimeUtc.Ticks}").OrderBy(s => s, StringComparer.Ordinal));
+        return Indexes.GetOrAdd(key, _ => Of(list));
+    }
+
     /// <summary>The DLLs in each of <paramref name="folders"/> (not their subfolders) that exist.</summary>
     public static IEnumerable<string> DllsIn(IEnumerable<string> folders) =>
         folders.Where(Directory.Exists).SelectMany(f => Directory.EnumerateFiles(f, "*.dll"));

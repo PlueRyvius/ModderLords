@@ -211,6 +211,23 @@ public sealed class LaunchSession
     /// is: it starts the generated plan, waits for it, and then prepares again. Everything else (previews, the CLI's
     /// dry run) passes false, and a save that has to exist is then bootstrapped from the template as before.
     /// </param>
+    /// <summary>
+    /// The server runs Coop's own bundled server package, which a game update does not touch; the players' games load
+    /// the Coop module installed beside the game. When that module does not fit the game installed here (the players'
+    /// game, usually), say so at launch: nobody on that game version can join. Null when it fits or cannot be checked.
+    /// </summary>
+    private static string? CoopPlayersWarning(ModuleCatalog catalog, string? gameRoot)
+    {
+        if (gameRoot is null) return null;
+        var server = catalog.Modules.FirstOrDefault(m => m.IsStock && CoopGameSupport.IsCoop(m.Id));
+        var players = catalog.Modules.Where(m => !m.IsStock && CoopGameSupport.IsCoop(m.Id) && m.HasClientBin).ToList();
+        var coop = players.FirstOrDefault(m => server is not null && m.Version == server.Version) ?? players.FirstOrDefault();
+        if (coop is null) return null;
+        var officials = catalog.Modules.Where(m => m.Source == ModuleSourceKind.GameModules && OfficialModules.IsGameModule(m.Id));
+        try { return CoopGameSupport.Warning(coop, gameRoot, officials, forHost: true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
     public static Prepared Prepare(Profile profile, bool applySideEffects = true, bool allowWorldCreation = false,
         (ModuleCatalog Catalog, string? GameRoot)? scanned = null, bool experimentalCompat = false)
     {
@@ -228,6 +245,7 @@ public sealed class LaunchSession
         if (!applySideEffects && scanned is { } previous) (catalog, gameRoot) = previous;
         else catalog = Scan(profile, paths, out gameRoot);
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));
+        if (CoopPlayersWarning(catalog, gameRoot) is { } coopWarning) messages.Add(coopWarning);
         // Decided from the profile's own enabled ids, before selections resolve, because the answer changes which
         // modules are selected: a generated world needs the compat module in the list.
         var requestedIds = profile.EnabledMods.Where(m => m.Role != ServerRole.ClientOptional).Select(m => m.Id).ToList();
