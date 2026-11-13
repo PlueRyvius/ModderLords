@@ -303,11 +303,22 @@ and the crash watchdog) are left in front: they wait for a person. A game kept o
 from the end of the run. If it then saves its settings on close, the test window size may stick; the app puts the files
 back again when that game exits.
 
-`--minimized` minimizes the game window instead.
+`--minimized` (or **Minimize the game** in the Tests tab) minimizes the game window instead, and minimizes it again if
+it comes back. The steps still advance: the game's tick does not stop while minimized once `StopGameOnFocusLost` is
+off, and a minimized game draws almost nothing, so runs are faster.
 
-First run, 2026-11-13, `test --profile Harness --modules world --single-player` while the maintainer worked over
-Remote Desktop: 17/17 passed in 417 s, the game sat at 1280x720 behind other windows throughout, and both files hashed
-the same before and after.
+Runs on 2026-11-13 (v1.5.7.125802), `test --profile Harness --modules world --single-player`, while the maintainer
+used the PC:
+
+| Run | Window | Result | Time |
+|---|---|---|---|
+| `20261113-004345-selected-44b8` | 1280x720 behind other windows; took the focus 6 times, put back each time | 17/17 passed | 417 s (about 3 of them waiting on the engine's mod-change box) |
+| `20261113-005858-selected-215e` | `--minimized`: minimized throughout | 17/17 passed | 104 s |
+
+Both config files hashed the same before and after each run. The Coop run
+(`--modules stash,sync,parity --world harness-vanilla`, `20261113-005219-selected-5034`) opened the game windowed and
+behind, and restored both files byte for byte, but the Workshop's Coop does not load on v1.5.7
+(`TypeLoadException` for `SandBox.ViewModelCollection.Map.Tracker.MapTrackerProvider`), so no step ran.
 
 ### A crash ends the run at once
 

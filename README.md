@@ -636,7 +636,7 @@ picked, no mod showed an error on screen, and in Coop the server and your game a
   after another on one world, so a Coop run starts the server and the game once.
 - **Run tests** uses the profile as saved; it refuses while the Server tab's server runs (Coop) or Bannerlord is open.
   The game opens in a small window behind your other windows and keeps running there, so you can go on using the PC;
-  its display settings are put back afterwards.
+  its display settings are put back afterwards. **Minimize the game** runs it minimized instead, which is also faster.
 - After a run: a pass or fail per suite, each step with its message, and the run's log. **Open run folder** shows the
   report and the evidence (screenshots, logs, what each game saw); **Copy report** puts the report on the clipboard.
 - Test worlds are saves you put in `%LOCALAPPDATA%\ModderLords\test-worlds\`.

@@ -1059,7 +1059,9 @@
                         <TextBlock Text="{l:T 'Test world:'}" VerticalAlignment="Center" Margin="0,0,6,0" />
                         <ComboBox ItemsSource="{Binding Worlds}" SelectedItem="{Binding World}" MinWidth="160" Margin="0,0,20,0"
                                   ToolTip="{l:T 'A save under test-worlds, copied fresh for every launch. Empty: single player makes its own world; Coop needs one, so your campaign is never touched.'}" />
-                        <CheckBox Content="{l:T 'Leave the game open if something fails'}" IsChecked="{Binding KeepOpenOnFail}" VerticalAlignment="Center" />
+                        <CheckBox Content="{l:T 'Leave the game open if something fails'}" IsChecked="{Binding KeepOpenOnFail}" VerticalAlignment="Center" Margin="0,0,20,0" />
+                        <CheckBox Content="{l:T 'Minimize the game'}" IsChecked="{Binding Minimized}" VerticalAlignment="Center"
+                                  ToolTip="{l:T 'The game runs minimized instead of in a small window behind yours. The steps still run, faster, since a minimized game draws almost nothing. Restore it from the taskbar to watch.'}" />
                     </WrapPanel>
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Content="{l:T 'Run tests'}" Command="{Binding RunCommand}" Padding="14,4" Margin="0,0,8,0" />

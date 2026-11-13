@@ -608,5 +608,7 @@
   "Locked to host": "锁定为主机设置",
   "With Settings sync on: ticked, players get this mod's settings from the server and their own changes are put back; unticked, each player keeps their own settings for this mod. Leave it ticked for mods whose settings change the shared world.": "开启设置同步时：勾选后，玩家会从服务器获得此模组的设置，自己的更改会被恢复；取消勾选后，每位玩家保留自己对此模组的设置。对于设置会影响共享世界的模组，请保持勾选。",
   "Runs scripted checks inside a real game on this profile (as saved), and says pass or fail per suite. Tick the test modules you want; the core checks always run. Single player starts just the game; Coop also starts the server and joins it. The game opens in a small window behind your other windows and keeps running there, so the PC stays free to use; its display settings are put back afterwards. The same runs are on the command line: ModderLords.Cli test --modules NAME (docs/WRITING-TEST-MODULES.md).": "在此配置（已保存的版本）的真实游戏中运行脚本化检查，并按套件给出通过或失败。勾选要测试的测试模块；核心检查始终运行。单人模式只启动游戏；Coop 还会启动服务器并加入。游戏会在其他窗口后面的小窗口中打开并持续运行，因此你可以继续使用电脑；结束后会恢复游戏的显示设置。命令行也可以执行同样的运行：ModderLords.Cli test --modules NAME（docs/WRITING-TEST-MODULES.md）。",
-  "Running… the game runs in a small window behind your other windows; you can keep using the PC.": "运行中……游戏在其他窗口后面的小窗口中运行；你可以继续使用电脑。"
+  "Running… the game runs in a small window behind your other windows; you can keep using the PC.": "运行中……游戏在其他窗口后面的小窗口中运行；你可以继续使用电脑。",
+  "Minimize the game": "最小化游戏",
+  "The game runs minimized instead of in a small window behind yours. The steps still run, faster, since a minimized game draws almost nothing. Restore it from the taskbar to watch.": "游戏以最小化方式运行，而不是在你的窗口后面的小窗口中运行。步骤照常运行，而且更快，因为最小化的游戏几乎不绘制画面。从任务栏还原即可观看。"
 }
