@@ -96,7 +96,23 @@ internal static class WorldSteps
         ctx.Report("culture", Hero.MainHero?.Culture?.StringId);
     }
 
-    private static Campaign NewCampaign() => new Campaign(CampaignGameMode.Campaign);
+    /// <summary>
+    /// A new Sandbox campaign, through whichever constructor this game has: <c>Campaign(gameMode)</c> to v1.4,
+    /// <c>Campaign(gameMode, AdvancedStartOptionsData)</c> from v1.5, given empty options (no advanced start). Built by
+    /// reflection: a direct call to the one this DLL was compiled against is a MissingMethodException on the other.
+    /// </summary>
+    private static Campaign NewCampaign()
+    {
+        foreach (var ctor in typeof(Campaign).GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+        {
+            var ps = ctor.GetParameters();
+            if (ps.Length == 0 || ps[0].ParameterType != typeof(CampaignGameMode)) continue;
+            if (ps.Length == 1) return (Campaign)ctor.Invoke(new object[] { CampaignGameMode.Campaign });
+            if (ps.Length == 2 && ps[1].ParameterType.GetConstructor(Type.EmptyTypes) is { } options)
+                return (Campaign)ctor.Invoke(new object[] { CampaignGameMode.Campaign, options.Invoke(null) });
+        }
+        throw new MissingMethodException("Campaign has no constructor this step knows: (CampaignGameMode) or (CampaignGameMode, start options)");
+    }
 
     /// <summary>Presses Next on the current character-creation page, choosing a default first when the page needs one.</summary>
     private sealed class CreationDriver
