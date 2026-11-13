@@ -239,6 +239,14 @@ private static IEnumerable<StepWait?> StashCount(StepContext ctx)
   adds to what the stash held; `hero.adminLevel` takes `by`), and put back settings later suites would see
   (`rules.set` reports `before`). Prefer it: a fresh world in Coop costs a whole launch, a few minutes. Keep a fresh
   world for a suite that saves and reloads, or makes a change other suites would trip on.
+- **A new world and an ongoing one.** A mod that keeps data in saves needs both: a fresh world (the default: the
+  first time the mod meets a campaign) and a save made on its last release (an *upgrade world*: what players load
+  after updating). `"world": "upgrade"` (single player, `"mode": "singleplayer"`) runs the suite once on each kept
+  `test-worlds\upgrade-<ModId>-<version>.sav` of a mod it requires, as `suite@version`; with none kept it is left out,
+  saying so. Make one with a `"manual": true` suite (it runs only by name) that sets the world up and ends with
+  `game.keepWorld` (`upgradeOf: <ModId>`), run on the released build: the launcher keeps the save when the run ends.
+- **Save and reload** in single player: `game.save` (`name`), `game.toMainMenu`, `game.loadSave` (`name`), then check
+  what survived. Give the suite a fresh world (`continuity: true`), not a shared one.
 - `continueOnFail` keeps going after a failure; otherwise a failure skips the rest of *this* suite only.
 - `knownFailing: "<issue link>"` marks a step expected to fail until an upstream fix: it shows `[known]`, and a pass
   becomes `UnexpectedPass`, which fails the run so the mark gets removed.
