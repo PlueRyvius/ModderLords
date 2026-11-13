@@ -60,6 +60,18 @@ public sealed class ModuleFingerprintTests : IDisposable
     }
 
     [Fact]
+    public void A_log_a_mod_writes_beside_its_dlls_does_not_change_its_code()
+    {
+        // MS2 writes msmith-coop-loader.log into its bin folder while the game runs, after the launcher hashed it.
+        var folder = Mod("a");
+        var before = ModuleFingerprint.Of(folder, ModuleFingerprint.ClientBin);
+        Write(folder, "bin/Win64_Shipping_Client/msmith-coop-loader.log", "loaded at 00:22");
+        Assert.Equal(before.Code, ModuleFingerprint.Of(folder, ModuleFingerprint.ClientBin).Code);
+        Write(folder, "bin/Win64_Shipping_Client/Mod.dll", "new code");
+        Assert.NotEqual(before.Code, ModuleFingerprint.Of(folder, ModuleFingerprint.ClientBin).Code);
+    }
+
+    [Fact]
     public void Other_files_count_by_size_not_content()
     {
         var same = ModuleFingerprint.Of(Mod("a", art: "pixels"), ModuleFingerprint.ClientBin);
