@@ -251,7 +251,9 @@ public static class InGameTestRun
         var serverPlan = prepared.Plan.WithEnvironment(FileTestRunChannel.ServerVariable, channel.SwitchValue("server"));
 
         string? gameGone = null;
-        var sequencer = new TestSequencer(channel) { Abort = () => gameGone };
+        // The server and the player's game write crash reports to the same folder; either one crashing ends the run.
+        var crash = new CrashWatch(ServerPaths.CrashesDir);
+        var sequencer = new TestSequencer(channel) { Abort = () => gameGone ?? crash.Check() };
         sequencer.Progress += line => say("[test] " + line);
         Task<TestReport>? testRun = null;
         var runner = new Core.Smoke.SmokeRunner(new Core.Smoke.SmokeOptions
@@ -293,6 +295,7 @@ public static class InGameTestRun
             await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.txt"), testReport.ToText(), CancellationToken.None);
             say(testReport.ToText());
         }
+        foreach (var file in crash.CopyLogs(channel.Folder)) say("[ModderLords] crash log kept: " + file);
         say($"[ModderLords] evidence and logs: {channel.Folder}");
         if (!options.KeepServer && !engine.Exited.IsCompleted)
         {
@@ -334,15 +337,16 @@ public static class InGameTestRun
         var plan = client.Plan with { ExtraArguments = [FileTestRunChannel.ClientArgument, channel.SwitchValue(TestPlan.GameSide)] };
         say("[ModderLords] " + plan.Describe());
 
+        var crash = new CrashWatch(ServerPaths.CrashesDir);
         System.Diagnostics.Process game;
         try { game = ClientLaunchSession.Start(plan, note => say("[ModderLords] " + note)); }
         catch (Exception ex) { return Stop("could not start the game: " + ex.Message); }
 
         // The run starts at launch here, not on the map as in Coop, so the hello waits out the game's start-up; a game
-        // that exits on the way ends the wait sooner.
+        // that exits or crashes on the way ends the wait sooner.
         var sequencer = new TestSequencer(channel, new TestSequencerOptions { HelloTimeout = TimeSpan.FromMinutes(10) })
         {
-            Abort = () => game.HasExited ? $"the game exited (code {game.ExitCode})" : null,
+            Abort = () => game.HasExited ? $"the game exited (code {game.ExitCode})" : crash.Check(),
         };
         sequencer.Progress += line => say("[test] " + line);
         var testReport = await sequencer.RunAsync(testPlan, channel.RunId, cancel);
@@ -353,11 +357,15 @@ public static class InGameTestRun
         say(testReport.ToText());
         say($"[ModderLords] evidence and logs: {channel.Folder}");
 
-        var keep = options.KeepClient || (options.KeepOpenOnFail && !testReport.Passed);
+        foreach (var file in crash.CopyLogs(channel.Folder)) say("[ModderLords] crash log kept: " + file);
+
+        // A crashed game is closed even when asked to keep it: it only waits on the watchdog's dialog. Closing it means
+        // no dump is written; the engine logs copied above say what crashed.
+        var keep = !crash.Crashed && (options.KeepClient || (options.KeepOpenOnFail && !testReport.Passed));
         if (keep && !game.HasExited) say("[ModderLords] the game was left running, as asked");
         else if (!game.HasExited)
         {
-            say("[ModderLords] closing the game…");
+            say(crash.Crashed ? "[ModderLords] closing the crashed game and its crash dialog…" : "[ModderLords] closing the game…");
             try { game.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
             try { await game.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token); } catch (OperationCanceledException) { }
         }

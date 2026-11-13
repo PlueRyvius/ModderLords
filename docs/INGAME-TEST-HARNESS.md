@@ -272,6 +272,20 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 (as `LogTail` does). No port, no firewall prompt, no listener thread in the game; a crash leaves what happened on
 disk. Polling costs nothing measurable; a handoff takes under a second.
 
+### A crash ends the run at once
+
+A hard crash leaves the process alive: the engine's watchdog asks whether to gather logs, and writes its crash report
+(`%ProgramData%\Mount and Blade II Bannerlord\crashes\<date>`, with a dump) only once someone answers. An unattended
+run would wait out the step (15 minutes to make a world). `CrashWatch` checks every 2 seconds:
+
+- the watchdog's log, `...\logs\watchdog_log_<pid>.txt`: "Crash occurred" is written the moment it catches one;
+- a new crash report folder, if someone did answer: its watchdog log names the exception (MissingMethodException…).
+
+The step waiting fails with "the game crashed during: <the engine's last log line>". The crashed process's watchdog
+and rgl logs are copied into the run folder's `crash\`, and the game is closed with its dialog, even with
+`--keep-client` (no dump is written then). Logs that already said "Crash occurred" when the run started are earlier
+runs' and are ignored.
+
 ## Running it
 
 ```powershell
