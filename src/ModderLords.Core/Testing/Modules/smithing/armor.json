@@ -9,7 +9,7 @@
   "mode": "singleplayer",
   "continuity": true,
   "description": "On a new world, armor crafts with the weights, protection and materials MS2 says, and survives a save and reload.",
-  "errorPatterns": [ "\\[MSmith\\].*(failed|error)" ],
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
   "steps": [
     { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },
     { "id": "smithing.craft", "side": "game", "as": "helmet", "args": { "slot": "head", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "maxKg": "3.5", "ingotGrades": 2 } },

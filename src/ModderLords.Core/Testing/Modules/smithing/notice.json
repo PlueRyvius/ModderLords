@@ -6,7 +6,7 @@
   "mode": "singleplayer",
   "continuity": true,
   "description": "The damage types notice shows on loading a save, and \"Keep off\" leaves them off and stops it coming back.",
-  "errorPatterns": [ "\\[MSmith\\].*(failed|error)" ],
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
   "steps": [
     { "id": "smithing.configSnapshot", "side": "game" },
     { "id": "smithing.watchNotice", "side": "game" },

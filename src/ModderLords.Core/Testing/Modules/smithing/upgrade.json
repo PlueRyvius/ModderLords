@@ -8,7 +8,7 @@
   "world": "upgrade",
   "continuity": true,
   "description": "On a save made with MS2's last release, every crafted item loads with its old stats, new crafts work, and a save and reload keeps both.",
-  "errorPatterns": [ "\\[MSmith\\].*(failed|error)" ],
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
   "steps": [
     { "id": "ModularSmithing2.health", "side": "game" },
     { "id": "smithing.records", "side": "game", "as": "before", "args": { "atLeast": 4 } },

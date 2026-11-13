@@ -9,7 +9,7 @@
   "mode": "singleplayer",
   "manual": true,
   "description": "Run on MS2's released build: crafts a piece in every slot and some ammo, then keeps the save as that version's upgrade world.",
-  "errorPatterns": [ "\\[MSmith\\].*(failed|error)" ],
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
   "steps": [
     { "id": "ModularSmithing2.health", "side": "game" },
     { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },

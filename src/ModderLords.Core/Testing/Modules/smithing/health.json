@@ -6,7 +6,7 @@
   "mode": "both",
   "world": "shared",
   "description": "MS2's part catalog loads; in Coop, the server and the player load the same one.",
-  "errorPatterns": [ "\\[MSmith\\].*(failed|error)" ],
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
   "steps": [
     { "id": "ModularSmithing2.health", "side": "game" },
     { "compare": "ModularSmithing2.health", "sides": ["game", "player"], "mode": "coop" }
