@@ -9,7 +9,7 @@ namespace ModderLords.Testing;
 
 /// <summary>
 /// What a mod folder holds, as short hashes (docs/INGAME-TEST-HARNESS.md, decisions 23 and 24): its data
-/// (<c>ModuleData\</c>), its code for one side (<c>bin\Win64_Shipping_Client\</c> or <c>_Server\</c>) and its
+/// (<c>ModuleData\</c>), its code for one side (the DLLs and EXEs in <c>bin\Win64_Shipping_Client\</c> or <c>_Server\</c>) and its
 /// <c>SubModule.xml</c>, each by content; everything else by size only, since art folders can be gigabytes. The launcher
 /// and the games compute it the same way (this file is linked into both), so a copy the game loaded can be checked
 /// against the copy ModderLords picked, and the server against the player's game. Results compare on these bytes, not on
@@ -58,7 +58,12 @@ public sealed class ModuleFingerprint
             {
                 if (relative == "submodule.xml") manifest = Hash(File.ReadAllBytes(path));
                 else if (relative.StartsWith("moduledata/", StringComparison.Ordinal)) data.Add(relative + ":" + Hash(File.ReadAllBytes(path)));
-                else if (relative.StartsWith("bin/" + bin.ToLowerInvariant() + "/", StringComparison.Ordinal)) code.Add(relative + ":" + Hash(File.ReadAllBytes(path)));
+                else if (relative.StartsWith("bin/" + bin.ToLowerInvariant() + "/", StringComparison.Ordinal))
+                {
+                    // Code only: a mod may write a log or settings beside its DLLs while it runs (MS2 writes
+                    // msmith-coop-loader.log there), which would change the hash between the launch and the check.
+                    if (IsCode(relative)) code.Add(relative + ":" + Hash(File.ReadAllBytes(path)));
+                }
                 else if (!relative.StartsWith("bin/", StringComparison.Ordinal)) other.Add(relative + ":" + new FileInfo(path).Length);
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
@@ -76,6 +81,9 @@ public sealed class ModuleFingerprint
         var sorted = parts.OrderBy(p => p, StringComparer.Ordinal).ToList();
         return Hash(Encoding.UTF8.GetBytes(string.Join("\n", sorted)));
     }
+
+    private static bool IsCode(string relative) =>
+        relative.EndsWith(".dll", StringComparison.Ordinal) || relative.EndsWith(".exe", StringComparison.Ordinal);
 
     private static string Normalize(string relative) => relative.Replace('\\', '/').Trim('/').ToLowerInvariant();
 
