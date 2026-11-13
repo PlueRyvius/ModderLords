@@ -11,6 +11,7 @@
     <Project Path="src/ModderLords.Core/ModderLords.Core.csproj" />
     <Project Path="src/ModderLords.Hook/ModderLords.Hook.csproj" />
     <Project Path="src/ModderLords.Tests.Retinues/ModderLords.Tests.Retinues.csproj" />
+    <Project Path="src/ModderLords.Tests.Smithing/ModderLords.Tests.Smithing.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ModderLords.App.Tests/ModderLords.App.Tests.csproj" />

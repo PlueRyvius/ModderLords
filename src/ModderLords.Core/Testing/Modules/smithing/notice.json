@@ -1,0 +1,21 @@
+{
+  // The one-time pop-up that offers damage types: it comes on the first map tick after a save loads, and answering it
+  // is remembered. Answering saves MS2's config file, so the file is put back as it was at the end.
+  "api": 2,
+  "name": "notice",
+  "mode": "singleplayer",
+  "continuity": true,
+  "description": "The damage types notice shows on loading a save, and \"Keep off\" leaves them off and stops it coming back.",
+  "errorPatterns": [ "\\[MSmith\\].*(failed|error)" ],
+  "steps": [
+    { "id": "smithing.configSnapshot", "side": "game" },
+    { "id": "smithing.watchNotice", "side": "game" },
+    { "id": "smithing.setSetting", "side": "game", "as": "unseen", "args": { "name": "damage_types_notice_shown", "value": "false" } },
+    { "id": "smithing.setSetting", "side": "game", "as": "off", "args": { "name": "damage_types", "value": "false" } },
+    { "id": "game.save", "side": "game", "args": { "name": "mltest-smithing-notice" } },
+    { "id": "game.toMainMenu", "side": "game", "timeoutSeconds": 300 },
+    { "id": "game.loadSave", "side": "game", "timeoutSeconds": 900, "args": { "name": "mltest-smithing-notice" } },
+    { "id": "smithing.answerNotice", "side": "game", "continueOnFail": true, "timeoutSeconds": 90, "args": { "answer": "off" } },
+    { "id": "smithing.configRestore", "side": "game" }
+  ]
+}

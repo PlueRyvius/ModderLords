@@ -1,0 +1,15 @@
+{
+  // v0.9.49's fix: crafted ammo flies at native missile speed (10), so AI archers hit with it; sling bullets craft.
+  "api": 2,
+  "name": "ammo",
+  "mode": "singleplayer",
+  "world": "shared",
+  "description": "Crafted arrows, bolts and sling bullets fly at native missile speed and reach the inventory.",
+  "errorPatterns": [ "\\[MSmith\\].*(failed|error)" ],
+  "steps": [
+    { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },
+    { "id": "smithing.craft", "side": "game", "as": "arrows", "args": { "family": "ammo", "slot": "arrow", "inner": "arrow_shaft_hardwood", "middle": "arrow_head_bodkin", "outer": "arrow_fletching_cloth", "extra": "arrow_nock_horn", "batch": 20, "missileSpeed": 10 } },
+    { "id": "smithing.craft", "side": "game", "as": "bolts", "args": { "family": "ammo", "slot": "bolt", "inner": "bolt_shaft_hardwood", "middle": "bolt_head_bodkin", "outer": "bolt_fletching_leather", "extra": "bolt_nock_horn", "batch": 20, "missileSpeed": 10 } },
+    { "id": "smithing.craft", "side": "game", "as": "bullets", "args": { "family": "ammo", "slot": "sling_stone", "inner": "sling_bullet_cast", "middle": "sling_shaping_almond", "batch": 20, "missileSpeed": 10 } }
+  ]
+}

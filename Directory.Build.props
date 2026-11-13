@@ -52,4 +52,19 @@
     <HasRetinuesAssemblies Condition="'$(HasRetinuesAssemblies)' == ''">false</HasRetinuesAssemblies>
   </PropertyGroup>
 
+  <!-- Modular Smithing 2 (test module smithing): its Core and Crafting DLLs. Override with -p:SmithingRefDir=... -->
+  <PropertyGroup>
+    <SmithingBin>steamapps\common\Mount &amp; Blade II Bannerlord\Modules\ModularSmithing2\bin\Win64_Shipping_Client</SmithingBin>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(SmithingRefDir)' == ''">
+    <SmithingRefDir Condition="Exists('C:\Program Files (x86)\Steam\$(SmithingBin)\ModularSmithing.Crafting.dll')">C:\Program Files (x86)\Steam\$(SmithingBin)</SmithingRefDir>
+    <SmithingRefDir Condition="'$(SmithingRefDir)' == '' And Exists('D:\Program Files (x86)\Steam\$(SmithingBin)\ModularSmithing.Crafting.dll')">D:\Program Files (x86)\Steam\$(SmithingBin)</SmithingRefDir>
+    <SmithingRefDir Condition="'$(SmithingRefDir)' == '' And Exists('D:\SteamLibrary\$(SmithingBin)\ModularSmithing.Crafting.dll')">D:\SteamLibrary\$(SmithingBin)</SmithingRefDir>
+    <SmithingRefDir Condition="'$(SmithingRefDir)' == '' And Exists('E:\SteamLibrary\$(SmithingBin)\ModularSmithing.Crafting.dll')">E:\SteamLibrary\$(SmithingBin)</SmithingRefDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <HasSmithingAssemblies Condition="'$(SmithingRefDir)' != '' And Exists('$(SmithingRefDir)\ModularSmithing.Crafting.dll')">true</HasSmithingAssemblies>
+    <HasSmithingAssemblies Condition="'$(HasSmithingAssemblies)' == ''">false</HasSmithingAssemblies>
+  </PropertyGroup>
+
 </Project>

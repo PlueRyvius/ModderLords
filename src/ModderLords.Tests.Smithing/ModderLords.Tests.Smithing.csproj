@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The smithing test module's own steps (docs/WRITING-TEST-MODULES.md, section 7). The test agent loads it by hand,
+       into a game that already has ModderLords.Compat and Modular Smithing 2 loaded, so neither is copied next to it.
+       Built only where MS2 is installed (HasSmithingAssemblies, Directory.Build.props); the launcher copies it into its
+       compat folder. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ModderLords.Tests.Smithing</AssemblyName>
+    <RootNamespace>ModderLords.Tests.Smithing</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Bannerlord.ReferenceAssemblies.Core" Version="1.4.8.119303" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\ModderLords.CompatSync\ModderLords.CompatSync.csproj" Private="false" />
+    <Reference Include="ModularSmithing.Core">
+      <HintPath>$(SmithingRefDir)\ModularSmithing.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ModularSmithing.Crafting">
+      <HintPath>$(SmithingRefDir)\ModularSmithing.Crafting.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
