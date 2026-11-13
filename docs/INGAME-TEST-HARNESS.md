@@ -398,6 +398,12 @@ recorded set differs, it deletes the other files in each renderer folder that ha
 keeping the format and build. It says so in the launch log. A file it cannot parse, or one it fails to write, is left to
 the game, which then asks as before. The cache is rebuilt by the game as it would be after OK.
 
+**v1.5.7 (build 125802) changed the file**, checked 2026-11-13: format `0x784`, and after the module list the game
+appends 24-byte records (two in a file from a player's own sessions). After OK it wrote the header alone: the new set and
+no records, 86 bytes for the harness's single-player set, and the other files in `D3D11` were gone. `Prepare` now reads
+`0x784` with its records and writes exactly that. Until then ModderLords logged "not in a layout ModderLords knows" and
+an unattended run stopped on the box.
+
 **The intro video.** `Module.SetInitialModuleScreenAsRootScreen` plays `Native/Videos/TWLogo_and_Partners.ivf` once,
 at the first main menu, if that file exists and no debugger is attached. There is no launch option or config value for
 it, and the player's game runs on .NET Framework, so no startup hook reaches it either. So every launch through
