@@ -22,6 +22,7 @@
     { "id": "smithing.itemSame", "side": "game", "as": "helmetBack", "args": { "item": "$helmet.value", "weight": "$helmet.weight", "armor": "$helmet.armor" } },
     { "id": "smithing.records", "side": "game", "as": "after", "args": { "atLeast": 5 } },
     { "id": "smithing.oldItemsKeepStats", "side": "game", "as": "oldAfter", "args": { "atLeast": 5 } },
+    { "id": "smithing.smelt", "side": "game", "as": "oldSmelt", "args": { "item": "old" } },
     { "id": "game.noErrors", "side": "game", "continueOnFail": true }
   ]
 }
