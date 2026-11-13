@@ -109,6 +109,19 @@
             <TextBlock Text="{Binding Host.DriftText}" TextWrapping="Wrap" />
         </Border>
 
+        <!-- Coop banner: the Coop this profile loads was built for another game version (Bannerlord updated first),
+             so a player's game crashes as it loads Coop. Player and Host mode alike. -->
+        <Border DockPanel.Dock="Top" Padding="8,6" Background="{DynamicResource WarningBackground}" BorderBrush="{DynamicResource WarningBorder}" BorderThickness="0,0,0,1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding CoopWarningText}" Value=""><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding CoopWarningText}" TextWrapping="Wrap" FontWeight="SemiBold" />
+        </Border>
+
         <!-- blocked-mod banner: Windows refuses to load assemblies extracted from a zip that was never unblocked,
              and it does so silently, so the player sees enabled mods that simply do nothing. Clearing the mark needs
              no elevation and undoes nothing, but it still touches their install, so it waits for the button. -->

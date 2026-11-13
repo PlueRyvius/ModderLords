@@ -63,6 +63,38 @@ public sealed class ApiCheckTests : IDisposable
         Assert.Empty(ApiCheck.CheckAll([native], ApiIndex.Of([Game()])));
     }
 
+    [Fact]
+    public void A_coop_built_for_another_game_version_is_warned_about_with_the_games_version()
+    {
+        // The game root as Steam lays it out: bin\Win64_Shipping_Client with the game's assemblies and Version.xml.
+        var gameRoot = Path.Combine(_root, "Bannerlord");
+        var bin = Directory.CreateDirectory(Path.Combine(gameRoot, "bin", "Win64_Shipping_Client")).FullName;
+        File.Copy(Game(), Path.Combine(bin, "TaleWorlds.CampaignSystem.dll"));
+        File.WriteAllText(Path.Combine(bin, "Version.xml"), "<Version>\n\t<Singleplayer Value=\"v1.5.7\"/>\n</Version>");
+        // Coop's module, whose SubModule.xml names Mod.dll, built against the game before it changed Campaign(int).
+        var coopFolder = Path.Combine(_root, "Coop");
+        var coopBin = Directory.CreateDirectory(Path.Combine(coopFolder, "bin", "Win64_Shipping_Client")).FullName;
+        File.Copy(Mod(), Path.Combine(coopBin, "Mod.dll"));
+        var info = new Bannerlord.ModuleManager.ModuleInfoExtended
+        {
+            Id = "Coop", Name = "Coop",
+            SubModules = [new Bannerlord.ModuleManager.SubModuleInfoExtended { Name = "Coop", DLLName = "Mod.dll" }],
+        };
+        var coop = new ModderLords.Core.Modules.DiscoveredModule("Coop", "v0.1.7", coopFolder, ModderLords.Core.Modules.ModuleSourceKind.Workshop, info);
+
+        Assert.Equal("v1.5.7", ModderLords.Core.Launch.CoopGameSupport.GameVersion(gameRoot));
+        var player = ModderLords.Core.Launch.CoopGameSupport.Warning(coop, gameRoot, []);
+        Assert.StartsWith("WARNING: Coop v0.1.7 does not support the installed game (v1.5.7): it makes 3 call(s)", player);
+        Assert.Contains("This game will crash when it loads Coop", player);
+        var host = ModderLords.Core.Launch.CoopGameSupport.Warning(coop, gameRoot, [], forHost: true);
+        Assert.Contains("nobody on it can join; the server itself runs", host);
+
+        // A Coop that fits the game says nothing.
+        File.Delete(Path.Combine(coopBin, "Mod.dll"));
+        Build(Path.Combine(coopBin, "Mod.dll"), "Mod", (_, _) => { });
+        Assert.Null(ModderLords.Core.Launch.CoopGameSupport.Warning(coop, gameRoot, []));
+    }
+
     // ---- the assemblies -------------------------------------------------------------------------------------------
 
     /// <summary>The "game": Campaign(int, int), field Mode, Run(), and CampaignChild : Campaign. No Campaign(int).</summary>

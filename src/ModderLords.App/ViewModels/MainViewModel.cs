@@ -2174,7 +2174,9 @@ public partial class MainViewModel : ObservableObject
             var p = _preview;
             LoadOrderPreview.Clear();
             foreach (var id in p.Order.ModuleIds) LoadOrderPreview.Add(id);
-            SetPreviewMessages(p.Messages.Where(m => m.StartsWith("order:")));
+            SetPreviewMessages(p.Messages.Where(m => m.StartsWith("order:") || m.StartsWith(CoopWarningPrefix, StringComparison.Ordinal)));
+            CoopWarningText = p.Messages.FirstOrDefault(m => m.StartsWith(CoopWarningPrefix, StringComparison.Ordinal)) is { } coopWarning
+                ? coopWarning["WARNING: ".Length..] : "";
             UpdateShareText();
             if (IsHost) Host?.UpdateSaveDiff();
         }
@@ -2187,6 +2189,15 @@ public partial class MainViewModel : ObservableObject
             SetPreviewMessages(["preview: " + ex.Message]);
         }
     }
+
+    /// <summary>How CoopGameSupport's warning starts: the Coop this profile loads does not fit the installed game.</summary>
+    private const string CoopWarningPrefix = "WARNING: Coop ";
+
+    /// <summary>
+    /// The banner under the top bar while this profile's Coop does not support the installed game (a game update came
+    /// before Coop's): a player's game crashes as it loads Coop. Empty hides it. Set by every preview.
+    /// </summary>
+    [ObservableProperty] private string _coopWarningText = "";
 
     /// <summary>The lines the last preview put in Messages, so the next preview can take them back out.</summary>
     private readonly List<string> _previewLines = new();
