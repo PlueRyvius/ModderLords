@@ -1,0 +1,17 @@
+{
+  // Smelting crafted armor through the smithy's own smelt (the game's DoSmelting, which MS2 patches): the party gains
+  // exactly what MS2's cost model says the piece smelts into, and loses the piece.
+  "api": 2,
+  "name": "smelting",
+  "mode": "singleplayer",
+  "world": "shared",
+  "description": "Crafted armor smelts into what MS2's cost model says, through the smithy's own smelt.",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
+  "steps": [
+    { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },
+    { "id": "smithing.craft", "side": "game", "as": "mail", "args": { "slot": "body", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "id": "smithing.smelt", "side": "game", "as": "mailSmelt", "args": { "item": "$mail.value" } },
+    { "id": "smithing.craft", "side": "game", "as": "leather", "args": { "slot": "legs", "inner": "gambeson_quilted", "outer": "leather_outer" } },
+    { "id": "smithing.smelt", "side": "game", "as": "leatherSmelt", "args": { "item": "$leather.value" } }
+  ]
+}
