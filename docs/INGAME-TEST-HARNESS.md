@@ -334,6 +334,28 @@ and rgl logs are copied into the run folder's `crash\`, and the game is closed w
 `--keep-client` (no dump is written then). Logs that already said "Crash occurred" when the run started are earlier
 runs' and are ignored.
 
+### The mods' game calls are checked before the launch
+
+A game update that removes or changes a method shows only when a mod's call to it first runs: a
+MissingMethodException, often inside the engine, which crashes the game (v1.5.7 changed `Campaign`'s constructor,
+and `game.createWorld` crashed with nothing but the watchdog's dialog). So before the game starts, `ApiCheck` reads
+the metadata of every DLL the launch loads: each community mod's (ModderLords.Compat's included) and each test
+module's step DLL. Every call into the game's namespaces (`TaleWorlds.`, `SandBox.`, `StoryMode.`, `Helpers.`) must
+resolve against the installed game: its `bin\Win64_Shipping_Client` and the bin folders of the modules the launch
+loads, base types included, matched by type, name and parameter count. Nothing is loaded or run, and it takes about a
+second for 50 DLLs.
+
+- Only the DLLs a module loads count: those its `SubModule.xml` names, and the DLLs beside them they reference.
+  Framework mods ship a build per game version (MCM's `Bannerlord.MBOptionScreen.v1.2.12.dll`, ...) and load the one
+  that fits by name; those are not checked.
+- A run that finds a missing call stops before launching, naming each DLL and what it calls. `--skip-api-check` runs
+  anyway, to see the break fail in the game. `test --profile NAME --api-check [--single-player]` runs the check alone.
+- A DLL loaded by name only when another mod is there (ModderLords.CompatSync.Coop with Coop) is not followed.
+- Overloads that differ only in parameter types are not told apart.
+
+Found on game v1.5.7 (2026-11-13), Coop launch of `!Modular`: Coop 0.1.7's `GameInterface.dll` makes 43 calls v1.5.7
+no longer has (among them `Campaign(CampaignGameMode)`) and `Missions.dll` 2, so Coop does not run on v1.5.7 yet.
+
 ## Running it
 
 ```powershell

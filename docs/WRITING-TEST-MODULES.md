@@ -61,6 +61,9 @@ ModderLords.Cli test --profile "My Host" --suite C:\scratch\try-this.json
   the focus each time it takes it, and keeps running there (`--minimized` minimizes it instead). Its settings files
   are put back afterwards. A message box from the game (a crash, a prompt the harness does not know yet) is left in
   front, since it waits for a person. Close any running Bannerlord first: a run refuses to start beside one.
+- **Before the game starts,** every DLL the launch loads, your step DLL included, is checked for calls into the game
+  that the installed version no longer has. A break stops the run there, naming the call, instead of crashing the
+  game. `test --profile NAME --api-check` runs only this check; `--skip-api-check` launches anyway.
 
 ## 3. What a step can reach
 
