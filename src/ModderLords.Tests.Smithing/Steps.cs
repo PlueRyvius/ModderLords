@@ -68,7 +68,11 @@ public static class Steps
 
     /// <summary>
     /// MS2's load status (decision 26): its version, its part catalog's size and hash. A catalog that fails to load
-    /// (the v0.9.49 hand install that left out changed data) fails here with MS2's own reason.
+    /// (the v0.9.49 hand install that left out changed data) fails here with MS2's own reason. So does an adapter that
+    /// loaded with a patch it could not hook: MS2 says "UNHOOKED: SpawnAgent" or "FAILED" in its loader status and
+    /// carries on, which left spawned soldiers undyed on game v1.5.7 while every check passed.
+    /// Reports MS2's settings that differ from its defaults, so a config that changes what the checks see (crafts made
+    /// free by material_cost_pct 0) shows in every run.
     /// </summary>
     private static IEnumerable<StepWait?> Health(StepContext ctx)
     {
@@ -80,9 +84,64 @@ public static class Steps
         ctx.Report("version", version);
         ctx.Report("parts", cat!.Components.Count);
         ctx.Report("catalogHash", cat.Hash);
+
+        var broken = new List<string>();
+        foreach (var (name, status) in LoaderStatuses())
+        {
+            ctx.Report("status." + name, status);
+            ctx.Log($"{name}: {status}");
+            if (status.IndexOf("UNHOOKED", StringComparison.Ordinal) >= 0 || status.IndexOf("FAILED", StringComparison.Ordinal) >= 0)
+                broken.Add($"{name}: {status}");
+        }
+        var changed = NonDefaultSettings();
+        ctx.Report("settings", changed.Count == 0 ? "all defaults" : string.Join("; ", changed));
+        ctx.Log("settings not at their defaults: " + (changed.Count == 0 ? "none" : string.Join("; ", changed)));
+
+        // value is compared across sides in Coop: the catalog only, not this PC's settings or adapters.
         ctx.Report("value", $"{version} parts={cat.Components.Count} catalog={cat.Hash.Substring(0, 12)}");
+        ctx.Assert(broken.Count == 0, "MS2 loaded with a patch it could not apply: " + string.Join(" | ", broken));
         yield break;
     }
+
+    /// <summary>
+    /// Every public static string named "...Status" on MS2's SubModule (NativeUiLoaderStatus, and its siblings for
+    /// the other adapters), by reflection: which ones exist depends on the MS2 build.
+    /// </summary>
+    private static IEnumerable<(string Name, string Status)> LoaderStatuses()
+    {
+        var type = typeof(CraftingDesigner).Assembly.GetType("ModularSmithing.Crafting.SubModule");
+        if (type == null) yield break;
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
+        foreach (var p in type.GetProperties(flags).Where(p => p.PropertyType == typeof(string) && p.Name.EndsWith("Status", StringComparison.Ordinal) && p.GetIndexParameters().Length == 0))
+            if (p.GetValue(null) is string s && s.Length > 0) yield return (p.Name, s);
+        foreach (var f in type.GetFields(flags).Where(f => f.FieldType == typeof(string) && f.Name.EndsWith("Status", StringComparison.Ordinal)))
+            if (f.GetValue(null) is string s && s.Length > 0) yield return (f.Name, s);
+    }
+
+    /// <summary>MS2's settings whose value differs from a fresh MSmithSettings, as "Field=value (default x)".</summary>
+    private static List<string> NonDefaultSettings()
+    {
+        var changed = new List<string>();
+        object? defaults;
+        try { defaults = Activator.CreateInstance(typeof(MSmithSettings)); }
+        catch (MissingMethodException) { return changed; }
+        foreach (var f in typeof(MSmithSettings).GetFields(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var now = f.GetValue(MSmithConfig.Settings);
+            var then = f.GetValue(defaults);
+            if (!Equals(now, then)) changed.Add($"{f.Name}={Show(now)} (default {Show(then)})");
+        }
+        return changed;
+    }
+
+    private static string Show(object? v) => v switch
+    {
+        null => "null",
+        string s => "\"" + s + "\"",
+        System.Collections.IEnumerable e => "[" + string.Join(", ", e.Cast<object?>().Select(Show)) + "]",
+        IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
+        _ => v.ToString() ?? "",
+    };
 
     // ---- crafting -------------------------------------------------------------------------------------------------
 
