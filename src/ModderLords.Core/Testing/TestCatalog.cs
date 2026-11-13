@@ -41,6 +41,8 @@ public static class TestCatalog
                     ["mode"] = s.Mode switch { SuiteMode.SinglePlayer => "singleplayer", SuiteMode.Coop => "coop", _ => "both" },
                     ["continuity"] = s.Continuity,
                     ["world"] = s.World,
+                    // Runs only with --suite: it makes something (an upgrade world) rather than checking.
+                    ["manual"] = s.Manual,
                     ["requires"] = Requires(s.Requires),
                     ["available"] = Available(s.Requires),
                     ["steps"] = new JsonArray(s.Steps.Select(st => st.Id).Distinct().Select(id => (JsonNode?)id).ToArray()),

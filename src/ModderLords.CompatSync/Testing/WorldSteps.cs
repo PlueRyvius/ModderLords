@@ -27,6 +27,55 @@ internal static class WorldSteps
         InGameTests.Register("game.createWorld", StepSide.Client, CreateWorld);
         InGameTests.Register("game.loadSave", StepSide.Client, LoadSave);
         InGameTests.Register("game.toMainMenu", StepSide.Client, ToMainMenu);
+        InGameTests.Register("game.save", StepSide.Client, Save);
+        InGameTests.Register("game.keepWorld", StepSide.Client, KeepWorld);
+    }
+
+    // ---- game.save / game.keepWorld ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// Saves the campaign under <c>name</c>, as the escape menu's Save As does, and waits until it is written. With
+    /// <c>game.toMainMenu</c> and <c>game.loadSave</c> after it, a single-player suite saves and reloads (decision 16).
+    /// </summary>
+    private static IEnumerable<StepWait?> Save(StepContext ctx)
+    {
+        var name = ctx.Arg("name");
+        foreach (var wait in SaveAs(ctx, name)) yield return wait;
+        ctx.Report("save", name);
+    }
+
+    /// <summary>
+    /// Saves the campaign and asks the launcher to keep it under test-worlds when the run ends (decision 27): as
+    /// <c>name</c>, or with <c>upgradeOf</c> a module id, as that module's upgrade world
+    /// <c>upgrade-&lt;ModId&gt;-&lt;its loaded version&gt;</c>. Reports <c>keptWorld</c> and <c>keptSave</c>, which the
+    /// launcher reads; a later failure in the run does not stop the copy, since this step passed.
+    /// </summary>
+    private static IEnumerable<StepWait?> KeepWorld(StepContext ctx)
+    {
+        string world;
+        if (ctx.HasArg("upgradeOf"))
+        {
+            var id = ctx.Arg("upgradeOf");
+            var module = TaleWorlds.ModuleManager.ModuleHelper.GetModules().FirstOrDefault(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
+            ctx.Assert(module != null, $"module {id} is not loaded, so there is no version to keep an upgrade world of");
+            world = "upgrade-" + module!.Id + "-" + module.Version;
+        }
+        else world = ctx.Arg("name");
+        ctx.Assert(world.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) < 0, $"\"{world}\" is not a file name");
+        var save = "mltest-keep-" + world;
+        foreach (var wait in SaveAs(ctx, save)) yield return wait;
+        ctx.Report("keptSave", save);
+        ctx.Report("keptWorld", world);
+        ctx.Report("value", world);
+    }
+
+    private static IEnumerable<StepWait?> SaveAs(StepContext ctx, string name)
+    {
+        ctx.Assert(Campaign.Current != null, "there is no campaign to save");
+        Campaign.Current!.TimeControlMode = CampaignTimeControlMode.Stop;
+        Campaign.Current.SaveHandler.SaveAs(name);
+        yield return null;
+        yield return ctx.Until(() => !Campaign.Current.SaveHandler.IsSaving && MBSaveLoad.IsSaveGameFileExists(name), $"the save {name} to be written", TimeSpan.FromMinutes(3));
     }
 
     private static string ActiveStateName => GameStateManager.Current?.ActiveState?.GetType().Name ?? "";

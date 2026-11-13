@@ -133,6 +133,7 @@ src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2
   "world": "auto",                 // auto (default): a fresh copy of the cached world for this mod set;
                                    // shared: the previous suite's world, no reset; upgrade: each kept
                                    // upgrade world in turn (decision 27); or a named test world
+  "manual": false,                 // true: runs only when named (--suite), e.g. a suite that keeps an upgrade world
   "errorPatterns": [ "\\[MArmor\\].*failed" ],   // added to game.noErrors' defaults (decision 25)
   "steps": [ ... ]                 // side: game (single player), server, client:N (Coop)
 }
@@ -196,7 +197,14 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 - A named world (`"world": "vanilla-1"`, `--world`) still works as in v1, and skips the cache.
 - **Upgrade worlds** (decision 27): `<data>\test-worlds\upgrade-<ModId>-<version>.sav`, one kept from each released
   version of a mod. An upgrade suite (`"world": "upgrade"`, `continuity`) runs once on each, with the new build, and
-  checks that the mod's records survived the load.
+  checks that the mod's records survived the load. **Built for single player 2026-11-13:** the run expands an
+  upgrade suite into one copy per kept upgrade world of a mod it requires (`suite@version`, oldest first), copies each
+  world fresh into the game's saves and loads it before that copy; with none kept, the suite is left out, saying so.
+  In Coop it waits for the server restarting inside one launch, so `"world": "upgrade"` needs `"mode": "singleplayer"`.
+- **Keeping a world:** `game.keepWorld` saves the campaign and reports it; when the run ends, the launcher copies that
+  save into test-worlds, with a `.json` note naming the run and the versions. With `upgradeOf: <ModId>` it is kept as
+  that mod's upgrade world, named from the version that loaded. A mod's test module ships a `manual` suite that makes
+  one; run it by name on the released build: `test --suite smithing/keep-upgrade-world --single-player`.
 
 ### Results history (decision 18)
 
@@ -244,8 +252,10 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    4. `smithing` (Modular Smithing 2), with its own DLL and `ModularSmithing2.health`.
       Its suites: `health` (both), `ammo`, `tier-preview` (single player), `heal-on-load` (single player,
       continuity) and `coop-craft` (Coop).
-4. The world cache, then `game.saveAndReload`, then the history file and table.
-5. `--package` and upgrade worlds, then the release step in `docs/RELEASING.md` (decision 27).
+4. The world cache, then `game.saveAndReload`, then the history file and table. **Single player's save and reload
+   built 2026-11-13** as steps (`game.save`, then `game.toMainMenu` and `game.loadSave`); Coop's waits.
+5. `--package` and upgrade worlds, then the release step in `docs/RELEASING.md` (decision 27). **Upgrade worlds built
+   for single player 2026-11-13**, with `game.keepWorld` and `manual` suites to make them.
 
 ## Shape
 
@@ -459,6 +469,10 @@ World steps (`WorldSteps.cs`), from the main menu, for single-player runs:
 - `game.loadSave` (`name`): loads a save as the Load Game screen does, without its pop-ups. The module differences
   that screen would warn about are logged and counted (`moduleWarnings`).
 - `game.toMainMenu`: leaves the campaign without saving.
+- `game.save` (`name`): saves the campaign as Save As does and waits until it is written. `game.save`,
+  `game.toMainMenu` and `game.loadSave` in a row are a save and reload in single player (decision 16).
+- `game.keepWorld` (`name`, or `upgradeOf: <ModId>`): saves the campaign and asks the launcher to keep it under
+  test-worlds when the run ends (Worlds, above). Reports `keptWorld` and `keptSave`.
 
 Parity steps (`ParitySteps.cs`), for what quietly differs between the sides:
 

@@ -64,6 +64,13 @@ public sealed record TestPlan
 
     /// <summary>The world value that runs a suite on the world the previous suite left (decision 19).</summary>
     public const string SharedWorld = "shared";
+    /// <summary>
+    /// The world value that runs a suite once on each kept upgrade world of the mods it requires (decision 27):
+    /// <c>test-worlds\upgrade-&lt;ModId&gt;-&lt;version&gt;.sav</c>, a save made on that released version.
+    /// </summary>
+    public const string UpgradeWorld = "upgrade";
+    /// <summary>The file name prefix of an upgrade world.</summary>
+    public const string UpgradePrefix = "upgrade-";
 
     public required string Name { get; init; }
     /// <summary>The test module the suite belongs to (decision 28); empty for a suite read from a file.</summary>
@@ -79,6 +86,12 @@ public sealed record TestPlan
     public bool Continuity { get; init; }
     /// <summary>The suite opted in to running on the previous suite's world (decision 19).</summary>
     public bool SharesWorld => World == SharedWorld;
+    /// <summary>The suite runs on each kept upgrade world (decision 27); the run expands it, one copy per world.</summary>
+    public bool OnUpgradeWorlds => World == UpgradeWorld;
+    /// <summary>A test world under test-worlds the suite loads, copied fresh; null for the run's own world.</summary>
+    public string? NamedWorld => World is null or SharedWorld or UpgradeWorld ? null : World;
+    /// <summary>Runs only when named (<c>--suite</c>): it makes something, such as an upgrade world, rather than checking.</summary>
+    public bool Manual { get; init; }
     /// <summary>Module step DLLs the games load for this run (run.json "load"); set by the launcher, not by a suite.</summary>
     public IReadOnlyList<ModuleLoad> Loads { get; init; } = [];
     /// <summary>Patterns (regular expressions) <c>game.noErrors</c> also fails on, beyond its default set (decision 25).</summary>
@@ -227,17 +240,23 @@ public sealed record TestPlan
         }
         foreach (var r in requires.Where(r => r.Version is not null))
             if (!VersionRange.IsValid(r.Version!)) throw new FormatException($"requirement {r.Id}: \"{r.Version}\" is not a version or range (>=1.2, <2, =1.3.0)");
+        var world = root["world"]?.GetValue<string>();
+        // Upgrade worlds load from the main menu, which only a single-player run does today; in Coop a fresh world
+        // costs a launch per world. Coop upgrade runs come with the server restarting inside one launch.
+        if (world == UpgradeWorld && mode != SuiteMode.SinglePlayer)
+            throw new FormatException($"\"world\": \"{UpgradeWorld}\" is single player only for now (\"mode\": \"singleplayer\")");
 
         return new TestPlan
         {
             Name = name,
             Api = api,
             Description = root["description"]?.GetValue<string>() ?? "",
-            World = root["world"]?.GetValue<string>(),
+            World = world,
             Steps = steps,
             Mode = mode,
             Requires = requires,
             Continuity = root["continuity"]?.GetValue<bool>() ?? false,
+            Manual = root["manual"]?.GetValue<bool>() ?? false,
             ErrorPatterns = errorPatterns,
         };
     }

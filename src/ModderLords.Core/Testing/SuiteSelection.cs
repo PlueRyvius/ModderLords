@@ -26,8 +26,10 @@ public static class SuiteSelection
     /// <param name="onlyMod">With <c>--mod X</c>: only suites that require X, unless <paramref name="withOthers"/>.</param>
     /// <param name="modules">With <c>--modules</c>: only these test modules' suites (decision 29); null for every module.</param>
     /// <param name="notes">Told why each suite left out was left out.</param>
+    /// <param name="worlds">The test worlds kept under test-worlds, by name, for suites that run on upgrade worlds.</param>
     public static IReadOnlyList<TestPlan> Select(IEnumerable<TestPlan> available, IReadOnlyDictionary<string, string?> mods,
-        bool singlePlayer, string? onlyMod, bool withOthers, List<string> notes, IReadOnlyCollection<string>? modules = null)
+        bool singlePlayer, string? onlyMod, bool withOthers, List<string> notes, IReadOnlyCollection<string>? modules = null,
+        IReadOnlyCollection<string>? worlds = null)
     {
         var all = available.ToList();
         var core = all.FirstOrDefault(p => p.Name == CoreSuite) ?? throw new InvalidOperationException("the core suite is missing");
@@ -39,6 +41,7 @@ public static class SuiteSelection
             // Unpicked, a v1 suite declares neither mode nor requirements, so nothing says where it applies. A module
             // picked by name runs its v1 suites too, in the mode their sides say.
             if (plan.Api < 2 && modules is null) continue;
+            if (plan.Manual) { notes.Add($"{label}: runs only when named (--suite {label})"); continue; }
             if (!plan.RunsIn(singlePlayer)) { notes.Add($"{label}: {(singlePlayer ? "Coop" : "single-player")} only"); continue; }
             var unmet = Unmet(plan.Requires, mods);
             if (unmet.Count > 0) { notes.Add($"{label}: needs {string.Join(", ", unmet.Select(r => Describe(r, mods)))}"); continue; }
@@ -47,12 +50,55 @@ public static class SuiteSelection
                 notes.Add($"{label}: does not require {onlyMod} (--with-others runs it too)");
                 continue;
             }
+            if (plan.OnUpgradeWorlds)
+            {
+                var kept = UpgradeWorlds(plan, worlds ?? []);
+                if (kept.Count == 0)
+                {
+                    notes.Add($"{label}: no upgrade world kept for {string.Join(" or ", plan.Requires.Select(r => r.Id))} " +
+                              $"(test-worlds\\{TestPlan.UpgradePrefix}<ModId>-<version>.sav, made by a suite that keeps one)");
+                    continue;
+                }
+                picked.AddRange(kept);
+                continue;
+            }
             picked.Add(plan);
         }
         // The suites that share a world ride on core's: core changes little, and in Coop they then cost no launch of
         // their own. Each suite that needs a fresh world follows, and only it sees the world it leaves.
         return [core.ForMode(singlePlayer), .. picked.Where(p => p.SharesWorld).Select(p => p.ForMode(singlePlayer)),
             .. picked.Where(p => !p.SharesWorld).Select(p => p.ForMode(singlePlayer))];
+    }
+
+    /// <summary>
+    /// One copy of an upgrade suite per kept upgrade world of a mod it requires (decision 27), oldest version first,
+    /// each named <c>suite@version</c> and loading that world.
+    /// </summary>
+    public static IReadOnlyList<TestPlan> UpgradeWorlds(TestPlan suite, IEnumerable<string> worlds)
+    {
+        var copies = new List<(string Version, TestPlan Plan)>();
+        foreach (var world in worlds)
+            foreach (var mod in suite.Requires.Select(r => r.Id))
+            {
+                var prefix = TestPlan.UpgradePrefix + mod + "-";
+                if (!world.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || world.Length == prefix.Length) continue;
+                var version = world[prefix.Length..];
+                copies.Add((version, suite with { Name = $"{suite.Name}@{version}", World = world }));
+            }
+        return copies.OrderBy(c => c.Version, VersionOrder.Instance).Select(c => c.Plan).ToList();
+    }
+
+    /// <summary>Versions in number order ("v0.9.49" before "v0.9.100"); text that is not a version sorts by text.</summary>
+    private sealed class VersionOrder : IComparer<string>
+    {
+        public static readonly VersionOrder Instance = new();
+        public int Compare(string? x, string? y)
+        {
+            if (x is null || y is null) return string.CompareOrdinal(x, y);
+            if (VersionRange.IsValid(x) && VersionRange.IsValid(y))
+                return VersionRange.Matches(x, "<" + y) ? -1 : VersionRange.Matches(x, "=" + y) ? 0 : 1;
+            return string.CompareOrdinal(x, y);
+        }
     }
 
     /// <summary>The requirements <paramref name="mods"/> do not meet.</summary>
@@ -78,19 +124,27 @@ public static class SuiteSelection
         return launches;
     }
 
-    /// <summary>Single player: make the run's world before the first suite, load it fresh before each later one.</summary>
+    /// <summary>The save a test world is copied to in the game's saves, fresh for each run.</summary>
+    public static string SaveFor(string testWorld) => "mltest-" + testWorld;
+
+    /// <summary>
+    /// Single player: make the run's world before the first suite, load it fresh before each later one. A suite with a
+    /// world of its own (a named test world, or one upgrade world of an upgrade suite) loads that one instead.
+    /// </summary>
     public static IReadOnlyList<PlanStep> SinglePlayerSetup(TestPlan suite, int index, string? world)
     {
         const string side = TestPlan.GameSide;
+        var own = suite.NamedWorld is { } named ? SaveFor(named) : null;
+        PlanStep Load(string name) => new() { Id = "game.loadSave", Side = side, As = "world", Timeout = TimeSpan.FromMinutes(15), Args = new Dictionary<string, string> { ["name"] = name } };
         if (index == 0)
-            return world is null
-                ? [new PlanStep { Id = "game.createWorld", Side = side, As = "world", Timeout = TimeSpan.FromMinutes(15), Args = new Dictionary<string, string> { ["name"] = RunWorld, ["overwrite"] = "true" } }]
-                : [new PlanStep { Id = "game.loadSave", Side = side, As = "world", Timeout = TimeSpan.FromMinutes(15), Args = new Dictionary<string, string> { ["name"] = world } }];
+            return (own ?? world) is { } first
+                ? [Load(first)]
+                : [new PlanStep { Id = "game.createWorld", Side = side, As = "world", Timeout = TimeSpan.FromMinutes(15), Args = new Dictionary<string, string> { ["name"] = RunWorld, ["overwrite"] = "true" } }];
         if (suite.SharesWorld) return [];
         return
         [
             new PlanStep { Id = "game.toMainMenu", Side = side, As = "leave", Timeout = TimeSpan.FromMinutes(5) },
-            new PlanStep { Id = "game.loadSave", Side = side, As = "world", Timeout = TimeSpan.FromMinutes(15), Args = new Dictionary<string, string> { ["name"] = world ?? RunWorld } },
+            Load(own ?? world ?? RunWorld),
             new PlanStep { Id = "game.pause", Side = side, As = "pause" },
         ];
     }

@@ -66,7 +66,17 @@ public static class InGameTestRun
             if (testPlan.Clients > 1) return Stop($"suite {testPlan.Name} needs {testPlan.Clients} players' games; this version starts one.");
             // An API v2 suite leaves the world and the wait for the map and Coop's join to the run's setup, so it
             // runs as the one picked suite below. Without that setup its steps started while the game was loading.
-            if (testPlan.Api >= 2) namedSuite = [testPlan];
+            if (testPlan.Api >= 2)
+            {
+                namedSuite = [testPlan];
+                // A named upgrade suite runs on each kept upgrade world, as when picked.
+                if (testPlan.OnUpgradeWorlds)
+                {
+                    namedSuite = SuiteSelection.UpgradeWorlds(testPlan, TestWorlds());
+                    if (namedSuite.Count == 0)
+                        return Stop($"suite {testPlan.Name} runs on upgrade worlds, and none is kept for {string.Join(" or ", testPlan.Requires.Select(r => r.Id))} in {TestSuites.WorldsDir}");
+                }
+            }
             else
             {
                 // Steps all on "game": just the player's game, no server (decision 15).
@@ -93,7 +103,7 @@ public static class InGameTestRun
         if (namedSuite is not null) chosen = namedSuite;
         else
         {
-            try { chosen = SuiteSelection.Select(TestSuites.LoadAll(), installed, options.SinglePlayer, options.OnlyMod, options.WithOthers, left, options.Modules); }
+            try { chosen = SuiteSelection.Select(TestSuites.LoadAll(), installed, options.SinglePlayer, options.OnlyMod, options.WithOthers, left, options.Modules, TestWorlds()); }
             catch (Exception ex) { return Stop("suites: " + ex.Message); }
             // With nothing picked, a module whose step DLL this build lacks is left out, not failed: a release
             // packaged on a PC without that mod has no DLL for it. A module picked by name still stops below.
@@ -116,16 +126,20 @@ public static class InGameTestRun
             // One launch: the run makes its world (or loads the test world) once, and loads it fresh before each suite
             // that needs a fresh world.
             string? spWorld = null;
-            if (options.World is { } named)
+            var saves = Path.Combine(GamePaths.UserDataDir(), "Game Saves");
+            // Every test world the run loads (--world, and each suite's own: a named world or an upgrade world) is
+            // copied fresh into the game's saves, so no run sees what an earlier one left.
+            var testWorlds = chosen.Select(p => p.NamedWorld).OfType<string>().ToList();
+            if (options.World is { } named) testWorlds.Insert(0, named);
+            foreach (var w in testWorlds.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                var worldFile = TestSuites.WorldPath(named);
+                var worldFile = TestSuites.WorldPath(w);
                 if (!File.Exists(worldFile)) return Stop($"test world not found: {worldFile}");
-                spWorld = "mltest-" + named;
-                var saves = Path.Combine(GamePaths.UserDataDir(), "Game Saves");
                 Directory.CreateDirectory(saves);
-                File.Copy(worldFile, Path.Combine(saves, spWorld + ".sav"), overwrite: true);
-                say($"[ModderLords] world {named} copied fresh -> {Path.Combine(saves, spWorld + ".sav")}");
+                File.Copy(worldFile, Path.Combine(saves, SuiteSelection.SaveFor(w) + ".sav"), overwrite: true);
+                say($"[ModderLords] world {w} copied fresh -> {Path.Combine(saves, SuiteSelection.SaveFor(w) + ".sav")}");
             }
+            if (options.World is { } runWorld) spWorld = SuiteSelection.SaveFor(runWorld);
             var composed = SuiteSelection.Compose("selected", chosen, (suite, i) => SuiteSelection.SinglePlayerSetup(suite, i, spWorld)) with { Loads = loads };
             return Collect(await RunSinglePlayer(profile, composed, options, say, cancel));
         }
@@ -171,6 +185,41 @@ public static class InGameTestRun
             return mods;
         }
         catch (Exception ex) { say("[ModderLords] mods: " + ex.Message); return null; }
+    }
+
+    /// <summary>
+    /// Copies each save a passed <c>game.keepWorld</c> step reported (values <c>keptSave</c> and <c>keptWorld</c>)
+    /// from the game's saves into test-worlds, with a note beside it saying which run made it. An upgrade world is
+    /// made this way on a mod's released version (decision 27).
+    /// </summary>
+    public static IReadOnlyList<string> KeepWorlds(TestReport report, string gameSaves, string worldsDir)
+    {
+        var said = new List<string>();
+        foreach (var step in report.Steps.Where(s => s.Outcome == StepOutcome.Pass))
+        {
+            if (!step.Values.TryGetValue("keptSave", out var save) || !step.Values.TryGetValue("keptWorld", out var world)) continue;
+            if (world.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || save.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                said.Add($"not keeping world \"{world}\": not a file name");
+                continue;
+            }
+            var from = Path.Combine(gameSaves, save + ".sav");
+            if (!File.Exists(from)) { said.Add($"not keeping world {world}: {from} is missing"); continue; }
+            Directory.CreateDirectory(worldsDir);
+            var to = Path.Combine(worldsDir, world + ".sav");
+            var replaced = File.Exists(to);
+            File.Copy(from, to, overwrite: true);
+            var note = new System.Text.Json.Nodes.JsonObject
+            {
+                ["world"] = world,
+                ["madeBy"] = $"{report.RunId} {step.Suite}/{step.Step}".Trim(),
+                ["at"] = DateTimeOffset.Now.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+                ["versions"] = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(report.Versions)),
+            };
+            File.WriteAllText(Path.Combine(worldsDir, world + ".json"), note.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            said.Add($"kept world {world}{(replaced ? " (replaced the one there)" : "")} -> {to}");
+        }
+        return said;
     }
 
     /// <summary>The test worlds kept under test-worlds, by name.</summary>
@@ -352,6 +401,8 @@ public static class InGameTestRun
         say("");
         say(testReport.ToText());
         say($"[ModderLords] evidence and logs: {channel.Folder}");
+        foreach (var line in KeepWorlds(testReport, Path.Combine(GamePaths.UserDataDir(), "Game Saves"), TestSuites.WorldsDir))
+            say("[ModderLords] " + line);
 
         var keep = options.KeepClient || (options.KeepOpenOnFail && !testReport.Passed);
         if (keep && !game.HasExited) say("[ModderLords] the game was left running, as asked");

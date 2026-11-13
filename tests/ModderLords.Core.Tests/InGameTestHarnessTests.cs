@@ -205,6 +205,91 @@ public class TestPlanTests
         Assert.All(plan.Steps.Take(3), s => Assert.Equal("a", s.Suite));
     }
 
+    private static TestPlan SpSuite(string name, string extra = "") =>
+        TestPlan.Parse("{ \"api\": 2, \"name\": \"" + name + "\", \"mode\": \"singleplayer\"" + extra + ", \"steps\": [ { \"id\": \"a\", \"side\": \"game\" } ] }");
+
+    [Fact]
+    public void An_upgrade_suite_runs_once_on_each_kept_upgrade_world_of_its_mod_oldest_first()
+    {
+        var upgrade = SpSuite("upgrade", ", \"world\": \"upgrade\", \"requires\": [ \"ModularSmithing2\" ]");
+        Assert.True(upgrade.OnUpgradeWorlds);
+        Assert.Null(upgrade.NamedWorld);
+        var worlds = new[] { "harness-vanilla", "upgrade-ModularSmithing2-v0.9.100", "upgrade-ModularSmithing2-v0.9.49", "upgrade-Retinues-v1.2" };
+        var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) { ["ModularSmithing2"] = "v0.9.50" };
+
+        var picked = SuiteSelection.Select([upgrade, TestSuites.Load(SuiteSelection.CoreSuite)], mods, singlePlayer: true, onlyMod: null, withOthers: false, [], worlds: worlds);
+        Assert.Equal(["core", "upgrade@v0.9.49", "upgrade@v0.9.100"], picked.Select(p => p.Name));
+        Assert.Equal("upgrade-ModularSmithing2-v0.9.49", picked[1].NamedWorld);
+
+        var notes = new List<string>();
+        var none = SuiteSelection.Select([upgrade, TestSuites.Load(SuiteSelection.CoreSuite)], mods, singlePlayer: true, onlyMod: null, withOthers: false, notes, worlds: ["harness-vanilla"]);
+        Assert.Equal(["core"], none.Select(p => p.Name));
+        Assert.Contains(notes, n => n.StartsWith("upgrade: no upgrade world kept for ModularSmithing2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_upgrade_suite_is_single_player_only_for_now()
+    {
+        var ex = Assert.Throws<FormatException>(() => BothSuite("upgrade", ", \"world\": \"upgrade\""));
+        Assert.Contains("single player only", ex.Message);
+    }
+
+    [Fact]
+    public void A_manual_suite_runs_only_when_named()
+    {
+        var keep = SpSuite("keep-world", ", \"manual\": true");
+        Assert.True(keep.Manual);
+        var notes = new List<string>();
+        var picked = SuiteSelection.Select([keep, TestSuites.Load(SuiteSelection.CoreSuite)], new Dictionary<string, string?>(), singlePlayer: true, onlyMod: null, withOthers: false, notes);
+        Assert.Equal(["core"], picked.Select(p => p.Name));
+        Assert.Contains(notes, n => n.StartsWith("keep-world: runs only when named", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_suite_with_its_own_world_loads_it_in_single_player()
+    {
+        var core = SpSuite("core");
+        var onUpgrade = SpSuite("upgrade") with { Name = "upgrade@v0.9.49", World = "upgrade-ModularSmithing2-v0.9.49" };
+        var fresh = SpSuite("fresh");
+        var plan = SuiteSelection.Compose("selected", [core, onUpgrade, fresh], (suite, i) => SuiteSelection.SinglePlayerSetup(suite, i, world: null));
+        var loads = plan.Steps.Where(s => s.Id is "game.loadSave" or "game.createWorld").Select(s => s.Args["name"]).ToList();
+        Assert.Equal([SuiteSelection.RunWorld, "mltest-upgrade-ModularSmithing2-v0.9.49", SuiteSelection.RunWorld], loads);
+
+        // Named alone, it starts on its own world.
+        var alone = SuiteSelection.SinglePlayerSetup(onUpgrade, 0, world: null);
+        Assert.Equal("game.loadSave", alone.Single().Id);
+        Assert.Equal("mltest-upgrade-ModularSmithing2-v0.9.49", alone.Single().Args["name"]);
+    }
+
+    [Fact]
+    public void A_kept_world_is_copied_from_the_games_saves_with_a_note()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ml-keep-" + Guid.NewGuid().ToString("N"));
+        var saves = Path.Combine(root, "saves");
+        var worlds = Path.Combine(root, "worlds");
+        Directory.CreateDirectory(saves);
+        try
+        {
+            File.WriteAllText(Path.Combine(saves, "mltest-keep-upgrade-ModularSmithing2-v0.9.49.sav"), "save bytes");
+            StepReport Step(CoreOutcome outcome, string world) => new()
+            {
+                Index = 0, Step = "keep", Side = "game", Outcome = outcome, Suite = "keep-world",
+                Values = new Dictionary<string, string> { ["keptSave"] = "mltest-keep-" + world, ["keptWorld"] = world },
+            };
+            var report = new TestReport
+            {
+                Suite = "selected", RunId = "run1", Started = DateTimeOffset.Now,
+                Steps = [Step(CoreOutcome.Pass, "upgrade-ModularSmithing2-v0.9.49"), Step(CoreOutcome.Fail, "upgrade-ModularSmithing2-v0.9.50")],
+            };
+            var said = ModderLords.Coop.Testing.InGameTestRun.KeepWorlds(report, saves, worlds);
+            Assert.Single(said);
+            Assert.Equal("save bytes", File.ReadAllText(Path.Combine(worlds, "upgrade-ModularSmithing2-v0.9.49.sav")));
+            Assert.Contains("run1", File.ReadAllText(Path.Combine(worlds, "upgrade-ModularSmithing2-v0.9.49.json")));
+            Assert.False(File.Exists(Path.Combine(worlds, "upgrade-ModularSmithing2-v0.9.50.sav")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void Every_suites_error_patterns_reach_every_error_check()
     {
