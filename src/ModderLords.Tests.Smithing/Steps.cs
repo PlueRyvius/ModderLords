@@ -53,6 +53,8 @@ public static class Steps
         InGameTests.Register("smithing.configRestore", StepSide.Any, ConfigRestore);
         InGameTests.Register("smithing.watchNotice", StepSide.Client, WatchNotice);
         InGameTests.Register("smithing.answerNotice", StepSide.Client, AnswerNotice);
+        InGameTests.Register("smithing.designer", StepSide.Client, Designer);
+        InGameTests.Register("smithing.smelt", StepSide.Client, Smelt);
         QuietNotice();
     }
 
@@ -291,6 +293,26 @@ public static class Steps
         string costText = string.Join(", ", taken.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key} {kv.Value}"));
         detail.AppendLine("materials taken: " + costText);
 
+        // The designer's preview, what the player saw before pressing Craft. It shows common quality; the rolled quality
+        // scales the weight by its mass factor (an inferior piece is heavier), so the preview's weight times that factor
+        // is the item's. Its cost is compared when the craft rolled common.
+        double previewKg = MSmithSettings.ScalePct(preview.MassGrams, MSmithConfig.Settings.WeightPct) / 1000.0;
+        var tiers = cat.QualityTiers;
+        double factor = tiers.TryGetValue(record.TierId ?? "common", out var rolled) && tiers.TryGetValue("common", out var common) && common.MassFactorFP != 0
+            ? (double)rolled.MassFactorFP / common.MassFactorFP : 1.0;
+        double previewAtQuality = previewKg * factor;
+        detail.AppendLine($"preview: {previewKg:0.###} kg at common, {previewAtQuality:0.###} kg at {record.TierId} (mass x{factor:0.###}); cost {string.Join(", ", (preview.MaterialCost ?? new Dictionary<string, int>()).OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key} {kv.Value}"))}");
+        if (Math.Abs(item.Weight - previewAtQuality) > 0.011 + 0.002 * previewAtQuality)
+            problems.Add($"the designer previewed {previewKg:0.###} kg ({previewAtQuality:0.###} kg at {record.TierId}), the item weighs {item.Weight:0.###} kg");
+        if (record.TierId == "common" && MSmithConfig.Settings.RequireMaterials && preview.MaterialCost != null)
+            foreach (var k in preview.MaterialCost.Keys.Union(taken.Keys))
+            {
+                int shown = preview.MaterialCost.TryGetValue(k, out var p) ? MSmithSettings.ScalePct(p, MSmithConfig.Settings.MaterialCostPct) : 0;
+                taken.TryGetValue(k, out int got);
+                if (shown != got) problems.Add($"the designer showed {shown} {k}, the craft took {got}");
+            }
+        else detail.AppendLine($"preview cost not compared: this craft rolled {record.TierId}");
+
         // Property checks a suite asks for.
         if (ctx.HasArg("maxKg") && item.Weight > double.Parse(ctx.Arg("maxKg"), Inv)) problems.Add($"weighs {item.Weight:0.###} kg, more than {ctx.Arg("maxKg")}");
         if (ctx.HasArg("minKg") && item.Weight < double.Parse(ctx.Arg("minKg"), Inv)) problems.Add($"weighs {item.Weight:0.###} kg, less than {ctx.Arg("minKg")}");
@@ -305,6 +327,109 @@ public static class Steps
         ctx.Report("armor", armorText);
         ctx.Report("cost", costText);
         ctx.Report("value", item.StringId);
+        ctx.Assert(problems.Count == 0, $"{item.StringId}: " + string.Join("; ", problems));
+    }
+
+    // ---- the designer -----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// MS2's designer as the player opens it, built without its screen, then driven through its own tab and button
+    /// commands: armor thins down to 50% and bows to 75% (<c>SizeMinPct</c>); gloves and boots have no coverage
+    /// choice; body coverage reads "Torso", "Torso and arms", "Torso, arms and legs"; the damage-types row shows for
+    /// armor and can be toggled only with the combat patch in.
+    /// </summary>
+    private static IEnumerable<StepWait?> Designer(StepContext ctx)
+    {
+        var cat = CraftingDesigner.SharedCatalog;
+        var vm = new CraftingDesignerVM(cat, () => { }, (_, _, _, _, _) => { }, RuntimeDonorRegistry.Get(cat));
+        var problems = new List<string>();
+        var seen = new StringBuilder();
+        void Expect<T>(string what, T got, T want)
+        {
+            seen.AppendLine($"{what}: {got}");
+            if (!EqualityComparer<T>.Default.Equals(got, want)) problems.Add($"{what} is {got}, expected {want}");
+        }
+        try
+        {
+            vm.ExecuteSelectSlot0();   // head
+            Expect("armor SizeMinPct", vm.SizeMinPct, 50);
+            Expect("armor ShowDamageTypes", vm.ShowDamageTypes, true);
+            var patch = typeof(CraftingDesigner).Assembly.GetType("ModularSmithing.Crafting.DamageTypeProfiles")?.GetField("PatchActive")?.GetValue(null) as bool?;
+            Expect("CanToggleDamageTypes (combat patch " + (patch == true ? "in" : "out") + ")", vm.CanToggleDamageTypes, patch == true);
+            vm.ExecuteSelectSlot3();   // hands
+            Expect("hands HasCoverageControls", vm.HasCoverageControls, false);
+            vm.ExecuteSelectSlot2();   // legs
+            Expect("legs HasCoverageControls", vm.HasCoverageControls, false);
+            vm.ExecuteSelectSlot1();   // body: standard coverage first, then cycled through extended and minimal
+            Expect("body HasCoverageControls", vm.HasCoverageControls, true);
+            var labels = new List<string>();
+            for (int i = 0; i < 3; i++) { labels.Add(vm.CoverageText); vm.ExecuteCycleCoverage(); }
+            Expect("body coverage labels", string.Join(" | ", labels), "Torso and arms | Torso, arms and legs | Torso");
+            vm.ExecuteCycleFamily();   // weapons: the first tab is the bow
+            Expect("bow SizeMinPct", vm.SizeMinPct, 75);
+            Expect("bow ShowDamageTypes", vm.ShowDamageTypes, false);
+        }
+        finally { vm.OnFinalize(); }
+        ctx.Dump("designer", seen.ToString());
+        ctx.Report("value", problems.Count == 0 ? "as designed" : problems.Count + " difference(s)");
+        ctx.Assert(problems.Count == 0, string.Join("; ", problems));
+        yield break;
+    }
+
+    // ---- smelting ---------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Smelts one armor piece the way the smithy's smelting tab does (the game's CraftingCampaignBehavior.DoSmelting,
+    /// which MS2 patches), and checks the party gained exactly what MS2's cost model says it smelts into
+    /// (ArmorSmelting.Return), and lost the piece. <c>item</c>: an item id, or <c>old</c> for the first armor piece
+    /// MS2 has a record of that is in the party (in an upgrade world: one made by the earlier release).
+    /// </summary>
+    private static IEnumerable<StepWait?> Smelt(StepContext ctx)
+    {
+        var hero = Hero.MainHero;
+        var roster = MobileParty.MainParty.ItemRoster;
+        ItemObject? item;
+        if (ctx.Arg("item") == "old")
+        {
+            var records = SmithingPersistenceBehavior.Current?.Records;
+            ctx.Assert(records != null, "MS2's persistence behaviour is not running");
+            item = records!.Select(r => MBObjectManager.Instance.GetObject<ItemObject>(r.StringId))
+                .FirstOrDefault(i => i?.ArmorComponent != null && roster.GetItemNumber(i) > 0);
+            ctx.Assert(item != null, "no crafted armor piece MS2 has a record of is in the party");
+        }
+        else item = MBObjectManager.Instance.GetObject<ItemObject>(ctx.Arg("item"));
+        ctx.Assert(item != null && roster.GetItemNumber(item) > 0, $"{ctx.Arg("item")} is not in the party");
+        ctx.Assert(ArmorSmelting.Enabled, "armor smelting is off in MS2's settings (smelt_armor)");
+
+        var expected = ArmorSmelting.Return(item!);
+        ctx.Assert(expected.Count > 0, $"MS2 says {item!.StringId} smelts into nothing");
+        var materials = expected.Keys.ToDictionary(k => k, k => NativeSmithingMaterialModel.MaterialItem(k), StringComparer.Ordinal);
+        var before = materials.ToDictionary(kv => kv.Key, kv => kv.Value == null ? 0 : roster.GetItemNumber(kv.Value), StringComparer.Ordinal);
+        int piecesBefore = roster.GetItemNumber(item);
+        TopUpStamina();
+
+        var behavior = Campaign.Current.GetCampaignBehavior<CraftingCampaignBehavior>();
+        ctx.Assert(behavior != null, "the game's crafting behaviour is not running");
+        var doSmelting = typeof(CraftingCampaignBehavior).GetMethod("DoSmelting", new[] { typeof(Hero), typeof(EquipmentElement) });
+        ctx.Assert(doSmelting != null, "CraftingCampaignBehavior.DoSmelting(Hero, EquipmentElement) is not in this game");
+        // The party's own entry, quality modifier included, as the smelting list hands it over: a crafted piece is
+        // "inferior" or "fine", and the bare item is not in the roster.
+        var element = roster.First(e => e.EquipmentElement.Item == item).EquipmentElement;
+        doSmelting!.Invoke(behavior, new object[] { hero, element });
+        yield return null;
+
+        var problems = new List<string>();
+        var detail = new StringBuilder($"smelted {item.StringId} '{item.Name}' (smelt_armor permille {MSmithConfig.Settings.SmeltArmorPermille})\n");
+        foreach (var kv in expected)
+        {
+            int got = materials[kv.Key] == null ? 0 : roster.GetItemNumber(materials[kv.Key]) - before[kv.Key];
+            detail.AppendLine($"{kv.Key}: got {got}, MS2 says {kv.Value}");
+            if (materials[kv.Key] == null) problems.Add($"the game has no item for MS2's material {kv.Key}");
+            else if (got != kv.Value) problems.Add($"got {got} {kv.Key}, MS2's cost model says {kv.Value}");
+        }
+        if (roster.GetItemNumber(item) != piecesBefore - 1) problems.Add($"the party still has {roster.GetItemNumber(item)} of it (had {piecesBefore})");
+        ctx.Dump("smelt", detail.ToString());
+        ctx.Report("value", string.Join(", ", expected.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key} {kv.Value}")));
         ctx.Assert(problems.Count == 0, $"{item.StringId}: " + string.Join("; ", problems));
     }
 

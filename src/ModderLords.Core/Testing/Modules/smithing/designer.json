@@ -1,0 +1,13 @@
+{
+  // MS2's designer as the player opens it, without its screen: the size slider's floor (armor 50%, bows 75%), no
+  // coverage choice for gloves and boots, body coverage labels, and the damage-types row.
+  "api": 2,
+  "name": "designer",
+  "mode": "singleplayer",
+  "world": "shared",
+  "description": "The designer offers what the rebalance says: armor thins to 50% and bows to 75%, gloves and boots have no coverage choice, body coverage reads Torso / Torso and arms / Torso, arms and legs, and damage types show for armor.",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
+  "steps": [
+    { "id": "smithing.designer", "side": "game" }
+  ]
+}
