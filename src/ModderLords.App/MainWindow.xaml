@@ -1,4 +1,4 @@
-﻿<Window x:Class="ModderLords.App.MainWindow"
+<Window x:Class="ModderLords.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:l="clr-namespace:ModderLords.App.Localization"
@@ -1052,7 +1052,7 @@
             <TabItem Header="{l:T 'Tests'}" DataContext="{Binding Tests}">
                 <DockPanel Margin="8">
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource MutedForeground}" Margin="0,0,0,8"
-                               Text="{l:T 'Runs scripted checks inside a real game on this profile (as saved), and says pass or fail per suite. Tick the test modules you want; the core checks always run. Single player starts just the game; Coop also starts the server and joins it. Don\&#x27;t use the PC while it runs: the game window comes to the front. The same runs are on the command line: ModderLords.Cli test --modules NAME (docs/WRITING-TEST-MODULES.md).'}" />
+                               Text="{l:T 'Runs scripted checks inside a real game on this profile (as saved), and says pass or fail per suite. Tick the test modules you want; the core checks always run. Single player starts just the game; Coop also starts the server and joins it. The game opens in a small window behind your other windows and keeps running there, so the PC stays free to use; its display settings are put back afterwards. The same runs are on the command line: ModderLords.Cli test --modules NAME (docs/WRITING-TEST-MODULES.md).'}" />
                     <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                         <RadioButton Content="{l:T 'Single player'}" IsChecked="{Binding SinglePlayer}" VerticalAlignment="Center" Margin="0,0,12,0" />
                         <RadioButton Content="{l:T 'Coop'}" IsChecked="{Binding IsCoop}" VerticalAlignment="Center" Margin="0,0,20,0" />

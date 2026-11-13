@@ -165,7 +165,7 @@ public partial class TestsViewModel : ObservableObject
             KeepOpenOnFail = KeepOpenOnFail,
         };
         IsTesting = true;
-        Headline = Loc.T("Running… don't use the PC: the game window comes to the front.");
+        Headline = Loc.T("Running… the game runs in a small window behind your other windows; you can keep using the PC.");
         _cancel = new CancellationTokenSource();
         var dispatcher = Application.Current.Dispatcher;
         try

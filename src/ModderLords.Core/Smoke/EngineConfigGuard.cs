@@ -1,7 +1,8 @@
 namespace ModderLords.Core.Smoke;
 
 /// <summary>
-/// Puts the player's engine_config.txt back as it was after an automatic join.
+/// Puts one of the player's game config files back as it was: engine_config.txt after an automatic join, and both it
+/// and BannerlordConfig.txt after a test run (<see cref="Testing.TestRunGameSettings"/>).
 /// <para>
 /// Coop's <c>/autoconnect</c> rewrites Documents\Mount and Blade II Bannerlord\Configs\engine_config.txt
 /// (<c>safely_exited = 1</c>, so the game skips its safe-mode question) and then marks it read-only. Left that way, every
@@ -14,6 +15,7 @@ public sealed class EngineConfigGuard
     private readonly FileAttributes _attributes;
 
     public string Path { get; }
+    private string Name => System.IO.Path.GetFileName(Path);
 
     public static string DefaultPath => System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Mount and Blade II Bannerlord", "Configs", "engine_config.txt");
@@ -37,18 +39,18 @@ public sealed class EngineConfigGuard
                 if (File.Exists(Path) && File.GetAttributes(Path).HasFlag(FileAttributes.ReadOnly))
                 {
                     File.SetAttributes(Path, File.GetAttributes(Path) & ~FileAttributes.ReadOnly);
-                    return "engine_config.txt: made writable again";
+                    return Name + ": made writable again";
                 }
-                return "engine_config.txt: not present before the test";
+                return Name + ": not present before the test";
             }
             if (File.Exists(Path)) File.SetAttributes(Path, FileAttributes.Normal);
             File.WriteAllBytes(Path, _content);
             File.SetAttributes(Path, _attributes);
-            return "engine_config.txt: restored as it was before the test";
+            return Name + ": restored as it was before the test";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return "engine_config.txt: could not be restored (" + ex.Message + "); if it is read-only, clear that in its Properties";
+            return Name + ": could not be restored (" + ex.Message + "); if it is read-only, clear that in its Properties";
         }
     }
 }
