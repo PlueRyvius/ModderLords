@@ -178,7 +178,8 @@ public static class Steps
             {
                 long mass = MSmithSettings.ScalePct(preview.MassGrams, MSmithConfig.Settings.WeightPct);
                 int predicted = NativeItemTier.Tier(NativeItemTier.Tierf(family, slot, preview.Stats, mass));
-                int engine = (int)item.Tier;
+                // ItemObject.Tier is ItemTiers, where Tier1 is 0: one below the tier the game and the designer show.
+                int engine = (int)item.Tier + 1;
                 detail.AppendLine($"tier: designer {predicted}, engine {engine}");
                 ctx.Report("tier", engine);
                 ctx.Report("predictedTier", predicted);
