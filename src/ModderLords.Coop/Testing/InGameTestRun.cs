@@ -28,6 +28,8 @@ public sealed record InGameTestOptions
     public bool KeepServer { get; init; }
     /// <summary>Minimize the game's window for the run instead of keeping it behind other windows.</summary>
     public bool Minimized { get; init; }
+    /// <summary>Launch without checking the mods' calls into the game first (ApiCheck), to see a break fail in the game.</summary>
+    public bool SkipApiCheck { get; init; }
     /// <summary>The game's Configs folder, whose two settings files the run changes and puts back; null for the player's own.</summary>
     public string? GameConfigsDir { get; init; }
     /// <summary>Where the launcher's compat folder is (module step DLLs); null for next to this process.</summary>
@@ -223,6 +225,68 @@ public static class InGameTestRun
     }
 
     /// <summary>
+    /// Before a launch: the calls into the game that each community mod in <paramref name="plan"/> (ModderLords.Compat
+    /// included) and each test module DLL in <paramref name="extraDlls"/> makes, against the installed game's
+    /// assemblies (its bin folder and the bin folders of the modules the launch loads). Null when nothing is missing or
+    /// the check is skipped; otherwise why the run stops, naming each DLL and what it calls that the game lacks.
+    /// </summary>
+    private static string? CheckApi(ClientLaunchPlan plan, IEnumerable<string> extraDlls, InGameTestOptions options, Action<string> say)
+    {
+        if (options.SkipApiCheck) { say("[ModderLords] game API check skipped (--skip-api-check)"); return null; }
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var found = ApiProblems(plan, extraDlls, out var checkedCount);
+        say($"[ModderLords] game API check: {checkedCount} DLL(s) against the installed game, {found.Count} with missing calls ({clock.ElapsedMilliseconds} ms)");
+        if (found.Count == 0) return null;
+        foreach (var line in found) say("[ModderLords]   " + line);
+        return "a mod calls into the game what this game version no longer has, so it would fail or crash in the game: "
+               + string.Join(" | ", found) + " (update the mod, or run with --skip-api-check to see it fail in the game)";
+    }
+
+    /// <summary>
+    /// What <see cref="CheckApi"/> finds, one line per DLL with something missing: "Mod\bin\...\X.dll: method T::M (2
+    /// parameters); ...". <paramref name="checkedCount"/> is how many DLLs were checked.
+    /// </summary>
+    public static IReadOnlyList<string> ApiProblems(ClientLaunchPlan plan, IEnumerable<string> extraDlls, out int checkedCount)
+    {
+        var game = ApiIndex.Of(ApiIndex.DllsIn([Path.Combine(plan.GameRoot, "bin", "Win64_Shipping_Client"), .. plan.SelectedModules.Select(m => m.ClientBin)]));
+        // Only what the game loads: the DLLs each SubModule.xml names, and what they reference beside them. Framework
+        // mods ship a DLL per game version (MCM's Bannerlord.MBOptionScreen.v1.2.12.dll, ...) and load the one that
+        // fits at runtime; the others would all be reported.
+        var dlls = plan.SelectedModules.Where(m => !m.IsOfficial)
+            .SelectMany(m => ApiCheck.LoadedDlls(m.ClientBin, m.Info.SubModules.Select(s => s.DLLName)))
+            .Concat(extraDlls.Where(File.Exists)).ToList();
+        checkedCount = dlls.Count;
+        return ApiCheck.CheckAll(dlls, game)
+            .Select(f => $"{Shorten(f.Dll, plan.SelectedModules)}: {string.Join("; ", f.Missing.Take(8))}{(f.Missing.Count > 8 ? $"; and {f.Missing.Count - 8} more" : "")}")
+            .ToList();
+    }
+
+    /// <summary>"ModId\X.dll" for a DLL in a selected module's folder; the full path otherwise.</summary>
+    private static string Shorten(string dll, IEnumerable<Core.Modules.DiscoveredModule> modules) =>
+        modules.FirstOrDefault(m => dll.StartsWith(Path.GetFullPath(m.FolderPath), StringComparison.OrdinalIgnoreCase)) is { } owner
+            ? owner.Id + "\\" + Path.GetFileName(dll)
+            : dll;
+
+    /// <summary>
+    /// The game API check alone, for <c>test --api-check</c>: the profile's client launch as a single-player test run
+    /// would make it (ModderLords.Compat added, Coop left out unless <paramref name="singlePlayer"/> is false), and
+    /// every test module DLL this launcher has. Returns the lines found; empty when nothing is missing.
+    /// </summary>
+    public static IReadOnlyList<string> ApiProblemsFor(Profile profile, bool singlePlayer, Action<string> say, string? bundledRoot = null)
+    {
+        if (singlePlayer)
+            foreach (var mod in profile.Mods.Where(m => CoopIds.Contains(m.Id) && m.Enabled)) mod.Enabled = false;
+        if (!profile.Mods.Any(m => m.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase)))
+            profile.Mods.Add(new ProfileMod { Id = LaunchSession.SyncModuleId, Role = ServerRole.AsShipped });
+        var client = ClientLaunchSession.Prepare(profile);
+        var stepDlls = TestSuites.Modules().Where(m => m.StepsDll is not null)
+            .Select(m => Path.Combine(bundledRoot ?? LaunchSession.BundledRoot ?? AppContext.BaseDirectory, "compat", m.StepsDll!));
+        var found = ApiProblems(client.Plan, stepDlls, out var count);
+        say($"[ModderLords] game API check: {count} DLL(s) of {profile.Name} against {client.Plan.GameRoot}");
+        return found;
+    }
+
+    /// <summary>
     /// Copies each save a passed <c>game.keepWorld</c> step reported (values <c>keptSave</c> and <c>keptWorld</c>)
     /// from the game's saves into test-worlds, with a note beside it saying which run made it. An upgrade world is
     /// made this way on a mod's released version (decision 27).
@@ -326,6 +390,7 @@ public static class InGameTestRun
         ClientLaunchSession.Prepared client;
         try { client = ServerMatchedClient.Prepare(prepared, profile); }
         catch (Exception ex) { return Stop("client plan: " + ex.Message); }
+        if (CheckApi(client.Plan, testPlan.Loads.Select(l => l.Dll), options, say) is { } broken) return Stop(broken);
         // The copies picked for each side, hashed now, for mods.fingerprint to check the loaded copies against.
         foreach (var line in PickedCopies.Write(channel.Folder, "server", prepared.Selections.Select(s => s.Module))
             .Concat(PickedCopies.Write(channel.Folder, "client:1", client.Plan.SelectedModules, client.Plan.ExcludedFolders)))
@@ -421,6 +486,7 @@ public static class InGameTestRun
         try { client = ClientLaunchSession.Prepare(profile); }
         catch (Exception ex) { return Stop("client plan: " + ex.Message); }
         foreach (var m in client.Messages) say("[ModderLords] " + m);
+        if (CheckApi(client.Plan, testPlan.Loads.Select(l => l.Dll), options, say) is { } broken) return Stop(broken);
 
         var channel = FileTestRunChannel.Create(Path.Combine(ProfileStore.RootDir, "tests"), testPlan, DateTimeOffset.Now);
         say($"[ModderLords] single-player test run {channel.RunId} -> {channel.Folder}");
