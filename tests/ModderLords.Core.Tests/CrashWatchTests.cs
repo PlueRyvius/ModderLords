@@ -57,6 +57,35 @@ public sealed class CrashWatchTests : IDisposable
         Assert.Equal(folder, watch.Folder);
     }
 
+    [Fact]
+    public void A_server_and_a_game_crashing_in_one_run_are_named_and_both_kept()
+    {
+        Log("watchdog_log_26408.txt", "Waiting for an exception event...\n");
+        Log("watchdog_log_44084.txt", "Waiting for an exception event...\n");
+        Log("rgl_log_26408.txt", "[05:12:46.500] Loading Save Game \n");
+        Log("rgl_log_44084.txt", "[05:12:42.649] compile_shader: pbr_metallic_gbuffer.rs \n");
+        var watch = new CrashWatch(Crashes, Logs) { Every = TimeSpan.Zero, WhoIs = pid => pid == "26408" ? "the server" : "the game" };
+
+        File.AppendAllText(Path.Combine(Logs, "watchdog_log_26408.txt"), "Crash occurred. Asking for dump.\n");
+        Assert.Equal($"the server crashed during: Loading Save Game; logs: {Logs}", watch.Check());
+
+        File.AppendAllText(Path.Combine(Logs, "watchdog_log_44084.txt"), "Crash occurred. Asking for dump.\n");
+        Assert.Equal(["the server", "the game"], watch.CrashedSides());
+        var kept = watch.CopyLogs(Path.Combine(_root, "run")).Select(Path.GetFileName).ToList();
+        Assert.Equal(["watchdog_log_26408.txt", "rgl_log_26408.txt", "watchdog_log_44084.txt", "rgl_log_44084.txt"], kept);
+    }
+
+    [Fact]
+    public void Only_the_watchdogs_question_with_a_No_button_is_the_crash_prompt()
+    {
+        string[] prompt = ["The application faced a problem. We need to collect necessary files to fix this problem. Would you like to proceed?", "&Yes", "&No"];
+        Assert.True(CrashPrompt.IsCrashPrompt(prompt));
+        Assert.False(CrashPrompt.IsCrashPrompt(["Would you like to always ignore this failure?", "Yes", "No"]));
+        Assert.False(CrashPrompt.IsCrashPrompt([prompt[0], "OK"]));
+        Assert.True(CrashPrompt.IsNo("&No"));
+        Assert.False(CrashPrompt.IsNo("Not now"));
+    }
+
     [Theory]
     [InlineData(Dumped, "MissingMethodException")]
     [InlineData("ExceptionCode: 0xE0434352\nParameter-0: 0xffffffff80004003 == 1", "NullReferenceException")]

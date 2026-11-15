@@ -117,7 +117,19 @@ public static class TestSuites
     /// <summary>A built-in suite as <c>module/suite</c>, or by its own name when that is unique; or a suite file by path.</summary>
     public static TestPlan Load(string nameOrPath)
     {
-        if (File.Exists(nameOrPath)) return TestPlan.Parse(File.ReadAllText(nameOrPath));
+        if (File.Exists(nameOrPath))
+        {
+            // A suite file can name a module, to use that module's own steps (its step DLL loads for the run).
+            var plan = TestPlan.Parse(File.ReadAllText(nameOrPath));
+            if (plan.Module.Length == 0) return plan;
+            var module = Module(plan.Module)
+                ?? throw new FormatException($"{nameOrPath}: there is no test module '{plan.Module}' (modules: {string.Join(", ", Modules().Select(m => m.Id))})");
+            return plan with
+            {
+                Module = module.Id,
+                Requires = [.. module.Requires, .. plan.Requires.Where(r => !module.Requires.Any(m => m.Id.Equals(r.Id, StringComparison.OrdinalIgnoreCase)))],
+            };
+        }
         var slash = nameOrPath.IndexOf('/');
         var matches = slash > 0
             ? Modules().Where(m => m.Id == nameOrPath[..slash]).SelectMany(m => m.Suites).Where(s => s.Name == nameOrPath[(slash + 1)..]).ToList()

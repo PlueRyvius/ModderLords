@@ -449,11 +449,21 @@ public static class InGameTestRun
         // The switch reaches the server through its own launch plan only, never this process's environment, so the
         // player's game (started from here) cannot inherit it and no ordinary Host launch can carry it.
         var serverPlan = prepared.Plan.WithEnvironment(FileTestRunChannel.ServerVariable, channel.SwitchValue("server"));
+        var serverDump = new ServerDump(channel.Folder);
+        foreach (var (name, value) in serverDump.Environment) serverPlan = serverPlan.WithEnvironment(name, value);
 
         string? gameGone = null;
+        EngineProcess? engine = null;
         // The server and the player's game write crash reports to the same folder; either one crashing ends the run.
-        var crash = new CrashWatch(ServerPaths.CrashesDir);
-        var sequencer = new TestSequencer(channel) { Abort = () => gameGone ?? crash.Check() };
+        var crash = new CrashWatch(ServerPaths.CrashesDir)
+        {
+            WhoIs = pid => engine?.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) == pid ? "the server" : "the game",
+        };
+        // The server's own exit names its cause (an access violation, say); its watchdog log may say nothing yet.
+        string? ServerGone() => engine is { Exited.IsCompleted: true } e
+            ? $"the server exited during the step: {ExitCodeExplainer.Explain(e.Exited.Result)}"
+            : null;
+        var sequencer = new TestSequencer(channel) { Abort = () => gameGone ?? ServerGone() ?? crash.Check() };
         sequencer.Progress += line => say("[test] " + line);
         Task<TestReport>? testRun = null;
         var runner = new Core.Smoke.SmokeRunner(new Core.Smoke.SmokeOptions
@@ -474,15 +484,18 @@ public static class InGameTestRun
         runner.Progress += line => say("[smoke] " + line);
 
         using var testLogWriter = new StreamWriter(Path.Combine(channel.Folder, "server-console.log")) { AutoFlush = true };
-        using var engine = EngineProcess.Start(serverPlan);
-        engine.LineReceived += line =>
+        using var server = EngineProcess.Start(serverPlan);
+        engine = server;
+        server.LineReceived += line =>
         {
             runner.ServerLine(line.Text);
+            serverDump.Observe(line.Text);
             lock (testLogWriter) testLogWriter.WriteLine($"{line.At:HH:mm:ss.fff} {line.Text}");
         };
-        _ = engine.Exited.ContinueWith(t => runner.ServerExited(t.Result), TaskScheduler.Default);
+        _ = server.Exited.ContinueWith(t => runner.ServerExited(t.Result), TaskScheduler.Default);
 
         using var windowWatch = new CancellationTokenSource();
+        var responder = CrashResponder.RunAsync(crash, () => serverDump.Writing, say, windowWatch.Token);
         var smokeReport = await runner.RunAsync(args =>
         {
             var started = ClientLaunchSession.Start(client.Plan with { ExtraArguments = args }, note => say("[ModderLords] " + note));
@@ -503,12 +516,21 @@ public static class InGameTestRun
             await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.txt"), testReport.ToText(), CancellationToken.None);
             say(testReport.ToText());
         }
+        // A crashed server writes its dump before anything may close it; then the crash prompts are answered.
+        await serverDump.WaitAsync(say);
+        await responder;
+        if (crash.CrashedSides().Count > 0 && CrashPrompt.AnswerNo() is > 0 and var answered)
+            say($"[ModderLords] answered {answered} crash prompt(s) with No; the engine logs are kept in the run folder");
+        if (server.Exited.IsCompleted && server.Exited.Result != 0)
+            say($"[ModderLords] the server exited: {ExitCodeExplainer.Explain(server.Exited.Result)}");
+        foreach (var side in crash.CrashedSides()) say($"[ModderLords] {side} crashed in this run");
         foreach (var file in crash.CopyLogs(channel.Folder)) say("[ModderLords] crash log kept: " + file);
+        foreach (var file in serverDump.Files()) say($"[ModderLords] server dump kept: {file} (open with dotnet-dump analyze; clrstack -all)");
         say($"[ModderLords] evidence and logs: {channel.Folder}");
-        if (!options.KeepServer && !engine.Exited.IsCompleted)
+        if (!options.KeepServer && !server.Exited.IsCompleted)
         {
             say("[ModderLords] stopping the server…");
-            await engine.StopAsync(TimeSpan.FromSeconds(60));
+            await server.StopAsync(TimeSpan.FromSeconds(60));
         }
         // Both reports count: steps that pass in a game that then crashed, or where Coop logged a fatal error, still fail.
         var passed = testReport?.Passed == true && smokeReport.Overall != Core.Smoke.SmokeVerdict.Fail;
@@ -552,6 +574,7 @@ public static class InGameTestRun
         catch (Exception ex) { return Stop("could not start the game: " + ex.Message); }
         using var windowWatch = new CancellationTokenSource();
         _ = TestGameWindow.Watch(game, options.Minimized, note => say("[ModderLords] " + note), windowWatch.Token);
+        var responder = CrashResponder.RunAsync(crash, () => false, say, windowWatch.Token);
 
         // The run starts at launch here, not on the map as in Coop, so the hello waits out the game's start-up; a game
         // that exits or crashes on the way ends the wait sooner.
@@ -562,6 +585,9 @@ public static class InGameTestRun
         sequencer.Progress += line => say("[test] " + line);
         var testReport = await sequencer.RunAsync(testPlan, channel.RunId, cancel);
         windowWatch.Cancel();
+        await responder;
+        if (crash.CrashedSides().Count > 0 && CrashPrompt.AnswerNo() is > 0 and var answered)
+            say($"[ModderLords] answered {answered} crash prompt(s) with No; the engine logs are kept in the run folder");
 
         await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.json"), testReport.ToJson(), CancellationToken.None);
         await File.WriteAllTextAsync(Path.Combine(channel.Folder, "report.txt"), testReport.ToText(), CancellationToken.None);
@@ -573,8 +599,8 @@ public static class InGameTestRun
 
         foreach (var file in crash.CopyLogs(channel.Folder)) say("[ModderLords] crash log kept: " + file);
 
-        // A crashed game is closed even when asked to keep it: it only waits on the watchdog's dialog. Closing it means
-        // no dump is written; the engine logs copied above say what crashed.
+        // A crashed game is closed even when asked to keep it: its crash prompt was answered No, so no dump is written;
+        // the engine logs copied above say what crashed.
         var keep = !crash.Crashed && (options.KeepClient || (options.KeepOpenOnFail && !testReport.Passed));
         if (keep && !game.HasExited) say("[ModderLords] the game was left running, as asked");
         else if (!game.HasExited)
