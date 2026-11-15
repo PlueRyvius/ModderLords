@@ -67,4 +67,19 @@
     <HasSmithingAssemblies Condition="'$(HasSmithingAssemblies)' == ''">false</HasSmithingAssemblies>
   </PropertyGroup>
 
+  <!-- TAOM (test module taom): TAOM.dll. Override with -p:TaomRefDir=... -->
+  <PropertyGroup>
+    <TaomBin>steamapps\common\Mount &amp; Blade II Bannerlord\Modules\TAOM\bin\Win64_Shipping_Client</TaomBin>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TaomRefDir)' == ''">
+    <TaomRefDir Condition="Exists('C:\Program Files (x86)\Steam\$(TaomBin)\TAOM.dll')">C:\Program Files (x86)\Steam\$(TaomBin)</TaomRefDir>
+    <TaomRefDir Condition="'$(TaomRefDir)' == '' And Exists('D:\Program Files (x86)\Steam\$(TaomBin)\TAOM.dll')">D:\Program Files (x86)\Steam\$(TaomBin)</TaomRefDir>
+    <TaomRefDir Condition="'$(TaomRefDir)' == '' And Exists('D:\SteamLibrary\$(TaomBin)\TAOM.dll')">D:\SteamLibrary\$(TaomBin)</TaomRefDir>
+    <TaomRefDir Condition="'$(TaomRefDir)' == '' And Exists('E:\SteamLibrary\$(TaomBin)\TAOM.dll')">E:\SteamLibrary\$(TaomBin)</TaomRefDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <HasTaomAssemblies Condition="'$(TaomRefDir)' != '' And Exists('$(TaomRefDir)\TAOM.dll')">true</HasTaomAssemblies>
+    <HasTaomAssemblies Condition="'$(HasTaomAssemblies)' == ''">false</HasTaomAssemblies>
+  </PropertyGroup>
+
 </Project>

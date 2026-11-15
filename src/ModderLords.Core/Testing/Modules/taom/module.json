@@ -1,0 +1,7 @@
+{
+  "id": "taom",
+  "title": "TAOM",
+  "description": "TAOM's Supply Lines in Coop: a player's supply order from the town they are in and from a nearby village reaches the server, its caravan sets out, and the server keeps running while the caravans travel to the player.",
+  "requires": [ { "id": "TAOM" } ],
+  "steps": "ModderLords.Tests.Taom.dll"
+}
