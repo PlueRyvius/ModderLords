@@ -463,7 +463,10 @@ public static class InGameTestRun
         string? ServerGone() => engine is { Exited.IsCompleted: true } e
             ? $"the server exited during the step: {ExitCodeExplainer.Explain(e.Exited.Result)}"
             : null;
-        var sequencer = new TestSequencer(channel) { Abort = () => gameGone ?? ServerGone() ?? crash.Check() };
+        // A crashed server is kept alive while it writes its dump, so it has not exited yet: say so at once rather than
+        // waiting out the step as a game that "may have crashed or hung".
+        string? ServerDumping() => serverDump.Writing ? $"the server crashed (its dump is being written to {serverDump.Folder})" : null;
+        var sequencer = new TestSequencer(channel) { Abort = () => gameGone ?? ServerGone() ?? ServerDumping() ?? crash.Check() };
         sequencer.Progress += line => say("[test] " + line);
         Task<TestReport>? testRun = null;
         var runner = new Core.Smoke.SmokeRunner(new Core.Smoke.SmokeOptions
