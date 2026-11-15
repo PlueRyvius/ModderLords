@@ -20,6 +20,38 @@ internal static class StartupHook
     private const string DesktopDirVariable = "MODDERLORDS_DESKTOP_DIR";
     private const string Prefix = "[ModderLords.Hook] ";
 
+    /// <summary>
+    /// Only when the runtime was asked for crash dumps (a ModderLords test run sets DOTNET_DbgEnableMiniDump on the
+    /// server): holds the process's exit while the runtime's createdump is still writing this process's dump. A native
+    /// crash on the server starts createdump, and the engine's own crash handling then exits the process within a
+    /// fraction of a second, which cut every such dump short (2026-11-15, three empty dumps). Waiting here keeps the
+    /// process, and the crashed thread's stack, in memory until the dump is complete.
+    /// </summary>
+    private static void WaitForCrashDump()
+    {
+        try
+        {
+            if (Environment.GetEnvironmentVariable("DOTNET_DbgEnableMiniDump") != "1") return;
+            var self = System.Diagnostics.Process.GetCurrentProcess();
+            var since = self.StartTime;
+            var deadline = DateTime.Now.AddMinutes(10);
+            var said = false;
+            while (DateTime.Now < deadline)
+            {
+                var writing = System.Diagnostics.Process.GetProcessesByName("createdump").Where(p =>
+                {
+                    try { return !p.HasExited && p.StartTime >= since; }
+                    catch { return false; }
+                }).ToList();
+                if (writing.Count == 0) break;
+                if (!said) { Write("waiting for the crash dump to be written before exiting"); said = true; }
+                writing[0].WaitForExit(1000);
+            }
+            if (said) Write("crash dump done; exiting");
+        }
+        catch { }
+    }
+
     private static readonly object Gate = new object();
     private static readonly HashSet<string> Announced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private static string[] _dirs = Array.Empty<string>();
@@ -85,6 +117,7 @@ internal static class StartupHook
         {
             try { Write("process exiting with code " + Environment.ExitCode + "; " + Breadcrumbs()); }
             catch { }
+            WaitForCrashDump();
         };
         if (Environment.GetEnvironmentVariable("MODDERLORDS_HOOK_FIRSTCHANCE") == "1")
         {

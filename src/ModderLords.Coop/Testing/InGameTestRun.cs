@@ -517,7 +517,7 @@ public static class InGameTestRun
             say(testReport.ToText());
         }
         // A crashed server writes its dump before anything may close it; then the crash prompts are answered.
-        await serverDump.WaitAsync(say);
+        await serverDump.WaitAsync(() => !server.Exited.IsCompleted, say);
         await responder;
         if (crash.CrashedSides().Count > 0 && CrashPrompt.AnswerNo() is > 0 and var answered)
             say($"[ModderLords] answered {answered} crash prompt(s) with No; the engine logs are kept in the run folder");

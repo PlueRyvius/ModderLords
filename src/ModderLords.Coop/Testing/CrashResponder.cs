@@ -48,13 +48,20 @@ public sealed class ServerDump
         }
     }
 
-    /// <summary>Waits while a dump is being written, up to its budget.</summary>
-    public async Task WaitAsync(Action<string> say)
+    /// <summary>
+    /// Waits while a dump is being written, up to its budget, and no longer than the server lives: the dump is read
+    /// from the server's memory, so once it has exited nothing more can come.
+    /// </summary>
+    public async Task WaitAsync(Func<bool> serverRunning, Action<string> say)
     {
         if (!Writing) return;
         say("[ModderLords] the server crashed and is writing its dump; waiting for it before closing anything…");
-        while (Writing) await Task.Delay(500);
-        say(Written ? "[ModderLords] the server's dump is written" : "[ModderLords] the server's dump did not finish in time");
+        while (Writing && serverRunning()) await Task.Delay(500);
+        // The runtime's "written" line can trail the exit by a moment.
+        if (!Written) await Task.Delay(1000);
+        say(Written ? "[ModderLords] the server's dump is written"
+            : serverRunning() ? "[ModderLords] the server's dump did not finish in time"
+            : "[ModderLords] the server exited before its dump was written");
     }
 
     /// <summary>The dumps in the run folder.</summary>
