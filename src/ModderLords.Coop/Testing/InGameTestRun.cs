@@ -431,9 +431,36 @@ public static class InGameTestRun
             profile.SaveName = "mltest-" + world;
         }
 
+        // A profile whose world has to be generated (TAOM, or the Host tab's tick box) and is not on disk yet gets it
+        // generated first, as the Host tab does. With no save named, the run uses one test world per profile, made by
+        // the first run and loaded by the next ones; the profile itself is not changed.
+        else if (WorldCreationRun.Needed(profile, name => SavePreparer.Exists(paths, name), _ => TestWorldSaveName(profile.Name),
+                     m => say("[ModderLords] " + m)))
+        {
+            say($"[ModderLords] generating the world '{profile.SaveName}' with this profile's mods, as the Host tab does; a large mod set takes several minutes");
+            try
+            {
+                var creating = LaunchSession.Prepare(profile, allowWorldCreation: true);
+                foreach (var m in creating.Messages) say("[ModderLords] " + m);
+                await WorldCreationRun.RunAsync(creating, profile.SaveName, profile.Server, Path.Combine(ProfileStore.RootDir, "logs"),
+                    m => say("[ModderLords] " + m),
+                    new WorldCreationRun.Hooks
+                    {
+                        Line = line =>
+                        {
+                            if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase)) say("[ModderLords] " + line.Text.Trim());
+                        },
+                    }, cancel);
+            }
+            catch (InvalidOperationException ex) { return Stop("could not generate the world: " + ex.Message); }
+            say($"[ModderLords] world '{profile.SaveName}' saved");
+        }
+
+        LaunchSession.Prepared prepared;
+        try { prepared = LaunchSession.Prepare(profile); }
+        catch (InvalidOperationException ex) { return Stop(ex.Message); }
         var channel = FileTestRunChannel.Create(Path.Combine(ProfileStore.RootDir, "tests"), testPlan, DateTimeOffset.Now);
         say($"[ModderLords] test run {channel.RunId} -> {channel.Folder}");
-        var prepared = LaunchSession.Prepare(profile);
         foreach (var m in prepared.Messages) say("[ModderLords] " + m);
         if (!prepared.Selections.Any(sel => sel.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase)))
             return Stop($"the test agent lives in {LaunchSession.SyncModuleId}, which this profile does not load.");
@@ -613,5 +640,12 @@ public static class InGameTestRun
             try { await game.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token); } catch (OperationCanceledException) { }
         }
         return (testReport.Passed ? 0 : 1, testReport, channel.Folder, null);
+    }
+
+    /// <summary>The save a Coop run generates for a profile that names none: one per profile, kept between runs.</summary>
+    public static string TestWorldSaveName(string profileName)
+    {
+        var slug = new string(profileName.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
+        return "mltest-world-" + (slug.Length == 0 ? "profile" : slug);
     }
 }

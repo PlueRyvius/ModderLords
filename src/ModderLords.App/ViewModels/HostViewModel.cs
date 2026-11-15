@@ -594,29 +594,16 @@ public partial class HostViewModel : ObservableObject
         try
         {
             var profileModuleIds = launchProfile.EnabledMods.Select(m => m.Id).ToList();
-            var isTaom = TaomLaunchPolicy.IsTaom(profileModuleIds);
             // Asked for either by the tick box or by TAOM, which cannot be served from the vanilla template at all.
-            if (isTaom || launchProfile.GenerateWorldWithActiveMods)
+            var worldPaths = LaunchSession.ResolvePaths(launchProfile);
+            var hadSaveName = !string.IsNullOrWhiteSpace(launchProfile.SaveName);
+            autoCreateWorld = WorldCreationRun.Needed(launchProfile, name => SavePreparer.Exists(worldPaths, name),
+                isTaom => (isTaom ? "taom_" : "world_") + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
+                m => AddLine(LogCategory.Tool, "[ModderLords] " + m));
+            if (!hadSaveName && !string.IsNullOrWhiteSpace(launchProfile.SaveName))
             {
-                var worldPaths = LaunchSession.ResolvePaths(launchProfile);
-                // A named save that exists is a campaign to LOAD. Nothing below may touch it: generation only ever
-                // fills a save that is being created, so an existing one ends the question here.
-                if (!string.IsNullOrWhiteSpace(launchProfile.SaveName) && SavePreparer.Exists(worldPaths, launchProfile.SaveName))
-                {
-                    if (launchProfile.GenerateWorldWithActiveMods)
-                        AddLine(LogCategory.Tool, $"[ModderLords] loading the existing save '{launchProfile.SaveName}'; no world is being generated");
-                }
-                else
-                {
-                    if (string.IsNullOrWhiteSpace(launchProfile.SaveName))
-                    {
-                        launchProfile.SaveName = (isTaom ? "taom_" : "world_") + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                        Profile.SaveName = launchProfile.SaveName;
-                        ProfileStore.Save(Profile);
-                        AddLine(LogCategory.Tool, $"[ModderLords] no save was selected; creating '{launchProfile.SaveName}' automatically");
-                    }
-                    autoCreateWorld = !isTaom || TaomLaunchPolicy.HasCompleteRecipe(profileModuleIds);
-                }
+                Profile.SaveName = launchProfile.SaveName;
+                ProfileStore.Save(Profile);
             }
             var pre = await Task.Run(() =>
             {
@@ -703,80 +690,36 @@ public partial class HostViewModel : ObservableObject
             {
                 Status = Loc.F("Generating world '{0}'…", launchProfile.SaveName);
                 AddLine(LogCategory.Milestone, $"[ModderLords] generating world '{launchProfile.SaveName}' with {profileModuleIds.Count} active mod(s) before starting the server");
-                // The creation phase must start with no configured save. Otherwise a stale server-config.json can
-                // make the official host begin loading an older campaign before the creation hook gets control.
-                ServerConfig.Write(prepared.Paths, "", launchProfile.Server);
-                var creationPlan = LaunchSession.CreateWorldPlan(prepared, launchProfile.SaveName);
-                using var creationDiagnostics = CreationDiagnostics.Start(logDir, creationPlan, launchProfile.SaveName);
-                AddLine(LogCategory.Tool, $"[ModderLords] world creation diagnostics -> {creationDiagnostics.ManifestPath}");
-                // A creation pass that is not creating anything looks exactly like a healthy server, because that is
-                // what it becomes: on 2026-09-19 a profile with Server guards off set the creation variables, loaded no
-                // module that reads them, and quietly served a template world for the full 15-minute budget before the
-                // watchdog killed it under a connected player. These two lines are the engine saying "I am serving", which
-                // a creation pass never legitimately does - a definitive signal rather than a timing guess, since heavy
-                // mods can take many minutes to reach the arming hook.
-                var servingInsteadOfCreating = false;
-                using var creation = EngineProcess.Start(creationPlan);
-                _creationEngine = creation;
-                IsRunning = true;
-                creationDiagnostics.Attach(creation.ProcessId);
-                BeginCreationProgress(creation.StartedAt);
-                creation.LineReceived += line =>
+                try
                 {
-                    creationDiagnostics.Record(line);
-                    // Everything the creation process says goes to the log and the console, exactly as the run
-                    // phase does. Only the worldcreate milestones were kept before, so when creation failed the
-                    // engine's own explanation — the one line that says why — had already been thrown away.
-                    var c = LogClassifier.Classify(line.Text);
-                    _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
-                    _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
-                    _mapIdentity.ObserveCreation(line.Text);
-                    if (!servingInsteadOfCreating &&
-                        (line.Text.Contains("[DedicatedServer] pulse:", StringComparison.OrdinalIgnoreCase) ||
-                         line.Text.Contains("player entered the campaign", StringComparison.OrdinalIgnoreCase)))
-                        servingInsteadOfCreating = true;
-                    if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase) ||
-                        line.Text.Contains("phase=", StringComparison.OrdinalIgnoreCase))
-                        Application.Current.Dispatcher.BeginInvoke(() => { ObserveCreationLine(line.Text); AddLine(LogCategory.Milestone, "[ModderLords] " + line.Text); });
-                };
-                // The compat module normally exits at the same deadline. Keep a launcher-side watchdog as well so
-                // a native hang cannot leave a half-started creation process behind indefinitely.
-                var creationExit = creation.Exited;
-                var watchdog = Task.Delay(TimeSpan.FromSeconds(LaunchSession.DefaultCreateWorldTimeoutSeconds + 30));
-                // Polled rather than awaited on the flag: the flag is set from the output thread, and the point is to
-                // stop within seconds of the engine revealing itself, not to wait out the 15-minute budget first.
-                var served = Task.Run(async () =>
-                {
-                    while (!servingInsteadOfCreating && !creationExit.IsCompleted)
-                        await Task.Delay(250);
-                    return servingInsteadOfCreating;
-                });
-                var completed = await Task.WhenAny(creationExit, watchdog, served);
-                if (completed == served && servingInsteadOfCreating && !creationExit.IsCompleted)
-                {
-                    creationDiagnostics.RecordEvent("creation-process-began-serving; no world was being created; stopping");
-                    AddLine(LogCategory.Error, "[ModderLords] the creation pass started serving instead of generating a world: " +
-                        $"nothing in the module list acted on the creation request. Check that {LaunchSession.CompatModuleId} is loaded.");
-                    await creation.StopAsync(TimeSpan.FromSeconds(20));
-                    _creationEngine = null;
-                    throw new InvalidOperationException(
-                        "World creation did not start: the engine began hosting instead. The compat module " +
-                        $"({LaunchSession.CompatModuleId}) is what performs world creation, so it has to be loaded for this to work.");
+                    await WorldCreationRun.RunAsync(prepared, launchProfile.SaveName, launchProfile.Server, logDir,
+                        m => AddLine(m.Contains("stopped", StringComparison.Ordinal) || m.Contains("instead of", StringComparison.Ordinal)
+                            ? LogCategory.Error : LogCategory.Tool, "[ModderLords] " + m),
+                        new WorldCreationRun.Hooks
+                        {
+                            Started = creation =>
+                            {
+                                _creationEngine = creation;
+                                IsRunning = true;
+                                BeginCreationProgress(creation.StartedAt);
+                            },
+                            Line = line =>
+                            {
+                                // Everything the creation process says goes to the log and the console, exactly as the run
+                                // phase does. Only the worldcreate milestones were kept before, so when creation failed the
+                                // engine's own explanation — the one line that says why — had already been thrown away.
+                                var c = LogClassifier.Classify(line.Text);
+                                _launchLog?.WriteLine($"{line.At:HH:mm:ss.fff} {c.Category,-10} {line.Text}");
+                                _pending.Enqueue(new ConsoleLine(line.At.ToString("HH:mm:ss"), c.Category, line.Text));
+                                _mapIdentity.ObserveCreation(line.Text);
+                                if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase) ||
+                                    line.Text.Contains("phase=", StringComparison.OrdinalIgnoreCase))
+                                    Application.Current.Dispatcher.BeginInvoke(() => { ObserveCreationLine(line.Text); AddLine(LogCategory.Milestone, "[ModderLords] " + line.Text); });
+                            },
+                            Finished = FinishCreationProgress,
+                        });
                 }
-                var creationCode = completed == creationExit
-                    ? await creationExit
-                    : await creation.StopAsync(TimeSpan.FromSeconds(20));
-                if (completed != creationExit)
-                {
-                    creationDiagnostics.RecordEvent($"launcher-watchdog timeout seconds={LaunchSession.DefaultCreateWorldTimeoutSeconds + 30}; process-stop-requested");
-                    AddLine(LogCategory.Error, "[ModderLords] world creation exceeded its 15-minute limit; the creation process was stopped");
-                }
-                var creationSaveExists = SavePreparer.Exists(prepared.Paths, launchProfile.SaveName);
-                creationDiagnostics.Complete(creationCode, completed != creationExit, creationSaveExists);
-                FinishCreationProgress(creationCode, completed != creationExit, creationSaveExists);
-                _creationEngine = null;
-                if (creationCode != 11 || !creationSaveExists)
-                    throw new InvalidOperationException($"World creation stopped with exit code {creationCode}; no usable save was written.");
+                finally { _creationEngine = null; }
                 AddLine(LogCategory.Milestone, $"[ModderLords] world '{launchProfile.SaveName}' saved; starting the server");
                 prepared = await Task.Run(() => LaunchSession.Prepare(launchProfile, experimentalCompat: experimentalCompat));
                 _prepared = prepared;
