@@ -8,6 +8,7 @@ using HarmonyLib;
 using ModderLords.CompatSync;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
 namespace ModderLords.CompatSync.Coop.Taom;
@@ -50,6 +51,7 @@ internal sealed class SupplyLinesComponent : ITaomComponent
     private static Type? _orderType;
     private static readonly List<MethodInfo> ClientSkipped = new List<MethodInfo>();
     private static readonly List<MethodInfo> Visuals = new List<MethodInfo>();
+    private static MethodInfo? _navPath;
 
     public string Id => "supply-lines";
 
@@ -78,6 +80,8 @@ internal sealed class SupplyLinesComponent : ITaomComponent
         _cancelCamp = service?.GetMethod("CancelCampOrders", Type.EmptyTypes);
         _activeOrders = service?.GetProperty("ActiveOrders")?.GetGetMethod();
         _getSources = t.GetType("TAOM.Features.SupplyLines.ISupplySourceService", false)?.GetMethod("GetSources", Type.EmptyTypes);
+        _navPath = caravans?.GetMethod("ComputeNavPathPoints", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+            null, new[] { typeof(Vec2), typeof(Vec2) }, null);
 
         ClientSkipped.Clear();
         foreach (var (name, args) in new (string, Type[])[]
@@ -100,12 +104,15 @@ internal sealed class SupplyLinesComponent : ITaomComponent
         if (ClientSkipped.Count != 5) missing.Add("SupplyOrderService tick handlers");
         if (_getSources == null) missing.Add("ISupplySourceService.GetSources()");
         if (Visuals.Count != 2) missing.Add("SupplyRouteVisualService.Update/ClearAll");
+        if (_navPath?.ReturnType != typeof(List<Vec2>)) missing.Add("SupplyCaravanService.ComputeNavPathPoints(Vec2, Vec2)");
         return missing.Count == 0 ? null : "TAOM changed; not found: " + string.Join(", ", missing);
     }
 
     public string Install(TaomContext context)
     {
         var h = new Harmony(Owner);
+        // Both sides: the server's caravan tick and the players' route arrows route through it.
+        h.Patch(_navPath!, prefix: new HarmonyMethod(typeof(SupplyLinesComponent), nameof(StraightRoutePrefix)));
         if (context.IsServer)
         {
             foreach (var visual in Visuals)
@@ -120,6 +127,21 @@ internal sealed class SupplyLinesComponent : ITaomComponent
             h.Patch(m, prefix: new HarmonyMethod(typeof(SupplyLinesComponent), nameof(ClientSkipPrefix)));
         h.Patch(_activeOrders!, postfix: new HarmonyMethod(typeof(SupplyLinesComponent), nameof(OwnActiveOrdersPostfix)));
         return "client sends supply orders to the server; caravans move and deliver on the server";
+    }
+
+    /// <summary>
+    /// Both sides: a caravan's route is the straight line from where it set out to the player, never the map's
+    /// pathfinder. TAOM asks the pathfinder with region switch costs (100/100), which takes the engine's region-switch
+    /// search; on TAOM's map that search crashes the process natively (access violation) for a route between two
+    /// places (village_RU6_1 to town_RU6, taom/navpath 2026-11-15: costs 0/0 returned, 100/100 crashed the game).
+    /// A server caravan tick crashed the server that way, and a player's route arrows crashed their game. The straight
+    /// line is TAOM's own fallback when no path is found; caravans deliver by elapsed time, so only the drawn route
+    /// and the caravan's position on the way change.
+    /// </summary>
+    private static bool StraightRoutePrefix(Vec2 from, Vec2 to, ref List<Vec2> __result)
+    {
+        __result = new List<Vec2> { from, to };
+        return false;
     }
 
     private static object? Resolve(string name) => _taom == null ? null : TaomActions.Resolve(_taom, name);
