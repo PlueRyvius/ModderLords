@@ -31,6 +31,35 @@ public static class Steps
         InGameTests.Register("taom.supplyCaravans", StepSide.Server, SupplyCaravans);
         InGameTests.Register("taom.watchCaravans", StepSide.Server, WatchCaravans);
         InGameTests.Register("taom.setTime", StepSide.Server, SetTime);
+        InGameTests.Register("taom.navPath", StepSide.Any, NavPath);
+    }
+
+    /// <summary>
+    /// Calls the map's pathfinder between two settlements' gates exactly as TAOM's caravan tick does
+    /// (SupplyCaravanService.ComputeNavPathPoints: faces from <c>new CampaignVec2(pos, true)</c>, agent radius 0.1, no
+    /// excluded faces, cost multiplier 1), with the region switch costs given (<c>landToSea</c>, <c>seaToLand</c>;
+    /// TAOM passes 100 and 100). Reports the path's size. A side whose engine crashes here never answers.
+    /// </summary>
+    private static IEnumerable<StepWait?> NavPath(StepContext ctx)
+    {
+        yield return ctx.Until(() => Campaign.Current?.MapSceneWrapper != null, "the campaign map scene");
+        var from = Settlement.Find(ctx.Arg("from"));
+        var to = Settlement.Find(ctx.Arg("to"));
+        ctx.Assert(from != null && to != null, $"no settlement {(from == null ? ctx.Arg("from") : ctx.Arg("to"))}");
+        var a = from!.GatePosition.ToVec2();
+        var b = to!.GatePosition.ToVec2();
+        var fromFace = new CampaignVec2(a, true).Face;
+        var toFace = new CampaignVec2(b, true).Face;
+        var landToSea = ctx.ArgInt("landToSea", 100);
+        var seaToLand = ctx.ArgInt("seaToLand", 100);
+        ctx.Log($"from {from.StringId} ({a.x:0.00},{a.y:0.00}) face {fromFace.FaceIndex} to {to.StringId} ({b.x:0.00},{b.y:0.00}) face {toFace.FaceIndex}, region switch costs {landToSea}/{seaToLand}");
+        // Written before the call, so a crash leaves the attempt in this side's ModderLords log.
+        ModderLords.CompatSync.Log.Info($"taom.navPath: calling GetPathBetweenAIFaces {from.StringId} -> {to.StringId} faces {fromFace.FaceIndex} -> {toFace.FaceIndex} costs {landToSea}/{seaToLand}");
+        var path = new NavigationPath();
+        var found = Campaign.Current.MapSceneWrapper.GetPathBetweenAIFaces(fromFace, toFace, a, b, 0.1f, path, null, 1f, landToSea, seaToLand);
+        ModderLords.CompatSync.Log.Info($"taom.navPath: returned {found}, {path.Size} point(s)");
+        ctx.Report("found", found);
+        ctx.Report("value", path.Size);
     }
 
     // ---- health --------------------------------------------------------------------------------------------
