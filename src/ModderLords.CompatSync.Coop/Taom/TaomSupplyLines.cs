@@ -26,8 +26,9 @@ namespace ModderLords.CompatSync.Coop.Taom;
 /// the state mirror, and the route arrows show only this player's own caravans.
 /// Server: places the order for the sender (PlayerScope, so the town sells to them and their gold pays); the per-frame
 /// and hourly ticks and the camp-break cancellation run once per player, each seeing only their own orders, so every
-/// caravan travels to and delivers to its owner. Caravans whose owner is offline wait (they are ticked unowned, which
-/// only lets them be lost). Route arrows are never drawn on the server (SandBox.View).
+/// caravan travels to and delivers to its owner. Caravans whose owner is offline wait: they are not ticked until the
+/// owner is back (a caravan destroyed meanwhile is still lost, through TAOM's party-destroyed event). Route arrows are
+/// never drawn on the server (SandBox.View).
 /// </summary>
 internal sealed class SupplyLinesComponent : ITaomComponent
 {
@@ -133,7 +134,7 @@ internal sealed class SupplyLinesComponent : ITaomComponent
     /// <summary>
     /// Server: TAOM's supply ticks act on "the player" (the caravan heads for the main party and delivers to it; a camp
     /// break cancels the main party's camp orders). Outside a player's scope the call is repeated once per owner with
-    /// the book narrowed to that owner's orders, then once for orders with no connected owner.
+    /// the book narrowed to that owner's orders; orders with no connected owner are left alone.
     /// </summary>
     private static bool PerOwnerPrefix(object __instance, MethodBase __originalMethod)
     {
@@ -158,11 +159,10 @@ internal sealed class SupplyLinesComponent : ITaomComponent
             using (new ServerRelay.PlayerScope(owner.Value.Hero, owner.Value.Party))
                 RunNarrowed(__instance, caravanService, __originalMethod, o => CaravanOf(o)?.ActualClan == owner.Key);
         }
-        RunNarrowed(__instance, caravanService, __originalMethod, o =>
-        {
-            var clan = CaravanOf(o)?.ActualClan;
-            return clan == null || !owners.ContainsKey(clan) || owners[clan].Party == null;
-        });
+        // Orders whose owner is not connected are not ticked at all. Outside a player's scope TAOM's "player" is the
+        // server's own main party: the frame tick paths each caravan to it, and the engine's native pathfinder crashed
+        // the server doing so (access violation in MapScene.GetPathBetweenAIFaces, 2026-11-15, reproduced on a save
+        // loaded with a caravan on the road); the hourly tick would deliver the cargo to it. They wait for their owner.
         return false;
     }
 
