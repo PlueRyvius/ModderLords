@@ -27,7 +27,7 @@
     { "id": "taom.supplyOrder", "side": "client:1", "as": "villageOrder", "args": { "source": "village" } },
     { "id": "taom.supplyCaravans", "side": "server", "args": { "atLeast": 1 } },
     { "id": "taom.setTime", "side": "server", "args": { "mode": "play" } },
-    { "id": "taom.watchCaravans", "side": "server", "args": { "seconds": 60 } },
+    { "id": "taom.watchCaravans", "side": "server", "timeoutSeconds": 120, "args": { "seconds": 60, "atLeast": 1 } },
     { "id": "taom.setTime", "side": "server", "args": { "mode": "stop" }, "continueOnFail": true },
     { "id": "game.noErrors", "side": "server", "continueOnFail": true },
     { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }

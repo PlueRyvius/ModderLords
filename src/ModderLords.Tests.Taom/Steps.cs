@@ -223,6 +223,8 @@ public static class Steps
         foreach (var id in first.Keys)
             ctx.Log($"{id}: moved {first[id].Distance(last[id]):0.00} from {first[id].x:0.00},{first[id].y:0.00}");
         ctx.Assert(hours > 0, $"campaign time did not advance in {seconds} s (time mode {Campaign.Current.TimeControlMode}), so the caravans were not moved");
+        var atLeast = ctx.ArgInt("atLeast", 0);
+        ctx.Assert(first.Count >= atLeast, $"saw {first.Count} supply caravan(s) on the road, expected at least {atLeast}");
         ctx.Report("value", first.Count);
     }
 
