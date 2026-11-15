@@ -30,7 +30,7 @@ public static class Steps
         InGameTests.Register("taom.supplyOrder", StepSide.Client, SupplyOrder);
         InGameTests.Register("taom.supplyCaravans", StepSide.Server, SupplyCaravans);
         InGameTests.Register("taom.watchCaravans", StepSide.Server, WatchCaravans);
-        InGameTests.Register("taom.setTime", StepSide.Any, SetTime);
+        InGameTests.Register("taom.setTime", StepSide.Server, SetTime);
     }
 
     // ---- health --------------------------------------------------------------------------------------------
@@ -114,21 +114,30 @@ public static class Steps
     }
 
     /// <summary>
-    /// Sets campaign time as the player's time buttons do: <c>mode</c> = <c>play</c> or <c>stop</c>. On a player's
-    /// game Coop sends it to the server as the player's request; the server applies it.
+    /// Sets campaign time on the server through Coop's own console command, as the smoke test does: <c>mode</c> =
+    /// <c>play</c>, <c>fast</c> or <c>stop</c>. (Setting the mode on the player's game does not reach the server: run 2
+    /// of this suite left time stopped.)
     /// </summary>
     private static IEnumerable<StepWait?> SetTime(StepContext ctx)
     {
         yield return ctx.Until(() => Campaign.Current != null, "the campaign");
-        var mode = ctx.Arg("mode") switch
+        var (coopMode, expected) = ctx.Arg("mode") switch
         {
-            "play" => CampaignTimeControlMode.StoppablePlay,
-            "fast" => CampaignTimeControlMode.StoppableFastForward,
-            "stop" => CampaignTimeControlMode.Stop,
+            "play" => ("Play_1x", CampaignTimeControlMode.StoppablePlay),
+            "fast" => ("Play_2x", CampaignTimeControlMode.StoppableFastForward),
+            "stop" => ("Pause", CampaignTimeControlMode.Stop),
             var other => throw new StepFailedException($"mode '{other}' is not play, fast or stop"),
         };
-        Campaign.Current.TimeControlMode = mode;
-        ctx.Report("value", mode.ToString());
+        const string command = "coop.debug.set_time_mode";
+        ctx.Assert(CommandLineFunctionality.HasFunctionForCommand(command), $"the console command {command} is not registered in this game");
+        var output = CommandLineFunctionality.CallFunction(command, new List<string> { coopMode }, out var found);
+        ctx.Log($"{command} {coopMode} -> {output}");
+        ctx.Assert(found, $"the console command {command} was not found when called");
+        bool Applied() => expected == CampaignTimeControlMode.Stop
+            ? Campaign.Current.TimeControlMode == CampaignTimeControlMode.Stop
+            : Campaign.Current.TimeControlMode != CampaignTimeControlMode.Stop;
+        yield return ctx.Until(Applied, $"campaign time mode {expected}", TimeSpan.FromSeconds(10));
+        ctx.Report("value", Campaign.Current.TimeControlMode.ToString());
     }
 
     // ---- the server's side ---------------------------------------------------------------------------------

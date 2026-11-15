@@ -20,15 +20,15 @@
     // The control: an order from the town the party is in, as the bundle's first three were.
     { "id": "taom.supplyOrder", "side": "client:1", "as": "townOrder", "args": { "source": "here" } },
     { "id": "taom.supplyCaravans", "side": "server", "args": { "atLeast": 1 } },
-    { "id": "taom.setTime", "side": "client:1", "args": { "mode": "play" } },
+    { "id": "taom.setTime", "side": "server", "args": { "mode": "play" } },
     { "id": "taom.watchCaravans", "side": "server", "args": { "seconds": 20 } },
     // The bundle's fourth order: from the nearest village, so the caravan has a real route to the player.
-    { "id": "taom.setTime", "side": "client:1", "args": { "mode": "stop" } },
+    { "id": "taom.setTime", "side": "server", "args": { "mode": "stop" } },
     { "id": "taom.supplyOrder", "side": "client:1", "as": "villageOrder", "args": { "source": "village" } },
     { "id": "taom.supplyCaravans", "side": "server", "args": { "atLeast": 1 } },
-    { "id": "taom.setTime", "side": "client:1", "args": { "mode": "play" } },
+    { "id": "taom.setTime", "side": "server", "args": { "mode": "play" } },
     { "id": "taom.watchCaravans", "side": "server", "args": { "seconds": 60 } },
-    { "id": "taom.setTime", "side": "client:1", "args": { "mode": "stop" }, "continueOnFail": true },
+    { "id": "taom.setTime", "side": "server", "args": { "mode": "stop" }, "continueOnFail": true },
     { "id": "game.noErrors", "side": "server", "continueOnFail": true },
     { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
   ]
