@@ -125,6 +125,8 @@ public partial class HostViewModel : ObservableObject
     private readonly System.Windows.Threading.DispatcherTimer _creationTimer;
     private DateTimeOffset? _creationStartedAt;
     private string _creationPhase = "starting";
+    private CreationProgress? _creationProgress;
+    private string? _creationProfile;
 
     public ObservableCollection<SaveRow> Saves { get; } = new();
     public BulkObservableCollection<ConsoleLine> Console { get; } = new();
@@ -173,6 +175,12 @@ public partial class HostViewModel : ObservableObject
     [ObservableProperty] private string _clientCheckText = "";
     /// <summary>Visible creation phase and elapsed time. Unlike the normal launch log this starts before the engine.</summary>
     [ObservableProperty] private string _creationProgressText = "";
+    /// <summary>
+    /// The creation bar, 0..100: each reported phase is a mark, paced between marks by this profile's last creation
+    /// (<see cref="CreationProgress"/>). Shown from the start of a creation pass until the next one.
+    /// </summary>
+    [ObservableProperty] private double _creationProgressValue;
+    [ObservableProperty] private bool _showCreationProgress;
 
     /// <summary>Points the live-settings channel at the newly selected profile. Called by
     /// <see cref="MainViewModel.LoadProfile"/>, and only in Host mode: mod settings are a channel to a running
@@ -202,6 +210,10 @@ public partial class HostViewModel : ObservableObject
     {
         _creationStartedAt = startedAt;
         _creationPhase = "starting";
+        _creationProfile = Profile.Name;
+        _creationProgress = new CreationProgress(CreationTimes.Load(_creationProfile));
+        _creationProgress.Start(startedAt);
+        ShowCreationProgress = true;
         RefreshCreationProgress();
         _creationTimer.Start();
     }
@@ -211,6 +223,7 @@ public partial class HostViewModel : ObservableObject
         if (_creationStartedAt is not { } started) return;
         var elapsed = DateTimeOffset.Now - started;
         CreationProgressText = Loc.F("World creation: {0} · elapsed {1:hh\\:mm\\:ss}", _creationPhase, elapsed);
+        if (_creationProgress != null) CreationProgressValue = Math.Round(_creationProgress.Fraction(DateTimeOffset.Now) * 100, 1);
     }
 
     private void ObserveCreationLine(string text)
@@ -230,6 +243,8 @@ public partial class HostViewModel : ObservableObject
         if (end >= 0) value = value[..end];
         if (value.Length == 0) return;
         _creationPhase = value;
+        // Only a phase reached moves the bar; a "fail phase=" line names the phase that failed.
+        if (index >= 0 && text.IndexOf(failure, StringComparison.OrdinalIgnoreCase) < 0) _creationProgress?.Reached(value, DateTimeOffset.Now);
         RefreshCreationProgress();
     }
 
@@ -239,6 +254,13 @@ public partial class HostViewModel : ObservableObject
         if (timedOut) _creationPhase = "timed out";
         else if (exitCode == 11 && saveExists) _creationPhase = "saved";
         else _creationPhase = $"failed (exit {exitCode})";
+        if (exitCode == 11 && saveExists && !timedOut && _creationProgress != null)
+        {
+            _creationProgress.Reached("saved", DateTimeOffset.Now);
+            CreationProgressValue = 100;
+            // The next creation for this profile is paced by this one.
+            if (_creationProgress.Durations() is { } seconds && _creationProfile != null) CreationTimes.Save(_creationProfile, seconds);
+        }
         if (_creationStartedAt is { } started)
         {
             var elapsed = DateTimeOffset.Now - started;
