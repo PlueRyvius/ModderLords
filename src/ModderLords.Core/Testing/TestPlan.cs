@@ -73,7 +73,10 @@ public sealed record TestPlan
     public const string UpgradePrefix = "upgrade-";
 
     public required string Name { get; init; }
-    /// <summary>The test module the suite belongs to (decision 28); empty for a suite read from a file.</summary>
+    /// <summary>
+    /// The test module the suite belongs to (decision 28). A built-in suite gets its folder's; a suite read from a file
+    /// names one with <c>"module"</c> to use that module's own steps, and is otherwise in none.
+    /// </summary>
     public string Module { get; init; } = "";
     public int Api { get; init; } = 1;
     public string Description { get; init; } = "";
@@ -249,6 +252,7 @@ public sealed record TestPlan
         return new TestPlan
         {
             Name = name,
+            Module = root["module"]?.GetValue<string>() ?? "",
             Api = api,
             Description = root["description"]?.GetValue<string>() ?? "",
             World = world,

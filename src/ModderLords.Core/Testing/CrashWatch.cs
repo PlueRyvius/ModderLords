@@ -23,6 +23,12 @@ public sealed class CrashWatch
     /// <summary>How often <see cref="Check"/> looks.</summary>
     public TimeSpan Every { get; init; } = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// Which side a process id is ("the server", "the game"), for the message. The server and the player's game write
+    /// to the same logs folder, so without it every crash reads as the game's.
+    /// </summary>
+    public Func<string, string?>? WhoIs { get; set; }
+
     private readonly string _crashesDir;
     private readonly string _logsDir;
     private readonly HashSet<string> _foldersBefore;
@@ -66,52 +72,65 @@ public sealed class CrashWatch
         {
             Folder = folder;
             WatchdogLog = Directory.EnumerateFiles(folder, "watchdog_log_*.txt").FirstOrDefault();
-            return _crash = Describe(Read(WatchdogLog), LastLine(folder), folder);
+            return _crash = Describe(Read(WatchdogLog), LastLine(folder), folder, Who(WatchdogLog));
         }
-        foreach (var log in WatchdogLogs().Where(f => !_crashedBefore.Contains(f)))
+        if (NewCrashLogs().FirstOrDefault() is { } log)
         {
-            var text = Read(log);
-            if (text?.Contains(CrashLine, StringComparison.Ordinal) != true) continue;
             WatchdogLog = log;
-            return _crash = Describe(text, LastLine(_logsDir, PidOf(log)), _logsDir);
+            return _crash = Describe(Read(log), LastLine(_logsDir, PidOf(log)), _logsDir, Who(log));
         }
         return null;
     }
 
     /// <summary>
-    /// Copies the crashed process's engine logs (watchdog, rgl log, rgl errors) into <paramref name="runFolder"/>\crash,
-    /// so the run folder holds the evidence. Never the dump. Returns the files copied.
+    /// Copies the engine logs (watchdog, rgl log, rgl errors) of every process that crashed since the watch started into
+    /// <paramref name="runFolder"/>\crash, so the run folder holds the evidence: in Coop the server and the player's
+    /// game can both crash in one run. Never the dump. Returns the files copied.
     /// </summary>
     public IReadOnlyList<string> CopyLogs(string runFolder)
     {
-        if (WatchdogLog is null) return [];
-        var dir = Path.GetDirectoryName(WatchdogLog)!;
-        var pid = PidOf(WatchdogLog);
+        var logs = NewCrashLogs().ToList();
+        if (WatchdogLog is not null && !logs.Contains(WatchdogLog, StringComparer.OrdinalIgnoreCase)) logs.Insert(0, WatchdogLog);
+        if (logs.Count == 0) return [];
         var copied = new List<string>();
         var to = Directory.CreateDirectory(Path.Combine(runFolder, "crash")).FullName;
-        foreach (var name in new[] { Path.GetFileName(WatchdogLog), $"rgl_log_{pid}.txt", $"rgl_log_errors_{pid}.txt" })
+        foreach (var watchdog in logs)
         {
-            var from = Path.Combine(dir, name);
-            if (!File.Exists(from)) continue;
-            try
+            var dir = Path.GetDirectoryName(watchdog)!;
+            var pid = PidOf(watchdog);
+            foreach (var name in new[] { Path.GetFileName(watchdog), $"rgl_log_{pid}.txt", $"rgl_log_errors_{pid}.txt" })
             {
-                using var source = Open(from);
-                using var target = File.Create(Path.Combine(to, name));
-                source.CopyTo(target);
-                copied.Add(Path.Combine(to, name));
+                var from = Path.Combine(dir, name);
+                if (!File.Exists(from)) continue;
+                try
+                {
+                    using var source = Open(from);
+                    using var target = File.Create(Path.Combine(to, name));
+                    source.CopyTo(target);
+                    copied.Add(Path.Combine(to, name));
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
         }
         return copied;
     }
 
+    /// <summary>The sides that crashed since the watch started ("the server", "the game"), in the order their logs sort.</summary>
+    public IReadOnlyList<string> CrashedSides() => NewCrashLogs().Select(Who).Distinct().ToList();
+
     /// <summary>"the game crashed (MissingMethodException) during: Initializing new game begin...; logs: DIR".</summary>
-    public static string Describe(string? watchdogLog, string? lastLine, string where)
+    public static string Describe(string? watchdogLog, string? lastLine, string where, string who = "the game")
     {
         var what = watchdogLog is null ? null : ExceptionName(watchdogLog);
-        return "the game crashed" + (what is null ? "" : $" ({what})") + (lastLine is null ? "" : $" during: {lastLine}") + $"; logs: {where}";
+        return who + " crashed" + (what is null ? "" : $" ({what})") + (lastLine is null ? "" : $" during: {lastLine}") + $"; logs: {where}";
     }
+
+    private IEnumerable<string> NewCrashLogs() =>
+        WatchdogLogs().Where(f => !_crashedBefore.Contains(f) && Read(f)?.Contains(CrashLine, StringComparison.Ordinal) == true);
+
+    private string Who(string? watchdogLog) =>
+        (watchdogLog is null || PidOf(watchdogLog) is not { } pid ? null : WhoIs?.Invoke(pid)) ?? "the game";
 
     /// <summary>
     /// What the watchdog's log says crashed: a .NET exception by name where its HRESULT is a common one, otherwise the
