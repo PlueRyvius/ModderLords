@@ -8,6 +8,7 @@ using HarmonyLib;
 using ModderLords.CompatSync;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
 namespace ModderLords.CompatSync.Coop.Taom;
@@ -26,8 +27,9 @@ namespace ModderLords.CompatSync.Coop.Taom;
 /// the state mirror, and the route arrows show only this player's own caravans.
 /// Server: places the order for the sender (PlayerScope, so the town sells to them and their gold pays); the per-frame
 /// and hourly ticks and the camp-break cancellation run once per player, each seeing only their own orders, so every
-/// caravan travels to and delivers to its owner. Caravans whose owner is offline wait (they are ticked unowned, which
-/// only lets them be lost). Route arrows are never drawn on the server (SandBox.View).
+/// caravan travels to and delivers to its owner. Caravans whose owner is offline wait: they are not ticked until the
+/// owner is back (a caravan destroyed meanwhile is still lost, through TAOM's party-destroyed event). Route arrows are
+/// never drawn on the server (SandBox.View).
 /// </summary>
 internal sealed class SupplyLinesComponent : ITaomComponent
 {
@@ -49,6 +51,7 @@ internal sealed class SupplyLinesComponent : ITaomComponent
     private static Type? _orderType;
     private static readonly List<MethodInfo> ClientSkipped = new List<MethodInfo>();
     private static readonly List<MethodInfo> Visuals = new List<MethodInfo>();
+    private static MethodInfo? _navPath;
 
     public string Id => "supply-lines";
 
@@ -77,6 +80,8 @@ internal sealed class SupplyLinesComponent : ITaomComponent
         _cancelCamp = service?.GetMethod("CancelCampOrders", Type.EmptyTypes);
         _activeOrders = service?.GetProperty("ActiveOrders")?.GetGetMethod();
         _getSources = t.GetType("TAOM.Features.SupplyLines.ISupplySourceService", false)?.GetMethod("GetSources", Type.EmptyTypes);
+        _navPath = caravans?.GetMethod("ComputeNavPathPoints", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+            null, new[] { typeof(Vec2), typeof(Vec2) }, null);
 
         ClientSkipped.Clear();
         foreach (var (name, args) in new (string, Type[])[]
@@ -99,12 +104,15 @@ internal sealed class SupplyLinesComponent : ITaomComponent
         if (ClientSkipped.Count != 5) missing.Add("SupplyOrderService tick handlers");
         if (_getSources == null) missing.Add("ISupplySourceService.GetSources()");
         if (Visuals.Count != 2) missing.Add("SupplyRouteVisualService.Update/ClearAll");
+        if (_navPath?.ReturnType != typeof(List<Vec2>)) missing.Add("SupplyCaravanService.ComputeNavPathPoints(Vec2, Vec2)");
         return missing.Count == 0 ? null : "TAOM changed; not found: " + string.Join(", ", missing);
     }
 
     public string Install(TaomContext context)
     {
         var h = new Harmony(Owner);
+        // Both sides: the server's caravan tick and the players' route arrows route through it.
+        h.Patch(_navPath!, prefix: new HarmonyMethod(typeof(SupplyLinesComponent), nameof(StraightRoutePrefix)));
         if (context.IsServer)
         {
             foreach (var visual in Visuals)
@@ -121,6 +129,21 @@ internal sealed class SupplyLinesComponent : ITaomComponent
         return "client sends supply orders to the server; caravans move and deliver on the server";
     }
 
+    /// <summary>
+    /// Both sides: a caravan's route is the straight line from where it set out to the player, never the map's
+    /// pathfinder. TAOM asks the pathfinder with region switch costs (100/100), which takes the engine's region-switch
+    /// search; on TAOM's map that search crashes the process natively (access violation) for a route between two
+    /// places (village_RU6_1 to town_RU6, taom/navpath 2026-11-15: costs 0/0 returned, 100/100 crashed the game).
+    /// A server caravan tick crashed the server that way, and a player's route arrows crashed their game. The straight
+    /// line is TAOM's own fallback when no path is found; caravans deliver by elapsed time, so only the drawn route
+    /// and the caravan's position on the way change.
+    /// </summary>
+    private static bool StraightRoutePrefix(Vec2 from, Vec2 to, ref List<Vec2> __result)
+    {
+        __result = new List<Vec2> { from, to };
+        return false;
+    }
+
     private static object? Resolve(string name) => _taom == null ? null : TaomActions.Resolve(_taom, name);
 
     private static MobileParty? CaravanOf(object order) =>
@@ -133,7 +156,7 @@ internal sealed class SupplyLinesComponent : ITaomComponent
     /// <summary>
     /// Server: TAOM's supply ticks act on "the player" (the caravan heads for the main party and delivers to it; a camp
     /// break cancels the main party's camp orders). Outside a player's scope the call is repeated once per owner with
-    /// the book narrowed to that owner's orders, then once for orders with no connected owner.
+    /// the book narrowed to that owner's orders; orders with no connected owner are left alone.
     /// </summary>
     private static bool PerOwnerPrefix(object __instance, MethodBase __originalMethod)
     {
@@ -158,11 +181,10 @@ internal sealed class SupplyLinesComponent : ITaomComponent
             using (new ServerRelay.PlayerScope(owner.Value.Hero, owner.Value.Party))
                 RunNarrowed(__instance, caravanService, __originalMethod, o => CaravanOf(o)?.ActualClan == owner.Key);
         }
-        RunNarrowed(__instance, caravanService, __originalMethod, o =>
-        {
-            var clan = CaravanOf(o)?.ActualClan;
-            return clan == null || !owners.ContainsKey(clan) || owners[clan].Party == null;
-        });
+        // Orders whose owner is not connected are not ticked at all. Outside a player's scope TAOM's "player" is the
+        // server's own main party: the frame tick paths each caravan to it, and the engine's native pathfinder crashed
+        // the server doing so (access violation in MapScene.GetPathBetweenAIFaces, 2026-11-15, reproduced on a save
+        // loaded with a caravan on the road); the hourly tick would deliver the cargo to it. They wait for their owner.
         return false;
     }
 
