@@ -12,8 +12,14 @@ public sealed record SmokeOptions
     public required int JoinPort { get; init; }
 
     public TimeSpan ServerTimeout { get; init; } = TimeSpan.FromMinutes(15);
-    /// <summary>From the game starting to Coop's first connection attempt (main menu load included).</summary>
+    /// <summary>
+    /// How long the game may go without connecting and without loading anything: counted from its start, or from the
+    /// last time its engine log grew, so a game still loading (compiling shaders for an overhaul, on its first run)
+    /// is not taken for one whose Coop never tried to join.
+    /// </summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromMinutes(4);
+    /// <summary>The longest the game may take to start connecting, however busy its loading is.</summary>
+    public TimeSpan ConnectHardLimit { get; init; } = TimeSpan.FromMinutes(20);
     /// <summary>From the connection attempt to the campaign map (world transfer and load; heavy mods take minutes).</summary>
     public TimeSpan LoadTimeout { get; init; } = TimeSpan.FromMinutes(12);
     /// <summary>How long the game must then stay on the map, connected, before the test closes it.</summary>
@@ -142,6 +148,9 @@ public sealed class SmokeRunner
         facts = facts with { ClientPid = client.Id };
 
         // 3. Watch.
+        var lastLoadActivity = clientStarted;
+        long lastGameLogSize = -1;
+        var saidStillLoading = false;
         ClientStage lastStage = ClientStage.Started;
         DateTimeOffset? onMapAt = null;
         Task? onMapWork = null;
@@ -215,11 +224,25 @@ public sealed class SmokeRunner
                 if (now - onMapAt.Value >= _options.SteadyFor) { Say("Stayed on the map; closing the game."); break; }
                 continue;
             }
-            if (stage < ClientStage.Connecting && now - clientStarted > _options.ConnectTimeout)
+            if (stage < ClientStage.Connecting)
             {
-                facts = facts with { TimedOutWaitingFor = "connecting" };
-                Say("The game never tried to connect.");
-                break;
+                // A first run of an overhaul compiles its shaders before the main menu (TAOM: over 850 of them, more
+                // than 4 minutes), and killing it then means the next run compiles them all again.
+                var gameLogSize = GameLogSize(client.Id);
+                if (gameLogSize != lastGameLogSize) { lastGameLogSize = gameLogSize; lastLoadActivity = now; }
+                if (now - lastLoadActivity > _options.ConnectTimeout || now - clientStarted > _options.ConnectHardLimit)
+                {
+                    facts = facts with { TimedOutWaitingFor = "connecting" };
+                    Say(now - clientStarted > _options.ConnectHardLimit
+                        ? $"The game was still loading after {_options.ConnectHardLimit.TotalMinutes:F0} minutes and never tried to connect."
+                        : "The game never tried to connect.");
+                    break;
+                }
+                if (now - lastLoadActivity < TimeSpan.FromSeconds(2) && now - clientStarted > _options.ConnectTimeout && !saidStillLoading)
+                {
+                    saidStillLoading = true;
+                    Say("The game is still loading (its engine log keeps growing); waiting for it to connect…");
+                }
             }
             var connectedAt = Locked(() => _observer.StageAt.TryGetValue(ClientStage.Connecting, out var at) ? at : (DateTimeOffset?)null);
             if (stage >= ClientStage.Connecting && connectedAt is { } c && now - c > _options.LoadTimeout)
@@ -308,6 +331,18 @@ public sealed class SmokeRunner
     }
 
     /// <summary>A Bannerlord process started after the test's own, still running: the game the starter handed over to.</summary>
+    /// <summary>The size of the game's engine log (rgl_log_&lt;pid&gt;.txt), or -1 while it does not exist.</summary>
+    private long GameLogSize(int pid)
+    {
+        try
+        {
+            var file = new FileInfo(Path.Combine(_options.EngineLogsDir, $"rgl_log_{pid}.txt"));
+            return file.Exists ? file.Length : -1;
+        }
+        catch (IOException) { return -1; }
+        catch (UnauthorizedAccessException) { return -1; }
+    }
+
     private static Process? Relaunched(DateTimeOffset since)
     {
         foreach (var p in Process.GetProcessesByName("Bannerlord"))
