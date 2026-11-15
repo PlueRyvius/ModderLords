@@ -700,7 +700,10 @@ public sealed class TestSequencerTests : IDisposable
     [Fact]
     public async Task A_step_the_game_times_out_is_a_failure_not_a_missing_result()
     {
-        var report = await Run("""{ "name": "t", "steps": [ { "id": "hang", "side": "client:1", "timeoutSeconds": 0.3 } ] }""");
+        // A long grace: the game's own timeout report must win however slowly a busy CI runner ticks the agent.
+        // The sequencer stops waiting as soon as that report arrives, so this costs no time.
+        var report = await Run("""{ "name": "t", "steps": [ { "id": "hang", "side": "client:1", "timeoutSeconds": 0.3 } ] }""",
+            grace: TimeSpan.FromSeconds(10));
         Assert.Equal(CoreOutcome.Fail, report.Steps[0].Outcome);
         Assert.Contains("timed out", report.Steps[0].Message);
     }
@@ -725,9 +728,10 @@ public sealed class TestSequencerTests : IDisposable
         Assert.Equal(side, TestRunSwitch.From(args, env, isServer)?.Side);
     }
 
-    private Task<TestReport> Run(string suite, bool stopAgents = false, string? token = null) => Run(TestPlan.Parse(suite), stopAgents, token);
+    private Task<TestReport> Run(string suite, bool stopAgents = false, string? token = null, TimeSpan? grace = null) =>
+        Run(TestPlan.Parse(suite), stopAgents, token, grace);
 
-    private async Task<TestReport> Run(TestPlan plan, bool stopAgents = false, string? token = null)
+    private async Task<TestReport> Run(TestPlan plan, bool stopAgents = false, string? token = null, TimeSpan? grace = null)
     {
         var channel = FileTestRunChannel.Create(_root, plan, DateTimeOffset.Now);
         var agents = plan.Sides.Select(side => new TestAgent(
@@ -747,7 +751,7 @@ public sealed class TestSequencerTests : IDisposable
         var sequencer = new TestSequencer(channel, new TestSequencerOptions
         {
             HelloTimeout = TimeSpan.FromSeconds(5),
-            Grace = TimeSpan.FromSeconds(0.5),
+            Grace = grace ?? TimeSpan.FromSeconds(0.5),
             Poll = TimeSpan.FromMilliseconds(10),
         });
         var report = await sequencer.RunAsync(plan, channel.RunId, CancellationToken.None);
