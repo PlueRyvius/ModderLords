@@ -114,7 +114,9 @@ the API is there and the approach is sound, but no step does it yet: prove it wi
   `AddHeroToPartyAction`, `KillCharacterAction` and the rest of `TaleWorlds.CampaignSystem.Actions`. Prefer an action
   to setting a field: actions fire the campaign events other mods and Coop listen to. *Available* (gold is *proven*).
 - **Time:** `Campaign.Current.TimeControlMode` (stop it before reading numbers; `game.pause`), `CampaignTime.Now`.
-  *Proven*.
+  *Proven*. To let it **run** in Coop, set it on the server through Coop's own console command,
+  `coop.debug.set_time_mode Play_1x` (or `Play_2x`, `Pause`): setting the mode on a player's game does not reach the
+  server. *Proven* (`taom.setTime`).
 - **Console commands, the game's and every mod's:** `CommandLineFunctionality.CallFunction(command, args, out found)`
   runs any `[CommandLineArgumentFunction]` command, as the developer console would: the game's `campaign.*` cheats,
   Coop's `coop.debug.*`, a mod's own. *Proven* (`party.toTownGate` runs `coop.debug.mobile_party.move_to_settlement`;

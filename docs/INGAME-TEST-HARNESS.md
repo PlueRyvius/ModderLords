@@ -100,8 +100,10 @@ src/ModderLords.Core/Testing/Modules/          (built in, embedded like today's 
   world/     module.json  sp-world.json
   retinues/  module.json  editor.json
   smithing/  module.json  health.json  ammo.json  tier-preview.json  heal-on-load.json  coop-craft.json
+  taom/      module.json  supply-lines.json  navpath.json (manual)
 src/ModderLords.Tests.Retinues/                (retinues' steps: references Retinues' DLL at compile time only)
 src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2's DLL at compile time only)
+src/ModderLords.Tests.Taom/                    (taom's steps: references TAOM.dll at compile time only)
 ```
 
 - **`module.json`**: `id`, `title`, `description` (what it checks, for the Tests tab), `requires` (mods, with
@@ -263,6 +265,14 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    4. `smithing` (Modular Smithing 2), with its own DLL and `ModularSmithing2.health`.
       Its suites: `health` (both), `ammo`, `tier-preview` (single player), `heal-on-load` (single player,
       continuity) and `coop-craft` (Coop).
+   5. `taom` (TAOM), with its own DLL and `TAOM.health`. **Built 2026-11-15** from a support bundle:
+      a TAOM server died 0.45 s after a player's supply caravan set out from a village. `supply-lines` (Coop) places
+      an order from the player's town and one from the nearest village as the order screen's Confirm does, runs
+      campaign time on the server (`taom.setTime`, Coop's `coop.debug.set_time_mode`) and watches every caravan for
+      a minute; it crashed the server every time until #305. `navpath` (manual) calls the map pathfinder as TAOM's
+      caravans did, with and without region switch costs: the call that crashed. TAOM needs a generated world, so a
+      Coop run on a TAOM profile makes one first (#309), and the player's first join compiles TAOM's shaders for
+      several minutes (#307).
 4. The world cache, then `game.saveAndReload`, then the history file and table. **Single player's save and reload
    built 2026-11-13** as steps (`game.save`, then `game.toMainMenu` and `game.loadSave`); Coop's waits.
 5. `--package` and upgrade worlds, then the release step in `docs/RELEASING.md` (decision 27). **Upgrade worlds built

@@ -1,0 +1,35 @@
+{
+  // A support bundle (2026-11-15, ModderLords 1.8.1, game v1.4.8, Coop 0.1.7): a player in town_RU6 ordered supplies
+  // three times from that town, then once from village_RU6_1, and the dedicated server died with an access violation
+  // 0.45 s after the village caravan set out. The town orders spawn the caravan where the player already is; the
+  // village one is the first caravan TAOM has to path across the map (its per-frame tick, run on the server for each
+  // player by ModderLords' TAOM layer). This suite places both kinds and lets time run, so the server's exit shows.
+  "api": 2,
+  "name": "supply-lines",
+  "mode": "coop",
+  "description": "Coop: supply orders from the player's own town and from a nearby village each send out a caravan, and the server survives a minute of the caravans travelling.",
+  "requires": [ { "id": "TAOM" } ],
+  "steps": [
+    { "id": "TAOM.health", "side": "server" },
+    { "id": "TAOM.health", "side": "client:1" },
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "hero.addGold", "side": "server", "args": { "heroName": "$me.heroName", "amount": 100000 } },
+    { "id": "party.toTownGate", "side": "server", "args": { "heroName": "$me.heroName", "town": "town_RU6" } },
+    { "id": "settlement.enter", "side": "client:1", "args": { "town": "town_RU6" } },
+    { "id": "taom.supplySources", "side": "client:1" },
+    // The control: an order from the town the party is in, as the bundle's first three were.
+    { "id": "taom.supplyOrder", "side": "client:1", "as": "townOrder", "args": { "source": "here" } },
+    { "id": "taom.supplyCaravans", "side": "server", "args": { "atLeast": 1 } },
+    { "id": "taom.setTime", "side": "server", "args": { "mode": "play" } },
+    { "id": "taom.watchCaravans", "side": "server", "args": { "seconds": 20 } },
+    // The bundle's fourth order: from the nearest village, so the caravan has a real route to the player.
+    { "id": "taom.setTime", "side": "server", "args": { "mode": "stop" } },
+    { "id": "taom.supplyOrder", "side": "client:1", "as": "villageOrder", "args": { "source": "village" } },
+    { "id": "taom.supplyCaravans", "side": "server", "args": { "atLeast": 1 } },
+    { "id": "taom.setTime", "side": "server", "args": { "mode": "play" } },
+    { "id": "taom.watchCaravans", "side": "server", "timeoutSeconds": 120, "args": { "seconds": 60, "atLeast": 1 } },
+    { "id": "taom.setTime", "side": "server", "args": { "mode": "stop" }, "continueOnFail": true },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

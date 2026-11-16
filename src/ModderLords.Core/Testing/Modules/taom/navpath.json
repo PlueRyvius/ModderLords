@@ -1,0 +1,15 @@
+{
+  "api": 2,
+  "name": "navpath",
+  "mode": "coop",
+  "manual": true,
+  "description": "The map pathfinder from village_RU6_1 to town_RU6 as TAOM's caravans call it, with and without region switch costs, on the player's game and then the server.",
+  "requires": [ { "id": "TAOM" } ],
+  "steps": [
+    { "id": "taom.navPath", "side": "client:1", "as": "c0", "args": { "from": "village_RU6_1", "to": "town_RU6", "landToSea": 0, "seaToLand": 0 }, "continueOnFail": true },
+    { "id": "taom.navPath", "side": "client:1", "as": "c100", "args": { "from": "village_RU6_1", "to": "town_RU6", "landToSea": 100, "seaToLand": 100 }, "continueOnFail": true },
+    { "id": "taom.navPath", "side": "server", "as": "s0", "args": { "from": "village_RU6_1", "to": "town_RU6", "landToSea": 0, "seaToLand": 0 }, "continueOnFail": true },
+    { "id": "taom.navPath", "side": "server", "as": "s100", "args": { "from": "village_RU6_1", "to": "town_RU6", "landToSea": 100, "seaToLand": 100 }, "continueOnFail": true }
+  ]
+}
+
