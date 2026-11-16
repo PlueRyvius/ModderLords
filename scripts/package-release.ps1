@@ -89,6 +89,14 @@ New-Item -ItemType Directory -Path $syncOut -Force | Out-Null
 Copy-Item (Join-Path $root 'src\ModderLords.CompatSync\_Module\*') $syncOut -Recurse -Force
 Get-ChildItem $syncOut -Recurse -Filter *.pdb | Remove-Item -Force
 
+# Test modules' own step DLLs (the Tests tab looks for them in compat\ beside the exe). Each is built only where its
+# mod is installed (Directory.Build.props), so say which ship rather than fail on a PC without one of those mods.
+foreach ($m in 'Retinues', 'Smithing', 'Taom') {
+    $dll = Join-Path $root "src\ModderLords.Tests.$m\bin\Release\ModderLords.Tests.$m.dll"
+    if (Test-Path $dll) { Copy-Item $dll (Join-Path $out 'compat') -Force; Write-Host "test module steps: ModderLords.Tests.$m.dll" }
+    else { Write-Warning "test module steps: ModderLords.Tests.$m.dll was not built (its mod is not installed here); the release's Tests tab will say so" }
+}
+
 # The standalone co-op compat modules (coop-compat\), which the launcher adds after their mods and installs for players
 # (LaunchSession.CompanionModules). Each builds against the local game install, like the community repo's modules.
 # Projects: the module, then any Coop adapter it loads by hand (built into the same folder). Dlls: what ships.
