@@ -112,6 +112,10 @@ public static class InGameTestRun
 
         // One suite by name (as v1), or with none named the core suite plus every suite this profile's mods meet.
         IReadOnlyList<TestPlan>? namedSuite = null;
+        // An upgrade world saved on a newer game than this one is left out: the older game crashes loading it.
+        var installedGame = ClientLauncher.ResolveGameRoot(profile) is { } gameRoot ? CoopGameSupport.GameVersion(gameRoot) : null;
+        string? SavedOn(string world) => WorldSavedOn(TestSuites.WorldsDir, world);
+        var left = new List<string>();
         if (options.Suite is { } suiteArg)
         {
             TestPlan testPlan;
@@ -127,7 +131,9 @@ public static class InGameTestRun
                 // A named upgrade suite runs on each kept upgrade world, as when picked.
                 if (testPlan.OnUpgradeWorlds)
                 {
-                    namedSuite = SuiteSelection.UpgradeWorlds(testPlan, TestWorlds());
+                    namedSuite = SuiteSelection.UpgradeWorlds(testPlan, TestWorlds(), SavedOn, installedGame, left);
+                    if (namedSuite.Count == 0 && left.Count > 0)
+                        return Stop($"suite {testPlan.Name} has no upgrade world this game can load: " + string.Join("; ", left));
                     if (namedSuite.Count == 0)
                         return Stop($"suite {testPlan.Name} runs on upgrade worlds, and none is kept for {string.Join(" or ", testPlan.Requires.Select(r => r.Id))} in {TestSuites.WorldsDir}");
                 }
@@ -153,12 +159,11 @@ public static class InGameTestRun
                 if (SuiteSelection.Unmet(m!.Requires, installed) is { Count: > 0 } unmet)
                     say($"[ModderLords] test module {m.Id} is unavailable here: needs {string.Join(", ", unmet.Select(r => SuiteSelection.Describe(r, installed)))}");
         }
-        var left = new List<string>();
         IReadOnlyList<TestPlan> chosen;
         if (namedSuite is not null) chosen = namedSuite;
         else
         {
-            try { chosen = SuiteSelection.Select(TestSuites.LoadAll(), installed, options.SinglePlayer, options.OnlyMod, options.WithOthers, left, options.Modules, TestWorlds()); }
+            try { chosen = SuiteSelection.Select(TestSuites.LoadAll(), installed, options.SinglePlayer, options.OnlyMod, options.WithOthers, left, options.Modules, TestWorlds(), SavedOn, installedGame); }
             catch (Exception ex) { return Stop("suites: " + ex.Message); }
             // With nothing picked, a module whose step DLL this build lacks is left out, not failed: a release
             // packaged on a PC without that mod has no DLL for it. A module picked by name still stops below.
@@ -373,6 +378,22 @@ public static class InGameTestRun
             say("[ModderLords] testing it with " + string.Join(", ", modules.Select(m => m.Id)));
         }
         return null;
+    }
+
+    /// <summary>
+    /// The game version a kept test world was saved on: the save's own header ("v1.5.7.125802"), else the version
+    /// its note recorded when it was kept (versions.game.game); null when neither says.
+    /// </summary>
+    public static string? WorldSavedOn(string worldsDir, string world)
+    {
+        if (Core.Saves.SaveHeaderReader.TryRead(Path.Combine(worldsDir, world + ".sav"), out _) is { ApplicationVersion: { Length: > 0 } fromHeader })
+            return fromHeader;
+        try
+        {
+            var note = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(worldsDir, world + ".json")));
+            return note?["versions"]?["game"]?["game"]?.GetValue<string>() is { Length: > 0 } fromNote ? fromNote : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException) { return null; }
     }
 
     /// <summary>The test worlds kept under test-worlds, by name.</summary>

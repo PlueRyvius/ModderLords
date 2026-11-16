@@ -256,7 +256,8 @@ private static IEnumerable<StepWait?> StashCount(StepContext ctx)
   first time the mod meets a campaign) and a save made on its last release (an *upgrade world*: what players load
   after updating). `"world": "upgrade"` (single player, `"mode": "singleplayer"`) runs the suite once on each kept
   `test-worlds\upgrade-<ModId>-<version>.sav` of a mod it requires, as `suite@version`; with none kept it is left out,
-  saying so. Make one with a `"manual": true` suite (it runs only by name) that sets the world up and ends with
+  saying so. A world saved on a newer game than the one installed is left out the same way (an older game crashes
+  loading it), so keep upgrade worlds on the game version you test on. Make one with a `"manual": true` suite (it runs only by name) that sets the world up and ends with
   `game.keepWorld` (`upgradeOf: <ModId>`), run on the released build: the launcher keeps the save when the run ends.
 - **Save and reload** in single player: `game.save` (`name`), `game.toMainMenu`, `game.loadSave` (`name`), then check
   what survived. Give the suite a fresh world (`continuity: true`), not a shared one.

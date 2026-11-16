@@ -223,7 +223,12 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
   checks that the mod's records survived the load. **Built for single player 2026-11-13:** the run expands an
   upgrade suite into one copy per kept upgrade world of a mod it requires (`suite@version`, oldest first), copies each
   world fresh into the game's saves and loads it before that copy; with none kept, the suite is left out, saying so.
-  In Coop it waits for the server restarting inside one launch, so `"world": "upgrade"` needs `"mode": "singleplayer"`.
+  A world saved on a newer game than the installed one is left out too (added 2026-11-16): an older game crashes
+  loading a newer game's save (`MapScreen.HandleInitialize`, seen loading v1.5.7 worlds on v1.4.8). The world's game
+  comes from the save's own header (`ApplicationVersion`, "v1.5.7.125802"), else its note's `versions.game.game`; the
+  installed one from `bin\Win64_Shipping_Client\Version.xml`. Only major.minor.revision count, and a world whose game
+  or the installed game is unknown still runs. The line reads "left out smithing/upgrade@v0.9.49: its world was saved
+  on game v1.5.7, newer than the installed v1.4.8"; an older or equal game runs it. In Coop it waits for the server restarting inside one launch, so `"world": "upgrade"` needs `"mode": "singleplayer"`.
 - **Keeping a world:** `game.keepWorld` saves the campaign and reports it; when the run ends, the launcher copies that
   save into test-worlds, with a `.json` note naming the run and the versions. With `upgradeOf: <ModId>` it is kept as
   that mod's upgrade world, named from the version that loaded. A mod's test module ships a `manual` suite that makes

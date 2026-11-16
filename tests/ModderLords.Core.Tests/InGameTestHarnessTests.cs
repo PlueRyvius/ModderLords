@@ -234,6 +234,93 @@ public class TestPlanTests
         Assert.Contains(notes, n => n.StartsWith("upgrade: no upgrade world kept for ModularSmithing2", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("v1.5.7.125802", "v1.4.8", true)]
+    [InlineData("v1.5.7", "v1.4.8", true)]
+    [InlineData("v1.4.10", "v1.4.8", true)]      // by number, not by text
+    [InlineData("v1.4.8.118999", "v1.4.8", false)] // a save's build number is the same game
+    [InlineData("v1.4.8", "v1.5.7", false)]
+    [InlineData("v1.3.15.110062", "v1.4.8", false)]
+    [InlineData("e1.5.7", "v1.4.8", true)]
+    [InlineData("", "v1.4.8", false)]           // unknown: the world runs
+    [InlineData("v1.5.7", null, false)]
+    [InlineData("not a version", "v1.4.8", false)]
+    public void A_world_is_from_a_newer_game_by_major_minor_revision(string? saved, string? installed, bool newer) =>
+        Assert.Equal(newer, SuiteSelection.NewerGame(saved, installed));
+
+    [Fact]
+    public void A_game_version_is_shown_without_its_build_number()
+    {
+        Assert.Equal("v1.5.7", SuiteSelection.ShortGameVersion("v1.5.7.125802"));
+        Assert.Equal("v1.4.8", SuiteSelection.ShortGameVersion("v1.4.8"));
+        Assert.Equal("odd", SuiteSelection.ShortGameVersion("odd"));
+    }
+
+    [Fact]
+    public void An_upgrade_world_saved_on_a_newer_game_is_left_out_with_a_line()
+    {
+        var upgrade = SpSuite("upgrade", ", \"world\": \"upgrade\", \"requires\": [ \"ModularSmithing2\" ]");
+        var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) { ["ModularSmithing2"] = "v0.9.50" };
+        var worlds = new[] { "upgrade-ModularSmithing2-v0.9.48", "upgrade-ModularSmithing2-v0.9.49", "upgrade-ModularSmithing2-v0.9.50", "upgrade-ModularSmithing2-v0.9.51" };
+        var savedOn = new Dictionary<string, string?>
+        {
+            ["upgrade-ModularSmithing2-v0.9.48"] = "v1.4.8.118999",  // same game: runs
+            ["upgrade-ModularSmithing2-v0.9.49"] = "v1.5.7.125802",  // newer: left out
+            ["upgrade-ModularSmithing2-v0.9.50"] = "v1.5.7",         // newer (from a note): left out
+            ["upgrade-ModularSmithing2-v0.9.51"] = null,             // unknown: runs
+        };
+
+        var notes = new List<string>();
+        var picked = SuiteSelection.Select([upgrade, TestSuites.Load(SuiteSelection.CoreSuite)], mods, singlePlayer: true, onlyMod: null, withOthers: false,
+            notes, worlds: worlds, savedOn: w => savedOn[w], installedGame: "v1.4.8");
+        Assert.Equal(["core", "upgrade@v0.9.48", "upgrade@v0.9.51"], picked.Select(p => p.Name));
+        Assert.Equal(
+            ["upgrade@v0.9.49: its world was saved on game v1.5.7, newer than the installed v1.4.8 (an older game crashes loading it)",
+             "upgrade@v0.9.50: its world was saved on game v1.5.7, newer than the installed v1.4.8 (an older game crashes loading it)"],
+            notes);
+
+        // Every world newer: the suite is left out by those lines alone, not as if no world were kept.
+        notes.Clear();
+        var none = SuiteSelection.Select([upgrade, TestSuites.Load(SuiteSelection.CoreSuite)], mods, singlePlayer: true, onlyMod: null, withOthers: false,
+            notes, worlds: worlds[1..3], savedOn: w => savedOn[w], installedGame: "v1.4.8");
+        Assert.Equal(["core"], none.Select(p => p.Name));
+        Assert.Equal(2, notes.Count);
+        Assert.DoesNotContain(notes, n => n.Contains("no upgrade world kept", StringComparison.Ordinal));
+
+        // On the newer game itself, or with the installed game unknown, they all run.
+        Assert.Equal(4, SuiteSelection.UpgradeWorlds(upgrade, worlds, w => savedOn[w], "v1.5.7").Count);
+        Assert.Equal(4, SuiteSelection.UpgradeWorlds(upgrade, worlds, w => savedOn[w], installedGame: null).Count);
+    }
+
+    [Fact]
+    public void A_kept_worlds_game_version_comes_from_its_save_header_else_its_note()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ml-savedon-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            static void Save(string path, string header)
+            {
+                var json = System.Text.Encoding.UTF8.GetBytes(header);
+                using var fs = File.Create(path);
+                fs.Write(BitConverter.GetBytes(json.Length));
+                fs.Write(json);
+                fs.Write(new byte[16]);
+            }
+            Save(Path.Combine(dir, "a.sav"), """{"List":{"ApplicationVersion":"v1.5.7.125802","Modules":"Native"}}""");
+            File.WriteAllText(Path.Combine(dir, "a.json"), """{ "versions": { "game": { "game": "v1.4.8" } } }""");
+            Save(Path.Combine(dir, "b.sav"), """{"List":{"Modules":"Native"}}""");
+            File.WriteAllText(Path.Combine(dir, "b.json"), """{ "versions": { "game": { "modderlords": "0.1.54", "game": "v1.5.7" } } }""");
+            Save(Path.Combine(dir, "c.sav"), """{"List":{"Modules":"Native"}}""");
+
+            Assert.Equal("v1.5.7.125802", ModderLords.Coop.Testing.InGameTestRun.WorldSavedOn(dir, "a"));
+            Assert.Equal("v1.5.7", ModderLords.Coop.Testing.InGameTestRun.WorldSavedOn(dir, "b"));
+            Assert.Null(ModderLords.Coop.Testing.InGameTestRun.WorldSavedOn(dir, "c"));
+            Assert.Null(ModderLords.Coop.Testing.InGameTestRun.WorldSavedOn(dir, "missing"));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     [Fact]
     public void An_upgrade_suite_is_single_player_only_for_now()
     {
