@@ -11,6 +11,8 @@
     <AssemblyName>ModderLords.Tests.Taom</AssemblyName>
     <RootNamespace>ModderLords.Tests.Taom</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- The app copies this DLL from bin\$(Configuration)\; a release publish (-r win-x64) must not move it. -->
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>

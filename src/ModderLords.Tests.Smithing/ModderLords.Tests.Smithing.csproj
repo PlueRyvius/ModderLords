@@ -11,6 +11,8 @@
     <AssemblyName>ModderLords.Tests.Smithing</AssemblyName>
     <RootNamespace>ModderLords.Tests.Smithing</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- The app copies this DLL from bin\$(Configuration)\; a release publish (-r win-x64) must not move it. -->
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
