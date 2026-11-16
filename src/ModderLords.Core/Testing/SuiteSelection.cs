@@ -27,9 +27,11 @@ public static class SuiteSelection
     /// <param name="modules">With <c>--modules</c>: only these test modules' suites (decision 29); null for every module.</param>
     /// <param name="notes">Told why each suite left out was left out.</param>
     /// <param name="worlds">The test worlds kept under test-worlds, by name, for suites that run on upgrade worlds.</param>
+    /// <param name="savedOn">The game version each kept world was saved on, for <see cref="UpgradeWorlds"/>.</param>
+    /// <param name="installedGame">The installed game's version; upgrade worlds from a newer game are left out.</param>
     public static IReadOnlyList<TestPlan> Select(IEnumerable<TestPlan> available, IReadOnlyDictionary<string, string?> mods,
         bool singlePlayer, string? onlyMod, bool withOthers, List<string> notes, IReadOnlyCollection<string>? modules = null,
-        IReadOnlyCollection<string>? worlds = null)
+        IReadOnlyCollection<string>? worlds = null, Func<string, string?>? savedOn = null, string? installedGame = null)
     {
         var all = available.ToList();
         var core = all.FirstOrDefault(p => p.Name == CoreSuite) ?? throw new InvalidOperationException("the core suite is missing");
@@ -52,14 +54,15 @@ public static class SuiteSelection
             }
             if (plan.OnUpgradeWorlds)
             {
-                var kept = UpgradeWorlds(plan, worlds ?? []);
-                if (kept.Count == 0)
+                var before = notes.Count;
+                var kept = UpgradeWorlds(plan, worlds ?? [], savedOn, installedGame, notes);
+                if (kept.Count == 0 && notes.Count == before)
                 {
                     notes.Add($"{label}: no upgrade world kept for {string.Join(" or ", plan.Requires.Select(r => r.Id))} " +
                               $"(test-worlds\\{TestPlan.UpgradePrefix}<ModId>-<version>.sav, made by a suite that keeps one)");
                     continue;
                 }
-                picked.AddRange(kept);
+                picked.AddRange(kept);   // none when every kept world is from a newer game; each said so
                 continue;
             }
             picked.Add(plan);
@@ -72,20 +75,64 @@ public static class SuiteSelection
 
     /// <summary>
     /// One copy of an upgrade suite per kept upgrade world of a mod it requires (decision 27), oldest version first,
-    /// each named <c>suite@version</c> and loading that world.
+    /// each named <c>suite@version</c> and loading that world. A world saved on a newer game than the installed one
+    /// (<paramref name="savedOn"/> against <paramref name="installedGame"/>) is left out, with a line in
+    /// <paramref name="notes"/>: an older game crashes loading a newer game's save.
     /// </summary>
-    public static IReadOnlyList<TestPlan> UpgradeWorlds(TestPlan suite, IEnumerable<string> worlds)
+    /// <param name="savedOn">The game version a kept world was saved on ("v1.5.7.125802"); null when unknown.</param>
+    /// <param name="installedGame">The installed game's version ("v1.4.8"); null when unknown, and then every world runs.</param>
+    public static IReadOnlyList<TestPlan> UpgradeWorlds(TestPlan suite, IEnumerable<string> worlds,
+        Func<string, string?>? savedOn = null, string? installedGame = null, List<string>? notes = null)
     {
+        var label = suite.Module.Length > 0 ? $"{suite.Module}/{suite.Name}" : suite.Name;
         var copies = new List<(string Version, TestPlan Plan)>();
+        var newer = new List<(string Version, string Line)>();
         foreach (var world in worlds)
             foreach (var mod in suite.Requires.Select(r => r.Id))
             {
                 var prefix = TestPlan.UpgradePrefix + mod + "-";
                 if (!world.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || world.Length == prefix.Length) continue;
                 var version = world[prefix.Length..];
+                if (savedOn?.Invoke(world) is { } saved && NewerGame(saved, installedGame))
+                {
+                    newer.Add((version, $"{label}@{version}: its world was saved on game {ShortGameVersion(saved)}, " +
+                                        $"newer than the installed {ShortGameVersion(installedGame!)} (an older game crashes loading it)"));
+                    continue;
+                }
                 copies.Add((version, suite with { Name = $"{suite.Name}@{version}", World = world }));
             }
+        notes?.AddRange(newer.OrderBy(n => n.Version, VersionOrder.Instance).Select(n => n.Line));
         return copies.OrderBy(c => c.Version, VersionOrder.Instance).Select(c => c.Plan).ToList();
+    }
+
+    /// <summary>
+    /// Whether a save made on game <paramref name="saved"/> is from a newer game than <paramref name="installed"/>.
+    /// Compares major.minor.revision only: a save's "v1.4.8.118999" is the same game as Version.xml's "v1.4.8". False
+    /// when either is unknown or not a version, so a world runs unless it is known to be newer.
+    /// </summary>
+    public static bool NewerGame(string? saved, string? installed) =>
+        GameVersionParts(saved) is { } s && GameVersionParts(installed) is { } i
+        && s.Zip(i).Select(p => p.First.CompareTo(p.Second)).FirstOrDefault(c => c != 0) > 0;
+
+    /// <summary>The game version as major.minor.revision with its letter ("v1.5.7.125802" → "v1.5.7").</summary>
+    public static string ShortGameVersion(string version)
+    {
+        var parts = GameVersionParts(version);
+        if (parts is null) return version;
+        var letter = version.TrimStart()[0] is var c && char.IsLetter(c) ? c.ToString() : "";
+        return letter + string.Join(".", parts);
+    }
+
+    private static int[]? GameVersionParts(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version)) return null;
+        var text = version.Trim().TrimStart('v', 'e', 'b', 'a', 'd', 'V');
+        var parts = text.Split('.');
+        if (parts.Length < 3) return null;
+        var numbers = new int[3];
+        for (int k = 0; k < 3; k++)
+            if (!int.TryParse(parts[k], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out numbers[k])) return null;
+        return numbers;
     }
 
     /// <summary>Versions in number order ("v0.9.49" before "v0.9.100"); text that is not a version sorts by text.</summary>
