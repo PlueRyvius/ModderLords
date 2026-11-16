@@ -45,6 +45,16 @@ internal static class TaomActions
     /// <summary>True on a client in a live co-op session: TAOM's host-only actions should be sent, not refused.</summary>
     internal static bool IsCoopClient => Send != null;
 
+    /// <summary>
+    /// The main hero, or null while a campaign is still loading. Hero.MainHero and MobileParty.MainParty throw then
+    /// (no campaign, or no player troop yet), and a client's ticks start running before its joined campaign is ready.
+    /// </summary>
+    internal static Hero? MainHeroOrNull =>
+        Campaign.Current == null ? null : (TaleWorlds.Core.Game.Current?.PlayerTroop as CharacterObject)?.HeroObject;
+
+    /// <summary>The main party, or null while a campaign is still loading (see <see cref="MainHeroOrNull"/>).</summary>
+    internal static MobileParty? MainPartyOrNull => Campaign.Current?.MainParty;
+
     /// <summary>Server: set by the server handler; sends feature data to one player's client unasked (their apply hook runs).</summary>
     internal static Action<Hero, string, IList<string>>? Push { get; set; }
 

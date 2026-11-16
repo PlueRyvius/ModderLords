@@ -84,8 +84,8 @@ internal sealed class ClientStateBackupComponent : ITaomComponent
     {
         if (!TaomActions.IsCoopClient || _taom == null || DateTime.UtcNow < _next) return;
         _next = DateTime.UtcNow.AddSeconds(5);
-        var hero = Hero.MainHero;
-        if (hero == null || Campaign.Current == null) return;
+        var hero = TaomActions.MainHeroOrNull;
+        if (hero == null) return;
         if (Campaign.Current != _campaign)
         {
             _campaign = Campaign.Current;
