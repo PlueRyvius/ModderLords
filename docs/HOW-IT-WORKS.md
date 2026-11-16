@@ -106,6 +106,8 @@ ModderLords adds its compat module right after it, and installs it on players' g
 
 ## The Host tab
 
+- **World creation progress**: when a launch has to generate its world first (TAOM, or the generate box), a bar
+  beside the status line follows it, timed from this profile's last creation.
 - **Campaign time**: Pause, 1x and 2x buttons that work while the server runs. **Pause while a player is joining**
   holds the world still from the moment someone connects until they reach the map, then goes back to the speed it
   ran at.
@@ -189,8 +191,11 @@ what works, what to turn on and what does not work. Mods you have installed are 
   game's "Mod change detected" box after the mod set changes. ModderLords does what pressing OK would have done
   before the game starts. [How](#your-own-game)
 - **Languages**: English and Simplified Chinese.
-- **Coop version**: built and tested against Bannerlord Coop 0.1.7. Coop 0.1.7 syncs town stashes and the inventory
-  screen's trades itself, so ModderLords leaves those to it.
+- **Coop version**: built and tested against Bannerlord Coop 0.1.7 on Bannerlord v1.4.8. Coop 0.1.7 syncs town
+  stashes and the inventory screen's trades itself, so ModderLords leaves those to it. It does not run on v1.5.7: a
+  banner says so when the installed Coop makes calls the installed game no longer has, since then nobody on that
+  game version can join (the server itself runs).
+- **Bannerlord v1.5.7**: the "Mod change detected" box stays away there too (v1.5.7 changed the file it reads).
 
 ---
 
@@ -326,7 +331,8 @@ On top of that channel each supported mod has its own layer:
 
 - **TAOM**: world creation for TAOM's map, a joining player's culture, race and career applied on the server, careers,
   special resources, the refuge, field camps and commissions, supply lines, siege defence, and the party components
-  TAOM adds.
+  TAOM adds. A supply caravan's route is the straight line to the player: TAOM's map pathfinding with region switch
+  costs crashes the server natively, so it is never called. Orders whose owner is offline wait for them.
 - **Living Economy**: the economy runs only on the server, and each player's actions and treaties run there as that
   player, with the state mirrored back. All of it lives in the standalone module `coop-compat/BetterEconomyCoopCompat`,
   messages included: its records and players' clicks can't travel any other way, so it has its own versioned messages
@@ -441,12 +447,20 @@ suite's steps on each side (give an item, enter a town, use the stash, compare b
   copies ModderLords picked (by fingerprint), no mod showed an error on screen, and in Coop a player's hero reads the
   same on both sides.
 - **Single player** runs leave Coop out and make a world by code; **Coop** runs need a test world, so a real campaign
-  is never changed.
+  is never changed. A profile whose world ModderLords generates has one of its own, generated once and copied fresh
+  for every run.
+- **Before launching**, every DLL the launch loads is read (metadata only) and each call into the game is checked
+  against the installed version. The same check gives the Coop and game version banner.
+- **Crashes** end a run at once. The crash prompt is answered No; the logs, and the server's own .NET dump, are kept
+  in the run folder.
+- **Mod releases**: `--package` checks a mod's zip and tests the unpacked copy; upgrade worlds kept from a mod's
+  released versions check that old saves still load.
 - **Suites share a world where they can.** The built-in Coop checks each read a value before they change it, so they
   run one after another on the same world, in one launch of the server and the game. A suite that needs a fresh world
   costs a launch of its own.
 
-Each run leaves a report, evidence and each side's logs in a run folder. Test mode is off unless the launch switches
+Each run leaves a report, evidence and each side's logs in a run folder; the newest 50 are kept, and a crash dump
+for a week. Test mode is off unless the launch switches
 it on. [INGAME-TEST-HARNESS.md](INGAME-TEST-HARNESS.md) has the details.
 
 ## Releases and updates

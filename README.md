@@ -78,8 +78,8 @@ inside that workshop item and ModderLords finds it automatically.
    *Starting a new TAOM campaign:* select the TAOM, TAOM_Map and LOTRLOME_Armory modules and leave the save name
    empty (TAOM.Dependencies comes along on its own as a declared dependency — you do not have to tick it). The
    launcher prepares the server-safe files in its private data folder, creates a unique campaign, and then starts the
-   server; creating the world takes about three minutes before hosting begins, and the Console tab shows its progress
-   as `worldcreate: phase=...` lines. If you already have a TAOM save, select it instead; **Import client save** is
+   server; creating the world takes about three minutes before hosting begins. A progress bar beside the status line
+   follows it (timed from this profile's last creation), and the Console tab shows `worldcreate: phase=...` lines. If you already have a TAOM save, select it instead; **Import client save** is
    available when the save only exists in Bannerlord's own save folder.
 4. **Server tab**: set a password if you want one, leave the join port at 4200 (forward UDP 4200 on your router for
    direct connections; Steam joins need no forwarding).
@@ -218,6 +218,9 @@ about the players' game, which is the copy the host is handing out.
   mods and versions), plus a "check my client" button that compares this PC's Bannerlord launcher selection to the server.
 - **Version drift banner**: if a mod updated since your last launch, you are told players must update and the server
   needs a restart.
+- **Coop and game version check**: if the installed Coop makes calls the installed game no longer has (Coop 0.1.7 on
+  Bannerlord v1.5.7), a banner and the launch messages say that players on that game version cannot join. Keep the
+  game on the version Coop supports (Steam: Bannerlord, Properties, Betas) until Coop is updated.
 - **Safety**: the server is tied to the launcher, so it can never linger headless if the launcher closes; errors are
   logged instead of crashing the app.
 - **Server guards** (the bundled `DedicatedServer.ModderLordsCompat` module): single-player mods that open inquiries or
@@ -238,7 +241,8 @@ To play with mods:
 To host a coop server, additionally:
 
 - **Bannerlord Coop** subscribed on the Steam Workshop (item 3770450698). Its dedicated server lives inside that
-  workshop item; ModderLords finds it automatically. ModderLords 1.8.0 is built and tested against Coop 0.1.7.
+  workshop item; ModderLords finds it automatically. ModderLords 1.9.0 is built and tested against Coop 0.1.7 on
+  Bannerlord v1.4.8. Coop 0.1.7 does not run on v1.5.7.
 - Everyone who joins needs the same community mods and versions enabled in their own Bannerlord launcher, and the War
   Sails DLC disabled. Use the Share tab to hand them the list.
 
@@ -632,17 +636,25 @@ picked, no mod showed an error on screen, and in Coop the server and your game a
 
 - **Single player** starts just the game, with ModderLords.Compat added and Coop left out, and makes a world by code
   each run (or loads the **Test world** you pick). **Coop** also starts the server and joins it, and needs a test
-  world: Coop checks change the world they run on, so your own campaign is never used. The built-in checks run one
-  after another on one world, so a Coop run starts the server and the game once.
+  world: Coop checks change the world they run on, so your own campaign is never used. A profile whose world
+  ModderLords generates (TAOM, or **Generate a new world with the active mods**) gets one of its own: the first run
+  generates it (several minutes), and every run starts from a fresh copy. It is made again when the profile's mods
+  change. The built-in checks run one after another on one world, so a Coop run starts the server and the game once.
+- **Before the game starts**, every mod's calls into the game are checked against the installed version; a call the
+  game no longer has stops the run there, naming it, instead of crashing the game.
+- **A crash** ends the run at once: the game's crash prompt is answered No, and the crashed side's logs (and, for the
+  server, a .NET dump that names the failing mod call) go into the run folder's `crash\` folder.
 - **Run tests** uses the profile as saved; it refuses while the Server tab's server runs (Coop) or Bannerlord is open.
   The game opens in a small window behind your other windows and keeps running there, so you can go on using the PC;
   its display settings are put back afterwards. **Minimize the game** runs it minimized instead, which is also faster.
 - After a run: a pass or fail per suite, each step with its message, and the run's log. **Open run folder** shows the
   report and the evidence (screenshots, logs, what each game saw); **Copy report** puts the report on the clipboard.
-- Test worlds are saves you put in `%LOCALAPPDATA%\ModderLords\test-worlds\`.
+- Test worlds are saves you put in `%LOCALAPPDATA%\ModderLords\test-worlds\`. The newest 50 run folders are kept,
+  and a crash dump for 7 days.
 
 From a command line: `ModderLords.Cli test --profile NAME --modules stash,sync [--single-player]`, and
-`test --list` for what exists. Writing new checks: `docs/WRITING-TEST-MODULES.md`; to send someone the links,
+`test --list` for what exists. Mods with their own modules: Retinues, Modular Smithing 2 and TAOM (Supply Lines).
+`test --package <zip>` checks a mod's release zip and runs its modules against the zip's contents. Writing new checks: `docs/WRITING-TEST-MODULES.md`; to send someone the links,
 `docs/WRITING-TESTS-LINKS.md`.
 
 ### Smoke test *(Host mode)*

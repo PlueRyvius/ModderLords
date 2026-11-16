@@ -36,7 +36,8 @@
         "Leave LOTRLOME_Armory off the server, and do not use TAOM.CoopCompat (see their entries)."
       ],
       "limits": [
-        "Not available in co-op: enlisting under a lord, and TAOM's hero picker in character creation. Both say so in the game."
+        "Not available in co-op: enlisting under a lord, and TAOM's hero picker in character creation. Both say so in the game.",
+        "A supply caravan travels and is drawn in a straight line to the player (TAOM's route search crashes the server), and an order waits while its owner is offline."
       ]
     },
     {
