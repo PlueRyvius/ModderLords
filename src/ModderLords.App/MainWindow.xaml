@@ -88,9 +88,18 @@
                     <Button Content="{l:T 'Re-sync junctions'}" Command="{Binding Host.ResyncCommand}" Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}"
                             ToolTip="{l:T 'Recreate the links under engine\\Modules (after a workshop update or a Steam re-download of the server)'}" />
                 </WrapPanel>
-                <TextBlock Text="{Binding Host.CreationProgressText}" VerticalAlignment="Center" Margin="8,0" FontStyle="Italic"
-                           Foreground="{DynamicResource MutedForeground}" TextWrapping="NoWrap"
-                           Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0"
+                            Visibility="{Binding IsHost, Converter={StaticResource BoolToVis}}">
+                    <!-- World creation: each reported phase is a mark, paced by this profile's last creation. -->
+                    <ProgressBar Width="160" Height="10" Minimum="0" Maximum="100" Margin="0,0,8,0" VerticalAlignment="Center"
+                                 Value="{Binding Host.CreationProgressValue, Mode=OneWay}"
+                                 Foreground="{DynamicResource SelectionBackground}" Background="{DynamicResource ControlBackground}"
+                                 BorderBrush="{DynamicResource ControlBorder}"
+                                 Visibility="{Binding Host.ShowCreationProgress, Converter={StaticResource BoolToVis}}"
+                                 ToolTip="{l:T 'Each step of world creation moves the bar to its mark; between steps it fills at the pace of the last world creation for this profile.'}" />
+                    <TextBlock Text="{Binding Host.CreationProgressText}" VerticalAlignment="Center" FontStyle="Italic"
+                               Foreground="{DynamicResource MutedForeground}" TextWrapping="NoWrap" />
+                </StackPanel>
             </DockPanel>
         </Border>
 
