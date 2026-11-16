@@ -79,8 +79,8 @@ internal sealed class SpecialResourceSyncComponent : ITaomComponent
     {
         if (!TaomActions.IsCoopClient || _getAll == null || DateTime.UtcNow < _nextReport) return;
         _nextReport = DateTime.UtcNow.AddSeconds(3);
-        var hero = Hero.MainHero;
-        if (hero == null || Campaign.Current == null) return;
+        var hero = TaomActions.MainHeroOrNull;
+        if (hero == null) return;
         var balances = BalancesFor(hero.StringId);
         var canonical = string.Join("|", balances);
         if (balances.Count == 0 || canonical == _lastReported) return;

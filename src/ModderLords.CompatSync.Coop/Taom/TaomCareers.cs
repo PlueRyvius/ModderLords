@@ -94,8 +94,8 @@ internal sealed class CareerSyncComponent : ITaomComponent
     {
         if (!TaomActions.IsCoopClient || _getAll == null || DateTime.UtcNow < _nextReport) return;
         _nextReport = DateTime.UtcNow.AddSeconds(3);
-        var hero = Hero.MainHero;
-        if (hero == null || Campaign.Current == null) return;
+        var hero = TaomActions.MainHeroOrNull;
+        if (hero == null) return;
         var record = RecordFor(hero.StringId);
         if (record == null) return;
         var canonical = string.Join("|", record);

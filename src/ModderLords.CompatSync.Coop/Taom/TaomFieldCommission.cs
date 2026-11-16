@@ -183,7 +183,7 @@ internal sealed class FieldCommissionComponent : ITaomComponent
     internal static void ClientTick()
     {
         if (!TaomActions.IsCoopClient || _tracked == null || _onStarted == null || _endBattle == null) return;
-        var party = MobileParty.MainParty;
+        var party = TaomActions.MainPartyOrNull;
         if (party == null) return;
         var current = party.MapEvent;
         try
