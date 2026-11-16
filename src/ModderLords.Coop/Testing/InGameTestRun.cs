@@ -72,6 +72,7 @@ public static class InGameTestRun
         }
         // The game opens in a small window and keeps running unfocused, so the PC stays usable; the player's settings
         // files are put back byte for byte at the end, however the run ends.
+        foreach (var note in TestRunRetention.Prune(Path.Combine(ProfileStore.RootDir, "tests"), DateTimeOffset.Now)) say("[ModderLords] " + note);
         var settings = TestRunGameSettings.Apply(options.GameConfigsDir ?? TestRunGameSettings.DefaultConfigsDir, out var applied);
         foreach (var note in applied) say("[ModderLords] " + note);
         try { return await Run(options, say, cancel); }
