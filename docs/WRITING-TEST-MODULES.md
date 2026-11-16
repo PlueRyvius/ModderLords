@@ -57,10 +57,14 @@ ModderLords.Cli test --profile "My Host" --suite C:\scratch\try-this.json
 - **A one-off suite file** (`--suite <path>`) is the quickest way to try a step before giving it a home in a module.
 - **Single player** takes about a minute (it creates a world by code each run). **Coop** takes a few minutes per launch
   (shared suites all run in one) and needs a Host profile, the dedicated server, and Coop's automatic join (no server password).
+  A Coop profile whose world has to be generated (TAOM, or the Host tab's "generate the world" box) and has no save
+  yet gets one first, as the Host tab does: the profile's own save name, or `mltest-world-<profile>` when it names
+  none, kept and loaded by later runs. That first run takes several minutes more.
 - **The PC stays usable during a run:** the game opens in a 1280x720 window, is put back behind whatever window had
   the focus each time it takes it, and keeps running there (`--minimized` minimizes it instead). Its settings files
-  are put back afterwards. A message box from the game (a crash, a prompt the harness does not know yet) is left in
-  front, since it waits for a person. Close any running Bannerlord first: a run refuses to start beside one.
+  are put back afterwards. A message box from the game that the harness does not know yet is left in front, since it
+  waits for a person. The crash prompt is the exception: the run answers it No, ends, and keeps the crash logs (and in
+  Coop the server's .NET dump) in the run folder's `crash\`. Close any running Bannerlord first: a run refuses to start beside one.
 - **Before the game starts,** every DLL the launch loads, your step DLL included, is checked for calls into the game
   that the installed version no longer has. A break stops the run there, naming the call, instead of crashing the
   game. `test --profile NAME --api-check` runs only this check; `--skip-api-check` launches anyway.
