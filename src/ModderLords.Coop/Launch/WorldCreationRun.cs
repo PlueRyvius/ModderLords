@@ -27,6 +27,16 @@ public static class WorldCreationRun
     }
 
     /// <summary>
+    /// Whether <paramref name="profile"/>'s world is one ModderLords generates when its save is missing: TAOM with its
+    /// complete recipe, or any other mod set with the Host tab's tick box.
+    /// </summary>
+    public static bool Generates(Profile profile)
+    {
+        var ids = profile.EnabledMods.Select(m => m.Id).ToList();
+        return TaomLaunchPolicy.IsTaom(ids) ? TaomLaunchPolicy.HasCompleteRecipe(ids) : profile.GenerateWorldWithActiveMods;
+    }
+
+    /// <summary>
     /// Whether launching <paramref name="profile"/> must first generate its campaign. A named save that exists is a
     /// campaign to load, and nothing is generated over it. An empty save name gets <paramref name="newSaveName"/>
     /// (written into <paramref name="profile"/>; the caller decides whether to keep it). False also when TAOM's recipe

@@ -80,13 +80,16 @@ public static class SavePreparer
     ///
     /// Unlike <see cref="EnsureExists"/> this is an explicit act, so it <b>does</b> replace an existing save when told
     /// to — but never silently: <paramref name="overwrite"/> has to be asked for, and the existing file is kept as a
-    /// .replaced-&lt;stamp&gt; sibling rather than destroyed.
+    /// .replaced-&lt;stamp&gt; sibling rather than destroyed. A test run's fresh copy of a test world, made again every
+    /// run, passes <paramref name="testCopy"/>: the old copy is deleted, and the world may be a server's own save (a
+    /// generated test world is), so server-only modules in its header are expected.
     ///
     /// Coop's session file (<see cref="SessionPath"/>) travels with the save. Reported 2026-10-11 by a host who moved
     /// a world from the in-game Coop host to the dedicated server: only the .sav was copied, so the players' characters
     /// stood in the world unowned until the "Players" list was pasted back by hand.
     /// </summary>
-    public static ImportResult ImportFrom(string clientSavePath, ServerPaths paths, string saveName, bool overwrite = false)
+    public static ImportResult ImportFrom(string clientSavePath, ServerPaths paths, string saveName, bool overwrite = false,
+        bool testCopy = false)
     {
         ValidateSaveName(saveName);
         if (!File.Exists(clientSavePath)) throw new FileNotFoundException($"No save at '{clientSavePath}'.", clientSavePath);
@@ -101,7 +104,7 @@ public static class SavePreparer
             if (!header.ModuleIds.Any(id => ClientManifest.CoopClientModuleIds.Contains(id)))
                 warnings.Add("the save does not list a Coop module, so it was made by a client that was not running Bannerlord Coop; " +
                     "the world may not be coop-compatible");
-            warnings.AddRange(header.ModuleIds.Where(ClientManifest.IsServerOnly)
+            if (!testCopy) warnings.AddRange(header.ModuleIds.Where(ClientManifest.IsServerOnly)
                 .Select(id => $"the save lists the server-only module {id}, which is unexpected for a client save"));
         }
 
@@ -112,7 +115,8 @@ public static class SavePreparer
 
         Directory.CreateDirectory(paths.SavesDir);
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        if (overwrote)
+        if (overwrote && testCopy) File.Delete(target);
+        else if (overwrote)
         {
             var kept = target + ".replaced-" + stamp;
             File.Move(target, kept);
@@ -121,7 +125,8 @@ public static class SavePreparer
         // A session file already under this name belongs to the world being replaced, or to one deleted earlier.
         // Left in place it would hand the new world's players the old world's characters.
         var targetSession = SessionPath(target);
-        if (File.Exists(targetSession)) File.Move(targetSession, targetSession + ".replaced-" + stamp);
+        if (File.Exists(targetSession) && testCopy) File.Delete(targetSession);
+        else if (File.Exists(targetSession)) File.Move(targetSession, targetSession + ".replaced-" + stamp);
 
         // Same write-then-move as EnsureExists: a save half-copied over is worse than one that is missing.
         var tmp = target + ".modderlords-tmp";

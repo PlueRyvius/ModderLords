@@ -23,6 +23,8 @@ public sealed record InGameTestOptions
     public bool WithOthers { get; init; }
     /// <summary>A test world (a name under test-worlds), copied fresh for every launch; null for the profile's save.</summary>
     public string? World { get; init; }
+    /// <summary>Generate the profile's test world again even when the kept one still fits (ProfileTestWorld).</summary>
+    public bool NewWorld { get; init; }
     public bool KeepClient { get; init; }
     public bool KeepOpenOnFail { get; init; }
     public bool KeepServer { get; init; }
@@ -417,43 +419,58 @@ public static class InGameTestRun
 
         // Every run starts from the same world, copied fresh over the last run's copy.
         var world = options.World ?? testPlan.World;
+
+        // A profile whose world is generated (TAOM, or the Host tab's tick box) gets a test world of its own, generated
+        // once with the Host tab's code and kept under test-worlds; from then on it is a named world like any other.
+        // The profile's own save is left alone.
+        if (world is null && WorldCreationRun.Generates(profile))
+        {
+            world = ProfileTestWorld.Name(profile.Name);
+            var mods = profile.EnabledMods.Select(m => m.Id).ToList();
+            if (ProfileTestWorld.Stale(TestSuites.WorldsDir, world, mods, options.NewWorld) is { } why)
+            {
+                var generated = "mltest-" + world;
+                say($"[ModderLords] {why}: generating '{world}' with this profile's mods, as the Host tab does; a large mod set takes several minutes");
+                try
+                {
+                    // Creation only runs when the save is missing; this name is the harness's own copy.
+                    foreach (var file in new[] { SavePreparer.SavePath(paths, generated), SavePreparer.SessionPath(SavePreparer.SavePath(paths, generated)) })
+                        if (File.Exists(file)) File.Delete(file);
+                    profile.SaveName = generated;
+                    var creating = LaunchSession.Prepare(profile, allowWorldCreation: true);
+                    foreach (var m in creating.Messages) say("[ModderLords] " + m);
+                    await WorldCreationRun.RunAsync(creating, generated, profile.Server, Path.Combine(ProfileStore.RootDir, "logs"),
+                        m => say("[ModderLords] " + m),
+                        new WorldCreationRun.Hooks
+                        {
+                            Line = line =>
+                            {
+                                if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase)) say("[ModderLords] " + line.Text.Trim());
+                            },
+                        }, cancel);
+                    var kept = ProfileTestWorld.Keep(SavePreparer.SavePath(paths, generated), TestSuites.WorldsDir, world, mods);
+                    say($"[ModderLords] test world kept -> {kept}");
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+                {
+                    return Stop("could not generate the test world: " + ex.Message);
+                }
+            }
+        }
+
         if (world is not null)
         {
             var worldFile = TestSuites.WorldPath(world);
             if (!File.Exists(worldFile)) return Stop($"test world not found: {worldFile} (put a .sav there, with its co-op session file beside it)");
             try
             {
-                var imported = SavePreparer.ImportFrom(worldFile, paths, "mltest-" + world, overwrite: true);
+                // The last run's copy is only a copy: replaced, not kept beside it.
+                var imported = SavePreparer.ImportFrom(worldFile, paths, "mltest-" + world, overwrite: true, testCopy: true);
                 foreach (var w in imported.Warnings) say("[ModderLords] WARNING " + w);
                 say($"[ModderLords] world {world} copied fresh -> {imported.SavePath}");
             }
             catch (Exception ex) { return Stop("could not copy the test world: " + ex.Message); }
             profile.SaveName = "mltest-" + world;
-        }
-
-        // A profile whose world has to be generated (TAOM, or the Host tab's tick box) and is not on disk yet gets it
-        // generated first, as the Host tab does. With no save named, the run uses one test world per profile, made by
-        // the first run and loaded by the next ones; the profile itself is not changed.
-        else if (WorldCreationRun.Needed(profile, name => SavePreparer.Exists(paths, name), _ => TestWorldSaveName(profile.Name),
-                     m => say("[ModderLords] " + m)))
-        {
-            say($"[ModderLords] generating the world '{profile.SaveName}' with this profile's mods, as the Host tab does; a large mod set takes several minutes");
-            try
-            {
-                var creating = LaunchSession.Prepare(profile, allowWorldCreation: true);
-                foreach (var m in creating.Messages) say("[ModderLords] " + m);
-                await WorldCreationRun.RunAsync(creating, profile.SaveName, profile.Server, Path.Combine(ProfileStore.RootDir, "logs"),
-                    m => say("[ModderLords] " + m),
-                    new WorldCreationRun.Hooks
-                    {
-                        Line = line =>
-                        {
-                            if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase)) say("[ModderLords] " + line.Text.Trim());
-                        },
-                    }, cancel);
-            }
-            catch (InvalidOperationException ex) { return Stop("could not generate the world: " + ex.Message); }
-            say($"[ModderLords] world '{profile.SaveName}' saved");
         }
 
         LaunchSession.Prepared prepared;
@@ -640,12 +657,5 @@ public static class InGameTestRun
             try { await game.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token); } catch (OperationCanceledException) { }
         }
         return (testReport.Passed ? 0 : 1, testReport, channel.Folder, null);
-    }
-
-    /// <summary>The save a Coop run generates for a profile that names none: one per profile, kept between runs.</summary>
-    public static string TestWorldSaveName(string profileName)
-    {
-        var slug = new string(profileName.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
-        return "mltest-world-" + (slug.Length == 0 ? "profile" : slug);
     }
 }

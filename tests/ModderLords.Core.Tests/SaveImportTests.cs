@@ -84,6 +84,22 @@ public class SaveImportTests : IDisposable
     }
 
     [Fact]
+    public void A_test_runs_fresh_copy_replaces_the_last_one_without_keeping_it_or_warning_about_a_server_save()
+    {
+        // A test run copies its world fresh every run; keeping each replaced copy left 56 of them beside one world.
+        // A generated test world is the server's own save, so it lists server-only modules.
+        var first = ClientSave("First", "Native;Coop;DedicatedServer.Windows");
+        File.WriteAllText(Path.ChangeExtension(first, ".json"), "{\"Players\":[]}");
+        SavePreparer.ImportFrom(first, _paths, "mltest-world");
+        var r = SavePreparer.ImportFrom(first, _paths, "mltest-world", overwrite: true, testCopy: true);
+
+        Assert.True(r.Overwrote);
+        Assert.Empty(r.Warnings);
+        Assert.Empty(Directory.GetFiles(_paths.SavesDir, "*.replaced-*"));
+        Assert.True(r.SessionCopied);
+    }
+
+    [Fact]
     public void The_coop_session_file_beside_the_save_comes_with_it()
     {
         // Reported 2026-10-11: a world moved from the in-game Coop host kept its characters and lost their owners,

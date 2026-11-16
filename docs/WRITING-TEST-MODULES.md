@@ -57,9 +57,10 @@ ModderLords.Cli test --profile "My Host" --suite C:\scratch\try-this.json
 - **A one-off suite file** (`--suite <path>`) is the quickest way to try a step before giving it a home in a module.
 - **Single player** takes about a minute (it creates a world by code each run). **Coop** takes a few minutes per launch
   (shared suites all run in one) and needs a Host profile, the dedicated server, and Coop's automatic join (no server password).
-  A Coop profile whose world has to be generated (TAOM, or the Host tab's "generate the world" box) and has no save
-  yet gets one first, as the Host tab does: the profile's own save name, or `mltest-world-<profile>` when it names
-  none, kept and loaded by later runs. That first run takes several minutes more.
+  A Coop profile whose world ModderLords generates (TAOM, or the Host tab's "generate the world" box) gets a test
+  world of its own, `test-worlds\profile-<profile>.sav`, and every run starts from a fresh copy of it; the profile's
+  own save is left alone. The first run generates it, as the Host tab does, which takes several minutes more; so does
+  a run after the profile's mods change, or with `--new-world`.
 - **The PC stays usable during a run:** the game opens in a 1280x720 window, is put back behind whatever window had
   the focus each time it takes it, and keeps running there (`--minimized` minimizes it instead). Its settings files
   are put back afterwards. A message box from the game that the harness does not know yet is left in front, since it

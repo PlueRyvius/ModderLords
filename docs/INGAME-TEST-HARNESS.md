@@ -208,12 +208,16 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 - Worlds are not reproducible (world generation is random), so each is created once and kept; the history records
   which cached world a result came from, since results compare only on the same world.
 - A named world (`"world": "vanilla-1"`, `--world`) still works as in v1, and skips the cache.
-- **Coop worlds a profile must generate** (built 2026-11-15): with no named world, a Coop run uses the profile's save.
-  When the profile's world has to be generated (TAOM, or the Host tab's "generate the world" box) and that save is
-  not on disk, the run generates it first with the Host tab's own code (`WorldCreationRun`), then serves it. A profile
-  that names no save gets `mltest-world-<profile>`, kept and loaded by later runs; the profile itself is not changed.
-  The run prints the creation's `worldcreate:` lines as it goes. This is not the per-mod-set cache above, which Coop
-  still lacks: tests change that world, and it is not copied fresh.
+- **A generating profile's own test world** (built 2026-11-16; `ProfileTestWorld`): a Coop run with no named world,
+  on a profile whose world ModderLords generates (TAOM with its full recipe, or the Host tab's "generate the world"
+  box), runs on a test world kept for that profile, `test-worlds\profile-<profile>.sav`. The first run generates it
+  with the Host tab's own code (`WorldCreationRun`, printing its `worldcreate:` lines) under the server's
+  `mltest-profile-<profile>`, and keeps that save, its Coop session file and a note of the enabled mods
+  (`.mods.txt`, one id per line in load order). Every run then copies it fresh, like any named world, so each starts
+  from the same world. It is generated again when the enabled mods or their order change, when the note is missing,
+  or with `--new-world`. The profile's own save is never used by a test run: tests change the world they run on.
+  This is a per-profile slice of the per-mod-set cache above; a mod updated in place keeps its world (results then
+  compare on the install fingerprints, decision 23).
 - **Upgrade worlds** (decision 27): `<data>\test-worlds\upgrade-<ModId>-<version>.sav`, one kept from each released
   version of a mod. An upgrade suite (`"world": "upgrade"`, `continuity`) runs once on each, with the new build, and
   checks that the mod's records survived the load. **Built for single player 2026-11-13:** the run expands an
@@ -264,7 +268,7 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    2. The Tests tab in the app, running the same harness, with live progress and per-suite results. **Built
       2026-11-08**: the run itself moved from the CLI into `ModderLords.Coop.Testing.InGameTestRun`, which the CLI's
       `test` and the tab both call. The tab runs the profile as saved, refuses Coop without a test world (Coop steps
-      change the world) and while the Server tab's server runs.
+      change the world; a generating profile has its own, see Worlds) and while the Server tab's server runs.
    3. The first module for a mod: `retinues` (Retinues and its Coop fork), with its own DLL and `Retinues.health`.
       **Built 2026-11-08**: the `editor` suite (both) drives the troop editor edit by edit and compares the troops
       on both sides. It set up the build wiring (`HasRetinuesAssemblies` in `Directory.Build.props`).
@@ -406,12 +410,14 @@ no longer has (among them `Campaign(CampaignGameMode)`) and `Missions.dll` 2, so
 ## Running it
 
 ```powershell
-ModderLords.Cli test --profile "My Host" --suite stash [--world NAME] [--keep-client] [--keep-server]
+ModderLords.Cli test --profile "My Host" --suite stash [--world NAME | --new-world] [--keep-client] [--keep-server]
 ```
 
 1. The suite is loaded (built-in name, or a path to a `.json` file) and checked; a mistake stops here.
 2. With a world (`--world`, or the suite's `"world"`), `<data>\test-worlds\NAME.sav` (and its Coop session file) is
-   copied over the server's `mltest-NAME` save, and the server loads that. Without one, the profile's save is used.
+   copied over the server's `mltest-NAME` save (the last run's copy is deleted, not kept), and the server loads that.
+   Without one, a profile whose world ModderLords generates uses its own test world (Worlds, above; `--new-world`
+   makes it again), and any other profile's save is used as it is.
 3. A run folder is created under `<data>\tests\`. The server is started with `MODDERLORDS_TEST_RUN` in its launch
    plan; the player's game with `/modderlords-test` (plus the smoke test's automatic join).
 4. Once the game is on the campaign map, the steps run in order. Then the game and server are closed.
