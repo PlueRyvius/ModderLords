@@ -311,9 +311,14 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 
 ### Transport: files in a run folder
 
-`%ProgramData%\ModderLords\tests\<runId>\`, one writer per file, append-only JSON Lines, readers tail by byte offset
+`<data>\tests\<runId>\` (`<data>` is ModderLords' data folder, `%LOCALAPPDATA%\ModderLords` by default), one writer per file, append-only JSON Lines, readers tail by byte offset
 (as `LogTail` does). No port, no firewall prompt, no listener thread in the game; a crash leaves what happened on
 disk. Polling costs nothing measurable; a handoff takes under a second.
+
+Run folders are pruned at the start of every run (`TestRunRetention`, 2026-11-16): the newest 50 are kept and older
+ones deleted, and a crash dump more than 7 days old is deleted from the folders kept, leaving its logs and reports. A
+TAOM server's dump is about 2 GB, and is read once, when the crash is looked into. Only folders named as runs
+(`yyyyMMdd-HHmmss-...`) are touched; copy a run elsewhere to keep it.
 
 ### The game runs behind other work
 
