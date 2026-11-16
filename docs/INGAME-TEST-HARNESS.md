@@ -206,6 +206,12 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
 - Worlds are not reproducible (world generation is random), so each is created once and kept; the history records
   which cached world a result came from, since results compare only on the same world.
 - A named world (`"world": "vanilla-1"`, `--world`) still works as in v1, and skips the cache.
+- **Coop worlds a profile must generate** (built 2026-11-15): with no named world, a Coop run uses the profile's save.
+  When the profile's world has to be generated (TAOM, or the Host tab's "generate the world" box) and that save is
+  not on disk, the run generates it first with the Host tab's own code (`WorldCreationRun`), then serves it. A profile
+  that names no save gets `mltest-world-<profile>`, kept and loaded by later runs; the profile itself is not changed.
+  The run prints the creation's `worldcreate:` lines as it goes. This is not the per-mod-set cache above, which Coop
+  still lacks: tests change that world, and it is not copied fresh.
 - **Upgrade worlds** (decision 27): `<data>\test-worlds\upgrade-<ModId>-<version>.sav`, one kept from each released
   version of a mod. An upgrade suite (`"world": "upgrade"`, `continuity`) runs once on each, with the new build, and
   checks that the mod's records survived the load. **Built for single player 2026-11-13:** the run expands an
@@ -342,10 +348,28 @@ run would wait out the step (15 minutes to make a world). `CrashWatch` checks ev
 - the watchdog's log, `...\logs\watchdog_log_<pid>.txt`: "Crash occurred" is written the moment it catches one;
 - a new crash report folder, if someone did answer: its watchdog log names the exception (MissingMethodException…).
 
-The step waiting fails with "the game crashed during: <the engine's last log line>". The crashed process's watchdog
-and rgl logs are copied into the run folder's `crash\`, and the game is closed with its dialog, even with
-`--keep-client` (no dump is written then). Logs that already said "Crash occurred" when the run started are earlier
-runs' and are ignored.
+The step waiting fails with "<side> crashed (<the exception, once known>) during: <the engine's last log line>; logs:
+<folder>", naming the side whose watchdog log it was (the server or the game; a run watches both). Logs that already said "Crash occurred" when the run
+started are earlier runs' and are ignored. Then (built 2026-11-15):
+
+- **The crash prompt is answered No** (`CrashPrompt`: the watchdog's `#32770` dialog asking to collect the necessary
+  files; it belongs to no game window, so it is found by its text). The maintainer's choice: Yes only adds the
+  watchdog's own report and native dump, and the logs below, with the server's .NET dump, are enough. A No lets the
+  crashed process exit. It is answered even with `--keep-client`.
+- **Every crashed side's logs are copied** into the run folder's `crash\`: its watchdog and rgl logs, and any new
+  crash report folder's files.
+- **The server writes a .NET dump** (with heap) into `crash\server-<pid>.dmp`: the run sets `DOTNET_DbgEnableMiniDump`
+  on the server, and the dump's managed stacks name the failing mod call, which the watchdog log never does. Writing
+  one takes minutes (1.6 GB for a TAOM server took nearly 5), and anything that ends the process first cuts it short:
+  three empty dumps on 2026-11-15. So while the server's console says `[createdump] Writing` and not yet `successfully
+  written` (`ServerDump`, up to 10 minutes, and no longer than the server lives), the run waits before answering the
+  prompt or stopping the server, and steps fail at once with "the server crashed (its dump is being written to ...)"
+  instead of each waiting out its timeout. The engine also exits a crashed server about 0.1 s after the dump starts,
+  so ModderLords' startup hook holds the process in its exit handler until `createdump` finishes.
+- **A server that exits** ends the run at once too: the next step fails naming it, not after its timeout.
+
+Found reproducing a TAOM server crash (2026-11-15, the Supply Lines order): the dump showed the native map pathfinder
+call that crashed, which the logs alone did not.
 
 ### The mods' game calls are checked before the launch
 
