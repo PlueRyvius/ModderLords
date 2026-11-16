@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModderLords.App.Localization;
 using ModderLords.Coop.Testing;
+using ModderLords.Coop.Launch;
 using ModderLords.Core.Launch;
 using ModderLords.Core.Testing;
 
@@ -148,7 +149,8 @@ public partial class TestsViewModel : ObservableObject
         _result = null;
         // The run reads the profile from disk, as the CLI does: unsaved changes would test something else.
         if (_main.IsDirty) { Headline = Loc.T("Save the profile first: a test run uses the profile as saved."); return; }
-        if (!SinglePlayer && World.Length == 0)
+        // A profile whose world is generated gets a test world of its own (ProfileTestWorld); any other needs one picked.
+        if (!SinglePlayer && World.Length == 0 && !WorldCreationRun.Generates(_main.Profile))
         {
             Headline = Loc.T("Coop tests change the world they run on. Pick a test world (a copy is used each time), so your campaign is never touched.");
             return;

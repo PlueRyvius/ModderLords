@@ -61,10 +61,12 @@ public sealed class WorldCreationRunTests
         Assert.False(WorldCreationRun.Needed(With("t", false, "TAOM", "TAOM_Map"), _ => false, _ => "unused", _ => { }));
     }
 
-    [Theory]
-    [InlineData("TAOM-Test", "mltest-world-taom-test")]
-    [InlineData("My Host!", "mltest-world-my-host")]
-    [InlineData("!!", "mltest-world-profile")]
-    public void The_harness_names_one_test_world_per_profile(string profile, string expected) =>
-        Assert.Equal(expected, InGameTestRun.TestWorldSaveName(profile));
+    [Fact]
+    public void A_profile_generates_its_world_for_TAOM_with_its_recipe_or_with_the_tick_box()
+    {
+        Assert.True(WorldCreationRun.Generates(With("x", false, Taom)));
+        Assert.False(WorldCreationRun.Generates(With("x", false, "TAOM", "TAOM_Map")));
+        Assert.True(WorldCreationRun.Generates(With("x", true, "SomeMod")));
+        Assert.False(WorldCreationRun.Generates(With("x", false, "SomeMod")));
+    }
 }

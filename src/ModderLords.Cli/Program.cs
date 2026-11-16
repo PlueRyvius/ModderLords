@@ -23,7 +23,7 @@ using ModderLords.Coop.Config;
 //   import-save --from NAME|PATH [--as NAME] [--overwrite]
 //   smoke    --profile NAME [--save NAME] [--steady SECONDS] [--no-time] [--keep-client] [--keep-server]
 //   smoke    --attach --server-log PATH [--server-commands PATH] (--profile-file PATH | --profile NAME) [--join-host H] [--join-port N] [--steady SECONDS] [--no-time] [--keep-client]
-//   test     --profile NAME --suite NAME|PATH [--world NAME] [--keep-client] [--keep-server] [--minimized] [--skip-api-check] [--package ZIP [--package-version V]] | test --profile NAME --api-check [--single-player] | test --package ZIP --package-check
+//   test     --profile NAME --suite NAME|PATH [--world NAME | --new-world] [--keep-client] [--keep-server] [--minimized] [--skip-api-check] [--package ZIP [--package-version V]] | test --profile NAME --api-check [--single-player] | test --package ZIP --package-check
 //   authority --mod ID [--all] [--json] [--out PATH]
 //   trace-diff --mod ID --trace-server FILE --trace-client FILE [--coop-client-log FILE] [--all] [--json] [--out PATH]
 
@@ -46,7 +46,7 @@ if (!opts.TryGetValue("cmd", out var cmd))
     Console.WriteLine("commands: catalog | sync --mods Id[:Role],... [--remove-all] | launch [--mods ...] [--save NAME] [--port N] [--join-port N] [--region EU] [--dry-run] [--quiet-engine] [--stop-after S]");
     Console.WriteLine("          play --profile NAME|--profile-file PATH [--dry-run]   (start the player's own game with a profile's mods)");
     Console.WriteLine("          smoke --profile NAME [--save NAME] [--steady SECONDS] [--keep-client] [--keep-server]   (start the server, join it with this PC's game, report)");
-    Console.WriteLine("          test --profile NAME --suite NAME|PATH [--world NAME] [--keep-client] [--keep-server] [--minimized] [--skip-api-check] [--package ZIP [--package-version V]] | test --profile NAME --api-check [--single-player] | test --package ZIP --package-check   (run in-game checks on server + this PC's game; docs/INGAME-TEST-HARNESS.md)");
+    Console.WriteLine("          test --profile NAME --suite NAME|PATH [--world NAME | --new-world] [--keep-client] [--keep-server] [--minimized] [--skip-api-check] [--package ZIP [--package-version V]] | test --profile NAME --api-check [--single-player] | test --package ZIP --package-check   (run in-game checks on server + this PC's game; docs/INGAME-TEST-HARNESS.md)");
     Console.WriteLine("          analyze --profile NAME [--root DedicatedServer] [--json] [--cache-dir PATH]   (read-only operation analysis)");
     Console.WriteLine("          launch --create-world NAME [--create-world-timeout S] [--data-dir PATH] [--world-log PATH] [--bundle-root PATH]   (generate, save, exit)");
     Console.WriteLine("          saves | import-save --from NAME|PATH [--as NAME] [--overwrite]   (seed the server with a world the real game built)");
@@ -503,6 +503,7 @@ switch (cmd)
             KeepServer = opts.ContainsKey("keep-server"),
             Minimized = opts.ContainsKey("minimized"),
             SkipApiCheck = opts.ContainsKey("skip-api-check"),
+            NewWorld = opts.ContainsKey("new-world"),
             Package = opts.GetValueOrDefault("package"),
             PackageVersion = opts.GetValueOrDefault("package-version"),
         }, Console.WriteLine, testCancel.Token);
