@@ -48,10 +48,32 @@ public sealed class ModuleCatalog
     public IReadOnlyList<DiscoveredModule> Modules { get; }
     public IReadOnlyList<string> Problems { get; }
 
-    private ModuleCatalog(IReadOnlyList<DiscoveredModule> modules, IReadOnlyList<string> problems)
+    /// <summary>
+    /// Community mods found as real folders in the server's own engine\Modules. Another tool put them there (the
+    /// Coodsz Coop Server Tool installs its mod presets that way); the server package never ships them and
+    /// ModderLords only ever links mods in as junctions. They are not part of <see cref="Modules"/>: counted as stock,
+    /// every one went into the server's module list whatever the profile said, and Coop then refused every player
+    /// whose game did not load it (2026-11-18, "module 'Improved Garrisons' is required").
+    /// </summary>
+    public IReadOnlyList<DiscoveredModule> ForeignServerModules { get; }
+
+    private ModuleCatalog(IReadOnlyList<DiscoveredModule> modules, IReadOnlyList<string> problems, IReadOnlyList<DiscoveredModule> foreign)
     {
-        Modules = modules; Problems = problems;
+        Modules = modules; Problems = problems; ForeignServerModules = foreign;
     }
+
+    /// <summary>
+    /// True for a module the dedicated server package itself ships: the game's own modules, Coop, and the
+    /// <c>DedicatedServer.*</c> modules. Decided by id, not by the folder it sits in or the manifest's
+    /// <c>ModuleType</c> (see <see cref="OfficialModules"/>). <c>DedicatedServer.*</c> covers TaleWorlds'
+    /// DedicatedServer.Windows and the server-side tools of partner launchers (PARITY.md: Coop's join check ignores
+    /// those ids, so loading one never changes what a player must have).
+    /// </summary>
+    public static bool IsServerPackageModule(string id) =>
+        OfficialModules.IsGameModule(id)
+        || ModderLords.Core.Launch.CoopGameSupport.IsCoop(id)
+        || id.StartsWith("DedicatedServer.", StringComparison.OrdinalIgnoreCase)
+        || id.Equals("DedicatedCustomServerHelper", StringComparison.OrdinalIgnoreCase);
 
     public DiscoveredModule? Find(string id) => Modules.FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 
@@ -64,14 +86,31 @@ public sealed class ModuleCatalog
         var modules = new List<DiscoveredModule>();
         var problems = new List<string>();
 
-        ScanRoot(serverModulesRoot, ModuleSourceKind.ServerStock, modules, problems);
+        var server = new List<DiscoveredModule>();
+        ScanRoot(serverModulesRoot, ModuleSourceKind.ServerStock, server, problems);
+        var (stock, foreign) = SplitServerModules(server);
+        modules.AddRange(stock);
         if (gameRoot is not null) ScanRoot(Path.Combine(gameRoot, "Modules"), ModuleSourceKind.GameModules, modules, problems);
         foreach (var lib in steamLibraries)
             ScanRoot(Path.Combine(lib, "steamapps", "workshop", "content", BannerlordAppId.ToString()), ModuleSourceKind.Workshop, modules, problems);
         foreach (var root in customRoots) ScanRoot(root, ModuleSourceKind.Custom, modules, problems);
 
-        return new ModuleCatalog(modules, problems);
+        return new ModuleCatalog(modules, problems, foreign);
     }
+
+    /// <summary>The server folder's real module folders, split into what the server package ships and what it does not.</summary>
+    public static (IReadOnlyList<DiscoveredModule> Stock, IReadOnlyList<DiscoveredModule> Foreign) SplitServerModules(IEnumerable<DiscoveredModule> found)
+    {
+        var stock = new List<DiscoveredModule>();
+        var foreign = new List<DiscoveredModule>();
+        foreach (var m in found) (IsServerPackageModule(m.Id) ? stock : foreign).Add(m);
+        return (stock, foreign);
+    }
+
+    /// <summary>The launch line for a community mod another tool copied into the server's Modules folder.</summary>
+    public static string ForeignServerModuleNote(DiscoveredModule m) =>
+        $"server Modules folder: {m.FolderName} ({m.Id}) is a real folder another tool put there, not part of the server; " +
+        $"not loaded unless this profile enables {m.Id} ({m.FolderPath})";
 
     /// <summary>
     /// How far below a scan root a module may be buried. Mods are increasingly shipped as a <i>package</i> - a
