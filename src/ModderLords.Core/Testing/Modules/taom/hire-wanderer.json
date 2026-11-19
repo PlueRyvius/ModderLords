@@ -1,0 +1,29 @@
+{
+  // A player report (2026-11-18): playing TAOM in Coop on a ModderLords server, "every time someone tries to talk to a
+  // companion to hire them the game freezes and gets stuck". This suite hires a wanderer the way a player does: it
+  // talks to one, steps through the conversation, pays, and waits for the wanderer to join the player's clan and party.
+  // The conversation dump keeps every line and option, so a conversation that stops shows the state it stopped in.
+  //
+  // Found with it: TAOM's named companions (Aragorn and the rest) have no Hero.Template on any peer, and the game's
+  // wanderer introduction ("Tell me about yourself") throws on it. In single player TAOM marks them met, so the
+  // introduction never runs; a co-op player has not met them. The TAOM layer's wanderer-introduction component answers
+  // with the short introduction instead. wandererTemplates lists every wanderer's template on both sides.
+  "api": 2,
+  "name": "hire-wanderer",
+  "mode": "coop",
+  "description": "Coop: a player talks to one of TAOM's named companions (no wanderer template), asks about them, pays, and the companion joins their clan and party; the conversation closes on its own.",
+  "requires": [ { "id": "TAOM" } ],
+  "steps": [
+    { "id": "TAOM.health", "side": "server" },
+    { "id": "TAOM.health", "side": "client:1" },
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "taom.wandererTemplates", "side": "server", "continueOnFail": true },
+    { "id": "taom.wandererTemplates", "side": "client:1", "continueOnFail": true },
+    { "id": "hero.addGold", "side": "server", "as": "give", "args": { "heroName": "$me.heroName", "amount": 1000000 } },
+    { "id": "hero.gold", "side": "client:1", "args": { "expected": "$give.gold" } },
+    { "id": "taom.findWanderer", "side": "client:1", "as": "wanderer", "args": { "side": "same", "template": "none" } },
+    { "id": "taom.hireWanderer", "side": "client:1", "timeoutSeconds": 180, "args": { "heroId": "$wanderer.heroId" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
