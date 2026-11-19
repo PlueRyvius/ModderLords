@@ -43,11 +43,32 @@ internal static class FbLeave
     internal static bool LeaveSettlementPrefix()
     {
         if (_depth == 0 || !FourberieLayer.IsCoopClient || MobileParty.MainParty is not { } party) return true;
-        MessageBroker.Instance.Publish(party, new EndSettlementEncounterAttempted(party));
+        MessageBroker.Instance.Publish(party, NewLeaveRequest(party));
         _asked = true;
         _sent++;
         return false;
     }
+
+    // Coop 0.1.7's EndSettlementEncounterAttempted(MobileParty); later builds (the v1.5.7 nightlies) add an optional
+    // leave type, (MobileParty, SettlementLeaveType = Leave). Compiled against one, the other throws
+    // MissingMethodException, so the widest constructor whose extra parameters are all optional is called with defaults.
+    private static readonly ConstructorInfo? LeaveRequestCtor = typeof(EndSettlementEncounterAttempted).GetConstructors()
+        .Where(c => c.GetParameters() is { Length: > 0 } p && p[0].ParameterType == typeof(MobileParty) && p.Skip(1).All(x => x.IsOptional))
+        .OrderByDescending(c => c.GetParameters().Length)
+        .FirstOrDefault();
+
+    private static EndSettlementEncounterAttempted NewLeaveRequest(MobileParty party)
+    {
+        if (LeaveRequestCtor == null) throw new MissingMethodException("Coop's EndSettlementEncounterAttempted has no (MobileParty, ...) constructor");
+        var args = LeaveRequestCtor.GetParameters().Select((p, i) => i == 0 ? party : DefaultOf(p)).ToArray();
+        return (EndSettlementEncounterAttempted)LeaveRequestCtor.Invoke(args);
+    }
+
+    // An enum default can come back as its underlying number; Invoke wants the enum itself.
+    private static object? DefaultOf(ParameterInfo p) =>
+        p.ParameterType.IsEnum && p.DefaultValue != null && p.DefaultValue.GetType() != p.ParameterType
+            ? Enum.ToObject(p.ParameterType, p.DefaultValue)
+            : p.DefaultValue;
 
     /// <summary>Prefix on PlayerEncounter.Finish: the one after a leave the server was asked for is the server's to make.</summary>
     internal static bool FinishPrefix() => !(_asked && _depth > 0);
