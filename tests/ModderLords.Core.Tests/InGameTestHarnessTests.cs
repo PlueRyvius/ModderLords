@@ -89,6 +89,22 @@ public class TestPlanTests
     }
 
     [Fact]
+    public void A_mods_coop_adapters_are_found_beside_its_dlls()
+    {
+        var bin = Path.Combine(Path.GetTempPath(), "ml-adapters-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(bin);
+            foreach (var name in new[] { "Retinues.dll", "Retinues.Coop.dll", "ModderLords.CompatSync.Coop.dll", "Coop.dll", "CoopWarehouses.dll" })
+                File.WriteAllBytes(Path.Combine(bin, name), []);
+            Assert.Equal(["ModderLords.CompatSync.Coop.dll", "Retinues.Coop.dll"],
+                ModderLords.Coop.Testing.InGameTestRun.CoopAdapters(bin).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+            Assert.Empty(ModderLords.Coop.Testing.InGameTestRun.CoopAdapters(Path.Combine(bin, "missing")));
+        }
+        finally { if (Directory.Exists(bin)) Directory.Delete(bin, true); }
+    }
+
+    [Fact]
     public void Picking_modules_runs_only_their_suites_and_core()
     {
         var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);

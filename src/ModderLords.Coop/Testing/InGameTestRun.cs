@@ -276,14 +276,23 @@ public static class InGameTestRun
         // Only what the game loads: the DLLs each SubModule.xml names, and what they reference beside them. Framework
         // mods ship a DLL per game version (MCM's Bannerlord.MBOptionScreen.v1.2.12.dll, ...) and load the one that
         // fits at runtime; the others would all be reported.
-        var dlls = plan.SelectedModules.Where(m => !m.IsOfficial)
+        var mods = plan.SelectedModules.Where(m => !m.IsOfficial).ToList();
+        var dlls = mods
             .SelectMany(m => ApiCheck.LoadedDlls(m.ClientBin, m.Info.SubModules.Select(s => s.DLLName)))
             .Concat(extraDlls.Where(File.Exists)).ToList();
+        // A mod's Coop adapter (ModderLords.CompatSync.Coop, Retinues.Coop, CoopWarehouses.Coop) is loaded by name only
+        // once Coop is there, so nothing the SubModule.xml names references it. With Coop in the launch it runs too.
+        if (plan.SelectedModules.Any(m => CoopIds.Contains(m.Id)))
+            dlls.AddRange(mods.SelectMany(m => CoopAdapters(m.ClientBin)).Where(a => !dlls.Contains(a, StringComparer.OrdinalIgnoreCase)));
         checkedCount = dlls.Count;
         return ApiCheck.CheckAll(dlls, game)
             .Select(f => $"{Shorten(f.Dll, plan.SelectedModules)}: {string.Join("; ", f.Missing.Take(8))}{(f.Missing.Count > 8 ? $"; and {f.Missing.Count - 8} more" : "")}")
             .ToList();
     }
+
+    /// <summary>The DLLs in <paramref name="bin"/> named like a Coop adapter, "*.Coop.dll".</summary>
+    public static IEnumerable<string> CoopAdapters(string bin) =>
+        Directory.Exists(bin) ? Directory.EnumerateFiles(bin, "*.Coop.dll") : [];
 
     /// <summary>"ModId\X.dll" for a DLL in a selected module's folder; the full path otherwise.</summary>
     private static string Shorten(string dll, IEnumerable<Core.Modules.DiscoveredModule> modules) =>
