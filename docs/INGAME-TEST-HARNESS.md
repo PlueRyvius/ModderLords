@@ -417,6 +417,22 @@ second for 50 DLLs.
 Found on game v1.5.7 (2026-11-13), Coop launch of `!Modular`: Coop 0.1.7's `GameInterface.dll` makes 43 calls v1.5.7
 no longer has (among them `Campaign(CampaignGameMode)`) and `Missions.dll` 2, so Coop does not run on v1.5.7 yet.
 
+### The server's module list is checked before a Coop launch
+
+Coop refuses every player who does not load each community module the server loads. So before the server starts,
+`ServerModuleListCheck` compares the server's module list with the profile: every module on it must be one the
+dedicated server package ships (the game's own modules, Coop, `DedicatedServer.*`) or one the profile selected.
+Anything else stops the run there, naming the module. A module that another tool copied into the server's
+`engine\Modules` as a real folder is named as such, with its path.
+
+- Another tool's folders in the server's Modules folder are not loaded unless the profile selects that mod. Each
+  launch says one line per folder, so they show in the run's console either way.
+- `client-plan --profile NAME` prints the same check as `module check`, without starting anything.
+
+Found on 2026-11-18: the Coodsz Coop Server Tool had installed its mod preset into the server's Modules folder as real
+folders, three of them went into the server's list for a profile that had them off, and every join was refused with
+"module 'Improved Garrisons' is required".
+
 ## Running it
 
 ```powershell
