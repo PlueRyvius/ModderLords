@@ -55,6 +55,9 @@ public static class Steps
         InGameTests.Register("smithing.answerNotice", StepSide.Client, AnswerNotice);
         InGameTests.Register("smithing.designer", StepSide.Client, Designer);
         InGameTests.Register("smithing.smelt", StepSide.Client, Smelt);
+        InGameTests.Register("smithing.prepareFor", StepSide.Server, PrepareFor);
+        InGameTests.Register("smithing.coopCraft", StepSide.Client, CoopCraft);
+        InGameTests.Register("smithing.itemStats", StepSide.Any, ItemStats);
         QuietNotice();
     }
 
@@ -431,6 +434,138 @@ public static class Steps
         ctx.Dump("smelt", detail.ToString());
         ctx.Report("value", string.Join(", ", expected.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key} {kv.Value}")));
         ctx.Assert(problems.Count == 0, $"{item.StringId}: " + string.Join("; ", problems));
+    }
+
+    // ---- Coop: a player's craft made by the server -------------------------------------------------------------
+
+    /// <summary>The recipe a craft step's arguments name (<c>family</c>, <c>slot</c>, <c>inner</c>... as smithing.craft).</summary>
+    private static Recipe RecipeArg(StepContext ctx)
+    {
+        string family = ctx.Arg("family", "armor");
+        string slot = ctx.Arg("slot");
+        return new Recipe
+        {
+            Family = family,
+            Slot = slot,
+            Inner = ctx.Arg("inner", Recipe.None),
+            Middle = ctx.Arg("middle", Recipe.None),
+            Outer = ctx.Arg("outer", Recipe.None),
+            Extra = ctx.Arg("extra", Recipe.None),
+            SizePct = ctx.ArgInt("size", 100),
+            AmmoKind = family == "ammo" ? slot : "none",
+            Coverage = ctx.HasArg("coverage") ? ctx.Arg("coverage") : null,
+        };
+    }
+
+    /// <summary>
+    /// Server, Coop: the player's hero (<c>heroName</c>) gets Smithing <c>skill</c> (default 330) and full stamina, and
+    /// their party gets twice the materials the recipe's dearest quality charges. In Coop the server crafts a player's
+    /// request (MS2's ServerCraftingHandler) and charges that party, so the materials have to be there. As
+    /// smithing.prepare does in single player, materials are charged at 100% at least. Reports the skill.
+    /// </summary>
+    private static IEnumerable<StepWait?> PrepareFor(StepContext ctx)
+    {
+        var name = ctx.Arg("heroName");
+        var found = Hero.AllAliveHeroes.Where(h => h.Name?.ToString() == name).ToList();
+        ctx.Assert(found.Count == 1, found.Count == 0 ? $"no hero named '{name}' on the server" : $"{found.Count} heroes are named '{name}'");
+        var hero = found[0];
+        var party = hero.PartyBelongedTo;
+        ctx.Assert(party != null, $"{name} has no party on the server");
+        hero.SetSkillValue(DefaultSkills.Crafting, ctx.ArgInt("skill", 330));
+        var behavior = Campaign.Current.GetCampaignBehavior<ICraftingCampaignBehavior>();
+        if (behavior != null) behavior.SetHeroCraftingStamina(hero, behavior.GetMaxHeroCraftingStamina(hero));
+        var settings = MSmithConfig.Settings;
+        if (!settings.RequireMaterials || settings.MaterialCostPct <= 0)
+        {
+            ctx.Log($"the server's config makes crafts free (require_materials {settings.RequireMaterials}, material_cost_pct {settings.MaterialCostPct}); charging 100% for the run, in memory only");
+            settings.RequireMaterials = true;
+            settings.MaterialCostPct = 100;
+        }
+        var cat = CraftingDesigner.SharedCatalog;
+        int skill = CraftDiagnostics.SafeCraftingSkill(hero);
+        var worst = CraftCalculator.Compute(cat, RecipeArg(ctx), skill, cat.QualityTiers.Values.OrderByDescending(q => q.MaterialFactorFP).First(), null, 0).MaterialCost;
+        foreach (var kv in worst)
+        {
+            var mat = NativeSmithingMaterialModel.MaterialItem(kv.Key);
+            ctx.Assert(mat != null, $"the game has no item for MS2's material {kv.Key}");
+            party!.ItemRoster.AddToCounts(mat, kv.Value * 2 + 5);
+        }
+        ctx.Log($"{name}: smithing {skill}, materials {string.Join(", ", worst.Select(kv => $"{kv.Key} {kv.Value * 2 + 5}"))}");
+        ctx.Report("value", skill);
+        yield break;
+    }
+
+    /// <summary>
+    /// Player's game, Coop: crafts the recipe as the designer's Craft button does. MS2's executor there sends the request
+    /// to the server, and the item arrives with the server's answer. Waits up to <c>seconds</c> (default 60) for a
+    /// crafted record that was not there before, with its item in the party's inventory. A denial shown by MS2 fails the
+    /// step at once. Reports <c>value</c> (the item id), <c>weight</c>, <c>armor</c>, <c>tier</c>, and <c>stats</c>
+    /// (as smithing.itemStats).
+    /// </summary>
+    private static IEnumerable<StepWait?> CoopCraft(StepContext ctx)
+    {
+        var executor = CraftingExecutors.Current;
+        ctx.Assert(executor != null && executor.GetType().Name == "RemoteCraftingExecutor",
+            $"MS2's crafting executor here is {executor?.GetType().FullName ?? "none"}, not the Coop one that asks the server");
+        var persistence = SmithingPersistenceBehavior.Current;
+        ctx.Assert(persistence != null, "MS2's persistence behaviour is not running");
+        var known = new HashSet<string>(persistence!.Records.Select(r => r.StringId), StringComparer.Ordinal);
+        var denials = new List<string>();
+        Action<InformationMessage> watch = m =>
+        {
+            var text = m?.Information ?? "";
+            if (text.IndexOf("denied craft", StringComparison.OrdinalIgnoreCase) >= 0)
+                denials.Add(text);
+        };
+        InformationManager.DisplayMessageInternal += watch;
+        CraftedItemRecord? made = null;
+        try
+        {
+            var outcome = executor!.Execute(CraftingDesigner.SharedCatalog, RecipeArg(ctx), "{=}ML coop test " + ctx.Arg("slot"), Hero.MainHero,
+                CraftDiagnostics.SafeCraftingSkill(Hero.MainHero), default(DonorVisual), new NativeSmithingStaminaModel(), 0);
+            ctx.Log("request: " + (outcome?.Message ?? "no outcome"));
+            var roster = MobileParty.MainParty.ItemRoster;
+            yield return ctx.Until(() =>
+            {
+                if (denials.Count > 0) return true;
+                made = persistence.Records.FirstOrDefault(r => !known.Contains(r.StringId));
+                var item = made == null ? null : MBObjectManager.Instance.GetObject<ItemObject>(made.StringId);
+                return item != null && item.IsReady && roster.GetItemNumber(item) > 0;
+            }, "the server's crafted item in this party", TimeSpan.FromSeconds(ctx.ArgInt("seconds", 60)));
+        }
+        finally { InformationManager.DisplayMessageInternal -= watch; }
+        ctx.Assert(denials.Count == 0, "MS2 refused the craft: " + string.Join(" | ", denials));
+        var crafted = MBObjectManager.Instance.GetObject<ItemObject>(made!.StringId);
+        ctx.Log($"crafted {made.StringId} '{crafted.Name}' quality {made.TierId}, skill {made.SmithingEffect}");
+        ctx.Report("value", made.StringId);
+        ctx.Report("weight", crafted.Weight.ToString("0.###", Inv));
+        var ac = crafted.ArmorComponent;
+        ctx.Report("armor", ac == null ? "" : $"{ac.HeadArmor}/{ac.BodyArmor}/{ac.ArmArmor}/{ac.LegArmor}");
+        ctx.Report("tier", made.TierId);
+        ctx.Report("stats", Stats(crafted, made));
+    }
+
+    /// <summary>
+    /// The item <c>item</c> as this game has it: weight, protection, value, name, and MS2's record of it (quality,
+    /// recipe). Reported as <c>value</c>, so a compare across the server and the players' games finds any difference.
+    /// </summary>
+    private static IEnumerable<StepWait?> ItemStats(StepContext ctx)
+    {
+        var id = ctx.Arg("item");
+        ItemObject? item = null;
+        yield return ctx.Until(() => (item = MBObjectManager.Instance.GetObject<ItemObject>(id)) is { IsReady: true }, $"item {id}", TimeSpan.FromSeconds(30));
+        var record = SmithingPersistenceBehavior.Current?.Records.FirstOrDefault(r => r.StringId == id);
+        ctx.Assert(record != null, $"MS2 keeps no record for {id} here");
+        var stats = Stats(item!, record!);
+        ctx.Dump("item", stats);
+        ctx.Report("value", stats);
+    }
+
+    private static string Stats(ItemObject item, CraftedItemRecord record)
+    {
+        var ac = item.ArmorComponent;
+        var armor = ac == null ? "-" : $"{ac.HeadArmor}/{ac.BodyArmor}/{ac.ArmArmor}/{ac.LegArmor}";
+        return $"{item.Weight.ToString("0.###", Inv)} kg, armor {armor}, value {item.Value}, '{item.Name}', quality {record.TierId}, recipe {record.RecipeCanonical}";
     }
 
     /// <summary>After a reload: the item <c>item</c> still exists with the <c>weight</c> and <c>armor</c> reported before.</summary>
