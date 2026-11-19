@@ -70,6 +70,9 @@ ModderLords.Cli test --profile "My Host" --suite C:\scratch\try-this.json
 - **Before the game starts,** every DLL the launch loads, your step DLL included, is checked for calls into the game
   that the installed version no longer has. A break stops the run there, naming the call, instead of crashing the
   game. `test --profile NAME --api-check` runs only this check; `--skip-api-check` launches anyway.
+- **Before a Coop server starts,** its module list is checked against the profile: a module the profile did not
+  select (another tool's folder in the server's Modules folder, say) stops the run, naming it, instead of every join
+  being refused.
 
 ## 3. What a step can reach
 

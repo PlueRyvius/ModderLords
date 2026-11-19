@@ -129,4 +129,42 @@ public class ServerStockClassificationTests : IDisposable
         Assert.DoesNotContain(catalog.Modules, m => m.Id == "SettlementCultureDrift");
         Assert.Single(catalog.ForeignServerModules);
     }
+
+    // ---- the harness's check of the server's module list (ServerModuleListCheck) ----------------------------------
+
+    private static readonly string[] PackageIds = ["Native", "SandBoxCore", "Sandbox", "CoopNightly", "DedicatedServer.Windows"];
+
+    [Fact]
+    public void A_server_list_of_the_package_and_the_profile_mods_passes()
+    {
+        var server = PackageIds.Concat(["ModderLords.Compat", "TAOM", "DedicatedServer.ModderLordsCompat"]);
+        Assert.Null(ServerModuleListCheck.Problem(server, ["ModderLords.Compat", "TAOM"], []));
+    }
+
+    [Fact]
+    public void A_module_the_profile_did_not_select_stops_the_run_and_says_another_tool_put_it_there()
+    {
+        // What the server loaded on 2026-11-18: the package, the profile's mods, and the other tool's copies.
+        MakeServerPackage();
+        MakeModule("ImprovedGarrisons", "ImprovedGarrisons");
+        var foreign = Scan().ForeignServerModules;
+        var server = PackageIds.Concat(["ModderLords.Compat", "ImprovedGarrisons", "Unknown.Mod"]);
+
+        var problem = ServerModuleListCheck.Problem(server, ["ModderLords.Compat"], foreign);
+
+        Assert.NotNull(problem);
+        Assert.Contains("ImprovedGarrisons (a real folder in the server's Modules folder that another tool put there", problem);
+        Assert.Contains(Path.Combine(Server, "ImprovedGarrisons"), problem);
+        Assert.Contains("Unknown.Mod", problem);
+        Assert.DoesNotContain("ModderLords.Compat", problem);
+    }
+
+    [Fact]
+    public void A_copied_in_mod_the_profile_does_select_passes()
+    {
+        MakeServerPackage();
+        MakeModule("ImprovedGarrisons", "ImprovedGarrisons");
+
+        Assert.Null(ServerModuleListCheck.Problem(PackageIds.Append("ImprovedGarrisons"), ["improvedgarrisons"], Scan().ForeignServerModules));
+    }
 }

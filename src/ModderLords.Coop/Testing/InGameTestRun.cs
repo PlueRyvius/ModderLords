@@ -1,6 +1,7 @@
 using ModderLords.Coop.Launch;
 using ModderLords.Coop.Saves;
 using ModderLords.Core.Launch;
+using ModderLords.Core.Modules;
 using ModderLords.Core.Overlay;
 using ModderLords.Core.Profiles;
 using ModderLords.Core.Testing;
@@ -498,6 +499,12 @@ public static class InGameTestRun
         LaunchSession.Prepared prepared;
         try { prepared = LaunchSession.Prepare(profile); }
         catch (InvalidOperationException ex) { return Stop(ex.Message); }
+        if (ServerModuleListCheck.Problem(prepared.Plan.ModuleIds, prepared.Selections.Select(s => s.Module.Id),
+                prepared.Catalog.ForeignServerModules) is { } unrequested)
+        {
+            foreach (var m in prepared.Messages) say("[ModderLords] " + m);
+            return Stop(unrequested);
+        }
         var channel = FileTestRunChannel.Create(Path.Combine(ProfileStore.RootDir, "tests"), testPlan, DateTimeOffset.Now);
         say($"[ModderLords] test run {channel.RunId} -> {channel.Folder}");
         foreach (var m in prepared.Messages) say("[ModderLords] " + m);

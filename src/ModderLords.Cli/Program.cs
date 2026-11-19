@@ -326,6 +326,8 @@ switch (cmd)
         Console.WriteLine("launcher data : " + launcherData);
         Console.WriteLine("server order  : " + string.Join(", ", prepared.Order.ModuleIds));
         foreach (var issue in prepared.Order.Issues) Console.WriteLine("order issue   : " + issue);
+        Console.WriteLine("module check  : " + (ServerModuleListCheck.Problem(prepared.Plan.ModuleIds, prepared.Selections.Select(s => s.Module.Id),
+            prepared.Catalog.ForeignServerModules) ?? "ok, only the server package and the profile's mods"));
         Console.WriteLine("server mods   : " + string.Join(", ", ClientManifest.From(prepared.Modules).Select(e => $"{e.Id} {e.Version}")));
         Console.WriteLine("client-visible: " + string.Join(", ", installed.OrderBy(x => x)));
         var plan = LauncherDataSync.ComputePlan(ClientManifest.From(prepared.Modules), prepared.Order, launcherData, installed,
