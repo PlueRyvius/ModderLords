@@ -167,7 +167,12 @@ From CoopCompat's guard list plus TAOM's own open items. Each is a small defensi
 a live session shows them, but they are all code-visible now:
 
 - Coop `ObjectManager` null lookups for TAOM-created objects (CoopCompat `CoopObjectManagerNullGuard`, `GhostReferenceSweep`).
-- Caravan initialisation null (`CaravanInitializationNullGuard`), recruitment volunteer null (`RecruitmentVolunteerNullGuard`), wanderer introduction null (`WandererIntroductionNullGuard`), ex-spouses (`ExSpousesGuard`).
+- Caravan initialisation null (`CaravanInitializationNullGuard`), recruitment volunteer null (`RecruitmentVolunteerNullGuard`), ex-spouses (`ExSpousesGuard`).
+- [b] Wanderer introduction null (2026-11-19, a player report: "talking to a companion to hire them freezes the game").
+  TAOM's named companions (Aragorn, Legolas, Gimli and 14 more) come from its heroes.xml with no `Hero.Template` on any
+  peer, and the game's "Tell me about yourself" reads `Template.StringId` and throws, which stops the conversation. In
+  single player TAOM marks them met, so it never runs; a co-op player has not met them. The `wanderer-introduction`
+  component answers with the game's short introduction instead. Checked by `taom/hire-wanderer` (talk, pay, joins).
 - Kingdom decisions added while one is resolving (`NestedKingdomDecisionDeferral`), eligibility (`KingdomDecisionEligibilityRepair`).
 - Battle spawn / mission start failures (`BattleSpawnReliability`, `MissionAfterStartFailureProbe`, `ActiveMissionMapEventGuard`, `NullMapEventEncounterEndGuard`).
 - Sackless battle scenes: already handled by ModderLords' `BattleScenePick` exclusion.

@@ -8,6 +8,7 @@ using TAOM;
 using TAOM.Features.SupplyLines;
 using TAOM.Features.SupplyLines.Domain;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Conversation;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Library;
@@ -32,6 +33,220 @@ public static class Steps
         InGameTests.Register("taom.watchCaravans", StepSide.Server, WatchCaravans);
         InGameTests.Register("taom.setTime", StepSide.Server, SetTime);
         InGameTests.Register("taom.navPath", StepSide.Any, NavPath);
+        InGameTests.Register("taom.findWanderer", StepSide.Client, FindWanderer);
+        InGameTests.Register("taom.hireWanderer", StepSide.Client, HireWanderer);
+        InGameTests.Register("taom.wandererTemplates", StepSide.Any, WandererTemplates);
+    }
+
+    /// <summary>
+    /// Every wanderer's template (<c>Hero.Template</c>, which the game's wanderer introduction reads) on this side, so
+    /// the server's and a player's can be compared. Reports how many have none.
+    /// </summary>
+    private static IEnumerable<StepWait?> WandererTemplates(StepContext ctx)
+    {
+        yield return ctx.Until(() => Campaign.Current != null, "the campaign");
+        var wanderers = Hero.AllAliveHeroes.Where(h => h.IsWanderer).OrderBy(h => h.StringId, StringComparer.Ordinal).ToList();
+        ctx.Dump("templates", string.Join("\n", wanderers.Select(h =>
+            $"{h.StringId} \"{h.Name}\" template {h.Template?.StringId ?? "NONE"} original {h.CharacterObject?.OriginalCharacter?.StringId ?? "-"}")));
+        var none = wanderers.Where(h => h.Template == null).ToList();
+        ctx.Log($"{wanderers.Count} wanderer(s), {none.Count} without a template: {string.Join(", ", none.Take(10).Select(h => h.StringId))}");
+        ctx.Report("count", wanderers.Count);
+        ctx.Report("value", none.Count);
+    }
+
+    // ---- hiring a wanderer ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A wanderer this player could hire: alive, in a town, in no party and nobody's companion. Arg <c>side</c> =
+    /// <c>same</c> (default: one TAOM's Wanderer Allegiance lets this player hire), <c>other</c> (one it refuses), or
+    /// <c>any</c>; <c>template</c> = <c>none</c> for one with no <c>Hero.Template</c> (TAOM's named companions).
+    /// Reports <c>heroId</c>, <c>town</c>, <c>culture</c> and the allegiance verdict.
+    /// </summary>
+    private static IEnumerable<StepWait?> FindWanderer(StepContext ctx)
+    {
+        yield return ctx.Until(() => MobileParty.MainParty != null && Clan.PlayerClan != null, "this player's party");
+        var side = ctx.Arg("side", "same");
+        // template = none: one of TAOM's named companions, which have no Hero.Template (the player report's case).
+        var noTemplate = ctx.Arg("template", "any") == "none";
+        var candidates = Hero.AllAliveHeroes
+            .Where(h => h.IsWanderer && h.CompanionOf == null && h.Clan == null && h.PartyBelongedTo == null && !h.IsPrisoner && h.CurrentSettlement?.IsTown == true)
+            .Where(h => !noTemplate || h.Template == null)
+            .Select(h => (Hero: h, Verdict: AllegianceVerdict(h)))
+            .ToList();
+        ctx.Dump("wanderers", string.Join("\n", candidates.Select(c =>
+            $"{c.Hero.StringId} \"{c.Hero.Name}\" culture {c.Hero.Culture?.StringId} in {c.Hero.CurrentSettlement?.StringId}: {c.Verdict}")));
+        var picked = candidates.FirstOrDefault(c => side switch
+        {
+            "same" => c.Verdict == "Allowed",
+            "other" => c.Verdict.StartsWith("Refused", StringComparison.Ordinal),
+            _ => true,
+        });
+        ctx.Assert(picked.Hero != null, $"no hireable wanderer ({side}) among {candidates.Count} in towns");
+        ctx.Log($"picked {picked.Hero!.StringId} \"{picked.Hero.Name}\" ({picked.Hero.Culture?.StringId}) in {picked.Hero.CurrentSettlement!.StringId}: {picked.Verdict}");
+        ctx.Report("heroId", picked.Hero.StringId);
+        ctx.Report("town", picked.Hero.CurrentSettlement.StringId);
+        ctx.Report("culture", picked.Hero.Culture?.StringId);
+        ctx.Report("verdict", picked.Verdict);
+        ctx.Report("value", picked.Hero.StringId);
+    }
+
+    /// <summary>
+    /// Talks to a wanderer (<c>heroId</c>) and hires them, as a player does: opens a conversation with them, steps
+    /// through it the way the conversation screen does (the player's options, else continue), picking the hire line and
+    /// paying, and waits for the conversation to close and the wanderer to join this player's clan (Coop applies the hire
+    /// on the server and syncs it back). Every line and option is kept in the <c>conversation</c> dump, so a conversation
+    /// that stops (no line for the next state) or throws shows where. Arg <c>expect</c> = <c>hired</c> (default) or
+    /// <c>refused</c> (the wanderer turns the player down and the conversation goes on).
+    /// The conversation is a map conversation, not the tavern scene a player meets wanderers in: the game's full
+    /// backstory for a templated wanderer reads the scene's location, which a map conversation has none of, so pick a
+    /// wanderer with <c>template: none</c> (or one already met) for this step.
+    /// </summary>
+    private static IEnumerable<StepWait?> HireWanderer(StepContext ctx)
+    {
+        yield return ctx.Until(() => MobileParty.MainParty != null && Campaign.Current?.ConversationManager != null, "this player's party");
+        var hero = Hero.FindFirst(h => h.StringId == ctx.Arg("heroId"));
+        ctx.Assert(hero != null, $"no hero {ctx.Arg("heroId")}");
+        var expectHired = ctx.Arg("expect", "hired") == "hired";
+        var cm = Campaign.Current.ConversationManager;
+        var transcript = new StringBuilder();
+        void Note(string line)
+        {
+            transcript.AppendLine(line);
+            ModderLords.CompatSync.Log.Info("taom.hireWanderer: " + line);
+        }
+        Note($"talking to {hero!.StringId} \"{hero.Name}\" ({hero.Culture?.StringId}), gold {Hero.MainHero.Gold}, price {Campaign.Current.Models.CompanionHiringPriceCalculationModel.GetCompanionHiringPrice(hero)}, companions {Clan.PlayerClan.Companions.Count}/{Clan.PlayerClan.CompanionLimit}");
+
+        CampaignMapConversation.OpenConversation(new ConversationCharacterData(CharacterObject.PlayerCharacter, PartyBase.MainParty),
+            new ConversationCharacterData(hero.CharacterObject));
+        yield return ctx.Until(() => cm.IsConversationInProgress && cm.OneToOneConversationHero == hero, "the conversation with the wanderer to open", TimeSpan.FromSeconds(30));
+        Note($"open: [{TokenName(cm, cm.ActiveToken)}] {LastSentenceId(cm)}: {Safe(() => cm.CurrentSentenceText)}");
+
+        // The path to the hire: the options to pick when offered, in order of preference. Anything else offered is a
+        // step of the wanderer's introduction; the first clickable option that does not leave moves it on.
+        string[] wanted = ["player_companion_hire_response_1", "main_option_faction_hire"];
+        string[] leaving = ["player_is_leaving", "companion_hire_capacity_full", "player_companion_hire_response_2", "hero_special_request"];
+        var pickedHire = false;
+        var refused = false;
+        var lastState = "";
+        var sameState = 0;
+        string? problem = null;
+        var actions = 0;
+        bool Step()
+        {
+            if (!cm.IsConversationInProgress) return true;
+            if (problem != null) return true;
+            try
+            {
+                var state = $"{cm.ActiveToken}/{LastSentenceId(cm)}";
+                sameState = state == lastState ? sameState + 1 : 0;
+                lastState = state;
+                if (sameState >= 6)
+                {
+                    problem = $"the conversation stopped at [{TokenName(cm, cm.ActiveToken)}] after {LastSentenceId(cm)}: no option and no line moves it on";
+                    return true;
+                }
+                if (++actions > 60) { problem = "the conversation did not close after 60 steps"; return true; }
+
+                cm.GetPlayerSentenceOptions();
+                var options = cm.CurOptions ?? [];
+                if (options.Count > 0)
+                    Note($"  [{TokenName(cm, cm.ActiveToken)}] options: {string.Join(" | ", options.Select(o => $"{o.Id}{(o.IsClickable ? "" : " (not clickable)")}: {o.Text}"))}");
+                if (refused && options.Count > 0)
+                {
+                    // Refused, and the player can talk on: the conversation did not stop. Leave it.
+                    var leave = options.FirstOrDefault(o => o.Id.StartsWith("player_is_leaving", StringComparison.Ordinal) && o.IsClickable);
+                    if (leave.Id == null) { problem = "refused, then no way to leave the conversation"; return true; }
+                    Note($"P  -> {leave.Id}");
+                    cm.DoOption(leave.Id);
+                }
+                else if (options.Count == 0)
+                {
+                    cm.ContinueConversation();
+                }
+                else if (wanted.Select(w => options.FirstOrDefault(o => o.Id == w)).FirstOrDefault(o => o.Id != null) is { Id: not null } hire)
+                {
+                    if (!hire.IsClickable) { problem = $"the option {hire.Id} is offered but not clickable: {hire.HintText}"; return true; }
+                    if (hire.Id == "player_companion_hire_response_1") pickedHire = true;
+                    Note($"P  -> {hire.Id}");
+                    cm.DoOption(hire.Id);
+                }
+                else if (options.FirstOrDefault(o => o.IsClickable && !leaving.Any(l => o.Id.StartsWith(l, StringComparison.Ordinal))) is { Id: not null } next)
+                {
+                    Note($"P  -> {next.Id}");
+                    cm.DoOption(next.Id);
+                }
+                else
+                {
+                    problem = $"no option leads to the hire at [{TokenName(cm, cm.ActiveToken)}]";
+                    return true;
+                }
+                var said = LastSentenceId(cm);
+                Note($"   now [{TokenName(cm, cm.ActiveToken)}] {said}: {Safe(() => cm.CurrentSentenceText)}");
+                if (said.Contains("taom_wa_refuse")) refused = true;
+            }
+            catch (Exception ex)
+            {
+                problem = $"the conversation threw at [{TokenName(cm, cm.ActiveToken)}] after {LastSentenceId(cm)}: {ex}";
+                return true;
+            }
+            return false;
+        }
+        while (!Step()) yield return ctx.Delay(TimeSpan.FromMilliseconds(300));
+        ctx.Dump("conversation", transcript.ToString());
+        if (problem != null && cm.IsConversationInProgress)
+        {
+            // Close what the player would be stuck in, so the rest of the run is not.
+            try { cm.EndConversation(); } catch (Exception ex) { ctx.Log("closing the conversation threw: " + ex.Message); }
+        }
+        ctx.Assert(problem == null, problem ?? "");
+        yield return ctx.Until(() => !cm.IsConversationInProgress, "the conversation to close", TimeSpan.FromSeconds(30));
+
+        if (!expectHired)
+        {
+            ctx.Assert(refused && !pickedHire, refused ? "the hire went through after the refusal" : "the wanderer was not refused");
+            ctx.Report("value", "refused");
+            yield break;
+        }
+        ctx.Assert(!refused, "the wanderer refused this player (TAOM Wanderer Allegiance)");
+        ctx.Assert(pickedHire, "the conversation closed before the hire was paid");
+        yield return ctx.Until(() => hero.CompanionOf == Clan.PlayerClan && hero.PartyBelongedTo == MobileParty.MainParty,
+            $"{hero.StringId} to join this player's clan and party (Coop hires on the server)", Sync);
+        ctx.Report("value", "hired");
+    }
+
+    private static string AllegianceVerdict(Hero wanderer)
+    {
+        try
+        {
+            var service = IoC.Resolve<TAOM.Features.WandererAllegiance.IWandererAllegianceService>();
+            var clan = Clan.PlayerClan;
+            return service.Evaluate(wanderer.StringId, wanderer.Culture?.StringId, clan?.Kingdom?.StringId,
+                clan?.Culture?.StringId ?? Hero.MainHero?.Culture?.StringId).ToString();
+        }
+        catch (Exception ex) { return "unknown (" + ex.GetType().Name + ")"; }
+    }
+
+    private static readonly System.Reflection.FieldInfo? SentencesField =
+        typeof(TaleWorlds.CampaignSystem.Conversation.ConversationManager).GetField("_sentences", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+    private static readonly System.Reflection.FieldInfo? CurrentSentenceField =
+        typeof(TaleWorlds.CampaignSystem.Conversation.ConversationManager).GetField("_currentSentence", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+    private static readonly System.Reflection.FieldInfo? StateMapField =
+        typeof(TaleWorlds.CampaignSystem.Conversation.ConversationManager).GetField("stateMap", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+    /// <summary>The id of the line said last ("AI"/"P" by who said it), for the transcript.</summary>
+    private static string LastSentenceId(TaleWorlds.CampaignSystem.Conversation.ConversationManager cm)
+    {
+        if (SentencesField?.GetValue(cm) is not List<TaleWorlds.CampaignSystem.Conversation.ConversationSentence> sentences
+            || CurrentSentenceField?.GetValue(cm) is not int i || i < 0 || i >= sentences.Count) return "-";
+        return (sentences[i].IsPlayer ? "P " : "AI ") + sentences[i].Id;
+    }
+
+    private static string TokenName(TaleWorlds.CampaignSystem.Conversation.ConversationManager cm, int token) =>
+        StateMapField?.GetValue(cm) is Dictionary<string, int> map && map.FirstOrDefault(kv => kv.Value == token).Key is { } name ? name : token.ToString(CultureInfo.InvariantCulture);
+
+    private static string Safe(Func<string> read)
+    {
+        try { return read(); } catch (Exception ex) { return "(" + ex.GetType().Name + ")"; }
     }
 
     /// <summary>

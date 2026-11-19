@@ -70,6 +70,7 @@ public static class TaomLayer
         new ClientStateBackupComponent(),
         new FiefVoteSyncComponent(),
         new SpecialResourceEarningsComponent(),
+        new WandererIntroductionComponent(),
     };
 
     private static bool _done;
