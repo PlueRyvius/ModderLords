@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using HarmonyLib;
 using ModderLords.CompatSync;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -327,7 +328,9 @@ internal static class FbSelfTest
         if (pair.Town == null) { Log.Info(FourberieLayer.Tag + "self-test: no visible hideout near a town; the summed-model check is skipped"); return; }
         if (seed)
         {
-            pair.Hideout.IsSpotted = true;
+            // v1.4.8 marks a found hideout with Hideout.IsSpotted; v1.5.7 dropped that and keeps only the settlement's
+            // visibility, so the setter is called only where it exists.
+            AccessTools.Property(typeof(Hideout), "IsSpotted")?.GetSetMethod()?.Invoke(pair.Hideout, new object[] { true });
             pair.Hideout.Settlement.IsVisible = true;
             using (FbBooks.Enter(b, b.PartyBelongedTo))
                 Dict<string, int>("_supportedBandits")[pair.Hideout.Settlement.Culture.StringId] = 1500;
