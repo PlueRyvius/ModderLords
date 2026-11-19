@@ -245,6 +245,7 @@ public sealed class LaunchSession
         if (!applySideEffects && scanned is { } previous) (catalog, gameRoot) = previous;
         else catalog = Scan(profile, paths, out gameRoot);
         messages.AddRange(catalog.Problems.Select(p => "catalog: " + p));
+        messages.AddRange(catalog.ForeignServerModules.Select(ModuleCatalog.ForeignServerModuleNote));
         if (CoopPlayersWarning(catalog, gameRoot) is { } coopWarning) messages.Add(coopWarning);
         // Decided from the profile's own enabled ids, before selections resolve, because the answer changes which
         // modules are selected: a generated world needs the compat module in the list.
