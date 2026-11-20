@@ -1,3 +1,4 @@
+using ModderLords.Coop.Launch;
 using ModderLords.Core.Modules;
 
 namespace ModderLords.Core.Tests;
@@ -12,7 +13,8 @@ namespace ModderLords.Core.Tests;
 public class ServerStockClassificationTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "ml-stock-" + Guid.NewGuid().ToString("N"));
-    private string Server => Path.Combine(_root, "Modules");
+    // Laid out as a server package (engine\Modules), so ServerPaths can point at it.
+    private string Server => Path.Combine(_root, "engine", "Modules");
 
     public ServerStockClassificationTests() => Directory.CreateDirectory(Server);
     public void Dispose() { try { Directory.Delete(_root, true); } catch { } }
@@ -129,6 +131,65 @@ public class ServerStockClassificationTests : IDisposable
         Assert.DoesNotContain(catalog.Modules, m => m.Id == "SettlementCultureDrift");
         Assert.Single(catalog.ForeignServerModules);
     }
+
+    // ---- War Sails: Coop's v1.5.7 server packages carry NavalDLC, and their host loads it only on request ----------
+
+    private ServerPaths Paths() => ServerPaths.Create(_root, coopDataDir: Path.Combine(_root, "CoopData"));
+
+    private void WriteModConfig(string path, bool warSails)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, $$"""
+            {
+              // Only the dedicated server reads this.
+              "modOptions": { "warSails": {{(warSails ? "true" : "false")}} }
+            }
+            """);
+    }
+
+    [Fact]
+    public void War_Sails_in_the_server_package_stays_out_of_the_server_load_order_by_default()
+    {
+        // What the 2026-11-18 nightly server loaded: NavalDLC with the package, then Coop stopped it with exit code 10.
+        MakeServerPackage();
+        MakeModule("NavalDLC", "NavalDLC");
+        WriteModConfig(Path.Combine(Server, "Coop", "mod-config.default.json"), warSails: false);
+
+        var stock = LaunchSession.ServerStock(Scan(), Paths());
+        var order = LoadOrder.Compute(stock, []);
+
+        Assert.DoesNotContain("NavalDLC", order.ModuleIds);
+        Assert.Contains("CoopNightly", order.ModuleIds);
+        Assert.False(File.Exists(Paths().ModConfigPath), "reading the switch must not create the host's mod-config.json");
+    }
+
+    [Fact]
+    public void War_Sails_loads_when_the_host_turned_it_on_in_mod_config()
+    {
+        MakeServerPackage();
+        MakeModule("NavalDLC", "NavalDLC");
+        WriteModConfig(Path.Combine(Server, "Coop", "mod-config.default.json"), warSails: false);
+        WriteModConfig(Paths().ModConfigPath, warSails: true);
+
+        Assert.Contains(LaunchSession.ServerStock(Scan(), Paths()), m => m.Id == "NavalDLC");
+    }
+
+    [Fact]
+    public void No_mod_config_at_all_means_War_Sails_off()
+    {
+        MakeServerPackage();
+        MakeModule("NavalDLC", "NavalDLC");
+
+        Assert.False(LaunchSession.WarSailsOn(Paths()));
+        Assert.DoesNotContain(LaunchSession.ServerStock(Scan(), Paths()), m => m.Id == "NavalDLC");
+    }
+
+    [Theory]
+    [InlineData(9, "War Sails mode")]
+    [InlineData(10, "cannot run it")]
+    [InlineData(11, "did not start loading")]
+    public void The_nightly_servers_new_exit_codes_are_explained(int code, string expected) =>
+        Assert.Contains(expected, ExitCodeExplainer.Explain(code));
 
     // ---- the harness's check of the server's module list (ServerModuleListCheck) ----------------------------------
 

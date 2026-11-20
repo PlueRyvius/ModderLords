@@ -25,9 +25,12 @@ public static class ExitCodeExplainer
         2 => "Load failure or timeout: the campaign/save never reached SERVING. Check the last module or submodule named above the failure.",
         3 => "Fatal error while serving. Look for the last exception in the log.",
         4 => "Coop module verification failed: engine\\Modules\\Coop was modified or replaced. Re-verify the workshop item.",
+        // From Coop's v1.5.7 server packages (their release-info.txt), which carry War Sails.
+        9 => "The save's War Sails mode disagrees with the server: the save was made with War Sails and modOptions.warSails in mod-config.json is off, or the other way round.",
+        10 => "War Sails is on, and this Coop build cannot run it. Turn modOptions.warSails off in mod-config.json, or use a tester build.",
         // The compat module ends the process itself after generating a world; these say the stop was on
-        // purpose, so a successful creation is never read as a crash.
-        11 => "World created and saved; the server stopped on purpose.",
+        // purpose, so a successful creation is never read as a crash. Coop's v1.5.7 servers use 11 as well.
+        11 => "World created and saved; the server stopped on purpose. Outside world creation, Coop's server uses 11 when the save did not start loading (a damaged file or a Coop error): pick another save.",
         12 => "World creation failed; the server stopped without a usable save. The reason is on the 'worldcreate: fail' line above.",
         -1 => "The engine exited with -1: usually an unhandled startup failure. Scroll up for the reason.",
         unchecked((int)0xC0000005) => "Access violation (0xC0000005) inside native code. Inspect the crash dump and engine log to identify the cause.",

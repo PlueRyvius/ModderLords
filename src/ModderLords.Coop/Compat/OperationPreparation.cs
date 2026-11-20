@@ -24,7 +24,7 @@ public static class OperationPreparation
         var paths = LaunchSession.ResolvePaths(profile);
         var catalog = LaunchSession.Scan(profile, paths, out var game);
         var selections = LaunchSession.Select(profile, catalog, new List<string>());
-        var order = LoadOrder.Compute(catalog.Modules.Where(m => m.IsStock).ToList(), selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
+        var order = LoadOrder.Compute(LaunchSession.ServerStock(catalog, paths), selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
             policy: profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest);
         return OperationAnalysisService.CreateRequest(profile, new(catalog, selections, order), game ?? "", paths.ServerBin);
     }

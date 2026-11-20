@@ -555,7 +555,7 @@ switch (cmd)
             Console.WriteLine($"[ModderLords] scan {s.Module.Id,-28} {scan.Summary}" + (scan.Notes.Count > 0 ? "  (" + string.Join("; ", scan.Notes) + ")" : ""));
         }
 
-        var stock = catalog.Modules.Where(m => m.IsStock).ToList();
+        var stock = LaunchSession.ServerStock(catalog, paths);
         // The order the mods were typed in is the user's stated intent; it used to be discarded, so --mods could not
         // express an order at all. --manual-order makes it authoritative over what the manifests declare.
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), selections.Select(s => s.Module.Id).ToList(),
