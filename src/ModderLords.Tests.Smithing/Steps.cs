@@ -58,6 +58,7 @@ public static class Steps
         InGameTests.Register("smithing.prepareFor", StepSide.Server, PrepareFor);
         InGameTests.Register("smithing.coopCraft", StepSide.Client, CoopCraft);
         InGameTests.Register("smithing.itemStats", StepSide.Any, ItemStats);
+        BallistaSteps.Register();
         QuietNotice();
     }
 
@@ -686,6 +687,7 @@ public static class Steps
     {
         ["damage_types"] = "DamageTypes",
         ["damage_types_notice_shown"] = "DamageTypesNoticeShown",
+        ["ballista_bows"] = "BallistaBows",
     };
 
     private static FieldInfo SettingField(StepContext ctx, string name)

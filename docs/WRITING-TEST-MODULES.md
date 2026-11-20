@@ -137,14 +137,21 @@ the API is there and the approach is sound, but no step does it yet: prove it wi
   `BanditPartyComponent.CreateBanditParty` create a party anywhere, with any troops (`MemberRoster.AddToCounts`).
   *Available* (the calls exist and ModderLords' Fourberie code hooks them; no step spawns one yet).
 - **Heroes:** `HeroCreator` makes lords, companions and wanderers. *Available*.
-- **Encounters and battles:** `EncounterManager.StartPartyEncounter(PartyBase.MainParty, other.Party)` meets a party
-  as the map does; the encounter menu's Attack option starts the battle; `PlayerEncounter` and `MapEvent` hold its
-  state and result. Auto-resolve settles it without a scene (casualties, loot, XP: fast and repeatable). A real
-  battle opens `MissionState`. *Available*.
-- **Inside a battle (mission):** `Mission.Current`, `Agent.Main`, `Mission.Agents`; any agent, the player's
-  included, can be handed to the AI (`agent.Controller`); a `MissionBehavior` added to the mission sees every hit,
-  kill and removal (`OnAgentHit`, `OnAgentRemoved`) to count them; time can be sped up. Check broad outcomes ("the
-  archers landed hits", "the battle ended"), never exact numbers: battles vary. *Available*.
+- **Encounters and battles:** a field battle against a bandit party from the map, as a player starts one. The player's
+  party moves to the bandits; `PlayerEncounter.RestartPlayerEncounter(enemy.Party, PartyBase.MainParty)`,
+  `PlayerEncounter.SetMeetingDone()` and `GameMenu.ActivateGameMenu("encounter_meeting")` skip the bandits' opening
+  conversation; the encounter menu's `attack` option opens the battle; a mission behaviour with `FinishDeployment()`
+  is the Ready button. `PlayerEncounter` and `MapEvent` hold its state and result. *Proven* (`smithing.yumiBattle`,
+  single player). Auto-resolve settles a battle without a scene. *Available*.
+- **Inside a battle (mission):** `Mission.Current`, `Mission.MainAgent`, `Mission.AllAgents`. The player's agent can
+  be handed to the AI: `Controller = AI`, alarmed, put in a formation with orders, and its AI unpaused (`IsPaused =
+  false`; it comes paused). Count outcomes by polling: ammo left, enemies hurt or down. Check broad outcomes ("the
+  archer landed hits"), never exact numbers: battles vary. *Proven* (`smithing.yumiBattle`). A `MissionBehavior` that
+  sees every hit, and sped-up time, are *available*.
+- **Screenshots of a thing in a battle:** `MissionScreen.CustomCamera` (the View assembly, by reflection through
+  `ScreenManager.TopScreen`) takes a camera's lens, and its position only from an entity the camera sits on
+  (`GameEntity.CreateEmpty`, `SetGlobalFrame`, `camera.Entity`). Put it above bush height; set it back to null after.
+  *Proven* (`smithing.yumiBattle`'s side camera).
 - **Custom battles** from the main menu (the CustomBattle module) test equipment and combat without a campaign.
   *Available*.
 
@@ -190,6 +197,13 @@ the API is there and the approach is sound, but no step does it yet: prove it wi
 - **Stop campaign time** before reading numbers (`game.pause`; the run's setup does it in Coop).
 - **Wait on conditions, never fixed times:** `ctx.Until(...)`, `ctx.Settled(...)` (a value that stopped changing).
   `ctx.Delay` passes on a fast PC only.
+- **Never name a battle-only static field in a coroutine that starts outside a battle** (`MovementOrder.MovementOrderCharge`
+  and the like). .NET Framework may run the type's static setup when the coroutine is compiled, on the map; it reads
+  `Mission.Current`, throws, and leaves the type broken for the whole session, so the next battle crashes while adding
+  its teams. Put such calls in a `[MethodImpl(NoInlining)]` method called inside the battle.
+- **A crash the engine logs cannot explain needs a dump.** The run answers the crash prompt No, so the engine writes
+  none. A dump of the frozen game (`MiniDumpWriteDump`, taken before the prompt is answered) read with ClrMD gave the
+  managed exception and its stack at once (the `MovementOrder` crash above).
 - **Make failure messages say what was seen and what was expected:** "after reopening 2 time(s) the stash holds 10
   grain, expected 5".
 - **Trace instead of guessing** when a number is wrong: log the messages or events involved on both sides, then

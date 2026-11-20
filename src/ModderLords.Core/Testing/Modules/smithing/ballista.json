@@ -1,0 +1,30 @@
+{
+  // The tier 6 ballista bow is a 3.77 m yumi with its own bow shader (MS2's docs/ballista-yumi.md). On a new world:
+  // MS2 has copied its shader files into the game's Shaders\Sources; a crafted ballista bow wears the yumi (no
+  // item-level scale, no longbow carry model, Bow 200 to equip) and keeps it through a save and reload; then the hero,
+  // handed to the AI, fights looters with it and ballista bolts, shoots and hits. The battle's screenshots (the bow on
+  // the back, at full draw) are in the run folder's evidence\yumi-battle, for a person to judge the size and the bend.
+  "api": 2,
+  "name": "ballista",
+  "mode": "singleplayer",
+  "continuity": true,
+  "description": "The ballista bow is the yumi: its shader files are installed, a crafted one has the yumi's model through a save and reload, and an AI archer with it and ballista bolts shoots and hits in a battle (screenshots of the carry and the draw kept).",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)", "\\[ShaderSourceInstall\\].*failed [1-9]" ],
+  "steps": [
+    { "id": "smithing.yumiShaders", "side": "game" },
+    { "id": "smithing.yumiItem", "side": "game", "as": "donor" },
+    { "id": "smithing.setSetting", "side": "game", "as": "on", "args": { "name": "ballista_bows", "value": "true" } },
+    { "id": "smithing.prepare", "side": "game", "args": { "skill": 330 } },
+    { "id": "smithing.craft", "side": "game", "as": "bow", "args": { "family": "bow", "slot": "bow", "inner": "bow_limbs_ballista", "middle": "bow_riser_horn", "outer": "bow_string_sinew" } },
+    { "id": "smithing.yumiItem", "side": "game", "as": "crafted", "args": { "item": "$bow.value", "difficulty": 200 } },
+    { "id": "smithing.craft", "side": "game", "as": "bolts", "args": { "family": "ammo", "slot": "arrow", "inner": "arrow_shaft_ballista", "middle": "arrow_head_ballista", "outer": "arrow_fletching_ballista", "extra": "arrow_nock_ballista", "batch": 20 } },
+    { "id": "game.save", "side": "game", "args": { "name": "mltest-smithing-ballista" } },
+    { "id": "game.toMainMenu", "side": "game", "timeoutSeconds": 300 },
+    { "id": "game.loadSave", "side": "game", "timeoutSeconds": 900, "args": { "name": "mltest-smithing-ballista" } },
+    { "id": "game.pause", "side": "game" },
+    { "id": "smithing.yumiItem", "side": "game", "as": "reloaded", "args": { "item": "$bow.value", "difficulty": 200 } },
+    { "id": "smithing.yumiBattle", "side": "game", "as": "battle", "timeoutSeconds": 420, "args": { "bow": "$bow.value", "ammo": "$bolts.value", "enemies": 6, "shots": 3, "screenshots": 3 } },
+    { "id": "smithing.setSetting", "side": "game", "as": "back", "args": { "name": "ballista_bows", "value": "$on.before" } },
+    { "id": "game.noErrors", "side": "game", "continueOnFail": true }
+  ]
+}

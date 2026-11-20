@@ -1,0 +1,28 @@
+{
+  // The ballista yumi in Coop. The player's game has MS2's bow shader files in the game's Shaders\Sources (the
+  // dedicated server skips the copy and is only logged). The server and the player's game load the same yumi donor
+  // item. A player's ballista bow, crafted by the server, arrives as the yumi on both sides. ballista_bows is turned on
+  // for the craft on both sides and put back after. Every check reads the new item only, so the suite runs on the
+  // shared world.
+  "api": 2,
+  "name": "ballista-coop",
+  "mode": "coop",
+  "world": "shared",
+  "description": "The player's game has the yumi's shader files, both sides load the yumi donor, and a player's ballista bow crafted by the server is the yumi on both sides.",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)", "\\[ShaderSourceInstall\\].*failed [1-9]", "host denied craft" ],
+  "steps": [
+    { "id": "smithing.yumiShaders", "side": "client:1" },
+    { "id": "smithing.yumiShaders", "side": "server" },
+    { "compare": "smithing.yumiItem", "sides": ["server", "client:1"] },
+    { "id": "smithing.setSetting", "side": "server", "as": "serverOn", "args": { "name": "ballista_bows", "value": "true" } },
+    { "id": "smithing.setSetting", "side": "client:1", "as": "playerOn", "args": { "name": "ballista_bows", "value": "true" } },
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "family": "bow", "slot": "bow", "inner": "bow_limbs_ballista", "middle": "bow_riser_horn", "outer": "bow_string_sinew" } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "bow", "timeoutSeconds": 120, "args": { "family": "bow", "slot": "bow", "inner": "bow_limbs_ballista", "middle": "bow_riser_horn", "outer": "bow_string_sinew" } },
+    { "compare": "smithing.yumiItem", "sides": ["server", "client:1"], "args": { "item": "$bow.value", "difficulty": 200 } },
+    { "compare": "smithing.itemStats", "sides": ["server", "client:1"], "args": { "item": "$bow.value" } },
+    { "id": "smithing.setSetting", "side": "server", "as": "serverBack", "args": { "name": "ballista_bows", "value": "$serverOn.before" } },
+    { "id": "smithing.setSetting", "side": "client:1", "as": "playerBack", "args": { "name": "ballista_bows", "value": "$playerOn.before" } },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
