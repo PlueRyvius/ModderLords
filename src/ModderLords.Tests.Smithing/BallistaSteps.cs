@@ -352,15 +352,16 @@ internal static class BallistaSteps
         $"controller {agent.Controller}, watch {agent.CurrentWatchState}, ai flags {agent.AIStateFlags}, formation {agent.Formation?.FormationIndex.ToString() ?? "none"}";
 
     /// <summary>
-    /// Points the battle screen at the agent from <paramref name="angle"/> degrees round from where it faces (0 in front,
-    /// 90 at its side, 180 behind), 5 m out and about 3 m up, framing a 3.77 m bow whole; null gives the player's camera
-    /// back. Reaches the screen (MissionScreen.CustomCamera, in the View assembly) by reflection. False when there is
-    /// no such screen.
+    /// Points the mission screen at the agent from <paramref name="angle"/> degrees round from where it faces (0 in front,
+    /// 90 at its side, 180 behind), <paramref name="distance"/> m out, looking at <paramref name="height"/> m up from
+    /// <paramref name="rise"/> m above that. The defaults (5 m out, about 3 m up) frame a 3.77 m bow whole; null gives the
+    /// player's camera back. Reaches the screen (MissionScreen.CustomCamera, in the View assembly) by reflection. False
+    /// when there is no such screen.
     /// </summary>
     private static TaleWorlds.Engine.GameEntity? _cameraEntity;
     private static TaleWorlds.Engine.Scene? _cameraScene;
 
-    private static bool ViewCamera(Agent agent, float? angle)
+    internal static bool ViewCamera(Agent agent, float? angle, float distance = 5f, float height = 1.4f, float rise = 1.6f, float fov = 1.0f)
     {
         var screens = Type.GetType("TaleWorlds.ScreenSystem.ScreenManager, TaleWorlds.ScreenSystem");
         var screen = screens?.GetProperty("TopScreen", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
@@ -372,12 +373,12 @@ internal static class BallistaSteps
         forward = forward.LengthSquared > 0.0001f ? forward.Normalized() : new Vec2(0f, 1f);
         float rad = angle.Value * (float)Math.PI / 180f;
         var dir = new Vec2(forward.x * (float)Math.Cos(rad) - forward.y * (float)Math.Sin(rad), forward.x * (float)Math.Sin(rad) + forward.y * (float)Math.Cos(rad));
-        var at = agent.Position + new Vec3(0f, 0f, 1.4f);
-        // 5 m out and 1.6 m above chest height (about 3 m up): over the bushes and carts that hid the hero at chest
-        // height, looking down at him.
-        var eye = at + new Vec3(dir.x * 5f, dir.y * 5f, 1.6f);
+        var at = agent.Position + new Vec3(0f, 0f, height);
+        // By default 5 m out and 1.6 m above chest height (about 3 m up): over the bushes and carts that hid the hero at
+        // chest height, looking down at him.
+        var eye = at + new Vec3(dir.x * distance, dir.y * distance, rise);
         var camera = TaleWorlds.Engine.Camera.CreateCamera();
-        camera.SetFovVertical(1.0f, 16f / 9f, 0.1f, 2000f);
+        camera.SetFovVertical(fov, 16f / 9f, 0.1f, 2000f);
         camera.LookAt(eye, at, Vec3.Up);
         // The screen copies a custom camera's lens but takes its position only from an entity the camera sits on
         // (MissionScreen.CheckForUpdateCamera): without one the view stayed at the scene's origin, out over the sea.

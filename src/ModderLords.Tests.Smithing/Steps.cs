@@ -59,6 +59,7 @@ public static class Steps
         InGameTests.Register("smithing.coopCraft", StepSide.Client, CoopCraft);
         InGameTests.Register("smithing.itemStats", StepSide.Any, ItemStats);
         BallistaSteps.Register();
+        LookSteps.Register();
         QuietNotice();
     }
 

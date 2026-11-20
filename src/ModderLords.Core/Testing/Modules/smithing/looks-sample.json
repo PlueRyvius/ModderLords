@@ -1,0 +1,18 @@
+{
+  // A quick check that MS2's armor dyes work at all on this game: three looks per slot, each crafted with a bold color
+  // per dye region, its dye textures rebuilt from the game's files, and worn by the hero in a town for a front and a back
+  // photo. The contact sheet is evidence\every-look\index.html. Manual: it needs Harmony and UIExtenderEx (MS2's dye
+  // renderer) and takes a few minutes. For the looks a game update or a re-bake changed, run looks-listed.
+  "api": 2,
+  "name": "looks-sample",
+  "mode": "singleplayer",
+  "manual": true,
+  "description": "Three armor looks per slot crafted with a test dye per region, their dye textures rebuilt, and photographed on the hero (contact sheet).",
+  "requires": [ { "id": "ModularSmithing2" }, { "id": "Bannerlord.Harmony" }, { "id": "Bannerlord.UIExtenderEx" } ],
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
+  "steps": [
+    { "id": "settlement.enter", "side": "game", "args": { "town": "town_EN1" } },
+    { "id": "smithing.everyLook", "side": "game", "as": "looks", "timeoutSeconds": 1800, "args": { "perSlot": 3 } },
+    { "id": "game.noErrors", "side": "game", "continueOnFail": true }
+  ]
+}

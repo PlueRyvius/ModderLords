@@ -1,7 +1,7 @@
 {
   "id": "smithing",
   "title": "Modular Smithing 2",
-  "description": "Modular Smithing 2's crafting on a new world and on a save made with its last release: armor weighs and costs what MS2 says, the designer's tier matches the game's, ammo flies at native speed, crafted items survive a save and reload, old items keep their stats after an update, damage types and their one-time notice work, no helper piece from another mod becomes a crafted look, and the ballista bow is its yumi: shader files installed, the model through a save and reload and in Coop, and an AI archer drawing and shooting it in a battle.",
+  "description": "Modular Smithing 2's crafting on a new world and on a save made with its last release: armor weighs and costs what MS2 says, the designer's tier matches the game's, ammo flies at native speed, crafted items survive a save and reload, old items keep their stats after an update, damage types and their one-time notice work, no helper piece from another mod becomes a crafted look, and the ballista bow is its yumi: shader files installed, the model through a save and reload and in Coop, and an AI archer drawing and shooting it in a battle. Manual: armor looks crafted with a test dye per region and photographed on the hero (looks-sample, looks-listed).",
   "requires": [ { "id": "ModularSmithing2" } ],
   "steps": "ModderLords.Tests.Smithing.dll",
   // test --package: a release zip of v0.9.50 holds 1305 files, 1073 of them dye masks (and 207 for the dye

@@ -1,0 +1,19 @@
+{
+  // The armor looks a game update or a dye re-bake changed, photographed for a person to check. List them in
+  // %LOCALAPPDATA%\ModderLords\test-inputs\ms2-looks.txt, one item id or dye profile id per line (a profile id takes every
+  // look that uses it; # starts a comment); MS2's offline dye verification names the failing profiles. Each look is
+  // crafted with a bold color per dye region, its dye textures rebuilt from the game's files, and worn by the hero in a
+  // town for a front and a back photo: evidence\every-look\index.html. Manual: it needs Harmony and UIExtenderEx.
+  "api": 2,
+  "name": "looks-listed",
+  "mode": "singleplayer",
+  "manual": true,
+  "description": "The armor looks listed in test-inputs\\ms2-looks.txt crafted with a test dye per region, their dye textures rebuilt, and photographed on the hero (contact sheet).",
+  "requires": [ { "id": "ModularSmithing2" }, { "id": "Bannerlord.Harmony" }, { "id": "Bannerlord.UIExtenderEx" } ],
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
+  "steps": [
+    { "id": "settlement.enter", "side": "game", "args": { "town": "town_EN1" } },
+    { "id": "smithing.everyLook", "side": "game", "as": "looks", "timeoutSeconds": 7200, "args": { "idsFile": "%LOCALAPPDATA%\\ModderLords\\test-inputs\\ms2-looks.txt" } },
+    { "id": "game.noErrors", "side": "game", "continueOnFail": true }
+  ]
+}
