@@ -94,6 +94,31 @@ public sealed record ServerPaths(string DedicatedServerRoot, string DataDir, str
         }
     }
 
+    /// <summary>
+    /// Where Coop's nightly installer puts the server unless told otherwise: Downloads\BannerlordCoop Dedicated Server.
+    /// </summary>
+    public static string NightlyInstallerDefaultRoot() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "BannerlordCoop Dedicated Server");
+
+    /// <summary>
+    /// Every Coop server package this PC has in a known place: the Workshop item's (Coop's release, for one game
+    /// version) and the nightly installer's default folder (the nightlies, often for a newer one).
+    /// </summary>
+    public static IEnumerable<string> FindCoopServerRoots()
+    {
+        foreach (var root in FindWorkshopDedicatedServerRoots()) yield return root;
+        var nightly = NightlyInstallerDefaultRoot();
+        if (File.Exists(Path.Combine(nightly, "BannerlordCoopServer.exe"))) yield return nightly;
+    }
+
+    /// <summary>
+    /// The Coop server package to host from for the game installed at <paramref name="gameRoot"/>: the profile's
+    /// folder when it runs that game, else a package found here that does (see <see cref="CoopGameSupport.PickServer"/>).
+    /// </summary>
+    public static CoopGameSupport.ServerChoice ChooseRoot(string? configured, string? gameRoot) =>
+        CoopGameSupport.PickServer(configured, FindCoopServerRoots(),
+            gameRoot is null ? null : CoopGameSupport.GameVersion(gameRoot), CoopGameSupport.ServerGameVersion);
+
     /// <summary>Kept as a forwarder so existing callers on the server side read the same as they did.</summary>
     public static IEnumerable<string> SteamLibraries() => GamePaths.SteamLibraries();
 

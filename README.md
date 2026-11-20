@@ -54,6 +54,19 @@ The list rescans straight away.
 Leave a box empty to keep finding it automatically in your Steam libraries. Mods kept somewhere other than the game's
 `Modules` folder or the Workshop go under **Extra mod folders** in the same dialog.
 
+#### Coop builds for different game versions
+
+Each Coop build runs on one game version: the Workshop release (module `Coop`) and the nightlies (module
+`CoopNightly`, installed by Coop's nightly installer) are often for different ones. When both are installed,
+ModderLords goes by the game version installed on your PC:
+
+- **Hosting:** it uses the Coop server for your game version. That is the Workshop's, or the nightly installer's
+  default folder, `Downloads\BannerlordCoop Dedicated Server`. A server folder you set yourself is used while it runs
+  your game version; if it runs another one, the launch log says so and hosts from the one that fits. The Folders
+  dialog shows which game version each server runs.
+- **Playing:** a profile ticks one Coop. If that one was built for another game version and the other Coop fits
+  yours, the game loads the other one, and the launch log says so. If both are ticked, only the one that fits loads.
+
 **Something else wrong?** [Troubleshooting](#troubleshooting) covers the failures people actually hit.
 
 ---
@@ -719,7 +732,7 @@ Per-profile things without a tab of their own:
 |---|---|---|
 | Don't ask again for this profile | the **Launch client** confirmation dialog | Applies the launcher-list changes silently from then on. Warnings the sync cannot fix are still reported either way. |
 | Extra mod folders | **Folders…** on the top bar | Folders holding mods outside the game's `Modules` folder and the Workshop. Pick the folder that *contains* the mods. |
-| Game and coop server folders | **Folders…** | Leave empty to keep finding them automatically in your Steam libraries. Set them for a GOG, Xbox or copied install. |
+| Game and coop server folders | **Folders…** | Leave empty to keep finding them automatically in your Steam libraries (and the Coop nightly installer's default folder). Set them for a GOG, Xbox or copied install. A server for another game version than yours is passed over for one that fits. |
 
 ---
 

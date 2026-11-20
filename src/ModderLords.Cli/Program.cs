@@ -131,7 +131,14 @@ if (cmd == "play")
     return 0;
 }
 
-var root = opts.GetValueOrDefault("root") ?? ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault();
+var root = opts.GetValueOrDefault("root");
+if (root is null)
+{
+    // The Coop server package for the game installed here (Workshop release or nightly), as a profile launch picks it.
+    var choice = ServerPaths.ChooseRoot(null, opts.GetValueOrDefault("game") ?? ModuleCatalog.FindGameRoot(ServerPaths.SteamLibraries().ToList()));
+    root = choice.Root;
+    if (choice.Note is not null) Console.WriteLine("[ModderLords] " + choice.Note);
+}
 if (root is null) { Console.Error.WriteLine("No DedicatedServer folder found; pass --root."); return 2; }
 var diagnosticData = opts.GetValueOrDefault("data-dir");
 var paths = ServerView.For(ServerPaths.Create(root, diagnosticData,
