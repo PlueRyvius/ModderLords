@@ -43,6 +43,14 @@ namespace ModderLords.CompatSync.Coop.Admin
         private static readonly FieldInfo? StealthEquipment = AccessTools.Field(typeof(Hero), "_stealthEquipment");
         private static readonly PropertyInfo? DeathMark = AccessTools.Property(typeof(Hero), nameof(Hero.DeathMark));
         private static readonly ConstructorInfo? NewDeveloper = AccessTools.Constructor(typeof(HeroDeveloper), new[] { typeof(Hero) });
+        // v1.4.8 has InitializeHeroDeveloper(); v1.5.7 added an optional bool (developCharacterStats = true). A direct
+        // call binds to one of them and throws MissingMethodException on the other, so it is found by name and called
+        // with its parameters' defaults, which on both versions does what the game's own HeroCreator does.
+        private static readonly MethodInfo? InitializeDeveloper = typeof(HeroDeveloper)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name == "InitializeHeroDeveloper" && m.GetParameters().All(p => p.IsOptional))
+            .OrderBy(m => m.GetParameters().Length)
+            .FirstOrDefault();
 
         /// <summary>Null when this game version has every member a rebuild needs; otherwise which are missing.</summary>
         public static string? Missing()
@@ -51,7 +59,7 @@ namespace ModderLords.CompatSync.Coop.Admin
             {
                 ("_heroDeveloper", (object?)Developer), ("_heroSkills", SkillStore), ("_heroTraits", TraitStore), ("_heroPerks", PerkStore),
                 ("_characterAttributes", AttributeStore), ("_battleEquipment", BattleEquipment), ("_civilianEquipment", CivilianEquipment),
-                ("DeathMark", DeathMark), ("HeroDeveloper(Hero)", NewDeveloper),
+                ("DeathMark", DeathMark), ("HeroDeveloper(Hero)", NewDeveloper), ("InitializeHeroDeveloper", InitializeDeveloper),
             }.Where(m => m.Item2 is null).Select(m => m.Item1).ToList();
             return missing.Count == 0 ? null : string.Join(", ", missing);
         }
@@ -69,7 +77,7 @@ namespace ModderLords.CompatSync.Coop.Admin
             var model = Campaign.Current.Models.HeroCreationModel;
             foreach (var (trait, value) in model.GetTraitsForHero(hero)) hero.SetTraitLevel(trait, value);
             foreach (var (skill, value) in model.GetDefaultSkillsForHero(hero)) hero.SetSkillValue(skill, value);
-            if (hero.Age >= Campaign.Current.Models.AgeModel.HeroComesOfAge) hero.HeroDeveloper.InitializeHeroDeveloper();
+            if (hero.Age >= Campaign.Current.Models.AgeModel.HeroComesOfAge) InitializeDeveloper!.Invoke(hero.HeroDeveloper, InitializeDeveloper.GetParameters().Select(p => p.DefaultValue).ToArray());
 
             // The template's first sets, so the server and every client end up with the same clothes.
             var source = hero.Template ?? hero.CharacterObject;
