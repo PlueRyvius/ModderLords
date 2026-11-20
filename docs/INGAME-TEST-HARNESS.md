@@ -99,7 +99,7 @@ src/ModderLords.Core/Testing/Modules/          (built in, embedded like today's 
   parity/    module.json  parity.json
   world/     module.json  sp-world.json
   retinues/  module.json  editor.json
-  smithing/  module.json  health.json  ammo.json  tier-preview.json  heal-on-load.json  coop-craft.json
+  smithing/  module.json  health.json  ammo.json  tier-preview.json  heal-on-load.json  coop-craft.json  ballista.json  ballista-coop.json
   taom/      module.json  supply-lines.json  navpath.json (manual)
 src/ModderLords.Tests.Retinues/                (retinues' steps: references Retinues' DLL at compile time only)
 src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2's DLL at compile time only)
@@ -279,7 +279,8 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
       on both sides. It set up the build wiring (`HasRetinuesAssemblies` in `Directory.Build.props`).
    4. `smithing` (Modular Smithing 2), with its own DLL and `ModularSmithing2.health`.
       Its suites: `health` (both), `ammo`, `tier-preview` (single player), `heal-on-load` (single player,
-      continuity) and `coop-craft` (Coop).
+      continuity), `coop-craft` (Coop), and for the ballista yumi `ballista` (single player, continuity: the first
+      battle a step starts, 2026-11-19) and `ballista-coop` (Coop).
    5. `taom` (TAOM), with its own DLL and `TAOM.health`. **Built 2026-11-15** from a support bundle:
       a TAOM server died 0.45 s after a player's supply caravan set out from a village. `supply-lines` (Coop) places
       an order from the player's town and one from the nearest village as the order screen's Confirm does, runs
@@ -739,6 +740,25 @@ was the harness, and each lesson is now in it:
 - **Trace instead of guessing.** `game.trace` logs Coop's trade and item-roster messages on both sides; it found the
   double Done in one run.
 
+The first battle (`smithing.yumiBattle`, 2026-11-19) took a day of runs; these are what it taught:
+
+- **A step that starts outside a battle must not name battle-only static fields.** `MovementOrder.MovementOrderCharge`
+  in the step's coroutine made .NET Framework run `MovementOrder`'s static setup when the coroutine was compiled, on the
+  campaign map. It reads `Mission.Current.CurrentTime`, threw, and left the type broken for the session; every battle
+  after that crashed while adding its teams (`Formation.Reset`). Put such calls in a separate
+  `[MethodImpl(NoInlining)]` method called inside the battle. A dump of the crashed game found it, after nine crashes
+  the engine logs could not explain.
+- **The player's agent comes with its AI paused.** Handed to the AI (`Controller = AI`), it stands still until
+  `IsPaused` is cleared; it also needs a formation with orders.
+- **A screenshot needs a camera that frames the thing.** The player's camera sits over the shoulder: a long bow is
+  mostly out of frame. `MissionScreen.CustomCamera` takes a camera's lens but its position only from an entity the
+  camera sits on; set above bush height.
+- **It finds real bugs.** The side-camera screenshots showed the crafted yumi invisible: MS2 shipped its unpacked
+  assets without their `RuntimeDataCache`. Then `ballista-coop` found that an unpacked `Assets` folder crashes the
+  dedicated server on start (it has no textures, not even the fallback ones, and overflows the stack); MS2 now ships
+  the yumi packed, client only, and the server's overlay now keeps a mod's unpacked `Assets` off the server too (#332,
+  #333).
+
 ## Not done yet
 
 - A run that shows the stash suite failing without PR #263. This branch cannot build the Coop adapter against the
@@ -747,5 +767,6 @@ was the harness, and each lesson is now in it:
 - "TEST MODE" in the server's player list (decision 6); the log lines are there.
 - The delivery-quest and Living Economy suites; a second player's game; an App button.
 - Everything in v2 (above) that the build order has not reached.
-- A battle step: start a custom battle with given equipment, run until it ends or a time limit, read hits and kills.
-  For behaviour that property checks can't reach (AI archers actually hitting); the expensive one, so it waits.
+- A general battle step. `smithing.yumiBattle` (single player) starts a field battle against a map bandit party, hands
+  the hero to the AI and counts shots and hits; its setup (encounter, deployment, AI handover, side camera) could move
+  into `BuiltInSteps` for other modules. Coop battles are not covered.
