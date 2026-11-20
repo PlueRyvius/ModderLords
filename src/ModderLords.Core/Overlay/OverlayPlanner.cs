@@ -31,8 +31,8 @@ public sealed record OverlayPlan(string OverlayRoot, string EngineModulesRoot, I
 /// <summary>
 /// Decides, per selected mod, how the engine gets to see it. Reads directory listings, plus - only for a Run mod that
 /// declares itself client-only - the IL metadata of its own submodule DLLs, to say whether overriding that declaration
-/// is likely to survive - and, only for a mod asked to leave folders out on the server, the names of its top-level
-/// folders. Tests inject <paramref name="scan"/> and <paramref name="topLevelFolders"/> to keep the planner off disk
+/// is likely to survive - and the names of each mod's top-level folders (to find folders to leave out on the
+/// server, and unpacked editor Assets). Tests inject <paramref name="scan"/> and <paramref name="topLevelFolders"/> to keep the planner off disk
 /// entirely.
 /// </summary>
 public static class OverlayPlanner
@@ -86,12 +86,35 @@ public static class OverlayPlanner
             // A direct junction is the whole mod folder or nothing, so leaving a folder out forces a shadow - but only
             // when there is something to leave out. A name that matches no folder must not cost the mod its direct
             // junction: a record that lists RuntimeDataCache would otherwise shadow every copy that never had one.
+            // The same goes for unpacked editor Assets: the server crashes on them, and only a shadow leaves them out
+            // (ServerFolderExclusions.NeverShownToServer). AssetPackages alone does not force a shadow: packed mods
+            // have always been junctioned whole, and the server copes with a client pack it is shown that way.
+            var editorAssets = EditorAssetFolders(mod, topLevelFolders, excluded);
+            if (editorAssets.Count > 0) notes.Add(LeftOutNote + string.Join(", ", editorAssets) + " (unpacked editor assets)");
+
             var kind = (!manifestNeedsRewrite && headlessAssetPath is null && headlessMapPath is null && excluded.Count == 0 &&
-                        (mod.HasServerBin || !mod.HasClientBin)) ? OverlayKind.DirectJunction : OverlayKind.Shadow;
+                        editorAssets.Count == 0 && (mod.HasServerBin || !mod.HasClientBin)) ? OverlayKind.DirectJunction : OverlayKind.Shadow;
             var shadow = kind == OverlayKind.Shadow ? Path.Combine(overlayRoot, mod.Id) : null;
             entries.Add(new OverlayEntry(sel, kind, enginePath, shadow, binTarget, notes, headlessAssetPath, headlessMapPath, excluded));
         }
         return new OverlayPlan(overlayRoot, engineModulesRoot, entries);
+    }
+
+    /// <summary>
+    /// The mod's unpacked editor asset folders (Assets, and the AssetSources and RuntimeDataCache beside it) that the
+    /// server's shadow will leave out whatever the lists say, named as they are on disk. Empty when the mod has no
+    /// Assets folder or its folders cannot be read. Names already in <paramref name="excluded"/> are not repeated.
+    /// </summary>
+    private static IReadOnlyList<string> EditorAssetFolders(DiscoveredModule mod,
+        Func<DiscoveredModule, IEnumerable<string>> topLevelFolders, IReadOnlyList<string> excluded)
+    {
+        List<string> onDisk;
+        try { onDisk = topLevelFolders(mod).ToList(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
+        return onDisk.Where(n => !n.Equals("AssetPackages", StringComparison.OrdinalIgnoreCase)
+                                 && ServerFolderExclusions.NeverShownToServer(n, onDisk) is not null
+                                 && !excluded.Contains(n, StringComparer.OrdinalIgnoreCase))
+            .ToList();
     }
 
     /// <summary>Starts the note that says which folders the server is not shown. The launch log repeats notes that begin with it.</summary>
