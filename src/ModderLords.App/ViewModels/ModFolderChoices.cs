@@ -81,7 +81,7 @@ public sealed class ModFolderChoices
                      .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
         {
             var present = Has(onDisk, name);
-            if (LockedSide(name) is { } locked)
+            if (LockedSide(name, onDisk) is { } locked)
             {
                 if (Has(clientOnly, name)) _lockedInServerList.Add(name);
                 rows.Add(new ModFolderRow
@@ -105,15 +105,16 @@ public sealed class ModFolderChoices
     internal const string NotPresentNote = "Not present in this copy of the mod. Choose " + ModFolderRow.BothLabel + " to forget it.";
 
     /// <summary>
-    /// The two folders whose side is not a choice. <c>bin</c> holds the mod's code and both sides load it (the server
-    /// through its own redirect). <c>AssetPackages</c> is never given to the dedicated server, whatever a list says:
-    /// that is hard-coded where the server's shadow is built (OverlayApplier.BuildShadow).
+    /// The folders whose side is not a choice. <c>bin</c> holds the mod's code and both sides load it (the server
+    /// through its own redirect). The client's assets (<c>AssetPackages</c>, unpacked <c>Assets</c> and what goes with
+    /// them) are never given to the dedicated server, whatever a list says: see
+    /// <see cref="ServerFolderExclusions.NeverShownToServer"/>, which the server's shadow follows too.
     /// </summary>
-    private static (FolderSide Side, string Reason)? LockedSide(string name) =>
+    private static (FolderSide Side, string Reason)? LockedSide(string name, IEnumerable<string> onDisk) =>
         name.Equals("bin", StringComparison.OrdinalIgnoreCase)
             ? (FolderSide.Both, "Always both: this is the mod's code.")
-        : name.Equals("AssetPackages", StringComparison.OrdinalIgnoreCase)
-            ? (FolderSide.ClientOnly, "Always client only: the dedicated server is never shown AssetPackages.")
+        : ServerFolderExclusions.NeverShownToServer(name, onDisk) is { } reason
+            ? (FolderSide.ClientOnly, "Always client only: " + reason)
         : null;
 
     /// <summary>

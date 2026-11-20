@@ -219,4 +219,62 @@ public sealed class OverlayTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(shadow, "SceneObj", "Backups")));
         Assert.True(File.Exists(Path.Combine(mod.FolderPath, "AssetPackages", "client.tpac")));
     }
+
+    /// <summary>
+    /// A mod in development carries unpacked editor Assets; a server shown them crashes on a material's texture. They,
+    /// and the AssetSources and RuntimeDataCache that go with them, stay out of the shadow whatever the lists say.
+    /// </summary>
+    [Fact]
+    public void Unpacked_editor_assets_never_reach_the_server()
+    {
+        var mod = MakeMod("Unpacked", serverBin: true, clientOnlyTags: true);
+        foreach (var dir in new[] { "Assets", "AssetSources", "RuntimeDataCache", "ModuleData" })
+        {
+            Directory.CreateDirectory(Path.Combine(mod.FolderPath, dir));
+            File.WriteAllText(Path.Combine(mod.FolderPath, dir, "file.txt"), dir);
+        }
+
+        // An empty profile list is "leave nothing out", which overrules a record but not this.
+        var plan = OverlayPlanner.Plan(_overlay, _engineModules, [new ModSelection(mod, ServerRole.Run)],
+            profileExcludedFolders: _ => []);
+        new OverlayApplier().Apply(plan);
+
+        var shadow = plan.Entries.Single().ShadowPath!;
+        Assert.False(Directory.Exists(Path.Combine(shadow, "Assets")));
+        Assert.False(Directory.Exists(Path.Combine(shadow, "AssetSources")));
+        Assert.False(Directory.Exists(Path.Combine(shadow, "RuntimeDataCache")));
+        Assert.True(Junction.PointsTo(Path.Combine(shadow, "ModuleData"), Path.Combine(mod.FolderPath, "ModuleData")));
+        Assert.True(File.Exists(Path.Combine(mod.FolderPath, "Assets", "file.txt")));
+    }
+
+    /// <summary>Without unpacked Assets, AssetSources and RuntimeDataCache are the host's choice, as they always were.</summary>
+    [Fact]
+    public void Asset_caches_without_unpacked_assets_still_reach_the_server()
+    {
+        var mod = MakeMod("Packed", serverBin: true, clientOnlyTags: true);
+        foreach (var dir in new[] { "AssetSources", "RuntimeDataCache" })
+            Directory.CreateDirectory(Path.Combine(mod.FolderPath, dir));
+
+        var plan = OverlayPlanner.Plan(_overlay, _engineModules, [new ModSelection(mod, ServerRole.Run)]);
+        new OverlayApplier().Apply(plan);
+
+        var shadow = plan.Entries.Single().ShadowPath!;
+        Assert.True(Junction.PointsTo(Path.Combine(shadow, "AssetSources"), Path.Combine(mod.FolderPath, "AssetSources")));
+        Assert.True(Junction.PointsTo(Path.Combine(shadow, "RuntimeDataCache"), Path.Combine(mod.FolderPath, "RuntimeDataCache")));
+    }
+
+    [Theory]
+    [InlineData("AssetPackages", false, true)]
+    [InlineData("assets", false, true)]
+    [InlineData("AssetSources", true, true)]
+    [InlineData("RuntimeDataCache", true, true)]
+    [InlineData("AssetSources", false, false)]
+    [InlineData("RuntimeDataCache", false, false)]
+    [InlineData("ModuleData", true, false)]
+    [InlineData("DsAssetPackages", true, false)]
+    public void Which_folders_the_server_is_never_shown(string name, bool besideAssets, bool neverShown)
+    {
+        string[] siblings = besideAssets ? ["Assets", name] : [name];
+        Assert.Equal(neverShown, ServerFolderExclusions.NeverShownToServer(name, siblings) is not null);
+    }
 }
