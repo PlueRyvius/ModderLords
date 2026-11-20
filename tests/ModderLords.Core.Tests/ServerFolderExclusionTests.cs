@@ -28,15 +28,47 @@ public sealed class ServerFolderExclusionPlannerTests
             topLevelFolders: _ => foldersOnDisk).Entries);
 
     [Fact]
-    public void Nothing_asked_for_keeps_the_direct_junction_and_never_lists_the_folder()
+    public void Nothing_asked_for_keeps_the_direct_junction()
+    {
+        var entry = Plan(profile: null, record: null, "ModuleData", "AssetPackages", "AssetSources", "RuntimeDataCache");
+
+        Assert.Equal(OverlayKind.DirectJunction, entry.Kind);
+        Assert.Empty(entry.ExcludedFolders ?? []);
+        Assert.DoesNotContain(entry.Notes, n => n.StartsWith(OverlayPlanner.LeftOutNote));
+    }
+
+    /// <summary>
+    /// Unpacked editor Assets crash the server, and a direct junction would show it the whole mod, so a mod that has
+    /// them is shadowed even when nothing is asked for; the shadow then leaves them out (OverlayApplier.BuildShadow).
+    /// </summary>
+    [Fact]
+    public void Unpacked_editor_assets_force_a_shadow_and_are_named_in_the_notes()
+    {
+        var entry = Plan(profile: [], record: null, "ModuleData", "Assets", "AssetSources", "RuntimeDataCache", "AssetPackages");
+
+        Assert.Equal(OverlayKind.Shadow, entry.Kind);
+        Assert.Contains(OverlayPlanner.LeftOutNote + "Assets, AssetSources, RuntimeDataCache (unpacked editor assets)", entry.Notes);
+    }
+
+    [Fact]
+    public void Editor_assets_already_asked_for_are_not_named_twice()
+    {
+        var entry = Plan(profile: ["Assets"], record: null, "ModuleData", "Assets", "RuntimeDataCache");
+
+        Assert.Equal(OverlayKind.Shadow, entry.Kind);
+        Assert.Contains(OverlayPlanner.LeftOutNote + "Assets", entry.Notes);
+        Assert.Contains(OverlayPlanner.LeftOutNote + "RuntimeDataCache (unpacked editor assets)", entry.Notes);
+    }
+
+    [Fact]
+    public void A_mod_folder_that_cannot_be_read_keeps_the_direct_junction()
     {
         var entry = Assert.Single(OverlayPlanner.Plan(@"X\overlay", @"X\engine", [new ModSelection(Mod(), ServerRole.Run)],
             scan: _ => new ScanResult("Mod", ServerVerdict.ServerSafe, [], [], [], [], [], [], [], false),
             record: _ => null, typeNames: _ => [],
-            topLevelFolders: _ => throw new Exception("the mod folder must not be read when nothing is left out")).Entries);
+            topLevelFolders: _ => throw new IOException("unreadable")).Entries);
 
         Assert.Equal(OverlayKind.DirectJunction, entry.Kind);
-        Assert.Empty(entry.ExcludedFolders ?? []);
     }
 
     [Fact]

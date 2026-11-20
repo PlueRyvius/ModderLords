@@ -247,6 +247,31 @@ public sealed class OverlayTests : IDisposable
         Assert.True(File.Exists(Path.Combine(mod.FolderPath, "Assets", "file.txt")));
     }
 
+    /// <summary>
+    /// A mod that would be junctioned whole (server bin, nothing to rewrite) is shadowed instead when it has unpacked
+    /// Assets, because a whole-mod junction would show them to the server. This was MS2's case in the crash.
+    /// </summary>
+    [Fact]
+    public void A_mod_junctioned_whole_is_shadowed_when_it_has_unpacked_assets()
+    {
+        var plain = MakeMod("PlainPacked", serverBin: true, clientOnlyTags: false);
+        Directory.CreateDirectory(Path.Combine(plain.FolderPath, "AssetPackages"));
+        var unpacked = MakeMod("PlainUnpacked", serverBin: true, clientOnlyTags: false);
+        Directory.CreateDirectory(Path.Combine(unpacked.FolderPath, "Assets"));
+        Directory.CreateDirectory(Path.Combine(unpacked.FolderPath, "ModuleData"));
+
+        var plan = OverlayPlanner.Plan(_overlay, _engineModules,
+            [new ModSelection(plain, ServerRole.Run), new ModSelection(unpacked, ServerRole.Run)]);
+        new OverlayApplier().Apply(plan);
+
+        Assert.Equal(OverlayKind.DirectJunction, plan.Entries.Single(e => e.Selection.Module == plain).Kind);
+        var entry = plan.Entries.Single(e => e.Selection.Module == unpacked);
+        Assert.Equal(OverlayKind.Shadow, entry.Kind);
+        var seen = Path.Combine(_engineModules, unpacked.Id);
+        Assert.False(Directory.Exists(Path.Combine(seen, "Assets")));
+        Assert.True(Directory.Exists(Path.Combine(seen, "ModuleData")));
+    }
+
     /// <summary>Without unpacked Assets, AssetSources and RuntimeDataCache are the host's choice, as they always were.</summary>
     [Fact]
     public void Asset_caches_without_unpacked_assets_still_reach_the_server()
