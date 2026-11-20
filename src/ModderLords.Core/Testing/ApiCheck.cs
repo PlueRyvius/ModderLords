@@ -34,7 +34,7 @@ public static class ApiCheck
         foreach (var h in md.TypeReferences)
         {
             var name = ApiIndex.TypeName(md, h);
-            if (name.Length > 0 && Ours(name) && !game.HasType(name)) missing.Add("type " + name);
+            if (name.Length > 0 && Ours(name) && !game.HasType(name) && !FromUninstalledAssembly(md, h, game)) missing.Add("type " + name);
         }
         foreach (var h in md.MemberReferences)
         {
@@ -55,6 +55,22 @@ public static class ApiCheck
                 missing.Add($"method {parent}::{name} ({count} parameter{(count == 1 ? "" : "s")})");
         }
         return missing.ToList();
+    }
+
+    /// <summary>
+    /// Whether a type reference points into an assembly that <paramref name="game"/> does not have at all. War Sails
+    /// declares its types in the game's namespaces (TaleWorlds.CampaignSystem...) inside NavalDLC.dll, and Coop ships
+    /// Coop.Naval.dll and Missions.Naval.dll built against it, which it loads only when War Sails is on. Without War
+    /// Sails installed every one of those types read as removed from the game (2026-11-19). A DLL that needs an
+    /// assembly that is not there cannot be what the game runs, so its types are not judged; a type the game's own
+    /// assemblies dropped is still found, because those assemblies are indexed.
+    /// </summary>
+    private static bool FromUninstalledAssembly(MetadataReader md, TypeReferenceHandle h, ApiIndex game)
+    {
+        var scope = md.GetTypeReference(h).ResolutionScope;
+        while (scope.Kind == HandleKind.TypeReference) scope = md.GetTypeReference((TypeReferenceHandle)scope).ResolutionScope;
+        if (scope.Kind != HandleKind.AssemblyReference || game.AssemblyCount == 0) return false;
+        return !game.HasAssembly(md.GetString(md.GetAssemblyReference((AssemblyReferenceHandle)scope).Name));
     }
 
     /// <summary>
@@ -126,11 +142,18 @@ public sealed class ApiIndex
     }
 
     private readonly Dictionary<string, TypeEntry> _types = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _assemblies = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Identifies this index's assemblies by name, size and time, for caching results against it.</summary>
     public string Key { get; private set; } = "";
 
     public int TypeCount => _types.Count;
+
+    /// <summary>How many assemblies were indexed.</summary>
+    public int AssemblyCount => _assemblies.Count;
+
+    /// <summary>Whether an assembly of that simple name ("TaleWorlds.CampaignSystem") was indexed.</summary>
+    public bool HasAssembly(string name) => _assemblies.Contains(name);
 
     /// <summary>Indexes every .NET assembly among <paramref name="dlls"/>; others are skipped.</summary>
     public static ApiIndex Of(IEnumerable<string> dlls)
@@ -175,6 +198,7 @@ public sealed class ApiIndex
 
     private void Add(MetadataReader md)
     {
+        if (md.IsAssembly) _assemblies.Add(md.GetString(md.GetAssemblyDefinition().Name));
         foreach (var h in md.TypeDefinitions)
         {
             var def = md.GetTypeDefinition(h);
