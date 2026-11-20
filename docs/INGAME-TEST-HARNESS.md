@@ -756,7 +756,8 @@ The first battle (`smithing.yumiBattle`, 2026-11-19) took a day of runs; these a
 - **It finds real bugs.** The side-camera screenshots showed the crafted yumi invisible: MS2 shipped its unpacked
   assets without their `RuntimeDataCache`. Then `ballista-coop` found that an unpacked `Assets` folder crashes the
   dedicated server on start (it has no textures, not even the fallback ones, and overflows the stack); MS2 now ships
-  the yumi packed, client only. `OverlayApplier` leaves a mod's `AssetPackages` off the server but not `Assets`.
+  the yumi packed, client only, and the server's overlay now keeps a mod's unpacked `Assets` off the server too (#332,
+  #333).
 
 ## Not done yet
 
