@@ -28,18 +28,25 @@ public static class FolderChecks
             : (false, @"Bannerlord.exe is not under bin\Win64_Shipping_Client here. Pick the game folder itself, the one containing bin and Modules.");
     }
 
-    public static (bool Ok, string Text) Server(string? root, string? detected)
+    /// <param name="gameVersion">The installed game's version: a server for another one is named, since players on this game cannot join it.</param>
+    public static (bool Ok, string Text) Server(string? root, string? detected, string? gameVersion = null)
     {
         if (root is null)
             return detected is null
                 ? (false, "Not found automatically. Subscribe to Bannerlord Coop on the Steam Workshop, or browse to its DedicatedServer folder.")
-                : (true, "Automatic: " + detected);
+                : (true, "Automatic: " + detected + Runs(detected));
         if (!Directory.Exists(root)) return (false, "This folder does not exist.");
         var problems = ServerPaths.Create(root).Validate().ToList();
-        return problems.Count == 0
-            ? (true, "OK: the Coop dedicated server is complete.")
-            : (false, problems[0] + (problems.Count > 1 ? $" (and {problems.Count - 1} more)" : ""));
+        if (problems.Count > 0) return (false, problems[0] + (problems.Count > 1 ? $" (and {problems.Count - 1} more)" : ""));
+        var runs = CoopGameSupport.ServerGameVersion(root);
+        var game = CoopGameSupport.ShortVersion(gameVersion);
+        if (runs is not null && game is not null && !CoopGameSupport.SameGame(runs, game))
+            return (false, $"This Coop server runs game {runs}, and the game here is {game}."
+                + (detected is not null ? $" Hosting uses the one for {game} instead: {detected}" : $" Install the Coop server for {game}."));
+        return (true, "OK: the Coop dedicated server is complete" + Runs(root) + ".");
     }
+
+    private static string Runs(string root) => CoopGameSupport.ServerGameVersion(root) is { } v ? $" (game {v})" : "";
 
     /// <summary>
     /// The catalogue scans the folders INSIDE an extra mod folder, so a picked folder that is itself a mod (it has a

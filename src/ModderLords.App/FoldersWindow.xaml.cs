@@ -36,7 +36,8 @@ public partial class FoldersWindow : Window
         InitializeComponent();
         _host = host;
         _detectedGame = GamePaths.FindGameRoot();
-        _detectedServer = host ? ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault() : null;
+        // The package a launch would host from for the game installed here (Workshop release or nightly).
+        _detectedServer = host ? ServerPaths.ChooseRoot(null, gameRoot ?? _detectedGame).Root : null;
         ServerPanel.Visibility = host ? Visibility.Visible : Visibility.Collapsed;
         RootsHint.Text = ModderLords.App.ViewModels.FolderChecks.ModRootsHint;
         GameBox.Text = gameRoot ?? "";
@@ -57,7 +58,8 @@ public partial class FoldersWindow : Window
     private void UpdateChecks()
     {
         Show(GameCheck, ModderLords.App.ViewModels.FolderChecks.Game(GameRoot, _detectedGame));
-        if (_host) Show(ServerCheck, ModderLords.App.ViewModels.FolderChecks.Server(ServerRoot, _detectedServer));
+        if (_host) Show(ServerCheck, ModderLords.App.ViewModels.FolderChecks.Server(ServerRoot, _detectedServer,
+            (GameRoot ?? _detectedGame) is { } game ? CoopGameSupport.GameVersion(game) : null));
     }
 
     private void Show(TextBlock label, (bool Ok, string Text) check)

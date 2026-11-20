@@ -73,11 +73,34 @@ public static class ClientLaunchSession
         // Roles are a dedicated-server concept (they decide what the overlay strips out of a manifest). On the
         // player's own machine every enabled mod simply loads, so the selection is used for its module list only.
         var mods = ModuleSelector.Select(profile, catalog, messages, ModuleSelector.ModuleSide.Client).Select(s => s.Module).ToList();
+        // The profile names one Coop (Coop is the Workshop's release, CoopNightly the nightlies), but each is built for
+        // one game version. When the game here is on the other one, load the Coop installed for it instead.
+        var preferredOrder = profile.Mods.Select(m => m.Id).ToList();
+        var thisGame = CoopGameSupport.GameVersion(gameRoot);
+        var coops = mods.Where(m => CoopGameSupport.IsCoop(m.Id)).ToList();
+        if (coops.Count > 1)
+        {
+            // Both ticked: the two builds declare each other incompatible, so only one can load.
+            var keep = coops.FirstOrDefault(m => CoopGameSupport.SameGame(CoopGameSupport.BuiltFor(m), thisGame)) ?? coops[0];
+            mods.RemoveAll(m => CoopGameSupport.IsCoop(m.Id) && !ReferenceEquals(m, keep));
+            messages.Add($"{string.Join(" and ", coops.Select(m => m.Id))} are both ticked and cannot load together: loading {keep.Id} {keep.Version}"
+                + (CoopGameSupport.BuiltFor(keep) is { } built ? $", built for game {built}" : ""));
+        }
+        var coopAt = mods.FindIndex(m => CoopGameSupport.IsCoop(m.Id));
+        if (coopAt >= 0 && CoopGameSupport.BetterCoopFor(mods[coopAt],
+                catalog.Modules.Where(m => !m.IsStock && m.HasClientBin), thisGame) is { } fits)
+        {
+            var named = mods[coopAt];
+            messages.Add($"{named.Id} {named.Version} is built for game {CoopGameSupport.BuiltFor(named)}, and this game is "
+                + $"{CoopGameSupport.ShortVersion(thisGame)}: loading {fits.Id} {fits.Version}, built for it, in its place");
+            mods[coopAt] = fits;
+            preferredOrder = preferredOrder.Select(id => id.Equals(named.Id, StringComparison.OrdinalIgnoreCase) ? fits.Id : id).ToList();
+        }
         // A Coop built for another game version crashes this game as it loads; say so before it does.
         if (mods.FirstOrDefault(m => CoopGameSupport.IsCoop(m.Id)) is { } coop && CoopGameSupport.Warning(coop, gameRoot, installedOfficials) is { } coopWarning)
             messages.Add(coopWarning);
 
-        var order = LoadOrder.Compute(officials, mods, profile.Mods.Select(m => m.Id).ToList(), LoadOrder.Profile.Client,
+        var order = LoadOrder.Compute(officials, mods, preferredOrder, LoadOrder.Profile.Client,
             profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest,
             CompatDb.Current.ClientFollowsCoop());
         messages.AddRange(order.Issues.Select(i => "order: " + i));
@@ -92,7 +115,9 @@ public static class ClientLaunchSession
             ExcludedFolders = excludedFolders,
             SelectedModules = officials.Concat(mods).ToList(),
             // A Client optional mod this player does not have is not missing: the game starts without it.
-            MissingModules = profile.EnabledMods.Where(pm => pm.Role != Overlay.ServerRole.ClientOptional && !mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase)))
+            MissingModules = profile.EnabledMods.Where(pm => pm.Role != Overlay.ServerRole.ClientOptional && !mods.Any(m => m.Id.Equals(pm.Id, StringComparison.OrdinalIgnoreCase))
+                    // A Coop row is met by the Coop loaded in its place for this game version.
+                    && !(CoopGameSupport.IsCoop(pm.Id) && mods.Any(m => CoopGameSupport.IsCoop(m.Id))))
                 .Select(pm => pm.Id).Concat(profile.ClientOfficialModules.Where(id => !officials.Any(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             RequiresIsolatedView = excludedFolders.Count > 0 || mods.Any(m => m.Source == ModuleSourceKind.Custom ||

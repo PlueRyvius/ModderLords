@@ -54,9 +54,19 @@ public sealed class LaunchSession
     /// <summary>Submodule class types that survive DependencyOnly, from the compat database (MCM's settings core when no DB ships).</summary>
     public static IReadOnlyCollection<string> KeepForDependencyOnly => CompatDb.Current.KeepForDependencyOnly();
 
-    public static ServerPaths ResolvePaths(Profile profile)
+    public static ServerPaths ResolvePaths(Profile profile) => ResolvePaths(profile, out _);
+
+    /// <summary>
+    /// The server package this profile hosts from. It follows the game installed here: a Coop server runs one game
+    /// version, and the players' games (this PC's among them) have to be on it. <paramref name="note"/> says when the
+    /// package is not the profile's own folder, or when none here runs this game.
+    /// </summary>
+    public static ServerPaths ResolvePaths(Profile profile, out string? note)
     {
-        var root = profile.DedicatedServerRoot ?? ServerPaths.FindWorkshopDedicatedServerRoots().FirstOrDefault()
+        var gameRoot = profile.GameRoot ?? ModuleCatalog.FindGameRoot(ServerPaths.SteamLibraries().ToList());
+        var choice = ServerPaths.ChooseRoot(profile.DedicatedServerRoot, gameRoot);
+        note = choice.Note;
+        var root = choice.Root
             ?? throw new InvalidOperationException("No DedicatedServer folder found. Subscribe to Bannerlord Coop on the workshop or set the path in the profile.");
         return ServerView.For(ServerPaths.Create(root));
     }
@@ -260,7 +270,8 @@ public sealed class LaunchSession
     {
         var compatDb = CompatDb.Current;
         var messages = new List<string>();
-        var paths = ResolvePaths(profile);
+        var paths = ResolvePaths(profile, out var serverNote);
+        if (serverNote is not null) messages.Add(serverNote);
         var problems = paths.Validate().ToList();
         if (problems.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, problems));
         // Before anything asks which folders exist: the hook's search dirs are filtered to the ones that do.
