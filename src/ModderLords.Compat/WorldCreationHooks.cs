@@ -47,6 +47,10 @@ internal static class WorldCreationHooks
         Patches.Patch(AccessTools.Method(typeof(Campaign), "LoadMapScene"), postfix: new HarmonyMethod(typeof(WorldCreationHooks), nameof(MapLoaded)));
         Patches.Patch(AccessTools.Method(typeof(MBObjectManager), "LoadXml", new[] { typeof(XmlDocument), typeof(bool) }),
             finalizer: new HarmonyMethod(typeof(WorldCreationHooks), nameof(XmlFinished)));
+        // v1.5 and later only; v1.4.8 has no advanced start.
+        var advancedStart = AccessTools.Method("TaleWorlds.CampaignSystem.CampaignBehaviors.CampaignAdvancedStartingPlayerOptionsCampaignBehavior:OnCharacterCreationIsOver");
+        if (advancedStart != null)
+            Patches.Patch(advancedStart, finalizer: new HarmonyMethod(typeof(WorldCreationHooks), nameof(AdvancedStartFinished)));
         Log.Info("worldcreate: installed creation-only LoadGame -> StartNewGame route");
     }
 
@@ -82,6 +86,21 @@ internal static class WorldCreationHooks
     }
 
     private static bool FinishNewCampaign(MBGameManager __instance)
+    {
+        try { return FinishNewCampaignCore(__instance); }
+        catch (Exception ex)
+        {
+            // The server dies of an unhandled exception here with no managed stack anywhere (0xE0434352), so the
+            // sidecar the launcher reads is the only place this can be seen.
+            var message = "worldcreate: finalization failed: " + ex;
+            Log.Error(message);
+            try { System.IO.File.AppendAllText(WorldCreator.SidecarPath(), DateTime.Now.ToString("HH:mm:ss.fff") + "  " + message + Environment.NewLine); }
+            catch { }
+            throw;
+        }
+    }
+
+    private static bool FinishNewCampaignCore(MBGameManager __instance)
     {
         Log.Info("worldcreate: finalization entered manager=" + __instance.GetType().AssemblyQualifiedName);
         if (_creator == null) return true;
@@ -166,6 +185,22 @@ internal static class WorldCreationHooks
         }
         if (moved.Count > 0)
             Log.Warn($"worldcreate: {moved.Count} faction(s) were homed at a settlement this map does not have and were given a town on it: " + string.Join("; ", moved));
+    }
+
+    /// <summary>
+    /// v1.5's advanced-start behaviour ends character creation by moving the map camera onto the main party:
+    /// <c>mapState.Handler.ResetCamera(...)</c>. A dedicated server has no map view, so the handler is null and the
+    /// NullReferenceException took the creation process down with 0xE0434352 (measured 2026-11-19, Coop nightly on
+    /// v1.5.7). Only that case is let through, and only while a world is being created. The camera is all the
+    /// exception skipped apart from the roster version bump after it, which is done here instead.
+    /// </summary>
+    private static Exception? AdvancedStartFinished(Exception? __exception)
+    {
+        if (__exception is not NullReferenceException || _creator == null) return __exception;
+        if (GameStateManager.Current?.ActiveState is not TaleWorlds.CampaignSystem.GameState.MapState { Handler: null }) return __exception;
+        TaleWorlds.CampaignSystem.Party.MobileParty.MainParty?.MemberRoster.UpdateVersion();
+        Log.Info("worldcreate: advanced start had no map view to move the camera in (headless server); carried on");
+        return null;
     }
 
     private static bool KeepCreating(bool value) => !value;
