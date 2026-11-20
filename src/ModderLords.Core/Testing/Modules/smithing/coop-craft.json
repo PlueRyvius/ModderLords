@@ -1,0 +1,25 @@
+{
+  // A player's craft in Coop: MS2's executor on the player's game asks the server, the server crafts and charges the
+  // player's party, and every game rebuilds the item from the server's record. The server and the player's game must
+  // then hold the same item: weight, protection, value, name, quality and recipe, and the same count of it. The
+  // materials go to the player's party on the server, which owns it. Every check reads the new item only, so the suite
+  // runs on the shared world.
+  "api": 2,
+  "name": "coop-craft",
+  "mode": "coop",
+  "world": "shared",
+  "description": "A player's craft is made by the server and arrives on the player's game as the same item: the same stats, quality and recipe on both sides, and in the party on both.",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)", "host denied craft" ],
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "slot": "body", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "mail", "timeoutSeconds": 120, "args": { "slot": "body", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "compare": "smithing.itemStats", "sides": ["server", "client:1"], "args": { "item": "$mail.value" } },
+    { "compare": "party.itemCount", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName", "item": "$mail.value" } },
+    // A second craft of a different slot, so one lucky id or a cached item cannot pass both.
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "slot": "legs", "inner": "gambeson_quilted", "outer": "leather_outer" } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "leather", "timeoutSeconds": 120, "args": { "slot": "legs", "inner": "gambeson_quilted", "outer": "leather_outer" } },
+    { "compare": "smithing.itemStats", "sides": ["server", "client:1"], "args": { "item": "$leather.value" } },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
