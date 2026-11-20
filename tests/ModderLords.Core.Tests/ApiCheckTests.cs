@@ -44,6 +44,30 @@ public sealed class ApiCheckTests : IDisposable
     }
 
     [Fact]
+    public void Game_namespace_types_from_an_assembly_that_is_not_installed_are_not_reported()
+    {
+        // Coop.Naval.dll as Coop ships it: built against War Sails, whose NavalDLC.dll declares types in the game's
+        // namespaces. Without War Sails installed, nothing in it can load, so none of it reads as missing.
+        var naval = Build(Path.Combine(_root, "mod", "Coop.Naval.dll"), "Coop.Naval", (mb, _) =>
+        {
+            var dlc = mb.AddAssemblyReference(mb.GetOrAddString("NavalDLC"), new Version(1, 0, 0, 0), default, default, 0, default);
+            var patrol = mb.AddTypeReference(dlc, mb.GetOrAddString("TaleWorlds.CampaignSystem.CampaignBehaviors"), mb.GetOrAddString("NavalPatrolPartiesCampaignBehavior"));
+            mb.AddTypeReference(patrol, default, mb.GetOrAddString("Nested"));
+            mb.AddMemberReference(patrol, mb.GetOrAddString("Tick"), mb.GetOrAddBlob(MethodSig(0)));
+        });
+
+        Assert.Empty(ApiCheck.Missing(naval, ApiIndex.Of([Game()]), ["TaleWorlds."]));
+    }
+
+    [Fact]
+    public void A_type_dropped_from_an_installed_game_assembly_is_still_reported()
+    {
+        var index = ApiIndex.Of([Game()]);
+        Assert.True(index.HasAssembly("TaleWorlds.CampaignSystem"));
+        Assert.Contains("type TaleWorlds.CampaignSystem.Gone", ApiCheck.Missing(Mod(), index, ["TaleWorlds."]));
+    }
+
+    [Fact]
     public void Only_dlls_a_module_loads_are_checked()
     {
         // The module names Mod.dll, which references Helper.dll; Mod.v1.2.6.dll is a build for another game version
