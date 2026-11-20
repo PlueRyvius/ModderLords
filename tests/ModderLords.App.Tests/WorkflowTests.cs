@@ -853,6 +853,29 @@ public class WorkflowTests
         Assert.Null(invalid.ServerExcluded);
     }
 
+    /// <summary>
+    /// Unpacked Assets are never the server's, and neither are the AssetSources and RuntimeDataCache beside them, so
+    /// those rows are locked to "Client only". Without Assets the other two stay a choice.
+    /// </summary>
+    [Fact]
+    public void UnpackedAssetFolderRowsAreLockedToClientOnly()
+    {
+        var unpacked = new ModFolderChoices(["Assets", "AssetSources", "RuntimeDataCache", "ModuleData"], [], [], null);
+        foreach (var name in new[] { "Assets", "AssetSources", "RuntimeDataCache" })
+        {
+            var row = unpacked.Rows.Single(r => r.Name == name);
+            Assert.True(row.IsLocked);
+            Assert.Equal(ModFolderRow.ClientOnlyLabel, row.Choice);
+            Assert.Contains("never shown", row.Note);
+        }
+        Assert.False(unpacked.Rows.Single(r => r.Name == "ModuleData").IsLocked);
+        // Locked rows are not edits: nothing beyond what the (empty) record says, so the profile keeps following it.
+        Assert.Null(unpacked.ServerExcluded);
+
+        var packed = new ModFolderChoices(["AssetSources", "RuntimeDataCache"], null, [], null);
+        Assert.All(packed.Rows, r => Assert.False(r.IsLocked));
+    }
+
     /// <summary>The dialog itself, never shown: its XAML loads, it shows the model's rows and says what the choices mean.</summary>
     [Fact]
     public void TheFoldersDialogShowsTheRowsAndExplainsTheChoices() => Sta(() =>

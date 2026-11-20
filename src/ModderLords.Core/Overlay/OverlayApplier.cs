@@ -124,14 +124,18 @@ public sealed class OverlayApplier
         if (Directory.Exists(e.BinTarget)) ReplaceShadowJunction(serverBinLink, e.BinTarget);
         else if (Junction.IsJunction(serverBinLink)) Junction.Remove(serverBinLink);
 
-        // 3. Every other top-level directory of the mod is junctioned as-is, except client-only AssetPackages. The
-        // dedicated server reads DsAssetPackages; exposing a full client pack here is both unnecessary and unsafe.
+        // 3. Every other top-level directory of the mod is junctioned as-is, except the client's assets: AssetPackages
+        // (the server reads DsAssetPackages; a full client pack crashed it) and unpacked editor Assets with their
+        // AssetSources and RuntimeDataCache (the server crashes on an Assets material's texture). The reasons are in
+        // ServerFolderExclusions.NeverShownToServer.
         var wantedDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "bin" };
-        foreach (var dir in Directory.EnumerateDirectories(mod.FolderPath))
+        var modDirs = Directory.EnumerateDirectories(mod.FolderPath).ToList();
+        var modDirNames = modDirs.Select(d => Path.GetFileName(d)).ToList();
+        foreach (var dir in modDirs)
         {
             var name = Path.GetFileName(dir);
             if (name.Equals("bin", StringComparison.OrdinalIgnoreCase)) continue;
-            if (name.Equals("AssetPackages", StringComparison.OrdinalIgnoreCase)) continue;
+            if (ServerFolderExclusions.NeverShownToServer(name, modDirNames) is not null) continue;
             // Asked for per mod (profile or compat record) and already checked by the planner. Not adding the name to
             // wantedDirs is what removes a junction an earlier launch made for it: the sweep below takes it away.
             if (e.ExcludedFolders is { } excluded && excluded.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
