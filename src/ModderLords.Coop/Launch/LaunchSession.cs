@@ -61,6 +61,33 @@ public sealed class LaunchSession
         return ServerView.For(ServerPaths.Create(root));
     }
 
+    /// <summary>
+    /// The server package's own modules that the engine loads. Coop's v1.5.7 server packages carry War Sails
+    /// (NavalDLC), and their host loads it only when <c>modOptions.warSails</c> in mod-config.json is true, which it is
+    /// not by default. Loaded anyway, Coop stops the server with exit code 10, before any module starts (2026-11-19).
+    /// </summary>
+    public static List<DiscoveredModule> ServerStock(ModuleCatalog catalog, ServerPaths paths)
+    {
+        var warSails = WarSailsOn(paths);
+        return catalog.Modules.Where(m => m.IsStock && (warSails || !OfficialModules.IsDlc(m.Id))).ToList();
+    }
+
+    /// <summary>
+    /// Whether the host turned War Sails on in mod-config.json: the CoopData copy, or the package's template while
+    /// there is none. Read only: unlike <see cref="ModConfig.Read"/>, this never creates the CoopData copy.
+    /// </summary>
+    public static bool WarSailsOn(ServerPaths paths)
+    {
+        var file = File.Exists(paths.ModConfigPath) ? paths.ModConfigPath : ModConfig.TemplatePath(paths);
+        if (file is null) return false;
+        try
+        {
+            return CommentedJson.Leaves(File.ReadAllText(file))
+                .Any(l => l.Path.Equals("modOptions.warSails", StringComparison.OrdinalIgnoreCase) && l.RawValue == "true");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { return false; }
+    }
+
     public static ModuleCatalog Scan(Profile profile, ServerPaths paths, out string? gameRoot)
     {
         var libraries = ServerPaths.SteamLibraries().ToList();
@@ -399,7 +426,7 @@ public sealed class LaunchSession
         if (IgnoredServerOnlyTicks(profile, selections.Select(s => s.Module.Id), experimentalCompat) is { Count: > 0 } ignored)
             messages.Add($"experimental compatibility is off: Server-only logic for {string.Join(", ", ignored)} is ignored (Server tab, Advanced)");
 
-        var stock = catalog.Modules.Where(m => m.IsStock).ToList();
+        var stock = ServerStock(catalog, paths);
         var order = LoadOrder.Compute(stock, selections.Select(s => s.Module).ToList(), profile.Mods.Select(m => m.Id).ToList(),
             policy: profile.ManualLoadOrder ? LoadOrder.OrderPolicy.Manual : LoadOrder.OrderPolicy.Suggest,
             knownToFollowCoop: compatDb.ClientFollowsCoop());
