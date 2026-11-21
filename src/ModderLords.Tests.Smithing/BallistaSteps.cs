@@ -377,16 +377,33 @@ internal static class BallistaSteps
         // By default 5 m out and 1.6 m above chest height (about 3 m up): over the bushes and carts that hid the hero at
         // chest height, looking down at him.
         var eye = at + new Vec3(dir.x * distance, dir.y * distance, rise);
+        return ViewFrom(screen!, custom, agent.Mission.Scene, eye, at, fov);
+    }
+
+    /// <summary>Points the mission screen from <paramref name="eye"/> at <paramref name="at"/>; null eye gives the
+    /// player's camera back. False when there is no mission screen.</summary>
+    internal static bool ViewFrom(TaleWorlds.Engine.Scene scene, Vec3? eye, Vec3 at, float fov = 1.0f)
+    {
+        var screens = Type.GetType("TaleWorlds.ScreenSystem.ScreenManager, TaleWorlds.ScreenSystem");
+        var screen = screens?.GetProperty("TopScreen", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+        var custom = screen?.GetType().GetProperty("CustomCamera");
+        if (custom == null) return false;
+        if (eye == null) { custom.SetValue(screen, null); return true; }
+        return ViewFrom(screen!, custom, scene, eye.Value, at, fov);
+    }
+
+    private static bool ViewFrom(object screen, PropertyInfo custom, TaleWorlds.Engine.Scene scene, Vec3 eye, Vec3 at, float fov)
+    {
         var camera = TaleWorlds.Engine.Camera.CreateCamera();
-        camera.SetFovVertical(fov, 16f / 9f, 0.1f, 2000f);
+        camera.SetFovVertical(fov, 16f / 9f, 0.05f, 2000f);
         camera.LookAt(eye, at, Vec3.Up);
         // The screen copies a custom camera's lens but takes its position only from an entity the camera sits on
         // (MissionScreen.CheckForUpdateCamera): without one the view stayed at the scene's origin, out over the sea.
         var frame = camera.Frame;
-        if (_cameraEntity == null || _cameraScene != agent.Mission.Scene)
+        if (_cameraEntity == null || _cameraScene != scene)
         {
-            _cameraEntity = TaleWorlds.Engine.GameEntity.CreateEmpty(agent.Mission.Scene, false, false, false);
-            _cameraScene = agent.Mission.Scene;
+            _cameraEntity = TaleWorlds.Engine.GameEntity.CreateEmpty(scene, false, false, false);
+            _cameraScene = scene;
         }
         _cameraEntity.SetGlobalFrame(frame);
         camera.Entity = _cameraEntity;

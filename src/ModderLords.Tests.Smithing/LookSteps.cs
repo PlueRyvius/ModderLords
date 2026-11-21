@@ -12,6 +12,7 @@ using ModularSmithing.Crafting;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
+using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.ObjectSystem;
 
@@ -46,6 +47,13 @@ internal static class LookSteps
         ["hands"] = (1.0f, 1.8f, 0.2f), ["shoulders"] = (1.35f, 2.3f, 0.25f),
     };
 
+    /// <summary>The item view's vertical field of view (radians): narrow, so the piece isn't distorted.</summary>
+    private const float ItemFov = 0.6f;
+
+    /// <summary>How high above the hero the item view hangs the piece (m): past the camera's 2 km far plane from the
+    /// ground, looking down a little.</summary>
+    private const float ItemAltitude = 1500f;
+
     internal static void Register() => InGameTests.Register("smithing.everyLook", StepSide.Client, EveryLook);
 
     private sealed class Row
@@ -63,8 +71,10 @@ internal static class LookSteps
     /// <c>limit</c> slice the result. Meant for tens of looks a person will actually look at, not all ~700.
     /// For each look: crafts one piece with that look and a
     /// test palette (one bold color per dye region) through MS2's executor, waits for its dye textures (up to
-    /// <c>readySeconds</c>, default 60), puts it on the hero in the town center with no other armor, and photographs it
-    /// from the front and the back. Horse armor is crafted and its dye rebuilt, not worn.
+    /// <c>readySeconds</c>, default 60), then photographs it. <c>view</c> "item" (the default) shows the piece on its
+    /// own, as MS2's designer does, high over the town against the sky, from the front, left, back and right, lit by a
+    /// light at the camera (<c>light</c>, its intensity, default 800) and six fill lights, so no side is in shadow; horse armor too. <c>view</c> "worn" puts it on the
+    /// hero in the town center with no other armor, from the front and the back (horse armor is then not photographed).
     ///
     /// Writes evidence\every-look\index.html (a contact sheet: failures first, each look with its region legend) and
     /// results.json. Fails, after the whole slice, when a craft or a dye texture rebuild failed, naming them. Needs the
@@ -110,6 +120,18 @@ internal static class LookSteps
         }
         Trace($"{looks.Count} look(s) in slots {string.Join(",", slots)}" + (wanted == null ? "" : $", from {wanted.Count} listed id(s)"));
 
+        // "item" (the default): each piece on its own, as the designer shows it, from four sides. "worn": on the hero.
+        var view = ctx.Arg("view", "item");
+        ctx.Assert(view is "item" or "worn", $"view is \"item\" or \"worn\", not \"{view}\"");
+        bool itemView = view == "item";
+        float lightIntensity = ctx.ArgInt("light", 800);
+        string Shot(string name)
+        {
+            var bmp = Path.Combine(folder, "shots", name + ".bmp");
+            TaleWorlds.Engine.Utilities.TakeScreenshot(bmp);
+            return bmp;
+        }
+
         var settings = MSmithConfig.Settings;
         var saved = (settings.RequireMaterials, settings.RequireStamina, settings.RequireUnlocks);
         settings.RequireMaterials = false; settings.RequireStamina = false; settings.RequireUnlocks = false;
@@ -126,6 +148,13 @@ internal static class LookSteps
             var bare = new Equipment(agent.SpawnEquipment);
             foreach (var i in SlotIndex.Values) bare[i] = EquipmentElement.Invalid;
             Trace($"town center {Mission.Current.SceneName}");
+            // The first screenshot after the scene opens can still be the loading screen, whatever the loading window
+            // reports: take one and throw it away.
+            var warm = DateTime.UtcNow.AddSeconds(2);
+            yield return ctx.Until(() => DateTime.UtcNow >= warm && !TaleWorlds.Engine.LoadingWindow.IsLoadingWindowActive, "the town center to finish loading", TimeSpan.FromSeconds(60));
+            var warmShot = Shot("warm-up");
+            yield return ctx.Until(() => File.Exists(warmShot) && new FileInfo(warmShot).Length > 0, "the warm-up screenshot", TimeSpan.FromSeconds(10));
+            try { File.Delete(warmShot); } catch (IOException) { }
 
             var hero = Hero.MainHero!;
             int skill = CraftDiagnostics.SafeCraftingSkill(hero);
@@ -198,8 +227,37 @@ internal static class LookSteps
                 }
                 else row.Status = profile == null ? "no dye profile" : "no regions";
 
+                if (itemView)
+                {
+                    // On its own, as the designer previews it, from four sides.
+                    // High enough that the ground below is past the camera's far plane: only sky behind the piece.
+                    using var render = LookRender.Show(agent.Mission.Scene, item, agent.Position + new Vec3(0f, 0f, ItemAltitude), lightIntensity, out var why);
+                    if (render == null)
+                    {
+                        // No picture is a failed check: the person reading the sheet can't judge the colors.
+                        row.Failed = true;
+                        if (row.Status == "dyed") row.Status = "no render";
+                        row.Message = (row.Message.Length > 0 ? row.Message + "; " : "") + why;
+                        Trace($"{n}/{looks.Count} {look.ItemId}: {why}");
+                    }
+                    else
+                    {
+                        if (render.Note.Length > 0) Trace($"{look.ItemId}: {render.Note}");
+                        foreach (var (angle, side) in new[] { (0f, "front"), (90f, "left"), (180f, "back"), (270f, "right") })
+                        {
+                            BallistaSteps.ViewFrom(agent.Mission.Scene, render.Eye(angle, 12f, ItemFov), render.Center, ItemFov);
+                            var settle = DateTime.UtcNow.AddSeconds(0.6);
+                            // A loading screen can come up over the scene (the first shots of a run caught it).
+                            yield return ctx.Until(() => DateTime.UtcNow >= settle && !TaleWorlds.Engine.LoadingWindow.IsLoadingWindowActive, "the piece to show", TimeSpan.FromSeconds(60));
+                            var shot = Shot(look.Slot + "-" + look.ItemId + "-" + side);
+                            yield return ctx.Until(() => File.Exists(shot) && new FileInfo(shot).Length > 0, "the screenshot file", TimeSpan.FromSeconds(10));
+                            var jpg = ToJpeg(shot, crop: true);
+                            if (jpg != null) row.Shots.Add("shots/" + Path.GetFileName(jpg));
+                        }
+                    }
+                }
                 // On the hero, alone, photographed from the front and the back.
-                if (SlotIndex.TryGetValue(look.Slot, out var index))
+                else if (SlotIndex.TryGetValue(look.Slot, out var index))
                 {
                     var eq = new Equipment(bare);
                     eq[index] = new EquipmentElement(item);
@@ -210,22 +268,20 @@ internal static class LookSteps
                         BallistaSteps.ViewCamera(agent, angle, shot.Distance, shot.Height, shot.Rise, 0.75f);
                         var settle = DateTime.UtcNow.AddSeconds(0.6);
                         yield return ctx.Until(() => DateTime.UtcNow >= settle, "the piece to show");
-                        var name = $"{look.Slot}-{look.ItemId}-{side}";
-                        var bmp = Path.Combine(folder, "shots", name + ".bmp");
-                        TaleWorlds.Engine.Utilities.TakeScreenshot(bmp);
+                        var bmp = Shot($"{look.Slot}-{look.ItemId}-{side}");
                         yield return ctx.Until(() => File.Exists(bmp) && new FileInfo(bmp).Length > 0, "the screenshot file", TimeSpan.FromSeconds(10));
-                        var jpg = ToJpeg(bmp);
+                        var jpg = ToJpeg(bmp, crop: false);
                         if (jpg != null) row.Shots.Add("shots/" + Path.GetFileName(jpg));
                     }
                 }
-                else row.Message = (row.Message.Length > 0 ? row.Message + "; " : "") + "not wearable by the hero (horse armor): crafted and dye-checked only";
+                else row.Message = (row.Message.Length > 0 ? row.Message + "; " : "") + "not wearable by the hero (horse armor): crafted and dye-checked only (view item photographs it)";
                 if (n % 25 == 0) Trace($"{n}/{looks.Count} done, {rows.Count(r => r.Failed)} failed so far");
             }
         }
         finally
         {
             (settings.RequireMaterials, settings.RequireStamina, settings.RequireUnlocks) = saved;
-            if (Mission.Current?.MainAgent != null) BallistaSteps.ViewCamera(Mission.Current.MainAgent, null);
+            if (Mission.Current?.Scene != null) BallistaSteps.ViewFrom(Mission.Current.Scene, null, Vec3.Zero);
             WriteSheet(folder, rows);
         }
 
@@ -287,8 +343,11 @@ internal static class LookSteps
         return line.Length > 300 ? line.Substring(0, 300) + "…" : line;
     }
 
-    /// <summary>The screenshot as a JPEG beside it (a 1280x720 BMP is 2.7 MB; hundreds of them add up), the BMP removed.</summary>
-    private static string? ToJpeg(string bmp)
+    /// <summary>
+    /// The screenshot as a JPEG beside it (a 1280x720 BMP is 2.7 MB; hundreds of them add up), the BMP removed. An item
+    /// view is cropped to the square in the middle, where the camera framed the piece.
+    /// </summary>
+    private static string? ToJpeg(string bmp, bool crop)
     {
         var jpg = Path.ChangeExtension(bmp, ".jpg");
         try
@@ -297,8 +356,16 @@ internal static class LookSteps
             {
                 var codec = ImageCodecInfo.GetImageEncoders().First(c => c.MimeType == "image/jpeg");
                 using var quality = new EncoderParameters(1);
-                quality.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 82L);
-                image.Save(jpg, codec, quality);
+                quality.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 85L);
+                if (crop && image.Width > image.Height)
+                {
+                    int side = image.Height, x = (image.Width - side) / 2;
+                    using var square = new Bitmap(side, side);
+                    using (var g = Graphics.FromImage(square))
+                        g.DrawImage(image, new Rectangle(0, 0, side, side), new Rectangle(x, 0, side, side), GraphicsUnit.Pixel);
+                    square.Save(jpg, codec, quality);
+                }
+                else image.Save(jpg, codec, quality);
             }
             File.Delete(bmp);
             return jpg;
@@ -314,8 +381,8 @@ internal static class LookSteps
         html.Append("<!doctype html><html><head><meta charset=\"utf-8\"><title>MS2 armor looks</title><style>")
             .Append("body{font:14px system-ui,sans-serif;margin:16px;background:#f4f4f2;color:#1d1d1b}")
             .Append("h1{font-size:20px}h2{font-size:16px;margin-top:24px}.grid{display:flex;flex-wrap:wrap;gap:12px}")
-            .Append(".card{background:#fff;border:1px solid #ccc;border-radius:6px;padding:8px;width:520px}")
-            .Append(".card.bad{border:2px solid #c0392b}.shots{display:flex;gap:4px}.shots img{width:254px;height:auto;border-radius:3px}")
+            .Append(".card{background:#fff;border:1px solid #ccc;border-radius:6px;padding:8px;max-width:1040px}")
+            .Append(".card.bad{border:2px solid #c0392b}.shots{display:flex;flex-wrap:wrap;gap:4px}.shots img{width:254px;height:auto;border-radius:3px}")
             .Append(".legend span{display:inline-flex;align-items:center;margin:2px 8px 2px 0}.legend i{width:14px;height:14px;border:1px solid #888;margin-right:4px;display:inline-block}")
             .Append(".meta{color:#555;font-size:12px}.msg{color:#c0392b;font-size:12px}")
             .Append("</style></head><body>");

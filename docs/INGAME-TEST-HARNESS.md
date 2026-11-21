@@ -282,7 +282,7 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
       continuity), `coop-craft` (Coop), and for the ballista yumi `ballista` (single player, continuity: the first
       battle a step starts, 2026-11-19) and `ballista-coop` (Coop). For MS2's armor dyes, the manual `looks-sample` (three
       looks per slot) and `looks-listed` (looks or dye profiles listed in `test-inputs\ms2-looks.txt`) craft each look
-      with a bold color per dye region, rebuild its dye textures in the game, and photograph it on the hero in a town:
+      with a bold color per dye region, rebuild its dye textures in the game, and photograph it on its own, as the designer shows it, from four sides:
       a contact sheet (`evidence\every-look\index.html`) for a person to check after a game update or a dye re-bake.
       They need Harmony and UIExtenderEx (MS2's dye renderer); profile `Nightly-v157-MS2-UI` has them.
    5. `taom` (TAOM), with its own DLL and `TAOM.health`. **Built 2026-11-15** from a support bundle:
