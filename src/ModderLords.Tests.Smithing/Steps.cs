@@ -58,6 +58,7 @@ public static class Steps
         InGameTests.Register("smithing.prepareFor", StepSide.Server, PrepareFor);
         InGameTests.Register("smithing.coopCraft", StepSide.Client, CoopCraft);
         InGameTests.Register("smithing.itemStats", StepSide.Any, ItemStats);
+        InGameTests.Register("smithing.pax", StepSide.Any, Pax);
         BallistaSteps.Register();
         LookSteps.Register();
         QuietNotice();
@@ -221,7 +222,7 @@ public static class Steps
         }
         var before = worst.Keys.ToDictionary(k => k, k => roster.GetItemNumber(NativeSmithingMaterialModel.MaterialItem(k)), StringComparer.Ordinal);
 
-        var preview = CraftPreview.Compute(cat, recipe, skill, batch);
+        var preview = CraftPreview.Compute(cat, recipe, skill, false, false, 0f, batch, PaxOn);
         var outcome = CraftingExecutors.Current.Execute(cat, recipe, "{=}ML test " + slot, hero, skill,
             default(DonorVisual), new NativeSmithingStaminaModel(), batch);
         ctx.Assert(outcome != null && outcome.Success, "MS2 did not craft it: " + (outcome?.Message ?? "no outcome"));
@@ -232,7 +233,8 @@ public static class Steps
 
         var record = SmithingPersistenceBehavior.Current?.Records.FirstOrDefault(r => r.StringId == item.StringId);
         ctx.Assert(record != null, $"MS2 keeps no record for {item.StringId}, so it would not survive a save");
-        var expected = SurvivalCheck.Expected(cat, record!.RecipeCanonical, record.SmithingEffect, record.TierId, batch);
+        // The calculator with the Pax Vanilla setting the craft ran under, as MS2's designer and craft use it.
+        var expected = SurvivalCheck.Expected(cat, record!.RecipeCanonical, record.SmithingEffect, record.TierId, batch, PaxOn);
         var problems = new List<string>();
         var detail = new StringBuilder();
         detail.AppendLine($"recipe {recipe.Canonical()}");
@@ -252,9 +254,12 @@ public static class Steps
             {
                 ["head"] = ac!.HeadArmor, ["body"] = ac.BodyArmor, ["arm"] = ac.ArmArmor, ["leg"] = ac.LegArmor,
             };
+            // Horse armor's protection is MS2's mount_body; the game keeps it in BodyArmor.
+            bool horse = slot == "horse_armor";
             foreach (var kv in live)
             {
-                int want = expected.Armor != null && expected.Armor.TryGetValue(kv.Key, out var w) ? w : 0;
+                string zone = horse && kv.Key == "body" ? "mount_body" : kv.Key;
+                int want = expected.Armor != null && expected.Armor.TryGetValue(zone, out var w) ? w : 0;
                 if (kv.Value != want) problems.Add($"{kv.Key} armor {kv.Value}, calculator {want}");
             }
             armorText = $"{live["head"]}/{live["body"]}/{live["arm"]}/{live["leg"]}";
@@ -307,7 +312,11 @@ public static class Steps
             ? (double)rolled.MassFactorFP / common.MassFactorFP : 1.0;
         double previewAtQuality = previewKg * factor;
         detail.AppendLine($"preview: {previewKg:0.###} kg at common, {previewAtQuality:0.###} kg at {record.TierId} (mass x{factor:0.###}); cost {string.Join(", ", (preview.MaterialCost ?? new Dictionary<string, int>()).OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key} {kv.Value}"))}");
-        if (Math.Abs(item.Weight - previewAtQuality) > 0.011 + 0.002 * previewAtQuality)
+        // Horse armor's weight is not the layered slots' weight times the quality's mass factor (MS2 adds its metal and
+        // soft goods apart), so the preview cannot be scaled to another quality; the calculator check above covers it.
+        if (slot == "horse_armor" && record.TierId != "common")
+            detail.AppendLine("preview weight not compared: horse armor at " + record.TierId);
+        else if (Math.Abs(item.Weight - previewAtQuality) > 0.011 + 0.002 * previewAtQuality)
             problems.Add($"the designer previewed {previewKg:0.###} kg ({previewAtQuality:0.###} kg at {record.TierId}), the item weighs {item.Weight:0.###} kg");
         if (record.TierId == "common" && MSmithConfig.Settings.RequireMaterials && preview.MaterialCost != null)
             foreach (var k in preview.MaterialCost.Keys.Union(taken.Keys))
@@ -585,6 +594,82 @@ public static class Steps
         yield break;
     }
 
+    // ---- Pax Vanilla ------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// What the Pax Vanilla setting does to the crafted item <c>item</c>'s recipe, from MS2's calculator at the quality
+    /// it rolled, with the setting on and off (smithing.craft has already checked the item against the setting it was
+    /// crafted under). <c>expect</c>:
+    /// <list type="bullet">
+    /// <item><c>unchanged</c>: weapons, ammo, shields and horse armor come out the same either way.</item>
+    /// <item><c>vanilla</c>: the setting replaces the armor and weight. At common quality, <c>armor</c>
+    /// (head/body/arm/leg) and <c>maxKg</c> compare with vanilla's best piece for the slot. A piece thinner or thicker
+    /// than 100% weighs its thickness times the 100% piece and has armor half as far from it (50% = 75% armor).</item>
+    /// </list>
+    /// Reports <c>value</c>: the common-quality armor and weight with the setting on, then off.
+    /// </summary>
+    private static IEnumerable<StepWait?> Pax(StepContext ctx)
+    {
+        var cat = CraftingDesigner.SharedCatalog;
+        var id = ctx.Arg("item");
+        var record = SmithingPersistenceBehavior.Current?.Records.FirstOrDefault(r => r.StringId == id);
+        ctx.Assert(record != null, $"MS2 keeps no record for {id}");
+        int batch = ctx.ArgInt("batch", 0);
+        var recipe = Recipe.FromCanonical(record!.RecipeCanonical);
+        var rolled = cat.QualityTiers[record.TierId ?? "common"];
+        var common = cat.QualityTiers["common"];
+        CraftResult Calc(Recipe r, QualityTier tier, bool pax) => CraftCalculator.Compute(cat, r, record.SmithingEffect, tier, null, batch, pax);
+        double Kg(CraftResult r) => MSmithSettings.ScalePct(r.MassGrams, MSmithConfig.Settings.WeightPct) / 1000.0;
+        int Zone(CraftResult r, string z) => r.Armor != null && r.Armor.TryGetValue(z, out var v) ? v : 0;
+        string ArmorText(CraftResult r) => $"{Zone(r, "head")}/{Zone(r, "body")}/{Zone(r, "arm")}/{Zone(r, "leg")}" + (Zone(r, "mount_body") != 0 ? $" mount {Zone(r, "mount_body")}" : "");
+        string Map(Dictionary<string, int>? d) => d == null ? "-" : string.Join(",", d.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}={kv.Value}"));
+        string Everything(CraftResult r) => $"armor {Map(r.Armor)}; weapon {Map(r.Weapon)}; ammo {Map(r.Ammo)}; shield {Map(r.Shield)}; {r.MassGrams} g";
+
+        var problems = new List<string>();
+        var detail = new StringBuilder($"{id} recipe {record.RecipeCanonical}, quality {record.TierId}, skill {record.SmithingEffect}\n");
+        var onRolled = Calc(recipe, rolled, true);
+        var offRolled = Calc(recipe, rolled, false);
+        var on = Calc(recipe, common, true);
+        var off = Calc(recipe, common, false);
+        detail.AppendLine($"at {record.TierId}: on  {Everything(onRolled)}");
+        detail.AppendLine($"at {record.TierId}: off {Everything(offRolled)}");
+        string expect = ctx.Arg("expect");
+        if (expect == "unchanged")
+        {
+            if (Everything(onRolled) != Everything(offRolled)) problems.Add($"Pax Vanilla changes it: on {Everything(onRolled)}, off {Everything(offRolled)}");
+        }
+        else if (expect == "vanilla")
+        {
+            ctx.Assert(recipe.Family == "armor", $"{id} is not armor");
+            detail.AppendLine($"common: on {ArmorText(on)} {Kg(on):0.###} kg, off {ArmorText(off)} {Kg(off):0.###} kg");
+            if (Everything(on) == Everything(off)) problems.Add("Pax Vanilla changes nothing for this piece");
+            if (ctx.HasArg("armor") && ArmorText(on) != ctx.Arg("armor"))
+                problems.Add($"armor {ArmorText(on)} at common quality, vanilla's best piece is {ctx.Arg("armor")}");
+            if (ctx.HasArg("maxKg") && Kg(on) > double.Parse(ctx.Arg("maxKg"), Inv) + 0.0005)
+                problems.Add($"weighs {Kg(on):0.###} kg at common quality, more than {ctx.Arg("maxKg")}");
+            if (recipe.SizePct != 100)
+            {
+                var full = Recipe.FromCanonical(record.RecipeCanonical);
+                full.SizePct = 100;
+                var at100 = Calc(full, common, true);
+                double size = recipe.SizePct / 100.0;
+                detail.AppendLine($"at 100%: {ArmorText(at100)} {Kg(at100):0.###} kg");
+                if (Math.Abs(on.MassGrams - at100.MassGrams * size) > 1 + 0.002 * on.MassGrams)
+                    problems.Add($"{recipe.SizePct}% weighs {on.MassGrams} g, {recipe.SizePct}% of the 100% piece is {at100.MassGrams * size:0} g");
+                foreach (var z in new[] { "head", "body", "arm", "leg" })
+                {
+                    double want = Zone(at100, z) * (0.5 + size / 2);
+                    if (Math.Abs(Zone(on, z) - want) > 1) problems.Add($"{recipe.SizePct}% has {z} armor {Zone(on, z)}, half as far from the 100% piece's {Zone(at100, z)} is {want:0.#}");
+                }
+            }
+        }
+        else throw new StepFailedException($"expect is unchanged or vanilla, not {expect}");
+        ctx.Dump("pax", detail.ToString());
+        ctx.Report("value", $"on {ArmorText(on)} {Kg(on):0.###} kg | off {ArmorText(off)} {Kg(off):0.###} kg");
+        ctx.Assert(problems.Count == 0, $"{id}: " + string.Join("; ", problems));
+        yield break;
+    }
+
     // ---- saves ----------------------------------------------------------------------------------------------------
 
     /// <summary>Every item MS2 keeps a record of exists in the game (no record lost its item on load).</summary>
@@ -689,7 +774,11 @@ public static class Steps
         ["damage_types"] = "DamageTypes",
         ["damage_types_notice_shown"] = "DamageTypesNoticeShown",
         ["ballista_bows"] = "BallistaBows",
+        ["pax_vanilla"] = "PaxVanilla",
     };
+
+    /// <summary>MS2's Pax Vanilla setting as it is now; false on builds without it.</summary>
+    private static bool PaxOn => typeof(MSmithSettings).GetField("PaxVanilla")?.GetValue(MSmithConfig.Settings) is true;
 
     private static FieldInfo SettingField(StepContext ctx, string name)
     {
