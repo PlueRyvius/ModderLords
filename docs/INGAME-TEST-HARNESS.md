@@ -99,7 +99,7 @@ src/ModderLords.Core/Testing/Modules/          (built in, embedded like today's 
   parity/    module.json  parity.json
   world/     module.json  sp-world.json
   retinues/  module.json  editor.json
-  smithing/  module.json  health.json  ammo.json  tier-preview.json  heal-on-load.json  coop-craft.json  ballista.json  ballista-coop.json
+  smithing/  module.json  health.json  ammo.json  tier-preview.json  heal-on-load.json  coop-craft.json  ballista.json  ballista-coop.json  looks-sample.json  looks-listed.json
   taom/      module.json  supply-lines.json  navpath.json (manual)
 src/ModderLords.Tests.Retinues/                (retinues' steps: references Retinues' DLL at compile time only)
 src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2's DLL at compile time only)
@@ -280,7 +280,11 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    4. `smithing` (Modular Smithing 2), with its own DLL and `ModularSmithing2.health`.
       Its suites: `health` (both), `ammo`, `tier-preview` (single player), `heal-on-load` (single player,
       continuity), `coop-craft` (Coop), and for the ballista yumi `ballista` (single player, continuity: the first
-      battle a step starts, 2026-11-19) and `ballista-coop` (Coop).
+      battle a step starts, 2026-11-19) and `ballista-coop` (Coop). For MS2's armor dyes, the manual `looks-sample` (three
+      looks per slot) and `looks-listed` (looks or dye profiles listed in `test-inputs\ms2-looks.txt`) craft each look
+      with a bold color per dye region, rebuild its dye textures in the game, and photograph it on its own, as the designer shows it, from four sides:
+      a contact sheet (`evidence\every-look\index.html`) for a person to check after a game update or a dye re-bake.
+      They need Harmony and UIExtenderEx (MS2's dye renderer); profile `Nightly-v157-MS2-UI` has them.
    5. `taom` (TAOM), with its own DLL and `TAOM.health`. **Built 2026-11-15** from a support bundle:
       a TAOM server died 0.45 s after a player's supply caravan set out from a village. `supply-lines` (Coop) places
       an order from the player's town and one from the nearest village as the order screen's Confirm does, runs
