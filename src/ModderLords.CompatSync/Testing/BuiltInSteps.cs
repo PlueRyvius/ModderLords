@@ -53,6 +53,8 @@ internal static class BuiltInSteps
         ParitySteps.Register();
         WorldSteps.Register();
         ErrorSteps.Register();
+        SessionSteps.Register();
+        BattleSteps.Register();
     }
 
     // ---- game ------------------------------------------------------------------------------------------------

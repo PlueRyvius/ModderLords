@@ -43,7 +43,21 @@ internal static class ErrorPatterns
         return new[] { text };
     }
 
-    /// <summary>The lines among <paramref name="seen"/> that match any pattern, in order.</summary>
+    /// <summary>
+    /// Messages a test run causes itself, never counted: the run closes each game without the mod's own clean exit, so
+    /// a mod that checks for that on start says so on the next launch. TAOM 2.0.41's bug-report offer ("TAOM: the last
+    /// game ended unexpectedly ... after a crash") is one.
+    /// </summary>
+    public static readonly IReadOnlyList<Regex> CausedByTheRun = new[]
+    {
+        new Regex(@"^pop-up: TAOM: the last game ended unexpectedly", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+    };
+
+    /// <summary>The lines among <paramref name="seen"/> that match any pattern, in order, leaving out those the run caused.</summary>
     public static List<string> Matches(IEnumerable<string> seen, IReadOnlyList<Regex> patterns) =>
-        seen.Where(line => patterns.Any(p => p.IsMatch(line))).ToList();
+        seen.Where(line => patterns.Any(p => p.IsMatch(line)) && !CausedByTheRun.Any(c => c.IsMatch(Message(line)))).ToList();
+
+    /// <summary>A kept line without its time stamp ("17:04:23 pop-up: ..." → "pop-up: ...").</summary>
+    private static string Message(string line) =>
+        Regex.Match(line, @"^\d{1,2}:\d{2}:\d{2}\s+") is { Success: true } stamp ? line.Substring(stamp.Length) : line;
 }

@@ -160,6 +160,7 @@ public sealed class SmokeRunner
             var now = DateTimeOffset.Now;
             foreach (var line in coopLog.ReadNew()) Locked(() => _observer.ObserveCoopClient(line, now));
             foreach (var line in compatLog.ReadNew()) Locked(() => _observer.ObserveCompatClient(line, now));
+            Locked(() => _observer.Tick(now));
             var stage = Locked(() => _observer.Stage);
             if (stage != lastStage) { Say(Describe(stage)); lastStage = stage; }
 
@@ -199,6 +200,11 @@ public sealed class SmokeRunner
                 onMapAt ??= now;
                 facts = facts with { SteadyAchieved = now - onMapAt.Value };
                 if (Locked(() => _observer.PlayerDropped)) { Say("The server dropped the player."); break; }
+                if (Locked(() => _observer.RejoinOverdue(now)))
+                {
+                    Say($"The player left to join again and was not back within {SmokeSignals.RejoinAllowance.TotalMinutes:0} minutes.");
+                    break;
+                }
                 if (_options.WhileOnMap is { } whileOnMap)
                 {
                     if (onMapWork is null)

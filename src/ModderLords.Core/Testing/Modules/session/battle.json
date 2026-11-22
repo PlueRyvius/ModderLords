@@ -1,0 +1,21 @@
+{
+  // A field battle in Coop, as a player fights one: the server brings a map bandit party beside the player, the
+  // player's game orders the attack (a map click's order), picks Attack and Ready, and the AI fights for both armies
+  // with the hero invulnerable. Then the bandits must be gone on both sides, and the hero the same on both.
+  // The server gives the player 20 troops first: a new character alone took over 8 minutes against a dozen looters
+  // (2026-11-22), and the test is the sync of the battle, not the hero's skill.
+  "api": 2,
+  "name": "battle",
+  "mode": "coop",
+  "world": "shared",
+  "description": "The player attacks a map bandit party; the field battle is fought and won, and the bandits are gone on the server and the player's game alike.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "battle.placeEnemy", "side": "server", "as": "enemy", "args": { "heroName": "$me.heroName", "escort": 20 } },
+    { "id": "battle.fight", "side": "client:1", "as": "fight", "timeoutSeconds": 900, "args": { "enemy": "$enemy.value", "battleSeconds": 480, "men": 21 } },
+    { "id": "game.pause", "side": "server" },
+    { "compare": "battle.party", "sides": ["server", "client:1"], "args": { "enemy": "$enemy.value" } },
+    { "compare": "hero.parity", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName" }, "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

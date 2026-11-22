@@ -46,7 +46,7 @@ public class TestPlanTests
     {
         var modules = TestSuites.Modules();
         Assert.Equal("core", modules[0].Id);
-        Assert.Equal(["core", "parity", "perks", "retinues", "smithing", "stash", "sync", "taom", "world"], modules.Select(m => m.Id));
+        Assert.Equal(["core", "parity", "perks", "retinues", "session", "smithing", "stash", "sync", "taom", "world"], modules.Select(m => m.Id));
         // The smithing module (Modular Smithing 2): a new world (armor), an ongoing one (upgrade), and the manual
         // suite that keeps the upgrade world.
         var smithing = TestSuites.Module("smithing")!;
@@ -111,7 +111,7 @@ public class TestPlanTests
         var picked = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: false, onlyMod: null, withOthers: false, [], modules: ["sync"]);
         Assert.Equal(["core", "hero-level", "sync-basics"], picked.Select(p => p.Name));
         var none = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: false, onlyMod: null, withOthers: false, []);
-        Assert.Equal(["core", "parity", "both-perks", "stash", "hero-level", "sync-basics"], none.Select(p => p.Name));
+        Assert.Equal(["core", "parity", "both-perks", "battle", "rejoin", "stash", "hero-level", "sync-basics", "save", "reload"], none.Select(p => p.Name));
         var notes = new List<string>();
         var single = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: true, onlyMod: null, withOthers: false, notes, modules: ["sync", "world"]);
         Assert.Equal(["core", "sp-world"], single.Select(p => p.Name));
@@ -210,6 +210,48 @@ public class TestPlanTests
             (shared ? ", \"world\": \"shared\"" : "") + ", \"steps\": [ { \"id\": \"a\", \"side\": \"server\" } ] }");
         var launches = SuiteSelection.CoopLaunches([Suite("core", false), Suite("a", false), Suite("b", true), Suite("c", true)]);
         Assert.Equal([["core"], ["a", "b", "c"]], launches.Select(l => l.Select(p => p.Name).ToArray()));
+    }
+
+    [Fact]
+    public void A_suite_that_continues_another_runs_in_the_launch_after_it_and_reads_its_values()
+    {
+        var mods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var notes = new List<string>();
+        var picked = SuiteSelection.Select(TestSuites.LoadAll(), mods, singlePlayer: false, onlyMod: null, withOthers: false, notes, modules: ["session"]);
+        // The shared suites ride on core's launch; save needs a fresh world, and reload follows it in a launch of its own.
+        var launches = SuiteSelection.CoopLaunches(picked);
+        Assert.Equal([["core", "battle", "rejoin"], ["save"], ["reload"]], launches.Select(l => l.Select(p => p.Name).ToArray()));
+        Assert.Equal("save", launches[2][0].After);
+
+        // Its references to the suite before are left as they are, for the values that launch reported.
+        var plan = SuiteSelection.Compose("selected-3", launches[2], SuiteSelection.CoopSetup);
+        var gold = plan.Steps.First(s => s.Name == "reload/sameHero");
+        Assert.Equal("$save/me.heroName", gold.Args["heroName"]);
+        Assert.Equal("$save/gold.value", gold.Args["expected"]);
+
+        // Without the suite it continues, it is left out, saying why.
+        var alone = TestSuites.LoadAll().Where(p => p.Name != "save");
+        Assert.DoesNotContain(SuiteSelection.Select(alone, mods, false, null, false, notes, modules: ["session"]), p => p.Name == "reload");
+        Assert.Contains(notes, n => n == "session/reload: runs after save, which this run does not include");
+    }
+
+    [Theory]
+    [InlineData("""{ "api": 2, "name": "x", "mode": "singleplayer", "after": "y", "steps": [ { "id": "a", "side": "game" } ] }""", "needs \"mode\": \"coop\"")]
+    [InlineData("""{ "api": 2, "name": "x", "mode": "coop", "after": "y", "world": "shared", "steps": [ { "id": "a", "side": "server" } ] }""", "takes no \"world\"")]
+    [InlineData("""{ "api": 2, "name": "x", "mode": "coop", "steps": [ { "id": "a", "side": "server", "args": { "v": "$y/b.value" } } ] }""", "only the suite named in \"after\"")]
+    public void A_continuing_suite_is_checked(string json, string expected)
+    {
+        var ex = Assert.Throws<FormatException>(() => TestPlan.Parse(json));
+        Assert.Contains(expected, ex.Message);
+    }
+
+    [Fact]
+    public void A_runs_values_seed_the_next_launch()
+    {
+        var plan = TestPlan.Parse("""{ "api": 2, "name": "r", "mode": "coop", "after": "s", "steps": [ { "id": "a", "side": "server", "args": { "v": "$s/b.value" } } ] }""")
+            with { Seed = new Dictionary<string, string> { ["s/b.value"] = "42" } };
+        Assert.True(TestSequencer.TrySubstitute(plan.Steps[0].Args, plan.Seed, out var args, out _));
+        Assert.Equal("42", args["v"]);
     }
 
     [Fact]
@@ -430,6 +472,9 @@ public class TestPlanTests
     [InlineData("[MSmith] Rehydrated 3 crafted item(s) on load, 1 failed.", "", true)]
     [InlineData("Loaded with no errors", "", false)]
     [InlineData("0 failed, but an exception was thrown", "", true)]
+    // The run closes each game without TAOM's clean exit, so TAOM offers a bug report on the next launch: not an error.
+    [InlineData("17:04:23 pop-up: TAOM: the last game ended unexpectedly: Your last game closed without TAOM's normal shutdown. That happens after a crash", "", false)]
+    [InlineData("17:04:23 pop-up: TAOM: something else crashed", "", true)]
     public void On_screen_errors_match_the_default_words_and_a_suites_own_patterns(string message, string extra, bool isError) =>
         Assert.Equal(isError, ModderLords.Testing.ErrorPatterns.Matches([message], ModderLords.Testing.ErrorPatterns.From(extra)).Count == 1);
 

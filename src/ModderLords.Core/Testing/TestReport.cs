@@ -46,6 +46,9 @@ public sealed record TestReport
     public IReadOnlyList<string> Notes { get; init; } = [];
     /// <summary>In a run of several suites: their names, grouped by the world they ran on (decision 19).</summary>
     public IReadOnlyList<IReadOnlyList<string>> Worlds { get; init; } = [];
+    /// <summary>Every value the steps reported, as "$name.key" reads them; seeds a suite that continues this run's world.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, string> Values { get; init; } = new Dictionary<string, string>();
 
     [JsonIgnore]
     public bool Passed => Steps.Count > 0 && Steps.All(s => s.Outcome is StepOutcome.Pass or StepOutcome.KnownFail);

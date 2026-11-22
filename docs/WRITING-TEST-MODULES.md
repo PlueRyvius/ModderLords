@@ -276,6 +276,26 @@ private static IEnumerable<StepWait?> StashCount(StepContext ctx)
   saying so. A world saved on a newer game than the one installed is left out the same way (an older game crashes
   loading it), so keep upgrade worlds on the game version you test on. Make one with a `"manual": true` suite (it runs only by name) that sets the world up and ends with
   `game.keepWorld` (`upgradeOf: <ModId>`), run on the released build: the launcher keeps the save when the run ends.
+- **Save and reload in Coop** takes two suites and two launches. The first ends with `coop.saveWorld` on `server`
+  (`world`: a name), which names the world to keep. The kept save is the one the server writes as it shuts down at
+  the end of the launch, with Coop's session file (which player plays which hero) beside it; the launcher keeps both
+  under test-worlds. (Coop's `coop.debug.save.save_as` only queues a save on a dedicated server, and it never ran.) The second suite says
+  `"after": "<first suite>"` (same module, `"mode": "coop"`, no `"world"`): it runs in the next launch, a new server
+  started on that save and a new player's game joining it, and reads the first suite's values as
+  `"$<suite>/<step>.key"`. Without the first suite in the run, or when it kept nothing, it is left out or skipped.
+  `session/save` and `session/reload` are the example.
+- **Leaving and joining again in Coop:** `coop.rejoin` on `client:1` leaves to the main menu (Coop ends its session
+  when the game ends) and joins the same server through Coop's automatic join, waiting for Coop's join-finished
+  signal. It fails if the player comes back as a different hero (`session/rejoin`).
+- **A field battle in Coop:** `battle.placeEnemy` (server, `heroName`, optional `escort`: that many of the hero's
+  culture's troops join the party first) brings the nearest map bandit party beside the player; `battle.fight`
+  (player, `enemy`, optional `men` to wait for the escort to sync and `battleSeconds`, default 180) gives the engage
+  order a map click gives, picks Attack and Ready, hands the hero (invulnerable) and the troops to the AI, waits for the
+  bandits to fall and leaves the encounter; compare `battle.party` on both sides after (`session/battle`). Give the
+  player an escort: a new character alone can take more than eight minutes against a dozen looters.
+- **Pop-ups during a run:** a pop-up with only an "Ok" button is closed as soon as it shows, and so are the known
+  question pop-ups listed in `ErrorSteps.KnownPopups` (with their negative button). Every one stays in the messages
+  `game.noErrors` reads. A mod pop-up that asks a question and pauses the game needs adding to that list.
 - **Save and reload** in single player: `game.save` (`name`), `game.toMainMenu`, `game.loadSave` (`name`), then check
   what survived. Give the suite a fresh world (`continuity: true`), not a shared one.
 - `continueOnFail` keeps going after a failure; otherwise a failure skips the rest of *this* suite only.

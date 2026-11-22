@@ -1,0 +1,20 @@
+{
+  // A player leaves the session to the main menu (as the escape menu's exit does) and joins the same server again,
+  // without restarting the game. Gold given while they are connected must still be theirs, on both sides, after.
+  "api": 2,
+  "name": "rejoin",
+  "mode": "coop",
+  "world": "shared",
+  "description": "The player leaves to the main menu and joins again; they get their own hero back, with the same gold on the server and their game.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "hero.addGold", "side": "server", "as": "give", "args": { "heroName": "$me.heroName", "amount": 777 } },
+    { "id": "hero.gold", "side": "client:1", "args": { "expected": "$give.gold" } },
+    { "id": "coop.rejoin", "side": "client:1", "as": "back", "timeoutSeconds": 600 },
+    { "id": "game.pause", "side": "server" },
+    { "compare": "hero.parity", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName" }, "continueOnFail": true },
+    { "id": "hero.gold", "side": "client:1", "args": { "expected": "$give.gold" } },
+    { "compare": "hero.gold", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName" } },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

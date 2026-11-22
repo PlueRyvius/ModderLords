@@ -101,6 +101,15 @@ public sealed record TestPlan
     public IReadOnlyList<string> ErrorPatterns { get; init; } = [];
     /// <summary>In a plan made of several suites: their names, grouped by the world they run on (decision 19).</summary>
     public IReadOnlyList<IReadOnlyList<string>> Worlds { get; init; } = [];
+    /// <summary>
+    /// Coop: the suite (in the same module) whose kept world this one continues on. It runs in its own launch right
+    /// after that suite's, its server starting on the world that suite's <c>coop.saveWorld</c> kept in the same run, and
+    /// its steps can read that suite's values as <c>"$suite/step.key"</c>. Without that suite in the run, or when it kept
+    /// no world, this one is left out.
+    /// </summary>
+    public string? After { get; init; }
+    /// <summary>Values the run starts with, as "$name.key" reads them: an earlier launch's, for a suite with <see cref="After"/>.</summary>
+    public IReadOnlyDictionary<string, string> Seed { get; init; } = new Dictionary<string, string>();
 
     /// <summary>Every side a step runs on, server first.</summary>
     public IReadOnlyList<string> Sides =>
@@ -206,7 +215,7 @@ public sealed record TestPlan
             };
             // A reference must name a step that ran earlier; a typo would otherwise surface as a puzzling in-game failure.
             foreach (var (key, value) in args)
-                if (Reference(value) is { } r && !names.Contains(r.Step))
+                if (Reference(value) is { } r && !IsOtherSuite(r.Step) && !names.Contains(r.Step))
                     throw new FormatException($"{where}: argument {key} refers to \"{r.Step}\", which is not an earlier step (name a step with \"as\" to refer to it)");
             names.Add(step.Name);
             steps.Add(step);
@@ -248,6 +257,17 @@ public sealed record TestPlan
         // costs a launch per world. Coop upgrade runs come with the server restarting inside one launch.
         if (world == UpgradeWorld && mode != SuiteMode.SinglePlayer)
             throw new FormatException($"\"world\": \"{UpgradeWorld}\" is single player only for now (\"mode\": \"singleplayer\")");
+        var after = root["after"]?.GetValue<string>();
+        if (after is not null)
+        {
+            if (mode != SuiteMode.Coop) throw new FormatException("\"after\" continues a Coop suite's kept world, so it needs \"mode\": \"coop\"");
+            if (world is not null) throw new FormatException("a suite with \"after\" runs on the world that suite kept; it takes no \"world\"");
+            if (after == name) throw new FormatException("a suite cannot run after itself");
+        }
+        foreach (var step in steps)
+            foreach (var (key, value) in step.Args)
+                if (Reference(value) is { } r && IsOtherSuite(r.Step) && r.Step[..r.Step.IndexOf('/')] != after)
+                    throw new FormatException($"{step.Describe()}: argument {key} reads suite \"{r.Step[..r.Step.IndexOf('/')]}\", but only the suite named in \"after\" can be read");
 
         return new TestPlan
         {
@@ -262,6 +282,7 @@ public sealed record TestPlan
             Continuity = root["continuity"]?.GetValue<bool>() ?? false,
             Manual = root["manual"]?.GetValue<bool>() ?? false,
             ErrorPatterns = errorPatterns,
+            After = after,
         };
     }
 
@@ -272,6 +293,9 @@ public sealed record TestPlan
         "coop" => SuiteMode.Coop,
         _ => throw new FormatException($"{where}: \"mode\" is singleplayer, coop or both, not \"{value}\""),
     };
+
+    /// <summary>A reference to another suite's step ("suite/step"), which only a suite with <see cref="After"/> makes.</summary>
+    public static bool IsOtherSuite(string step) => step.IndexOf('/') > 0;
 
     /// <summary>"$step.key" → (step, key); a step name may itself contain dots, so the key is after the last one.</summary>
     public static (string Step, string Key)? Reference(string value)

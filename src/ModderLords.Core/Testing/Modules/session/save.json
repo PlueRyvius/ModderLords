@@ -1,0 +1,17 @@
+{
+  // First half of a save and reload: marks the player's hero (gold) and party (grain) on the server, then saves the
+  // world with Coop's own save, which writes Coop's session file (who plays which hero) beside it. The launcher keeps
+  // both, and suite session/reload starts the next launch's server on them.
+  "api": 2,
+  "name": "save",
+  "mode": "coop",
+  "description": "The server saves the world with Coop's save command, after giving the player gold and grain, and keeps it with Coop's session file for session/reload.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "hero.addGold", "side": "server", "as": "give", "args": { "heroName": "$me.heroName", "amount": 4321 } },
+    { "id": "party.addItem", "side": "server", "as": "grain", "args": { "heroName": "$me.heroName", "item": "grain", "count": 7 } },
+    { "id": "hero.gold", "side": "client:1", "as": "gold", "args": { "expected": "$give.gold" } },
+    { "id": "party.itemCount", "side": "client:1", "as": "goods", "args": { "item": "grain", "expected": "$grain.value" } },
+    { "id": "coop.saveWorld", "side": "server", "as": "saved", "timeoutSeconds": 600, "args": { "world": "session-reload" } }
+  ]
+}

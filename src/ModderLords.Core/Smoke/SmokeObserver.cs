@@ -21,6 +21,26 @@ public sealed class SmokeObserver
     public DateTimeOffset? ServerOnMapAt { get; private set; }
     /// <summary>The test's player was on the map and then left the server's list before the test closed the game.</summary>
     public bool PlayerDropped { get; private set; }
+    /// <summary>When the player's game announced it was leaving to join again (<see cref="SmokeSignals.RejoinLeavingLine"/>); null when it is not away.</summary>
+    public DateTimeOffset? RejoinLeftAt { get; private set; }
+    /// <summary>Announced rejoins that came back.</summary>
+    public int Rejoins { get; private set; }
+    /// <summary>An announced rejoin has taken longer than <see cref="SmokeSignals.RejoinAllowance"/>: the player is gone after all.</summary>
+    public bool RejoinOverdue(DateTimeOffset now) => RejoinLeftAt is { } left && now - left > SmokeSignals.RejoinAllowance;
+
+    /// <summary>
+    /// When the server's list last lost the test's player. A drop is declared only after <see cref="DropGrace"/> with no
+    /// rejoin announced: the server's list arrives live, the game's own log only when the runner next reads it, so a
+    /// player leaving on purpose can vanish from the list before the announcement is read.
+    /// </summary>
+    private DateTimeOffset? _missingSince;
+    public static readonly TimeSpan DropGrace = TimeSpan.FromSeconds(10);
+
+    /// <summary>Called on each pass of the runner: declares the drop once the grace has passed.</summary>
+    public void Tick(DateTimeOffset now)
+    {
+        if (_missingSince is { } missing && RejoinLeftAt is null && now - missing > DropGrace) PlayerDropped = true;
+    }
     public bool ServerAnsweredPing { get; private set; }
     public List<string> ServerWarningsAtStartup { get; } = new();
     public List<string> ServerWarningsDuringJoin { get; } = new();
@@ -145,7 +165,8 @@ public sealed class SmokeObserver
                 }, at);
             }
             else if (ServerOnMapAt is not null && TestPlayer is not null && players.All(p => p.Id != TestPlayer.Id))
-                PlayerDropped = true;
+                _missingSince ??= at;
+            if (TestPlayer is not null && players.Any(p => p.Id == TestPlayer.Id)) _missingSince = null;
             return;
         }
 
@@ -200,6 +221,12 @@ public sealed class SmokeObserver
             Advance(ClientStage.OnMap, at);
         }
         if (SmokeSignals.PingMs(message) is { } ms) PingMs ??= ms;
+        if (message.StartsWith(SmokeSignals.RejoinLeavingLine, StringComparison.Ordinal)) RejoinLeftAt = at;
+        if (message.StartsWith(SmokeSignals.RejoinBackLine, StringComparison.Ordinal) && RejoinLeftAt is not null)
+        {
+            RejoinLeftAt = null;
+            Rejoins++;
+        }
         if (message.StartsWith(SmokeSignals.CreationStartedLine, StringComparison.Ordinal))
         {
             CreatingCharacter = true;

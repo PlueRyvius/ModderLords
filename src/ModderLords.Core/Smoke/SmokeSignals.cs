@@ -136,6 +136,14 @@ public static partial class SmokeSignals
 
     // Mirrors ModderLords.CompatSync.Coop.SessionCheck; the module cannot be referenced from here.
     public const string ReadyLine = "session check: campaign ready on this player's game";
+    /// <summary>
+    /// The player's game is about to leave the server on purpose and join it again (test step <c>coop.rejoin</c>), and
+    /// that it is back. Between the two the server's player list may drop the player without it being a failure.
+    /// </summary>
+    public const string RejoinLeavingLine = "coop rejoin: leaving";
+    public const string RejoinBackLine = "coop rejoin: back";
+    /// <summary>How long an announced rejoin may take before the player counts as dropped after all.</summary>
+    public static readonly TimeSpan RejoinAllowance = TimeSpan.FromMinutes(6);
     public const string AnsweredLine = "session check: server answered the ping in ";
     public const string ServerAnsweredLine = "session check: answered the ping of ";
     // Mirrors ModderLords.CompatSync.Coop.SmokeCharacterCreation.
