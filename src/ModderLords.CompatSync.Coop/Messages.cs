@@ -95,6 +95,11 @@ public sealed class NetworkTaomCampOp : ICommand
     /// <summary>TAOM's CampType value, for establish.</summary>
     [ProtoMember(2)] public int CampType { get; set; }
     [ProtoMember(3)] public int ProtocolVersion { get; set; }
+    /// <summary>
+    /// Establish only: TAOM skipped its minimum distance to a town (2.0.41's ignoreTownDistance). Its own member, so an
+    /// older server ignores it instead of reading an undefined CampType.
+    /// </summary>
+    [ProtoMember(4)] public bool IgnoreTownDistance { get; set; }
 }
 
 /// <summary>Server -> the sending client: whether TAOM ran the camp operation for that player.</summary>

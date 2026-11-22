@@ -6,7 +6,8 @@ namespace ModderLords.Core.Tests;
 /// The TAOM layer (src/ModderLords.CompatSync.Coop/Taom) binds to TAOM by name and switches a component off when a
 /// member it needs is missing. This checks those names against a real TAOM.dll, so a TAOM update that moves one shows
 /// up here instead of as a silent "off" line in a player's log. Runs against MODDERLORDS_TAOM_DLL, or the usual Steam
-/// install; does nothing when neither exists (CI has no TAOM).
+/// install; does nothing when neither exists (CI has no TAOM). Written against TAOM 2.0.41, which keeps its client-only
+/// half (map visuals, some UI) in TAOM.Client.dll beside TAOM.dll; types are looked up in both, as the layer does.
 /// </summary>
 public sealed class TaomSurfaceTests
 {
@@ -21,6 +22,28 @@ public sealed class TaomSurfaceTests
         return candidates.FirstOrDefault(p => !string.IsNullOrEmpty(p) && File.Exists(p));
     }
 
+    /// <summary>TAOM.dll, and TAOM.Client.dll from the same folder when it is there.</summary>
+    private sealed class Taom : IDisposable
+    {
+        public Taom(string dll)
+        {
+            Core = ModuleDefinition.ReadModule(dll);
+            var client = Path.Combine(Path.GetDirectoryName(dll)!, "TAOM.Client.dll");
+            Client = File.Exists(client) ? ModuleDefinition.ReadModule(client) : null;
+        }
+
+        public ModuleDefinition Core { get; }
+        public ModuleDefinition? Client { get; }
+
+        public TypeDefinition? GetType(string name) => Core.GetType(name) ?? Client?.GetType(name);
+
+        public void Dispose()
+        {
+            Core.Dispose();
+            Client?.Dispose();
+        }
+    }
+
     // Type, member, parameter types (full names), return type (full name) — exactly what TaomJoinGrant.Bind and
     // TaomFieldCamp.Bind look up.
     public static TheoryData<string, string, string[], string> Methods => new()
@@ -31,9 +54,9 @@ public sealed class TaomSurfaceTests
             ["TAOM.Features.PlayerPossession.PlayerCharacterCreationChoices", "System.String", "System.String"], "System.Boolean" },
         { "TAOM.Features.PlayerPossession.PlayerCharacterCreationChoices", ".ctor",
             ["System.String", "System.String", "System.Int32", "System.String"], "System.Void" },
-        { "TAOM.Features.FieldCamp.CampService", "Establish", ["TAOM.Features.FieldCamp.Domain.CampType"], "System.Boolean" },
+        { "TAOM.Features.FieldCamp.CampService", "Establish", ["TAOM.Features.FieldCamp.Domain.CampType", "System.Boolean"], "System.Boolean" },
         { "TAOM.Features.FieldCamp.CampService", "Fortify", [], "System.Boolean" },
-        { "TAOM.Features.FieldCamp.CampService", "CanEstablish", ["TAOM.Features.FieldCamp.Domain.CampType"], "TAOM.Features.FieldCamp.CampBlockReason" },
+        { "TAOM.Features.FieldCamp.CampService", "CanEstablish", ["TAOM.Features.FieldCamp.Domain.CampType", "System.Boolean"], "TAOM.Features.FieldCamp.CampBlockReason" },
         { "TAOM.Features.FieldCamp.CampService", "ToggleForaging", [], "System.Boolean" },
         { "TAOM.Features.FieldCamp.CampService", "BreakPlayerCamp", [], "System.Void" },
         { "TAOM.Features.FieldCamp.CampService", "HourlyTick", [], "System.Void" },
@@ -48,7 +71,7 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.FieldCamp.UI.FieldCampOverlayVM", "Refresh", [], "System.Void" },
         { "TAOM.Features.FieldCamp.CampService", "IsMainPartyMoving", [], "System.Boolean" },
         { "TAOM.Features.EliteEmissary.Hooks.EliteEmissaryInquiryPresenter", "ExecutePurchase",
-            ["TAOM.Adapters.SettlementOwnerInfo", "System.String", "System.String", "System.Int32"], "System.Void" },
+            ["TAOM.Adapters.SettlementOwnerInfo", "System.String", "System.String", "System.Int32", "System.String"], "System.Void" },
         { "TAOM.Features.EliteEmissary.IEliteEmissaryService", "Purchase",
             ["System.String", "System.String", "System.String", "System.String", "System.Int32"], "TAOM.Features.EliteEmissary.Domain.EmissaryPurchaseResult" },
         { "TAOM.Features.EliteEmissary.IEliteEmissaryService", "IsKeySettlement", ["System.String"], "System.Boolean" },
@@ -59,7 +82,7 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.Siege.SiegeDefenseService", "GetMessages", ["System.String"], "TAOM.Features.Siege.Models.KingdomSiegeMessages" },
         { "TAOM.Features.Siege.SiegeDefenseService", "Resolve",
             ["System.String", "System.String", "System.String", "System.Int32", "System.Int32", "System.Int32"], "System.String" },
-        { "TAOM.Features.Messengers.MessengerCampaignBehavior", "SendMessenger", ["TaleWorlds.CampaignSystem.Hero"], "System.Void" },
+        { "TAOM.Features.Messengers.MessengerCampaignBehavior", "SendMessenger", ["TaleWorlds.CampaignSystem.Hero", "System.Boolean"], "System.Void" },
         { "TAOM.Features.SpecialResources.ISpecialResourceStorageService", "GetAllData", [],
             "System.Collections.Generic.Dictionary`2<System.String,System.Single>" },
         { "TAOM.Features.CareerSystem.ICareerDataService", "GetAllData", [],
@@ -67,11 +90,13 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.CareerSystem.ICareerDataService", "GetOrCreateData", ["System.String"], "TAOM.Features.CareerSystem.Domain.HeroCareerData" },
         { "TAOM.Features.CareerSystem.ICareerPassiveService", "RefreshCache",
             ["TAOM.Features.CareerSystem.ICareerDataService", "TAOM.Features.CareerSystem.ICareerRegistry"], "System.Void" },
-        { "TAOM.Features.SpecialResources.SpecialResourcesBehavior", "ApplyDesertion",
-            ["TaleWorlds.CampaignSystem.Party.MobileParty",
+        { "TAOM.Adapters.SpecialResourceEventAdapter", "ApplyDesertion",
+            ["TaleWorlds.CampaignSystem.Hero",
              "System.Collections.Generic.IReadOnlyList`1<TAOM.Features.SpecialResources.TroopDesertionEntry>"], "System.Int32" },
         { "TAOM.Adapters.PlayerContextAdapter", "GetPlayerKingdomId", [], "System.String" },
-        { "TAOM.Adapters.PlayerContextAdapter", "GetPlayerCultureId", [], "System.String" },
+        { "TAOM.Adapters.PlayerContextAdapter", "GetPlayerClanId", [], "System.String" },
+        { "TAOM.Adapters.FactionSides", "OfPlayer", [], "TAOM.Features.Execution.SideIds" },
+        { "TAOM.Adapters.FactionSides", "Of", ["TaleWorlds.CampaignSystem.IFaction"], "TAOM.Features.Execution.SideIds" },
         { "TAOM.Adapters.PlayerContextAdapter", "IsUnderMercenaryService", [], "System.Boolean" },
         { "TAOM.Adapters.WarEventSnapshotAdapter", "IsPlayerRelated", ["TaleWorlds.CampaignSystem.Party.PartyBase", "System.String"], "System.Boolean" },
         { "TAOM.Adapters.WarEventSnapshotAdapter", "FromMapEvent", ["TaleWorlds.CampaignSystem.MapEvents.MapEvent"],
@@ -109,7 +134,7 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.TroopProgression.Models.TaomVolunteerModel", "MaximumIndexHeroCanRecruitFromHero",
             ["TaleWorlds.CampaignSystem.Hero", "TaleWorlds.CampaignSystem.Hero", "System.Int32"], "System.Int32" },
         { "TAOM.Features.PrisonerRecruitment.Models.TaomPrisonerRecruitmentCalculationModel", "GetPrisonerRecruitmentMoraleEffect",
-            ["TaleWorlds.CampaignSystem.Party.PartyBase", "TaleWorlds.CampaignSystem.CharacterObject", "System.Int32"], "System.Int32" },
+            ["TaleWorlds.CampaignSystem.Party.PartyBase", "TaleWorlds.CampaignSystem.CharacterObject", "System.Int32"], "System.Single" },
         { "TAOM.Features.CulturalFeats.Models.TaomCaravanModel", "GetInitialTradeGold",
             ["TaleWorlds.CampaignSystem.Hero", "System.Boolean", "System.Boolean"], "System.Int32" },
         { "TAOM.Features.CulturalFeats.Models.TaomCaravanModel", "GetMaxGoldToSpendOnOneItemCategory",
@@ -136,8 +161,28 @@ public sealed class TaomSurfaceTests
         { "TAOM.Features.FiefGranting.FiefGrantFactsBuilder", "Build",
             ["TaleWorlds.CampaignSystem.Clan", "TaleWorlds.CampaignSystem.Settlements.Settlement", "TAOM.Features.FiefGranting.IFiefSiegeParticipationService"],
             "TAOM.Features.FiefGranting.FiefGrantCandidateFacts" },
-        { "TAOM.Features.SpecialResources.SpecialResourcesBehavior", "CanEarn", [], "System.Boolean" },
+        { "TAOM.Features.SpecialResources.SpecialResourceEarningService", "OnVictory", ["TAOM.Features.SpecialResources.VictorySnapshot"],
+            "System.Collections.Generic.IReadOnlyList`1<TAOM.Features.SpecialResources.EarningNotice>" },
         { "TAOM.Features.SpecialResources.SpecialResourcesBehavior", "OnMapEventEnded", ["TaleWorlds.CampaignSystem.MapEvents.MapEvent"], "System.Void" },
+        { "TAOM.Features.SpecialResources.SpecialResourcesBehavior", "OnRaidCompleted",
+            ["TaleWorlds.Core.BattleSideEnum", "TaleWorlds.CampaignSystem.MapEvents.RaidEventComponent"], "System.Void" },
+        { "TAOM.Features.SpecialResources.SpecialResourcesBehavior", "OnHideoutCompleted",
+            ["TaleWorlds.Core.BattleSideEnum", "TaleWorlds.CampaignSystem.MapEvents.HideoutEventComponent",
+             "TaleWorlds.CampaignSystem.MapEvents.HideoutEventComponent/HideoutBattleEndState"], "System.Void" },
+        { "TAOM.Features.SpecialResources.SpecialResourcesBehavior", "OnTournamentFinished",
+            ["TaleWorlds.CampaignSystem.CharacterObject", "TaleWorlds.Library.MBReadOnlyList`1<TaleWorlds.CampaignSystem.CharacterObject>",
+             "TaleWorlds.CampaignSystem.Settlements.Town", "TaleWorlds.Core.ItemObject"], "System.Void" },
+        { "TAOM.Features.SpecialResources.SpecialResourcesBehavior", "OnDailyTickHero", ["TaleWorlds.CampaignSystem.Hero"], "System.Void" },
+        // SpecialResourceEarningsComponent (2.0.41): the single balance write it hooks, and the charge paths it batches.
+        { "TAOM.Features.SpecialResources.SpecialResourceStorageService", "Set", ["System.String", "System.String", "System.Single"], "System.Void" },
+        { "TAOM.Features.SpecialResources.SpecialResourceStorageService", "Get", ["System.String", "System.String"], "System.Single" },
+        { "TAOM.Features.SpecialResources.SpecialResourcesBehavior", "OnUnitRecruited", ["TaleWorlds.CampaignSystem.CharacterObject", "System.Int32"], "System.Void" },
+        { "TAOM.Features.SpecialResources.SpecialResourceEarningService", "ChargeCoopUpgrades",
+            ["TAOM.Features.SpecialResources.EarnerRef",
+             "System.Collections.Generic.IReadOnlyList`1<TAOM.Features.SpecialResources.CoopUpgradeLine>"], "System.Single" },
+        // PlayerContextComponent (2.0.41): FactionSides.OfPlayer is substituted only inside this postfix.
+        { "TAOM.Features.Execution.Hooks.ExecutionCampaignBehavior_BloodFeudRelationPenalty_Patch", "Postfix",
+            ["TaleWorlds.CampaignSystem.Hero", "TaleWorlds.CampaignSystem.Clan", "System.Int32&"], "System.Void" },
         { "TAOM.Features.FieldCommission.Hooks.FieldCommissionBehavior", "OnMapEventStarted",
             ["TaleWorlds.CampaignSystem.MapEvents.MapEvent", "TaleWorlds.CampaignSystem.Party.PartyBase", "TaleWorlds.CampaignSystem.Party.PartyBase"], "System.Void" },
         { "TAOM.Features.Refuge.Hooks.RefugeEncounterPatch", "IsEnterableRefuge", ["TAOM.Features.Refuge.IRefugeService", "System.String"], "System.Boolean" },
@@ -155,9 +200,9 @@ public sealed class TaomSurfaceTests
     public void TaomMethodTheLayerBindsToExists(string type, string method, string[] parameters, string returns)
     {
         if (TaomDll() is not { } dll) return;
-        using var module = ModuleDefinition.ReadModule(dll);
-        var t = module.GetType(type);
-        Assert.True(t != null, $"{type} is missing from {dll}");
+        using var taom = new Taom(dll);
+        var t = taom.GetType(type);
+        Assert.True(t != null, $"{type} is missing from {dll} and TAOM.Client.dll");
         var match = t!.Methods.Where(m => m.Name == method).FirstOrDefault(m =>
             m.Parameters.Select(p => p.ParameterType.FullName).SequenceEqual(parameters) && m.ReturnType.FullName == returns);
         Assert.True(match != null, $"{type}.{method}({string.Join(", ", parameters)}) : {returns} is missing or changed shape");
@@ -194,6 +239,46 @@ public sealed class TaomSurfaceTests
         Assert.NotNull(module.GetType("TAOM.Features.FieldCamp.ICampService"));
         var resolve = module.GetType("TAOM.IoC")?.Methods.FirstOrDefault(m => m.Name == "Resolve" && m.IsStatic && m.Parameters.Count == 0);
         Assert.True(resolve is { HasGenericParameters: true }, "TAOM.IoC.Resolve<T>() is missing");
+        var adapter = module.GetType("TAOM.Adapters.SpecialResourceEventAdapter");
+        Assert.True(adapter?.Interfaces.Any(i => i.InterfaceType.FullName == "TAOM.Adapters.ISpecialResourceEventAdapter") == true,
+            "SpecialResourceEventAdapter no longer implements ISpecialResourceEventAdapter");
+    }
+
+    /// <summary>
+    /// The layer leaves a visual service alone when TAOM.dll does not have it and TAOM names its client composition
+    /// (TaomTypes.HasClientSplit): the service is then in TAOM.Client.dll, which a dedicated server never loads.
+    /// </summary>
+    [Theory]
+    [InlineData("TAOM.Features.FieldCamp.CampVisualService")]
+    [InlineData("TAOM.Features.Refuge.Visuals.RefugeVisualService")]
+    [InlineData("TAOM.Features.SupplyLines.SupplyRouteVisualService")]
+    public void VisualServicesLiveInTheClientOnlyAssembly(string type)
+    {
+        if (TaomDll() is not { } dll) return;
+        using var taom = new Taom(dll);
+        Assert.NotNull(taom.Core.GetType("TAOM.Composition.ClientComposition"));
+        Assert.Null(taom.Core.GetType(type));
+        Assert.True(taom.Client?.GetType(type) != null, $"{type} is missing from TAOM.Client.dll");
+    }
+
+    /// <summary>
+    /// The value types a SyncData saves through IDataStore, following TAOM's own helpers that take the store
+    /// (2.0.41's SyncDataChunker.SyncChunks saves an int count and string chunks).
+    /// </summary>
+    private static List<string> SyncedTypes(MethodDefinition syncData, HashSet<string>? seen = null)
+    {
+        seen ??= new HashSet<string>();
+        var used = new List<string>();
+        if (!syncData.HasBody || !seen.Add(syncData.FullName)) return used;
+        foreach (var operand in syncData.Body.Instructions.Select(i => i.Operand).OfType<MethodReference>())
+        {
+            if (operand is GenericInstanceMethod g && g.Name == "SyncData" && g.DeclaringType.FullName == "TaleWorlds.CampaignSystem.IDataStore")
+                used.Add(g.GenericArguments[0].FullName);
+            else if (operand.Parameters.Any(p => p.ParameterType.FullName == "TaleWorlds.CampaignSystem.IDataStore")
+                     && operand.DeclaringType.Scope == syncData.Module && operand.Resolve() is { } helper)
+                used.AddRange(SyncedTypes(helper, seen));
+        }
+        return used;
     }
 
     // Keep in step with MirrorStore.Supported and TaomStateMirror.Mirrored (src/ModderLords.CompatSync.Coop/Taom).
@@ -220,9 +305,7 @@ public sealed class TaomSurfaceTests
         var syncData = module.GetType(behaviour)?.Methods.FirstOrDefault(m => m.Name == "SyncData" && m.Parameters.Count == 1);
         Assert.True(syncData?.HasBody == true, $"{behaviour}.SyncData is missing");
         var book = $"System.Collections.Generic.Dictionary`2<System.String,{record}>";
-        var used = syncData!.Body.Instructions.Select(i => i.Operand).OfType<GenericInstanceMethod>()
-            .Where(m => m.Name == "SyncData" && m.DeclaringType.FullName == "TaleWorlds.CampaignSystem.IDataStore")
-            .Select(m => m.GenericArguments[0].FullName).ToList();
+        var used = SyncedTypes(syncData!);
         Assert.All(used, t => Assert.True(t == book || MirrorTypes.Contains(t), $"{behaviour}.SyncData syncs a {t}"));
         var fields = module.GetType(record)!.Fields.Where(f => f.IsPublic && !f.IsStatic).Select(f => f.FieldType.FullName);
         Assert.All(fields, t => Assert.True(MirrorTypes.Contains(t) || t == "TaleWorlds.CampaignSystem.CampaignTime",
@@ -239,11 +322,7 @@ public sealed class TaomSurfaceTests
         using var module = ModuleDefinition.ReadModule(dll);
         var syncData = module.GetType(type)?.Methods.FirstOrDefault(m => m.Name == "SyncData" && m.Parameters.Count == 1);
         Assert.True(syncData?.HasBody == true, $"{type}.SyncData is missing");
-        var used = syncData!.Body.Instructions
-            .Select(i => i.Operand).OfType<GenericInstanceMethod>()
-            .Where(m => m.Name == "SyncData" && m.DeclaringType.FullName == "TaleWorlds.CampaignSystem.IDataStore")
-            .Select(m => m.GenericArguments[0].FullName)
-            .ToList();
+        var used = SyncedTypes(syncData!);
         Assert.NotEmpty(used);
         Assert.All(used, t => Assert.True(MirrorTypes.Contains(t), $"{type}.SyncData syncs a {t}, which the state mirror does not carry"));
     }

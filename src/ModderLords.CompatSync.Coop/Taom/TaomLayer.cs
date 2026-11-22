@@ -71,6 +71,7 @@ public static class TaomLayer
         new FiefVoteSyncComponent(),
         new SpecialResourceEarningsComponent(),
         new WandererIntroductionComponent(),
+        new OathHireComponent(),
     };
 
     private static bool _done;
@@ -133,6 +134,24 @@ public static class TaomLayer
 
     internal static Assembly? Loaded(string name) =>
         AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => !a.IsDynamic && a.GetName().Name == name);
+}
+
+/// <summary>
+/// TAOM 2.0.41 split its client-only half (map visuals, some UI) out of TAOM.dll into TAOM.Client.dll, a submodule
+/// tagged DedicatedServerType=none, so a dedicated server never loads it. Older TAOM has everything in TAOM.dll.
+/// </summary>
+internal static class TaomTypes
+{
+    /// <summary>A TAOM type by full name: TAOM.dll first, then TAOM.Client.dll when it is loaded.</summary>
+    internal static Type? Find(Assembly taom, string name) =>
+        taom.GetType(name, false) ?? TaomLayer.Loaded("TAOM.Client")?.GetType(name, false);
+
+    /// <summary>
+    /// Whether this TAOM keeps its client-only code in TAOM.Client.dll (its composition root names it). A visual
+    /// service that is not found is then simply not loaded here (a server), not removed.
+    /// </summary>
+    internal static bool HasClientSplit(Assembly taom) =>
+        taom.GetType("TAOM.Composition.ClientComposition", false) != null;
 }
 
 /// <summary>

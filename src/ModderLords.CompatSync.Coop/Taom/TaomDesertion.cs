@@ -22,6 +22,10 @@ namespace ModderLords.CompatSync.Coop.Taom;
 /// On a client in a session the removal is sent to the server instead, which removes at most what the party really
 /// has; Coop then syncs the roster back. TAOM's own "N deserted" message still shows, with the count computed the way
 /// TAOM computes it.
+///
+/// TAOM 2.0.41 moved the removal to TAOM.Adapters.SpecialResourceEventAdapter.ApplyDesertion(Hero, ...) and runs the
+/// daily upkeep only on the session's authority (the server), for every player's hero, so on that TAOM a client should
+/// not reach it at all; the relay stays as a guard for a client that does.
 /// </summary>
 internal sealed class DesertionRelayComponent : ITaomComponent
 {
@@ -35,11 +39,18 @@ internal sealed class DesertionRelayComponent : ITaomComponent
     {
         var entry = context.Taom.GetType("TAOM.Features.SpecialResources.TroopDesertionEntry", false);
         var list = entry == null ? null : typeof(IReadOnlyList<>).MakeGenericType(entry);
-        _applyDesertion = list == null ? null : context.Taom.GetType("TAOM.Features.SpecialResources.SpecialResourcesBehavior", false)
-            ?.GetMethod("ApplyDesertion", BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { typeof(MobileParty), list }, null);
+        const BindingFlags inst = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        // 2.0.41: the adapter TAOM resolves as ISpecialResourceEventAdapter, by hero. Up to 2.0.28: the behaviour, by party.
+        var adapter = context.Taom.GetType("TAOM.Adapters.SpecialResourceEventAdapter", false);
+        var contract = context.Taom.GetType("TAOM.Adapters.ISpecialResourceEventAdapter", false);
+        _applyDesertion = list == null ? null
+            : (contract != null && contract.IsAssignableFrom(adapter) ? adapter : null)?.GetMethod("ApplyDesertion", inst, null, new[] { typeof(Hero), list }, null)
+              ?? context.Taom.GetType("TAOM.Features.SpecialResources.SpecialResourcesBehavior", false)
+                  ?.GetMethod("ApplyDesertion", inst, null, new[] { typeof(MobileParty), list }, null);
         return _applyDesertion?.ReturnType == typeof(int)
             ? null
-            : "TAOM changed; not found: SpecialResourcesBehavior.ApplyDesertion(MobileParty, IReadOnlyList<TroopDesertionEntry>)";
+            : "TAOM changed; not found: SpecialResourceEventAdapter.ApplyDesertion(Hero, IReadOnlyList<TroopDesertionEntry>) " +
+              "or SpecialResourcesBehavior.ApplyDesertion(MobileParty, IReadOnlyList<TroopDesertionEntry>)";
     }
 
     public string Install(TaomContext context)
@@ -54,10 +65,12 @@ internal sealed class DesertionRelayComponent : ITaomComponent
     }
 
     /// <summary>Client: counts as TAOM would, sends the removals, and leaves the roster to the server.</summary>
-    private static bool ApplyDesertionPrefix(MobileParty party, object desertions, ref int __result)
+    private static bool ApplyDesertionPrefix(object[] __args, ref int __result)
     {
         if (!TaomActions.IsCoopClient) return true;
         __result = 0;
+        var party = __args[0] as MobileParty ?? (__args[0] as Hero)?.PartyBelongedTo;
+        var desertions = __args[1];
         if (party?.MemberRoster == null || desertions is not IEnumerable list) return false;
         var args = new List<string>();
         foreach (var entry in list)

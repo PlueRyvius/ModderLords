@@ -106,8 +106,8 @@ internal static class TaomFieldCamp
     internal static MethodInfo? ForageHour { get; private set; }
     internal static string? MissingSurface { get; private set; } = "not bound";
 
-    /// <summary>Set by the client handler while a session is live: sends one operation to the server.</summary>
-    internal static Action<string, int>? Send { get; set; }
+    /// <summary>Set by the client handler while a session is live: sends one operation (op, camp type, ignoreTownDistance) to the server.</summary>
+    internal static Action<string, int, bool>? Send { get; set; }
 
     /// <summary>True while this layer itself is calling TAOM, so the patches do not forward their own calls.</summary>
     [ThreadStatic] private static bool _replaying;
@@ -119,10 +119,15 @@ internal static class TaomFieldCamp
         _serviceInterface = taom.GetType("TAOM.Features.FieldCamp.ICampService", false);
         _campType = taom.GetType("TAOM.Features.FieldCamp.Domain.CampType", false);
         _resolve = taom.GetType("TAOM.IoC", false)?.GetMethod("Resolve", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
-        Establish = _campType == null ? null : service?.GetMethod("Establish", new[] { _campType });
-        _canEstablish = _campType == null ? null : service?.GetMethod("CanEstablish", new[] { _campType });
+        // TAOM 2.0.41 added a second parameter, ignoreTownDistance (true only from its "start in camp" opening);
+        // older TAOM takes the camp type alone.
+        Establish = _campType == null ? null
+            : service?.GetMethod("Establish", new[] { _campType, typeof(bool) }) ?? service?.GetMethod("Establish", new[] { _campType });
+        _canEstablish = _campType == null ? null
+            : service?.GetMethod("CanEstablish", new[] { _campType, typeof(bool) }) ?? service?.GetMethod("CanEstablish", new[] { _campType });
         VisualMethods.Clear();
-        var visuals = taom.GetType("TAOM.Features.FieldCamp.CampVisualService", false);
+        // In TAOM.Client.dll since 2.0.41, which a dedicated server never loads: nothing there for the server to blank.
+        var visuals = TaomTypes.Find(taom, "TAOM.Features.FieldCamp.CampVisualService");
         foreach (var name in new[] { "Show", "IsShown", "Remove", "ClearAll" })
             if (visuals?.GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly) is { } m)
                 VisualMethods.Add(m);
@@ -150,7 +155,7 @@ internal static class TaomFieldCamp
         if (_resolve == null || !_resolve.IsGenericMethodDefinition) missing.Add("TAOM.IoC.Resolve<T>()");
         if (Establish?.ReturnType != typeof(bool)) missing.Add("CampService.Establish(CampType)");
         if (_canEstablish == null || !_canEstablish.ReturnType.IsEnum) missing.Add("CampService.CanEstablish(CampType)");
-        if (VisualMethods.Count != 4) missing.Add("CampVisualService.Show/IsShown/Remove/ClearAll");
+        if (visuals == null ? !TaomTypes.HasClientSplit(taom) : VisualMethods.Count != 4) missing.Add("CampVisualService.Show/IsShown/Remove/ClearAll");
         if (Fortify?.ReturnType != typeof(bool)) missing.Add("CampService.Fortify()");
         if (ToggleForaging?.ReturnType != typeof(bool)) missing.Add("CampService.ToggleForaging()");
         if (Break == null) missing.Add("CampService.BreakPlayerCamp()");
@@ -164,9 +169,30 @@ internal static class TaomFieldCamp
 
     // ---- client ------------------------------------------------------------------------------------
 
-    internal static void EstablishPostfix(bool __result, object type)
+    /// <summary>
+    /// A test build of this layer packed TAOM's ignoreTownDistance into the camp type as this bit. It now travels as its
+    /// own message member (NetworkTaomCampOp.IgnoreTownDistance), which an older server simply ignores; the server
+    /// still reads the bit from such a client, so a packed value never reaches Enum.ToObject.
+    /// </summary>
+    private const int PackedIgnoreTownDistance = 0x100;
+
+    internal static void EstablishPostfix(bool __result, object[] __args)
     {
-        if (__result) Forward(OpEstablish, Convert.ToInt32(type));
+        if (!__result) return;
+        // TAOM 2.0.41's ignoreTownDistance (true only from its "start in camp" opening), so the server's replay skips the
+        // town-distance rule too.
+        var ignoreTownDistance = __args.Length > 1 && __args[1] is true;
+        Forward(OpEstablish, Convert.ToInt32(__args[0]), ignoreTownDistance);
+    }
+
+    /// <summary>The arguments for Establish / CanEstablish, for either TAOM shape.</summary>
+    private static object[] EstablishArgs(MethodInfo method, int campType, bool ignoreTownDistance)
+    {
+        ignoreTownDistance |= (campType & PackedIgnoreTownDistance) != 0;
+        var type = Enum.ToObject(_campType!, campType & ~PackedIgnoreTownDistance);
+        return method.GetParameters().Length > 1
+            ? new[] { type, ignoreTownDistance }
+            : new[] { type };
     }
 
     internal static void FortifyPostfix(bool __result)
@@ -272,10 +298,10 @@ internal static class TaomFieldCamp
     /// <summary>Client, during a live session only (Send is set): the server applies this effect instead.</summary>
     internal static bool SkipOnClientPrefix() => Send == null;
 
-    private static void Forward(string op, int campType)
+    private static void Forward(string op, int campType, bool ignoreTownDistance = false)
     {
         if (_replaying || Send == null) return;
-        try { Send(op, campType); }
+        try { Send(op, campType, ignoreTownDistance); }
         catch (Exception ex) { Log.Warn("TAOM layer: field-camp could not send " + op + ": " + ex.GetBaseException().Message); }
     }
 
@@ -310,7 +336,7 @@ internal static class TaomFieldCamp
     // ---- server ------------------------------------------------------------------------------------
 
     /// <summary>Server, game thread: runs one camp operation for a player. Returns whether TAOM accepted it.</summary>
-    internal static (bool Ran, string Detail) ServerRun(Hero hero, MobileParty? party, string op, int campType)
+    internal static (bool Ran, string Detail) ServerRun(Hero hero, MobileParty? party, string op, int campType, bool ignoreTownDistance = false)
     {
         if (MissingSurface != null) return (false, "field-camp is off on the server: " + MissingSurface);
         if (party == null) return (false, "the player's party was not found on the server");
@@ -325,7 +351,7 @@ internal static class TaomFieldCamp
             {
                 result = op switch
                 {
-                    OpEstablish => Establish!.Invoke(service, new[] { Enum.ToObject(_campType!, campType) }),
+                    OpEstablish => Establish!.Invoke(service, EstablishArgs(Establish, campType, ignoreTownDistance)),
                     OpFortify => Fortify!.Invoke(service, null),
                     OpForaging => ToggleForaging!.Invoke(service, null),
                     OpBreak => Break!.Invoke(service, null),
@@ -338,17 +364,17 @@ internal static class TaomFieldCamp
         if (result is "unknown") return (false, "unknown camp operation '" + op + "'");
         var ran = result is not bool b || b;
         if (ran) return (true, $"{op} ran for {hero.Name}");
-        return (false, $"TAOM refused {op} for {hero.Name} on the server" + (op == OpEstablish ? ": " + WhyNot(service, hero, party, campType) : ""));
+        return (false, $"TAOM refused {op} for {hero.Name} on the server" + (op == OpEstablish ? ": " + WhyNot(service, hero, party, campType, ignoreTownDistance) : ""));
     }
 
     /// <summary>TAOM's own reason (CampBlockReason) for refusing an Establish, asked the same way the menu asks it.</summary>
-    private static string WhyNot(object service, Hero hero, MobileParty party, int campType)
+    private static string WhyNot(object service, Hero hero, MobileParty party, int campType, bool ignoreTownDistance)
     {
         try
         {
             _replaying = true;
             using (new ServerRelay.PlayerScope(hero, party))
-                return _canEstablish!.Invoke(service, new[] { Enum.ToObject(_campType!, campType) })?.ToString() ?? "?";
+                return _canEstablish!.Invoke(service, EstablishArgs(_canEstablish, campType, ignoreTownDistance))?.ToString() ?? "?";
         }
         catch (Exception ex) { return "reason unavailable (" + ex.GetBaseException().Message + ")"; }
         finally { _replaying = false; }
