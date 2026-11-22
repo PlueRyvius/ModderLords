@@ -65,9 +65,10 @@
       "Id": "TAOM.Dependencies",
       "Verdict": "NeedsRecipe",
       "TestedVersions": [
-        "v2.0.26"
+        "v2.0.26",
+        "v2.0.41"
       ],
-      "TestedCoopVersion": "v0.1.4",
+      "TestedCoopVersion": "v0.1.8",
       "DefaultRole": "DependencyOnly",
       "KeepSubModules": [
         "TAOM.Dependencies.SubModule"
@@ -79,54 +80,58 @@
           "Value": "{coopModuleId}"
         }
       ],
-      "Notes": "TAOM's bundled BUTR stack: it packs UIExtenderEx, ButterLib, MCM and the MBOptionScreen module loader into one module, and lists UIExtenderEx FIRST with no DedicatedServerType tag, so the server tries to load a UI framework before anything else and dies there. DependencyOnly drops the bundled client frameworks; TAOM.Dependencies.SubModule is kept because it is TAOM's own dependency bootstrap, and MCM's two settings-core class types are kept through the shared keep-list.",
-      "UpdatedAt": "2026-09-07T00:00:00Z"
+      "Notes": "Bannerlord v1.5.7, Coop v0.1.8, v2.0.41 (2026-11-22): the same recipe serves. The server got TAOM.Dependencies.SubModule and the two MCM settings-core submodules, nothing else. 2.0.41 now tags UIExtenderEx, ButterLib, MCM and the module loader DedicatedServerType=none itself. On a player's game, a profile that also loads the Workshop Harmony, ButterLib, UIExtenderEx and MCM gets TAOM's own 'TAOM.Dependencies already provides ...' notice: leave those off. Bannerlord v1.4.8, v2.0.26: TAOM's bundled BUTR stack: it packs UIExtenderEx, ButterLib, MCM and the MBOptionScreen module loader into one module, and lists UIExtenderEx FIRST with no DedicatedServerType tag, so the server tries to load a UI framework before anything else and dies there. DependencyOnly drops the bundled client frameworks; TAOM.Dependencies.SubModule is kept because it is TAOM's own dependency bootstrap, and MCM's two settings-core class types are kept through the shared keep-list.",
+      "UpdatedAt": "2026-11-22T00:00:00Z"
     },
     {
       "Id": "TAOM",
       "Verdict": "NeedsRecipe",
       "TestedVersions": [
-        "v2.0.27"
+        "v2.0.27",
+        "v2.0.41"
       ],
-      "TestedCoopVersion": "v0.1.4",
-      "DefaultRole": "DependencyOnly",
+      "TestedCoopVersion": "v0.1.8",
+      "DefaultRole": "AsShipped",
       "DefaultSettings": {
         "TAOM": {
           "EnableTroopWeight": "false"
         }
       },
-      "Notes": "The Age of Machinery. CO-OP SETTINGS 2026-09-12: EnableTroopWeight is forced off by default because TroopWeight trims party rosters from each peer's own simulation; TAOM's own co-op compat package turns it off on every peer too. A host override in Mod settings wins. The headless crash was 0Harmony: TAOM.Dependencies ships a different build of 0Harmony.dll reporting the same FileVersion 2.4.2.0, whose ILMerged MonoMod calls ILGenerator.MarkSequencePoint, which does not exist on the server's .NET 6. With StartupHook resolving shared runtime libraries from the server's own copies, TAOM:Run LOADS HEADLESS - measured repeatedly, no TypeInitializationException and no HarmonyException. Its manifest still tags TAOM.SubModule DedicatedServerType=none and TAOM.dll still constructs GauntletLayer, GauntletMovie, MapScreen, MissionView and ScreenBase, so the view code is real; it simply is not reached during load. What has NOT been shown is a TAOM server reaching SERVING: every attempt so far loaded the vanilla autosave, which no TAOM world can match, and stalled in campaign init. Testing that needs a world created by a client running TAOM (see: import-save). DefaultRole stays DependencyOnly until Run is proven to SERVING. DependencyOnly keeps the id+version for Coop's handshake and keeps every <Xmls> entry (81 ModuleData files: kingdoms, cultures, clans, lords, heroes), so the server still serves TAOM's world. CAVEAT: TAOM.dll also owns ~51 campaign behaviours (Diplomacy, WarOfTheRing, Enlistment, CareerSystem, SupplyLines, CultureConversion, SpecialResources, Siege, ...) and ~25 mission behaviours. Under DependencyOnly none of those run server-side, so the host runs vanilla campaign logic against TAOM data while clients run the full mod. Expect divergence on anything those behaviours drive. Reaching SERVING this way is a data-parity server, not a full TAOM coop server.",
-      "Url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3770450698",
-      "UpdatedAt": "2026-09-07T00:00:00Z"
+      "Notes": "The Age of Machinery. Bannerlord v1.5.7, Coop v0.1.8 nightly, v2.0.41 (2026-11-22), with ModderLords' TAOM layer and no TAOM.CoopCompat: the server reached SERVING, and the in-game suites pass on a dedicated server with one player. They cover core, battle, leaving and rejoining, save, reload, hiring a wanderer (TAOM's oaths of service, sealed on the server) and supply lines. 2.0.41 moved its client-only code into a TAOM.Client submodule tagged DedicatedServerType=none, so AsShipped now loads TAOM.dll headless, with TAOM's campaign behaviours on the server. On older TAOM, AsShipped skips TAOM.SubModule (tagged none) and acts like DependencyOnly. Not covered yet: the layer's siege-defense component (2.0.41 moved SiegeDefenseService.Resolve), more than one player, and TAOM's other host-only features (oath topics, Warden's Tally). Bannerlord v1.4.8, v2.0.27, Coop v0.1.4: CO-OP SETTINGS 2026-09-12: EnableTroopWeight is forced off by default because TroopWeight trims party rosters from each peer's own simulation; TAOM's own co-op compat package turns it off on every peer too. A host override in Mod settings wins. The headless crash was 0Harmony: TAOM.Dependencies ships a different build of 0Harmony.dll reporting the same FileVersion 2.4.2.0, whose ILMerged MonoMod calls ILGenerator.MarkSequencePoint, which does not exist on the server's .NET 6. With StartupHook resolving shared runtime libraries from the server's own copies, TAOM:Run LOADS HEADLESS - measured repeatedly, no TypeInitializationException and no HarmonyException. Its manifest still tags TAOM.SubModule DedicatedServerType=none and TAOM.dll still constructs GauntletLayer, GauntletMovie, MapScreen, MissionView and ScreenBase, so the view code is real; it simply is not reached during load. What has NOT been shown is a TAOM server reaching SERVING: every attempt so far loaded the vanilla autosave, which no TAOM world can match, and stalled in campaign init. Testing that needs a world created by a client running TAOM (see: import-save). DefaultRole stays DependencyOnly until Run is proven to SERVING. DependencyOnly keeps the id+version for Coop's handshake and keeps every <Xmls> entry (81 ModuleData files: kingdoms, cultures, clans, lords, heroes), so the server still serves TAOM's world. CAVEAT: TAOM.dll also owns ~51 campaign behaviours (Diplomacy, WarOfTheRing, Enlistment, CareerSystem, SupplyLines, CultureConversion, SpecialResources, Siege, ...) and ~25 mission behaviours. Under DependencyOnly none of those run server-side, so the host runs vanilla campaign logic against TAOM data while clients run the full mod. Expect divergence on anything those behaviours drive. Reaching SERVING this way is a data-parity server, not a full TAOM coop server.",
+      "UpdatedAt": "2026-11-22T00:00:00Z"
     },
     {
       "Id": "TAOM_Map",
       "Verdict": "Works",
       "TestedVersions": [
-        "v2.0.27"
+        "v2.0.27",
+        "v2.0.41"
       ],
-      "TestedCoopVersion": "v0.1.4",
+      "TestedCoopVersion": "v0.1.8",
       "DefaultRole": "Run",
-      "Notes": "TAOM's campaign map. Data only - no <SubModule> entries and no managed bin - so Run loads its <Xmls> and scene data with no code to go wrong. Measured 2026-09-07: with TAOM_Map:Run the server reads Main_map successfully every time with a constant navmesh CRC=1465536726, and the map scene that loads is DedicatedServer.Windows's, not this mod's - so the repeated CreateMapScene loop seen in those runs is NOT a map failure, it is the campaign state machine re-entering after a swallowed exception. Verdict Works reflects loading cleanly; it has not yet been shown on a server that reached SERVING.",
-      "UpdatedAt": "2026-09-07T00:00:00Z"
+      "Notes": "TAOM's campaign map. Bannerlord v1.5.7, Coop v0.1.8, v2.0.41 (2026-11-22): loaded with Run on a server that reached SERVING and passed the in-game suites (see TAOM). Bannerlord v1.4.8, v2.0.27: TAOM's campaign map. Data only - no <SubModule> entries and no managed bin - so Run loads its <Xmls> and scene data with no code to go wrong. Measured 2026-09-07: with TAOM_Map:Run the server reads Main_map successfully every time with a constant navmesh CRC=1465536726, and the map scene that loads is DedicatedServer.Windows's, not this mod's - so the repeated CreateMapScene loop seen in those runs is NOT a map failure, it is the campaign state machine re-entering after a swallowed exception. Verdict Works reflects loading cleanly; it has not yet been shown on a server that reached SERVING.",
+      "UpdatedAt": "2026-11-22T00:00:00Z"
     },
     {
       "Id": "LOTRLOME_Armory",
-      "Verdict": "Broken",
+      "Verdict": "Works",
       "TestedVersions": [
-        "v2.0.26"
+        "v2.0.41"
       ],
-      "TestedCoopVersion": "v0.1.4",
+      "TestedCoopVersion": "v0.1.8",
       "DefaultRole": "Run",
-      "Notes": "Item pack shipped alongside TAOM. Measured, it is the single reason a TAOM server could not start. Its ModuleData/action_sets.xslt declares the elephant_rider_* / howdah_* animation set while the binaries live only in a client AssetPackages pack1.tpac (1.17 GB); the dedicated server reads DsAssetPackages, which this mod does not ship. <Xmls> is always processed, so the declarations load while the data cannot: 104-137 \"Could not find animation\" warnings and 52-77 blocking `Messagebox [Always Ignore?]` prompts, then exit -1. Dropping it removes every one of them - zero animation failures and zero modals with the same TAOM loadout. There is NO ROLE THAT FIXES THIS: DependencyOnly only removes <SubModule> elements and this mod has none. Two escapes were tried and both failed. Mapping its AssetPackages onto DsAssetPackages caused a native access violation (0xC0000005) during \"Registering items\" and failed EARLIER than without it; DsAssetPackages is a curated server subset from TaleWorlds' pipeline and cannot be synthesised from client packs. Suppressing the modal does not help either: the prompts never reach the managed IDebugManager (they are raised natively and printed straight to stdout), and with Utilities.SetAssertionsAndWarningsSetExitCode(false) + SetCrashOnAsserts(false) applied the run stops exiting through the assertion path and instead dies in native code with an Rgl.pdb / FairyTale.Library.pdb stack, before the loading steps begin. The modal was a symptom. Leave it off the server; clients keep it, and it is client-render content anyway.",
-      "UpdatedAt": "2026-09-07T00:00:00Z"
+      "Notes": "Item pack shipped alongside TAOM. Bannerlord v1.5.7, Coop v0.1.8, v2.0.41 (2026-11-22): WORKS with Run. The server loaded it, read its elephant monster and howdah prefabs, reached SERVING and passed the in-game suites (see TAOM). There were no elephant_rider_* or howdah_* animation failures. The animation warnings and 'Always Ignore?' prompts that remain are vanilla's and do not stop the server. Bannerlord v1.4.8, v2.0.26, Coop v0.1.4: BROKEN, as follows. Item pack shipped alongside TAOM. Measured, it is the single reason a TAOM server could not start. Its ModuleData/action_sets.xslt declares the elephant_rider_* / howdah_* animation set while the binaries live only in a client AssetPackages pack1.tpac (1.17 GB); the dedicated server reads DsAssetPackages, which this mod does not ship. <Xmls> is always processed, so the declarations load while the data cannot: 104-137 \"Could not find animation\" warnings and 52-77 blocking `Messagebox [Always Ignore?]` prompts, then exit -1. Dropping it removes every one of them - zero animation failures and zero modals with the same TAOM loadout. There is NO ROLE THAT FIXES THIS: DependencyOnly only removes <SubModule> elements and this mod has none. Two escapes were tried and both failed. Mapping its AssetPackages onto DsAssetPackages caused a native access violation (0xC0000005) during \"Registering items\" and failed EARLIER than without it; DsAssetPackages is a curated server subset from TaleWorlds' pipeline and cannot be synthesised from client packs. Suppressing the modal does not help either: the prompts never reach the managed IDebugManager (they are raised natively and printed straight to stdout), and with Utilities.SetAssertionsAndWarningsSetExitCode(false) + SetCrashOnAsserts(false) applied the run stops exiting through the assertion path and instead dies in native code with an Rgl.pdb / FairyTale.Library.pdb stack, before the loading steps begin. The modal was a symptom. Leave it off the server; clients keep it, and it is client-render content anyway.",
+      "UpdatedAt": "2026-11-22T00:00:00Z"
     },
     {
       "Id": "TAOM.CoopCompat",
-      "Verdict": "Broken",
+      "Verdict": "Unknown",
+      "TestedVersions": [
+        "v0.3.17"
+      ],
       "TestedCoopVersion": "v0.1.5",
-      "Notes": "Requires the TAOM-Coop wrapper's rebuilt DedicatedServer.Core.dll and will not serve without it. The module waits for a hash-qualified wrapper to register 'pre-save and pre-serving guards' during OnSubModuleLoad; on the stock workshop server nothing registers them, the pre-serving gate never opens, and the host sits at 'will host save X once module init settles' forever, at a healthy 64fps with no error. Measured twice on 2026-09-12: a 15-minute world creation timed out at phase=armed, and a launch against an existing TAOM save never left campaignMode=none. Its own strings name the failure: 'DedicatedServer.Core is loaded but the hash-qualified wrapper did not register its pre-save and pre-serving guards during OnSubModuleLoad'. The gate is hash-pinned to their build, so it cannot be satisfied from outside. Using it means adopting their whole host stack, which replaces the official server binaries. Version v0.3.17 checked.",
-      "UpdatedAt": "2026-09-12T00:00:00Z",
+      "Notes": "Two different modules share this id, so the verdict is Unknown rather than either one's result. The TAOM team's 1.5.x module (a join-time settings check and a War of the Ring momentum relay) has not been tested here yet. Sternab's v0.3.x TAOM-Coop module (Bannerlord v1.4.8, no longer maintained) was BROKEN on the stock server, as described below. ModderLords' TAOM layer already mirrors War of the Ring momentum from the server, so with both loaded the two would send the same state. Sternab's v0.3.x: Requires the TAOM-Coop wrapper's rebuilt DedicatedServer.Core.dll and will not serve without it. The module waits for a hash-qualified wrapper to register 'pre-save and pre-serving guards' during OnSubModuleLoad; on the stock workshop server nothing registers them, the pre-serving gate never opens, and the host sits at 'will host save X once module init settles' forever, at a healthy 64fps with no error. Measured twice on 2026-09-12: a 15-minute world creation timed out at phase=armed, and a launch against an existing TAOM save never left campaignMode=none. Its own strings name the failure: 'DedicatedServer.Core is loaded but the hash-qualified wrapper did not register its pre-save and pre-serving guards during OnSubModuleLoad'. The gate is hash-pinned to their build, so it cannot be satisfied from outside. Using it means adopting their whole host stack, which replaces the official server binaries. Version v0.3.17 checked.",
+      "UpdatedAt": "2026-11-22T00:00:00Z",
       "ClientLoadsAfterCoop": true
     },
     {
