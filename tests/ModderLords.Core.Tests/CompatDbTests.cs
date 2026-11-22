@@ -457,7 +457,9 @@ public sealed class CompatDbTests : IDisposable
     /// <summary>
     /// TAOM.CoopCompat waits for a hash-qualified wrapper to register pre-save and pre-serving guards. On the stock
     /// server nothing registers them and the host waits forever at a healthy 64fps with no error, which is very
-    /// expensive to diagnose from scratch — so the record has to keep saying why.
+    /// expensive to diagnose from scratch — so the record has to keep saying why. That was Sternab's v0.3.x on 1.4.8;
+    /// the TAOM team's 1.5.x module has the same id and is untested, so the verdict is Unknown, not Broken: a Broken
+    /// verdict warns at every launch and would flag their module as not working.
     /// </summary>
     [Fact]
     public void The_TAOM_compat_module_is_recorded_as_needing_its_own_wrapper()
@@ -465,7 +467,7 @@ public sealed class CompatDbTests : IDisposable
         var record = CompatDb.Reload().Find("TAOM.CoopCompat");
 
         Assert.NotNull(record);
-        Assert.Equal(CompatVerdict.Broken, record!.Verdict);
+        Assert.Equal(CompatVerdict.Unknown, record!.Verdict);
         Assert.Contains("wrapper", record.Notes, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pre-serving", record.Notes, StringComparison.OrdinalIgnoreCase);
     }
