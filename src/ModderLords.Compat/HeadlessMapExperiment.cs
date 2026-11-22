@@ -66,12 +66,8 @@ internal static class HeadlessMapExperiment
         if (_mapModuleId.Length == 0 || _mapModuleId.Contains(IoPath.DirectorySeparatorChar) || _mapModuleId.Contains(IoPath.AltDirectorySeparatorChar))
             throw new InvalidDataException("Invalid headless map module id");
         var type = AccessTools.TypeByName("SandBox.MapScene") ?? throw new MissingMemberException("SandBox.MapScene");
-        // The host implementation lives in DedicatedServer.Core, not in SandBox.
-        _headlessType = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => a.GetName().Name == "DedicatedServer.Core")
-            .Select(a => a.GetType("A.G")).FirstOrDefault(t => t != null);
-        if (_headlessType == null || !type.IsAssignableFrom(_headlessType))
-            throw new MissingMemberException("Unsupported DedicatedServer.Core headless MapScene implementation");
+        // The host implementation lives in DedicatedServer.Core, not in SandBox (found by its base type: the name is obfuscated).
+        _headlessType = MapSceneTarget.Headless();
         var borders = AccessTools.Method(type, "GetMapBorders", new[] { typeof(Vec2).MakeByRefType(), typeof(Vec2).MakeByRefType(), typeof(float).MakeByRefType() });
         var terrain = AccessTools.Method(type, "GetTerrainSize", Type.EmptyTypes);
         if (borders?.ReturnType != typeof(void) || terrain?.ReturnType != typeof(Vec2))
