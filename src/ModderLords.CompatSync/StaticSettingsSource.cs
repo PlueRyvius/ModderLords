@@ -19,7 +19,7 @@ public sealed class StaticSettingsSource : ISettingsSource
     public const string Prefix = "static:";
 
     private static readonly string[] NameSuffixes = { "Settings", "Setting", "Config", "Configs", "Configuration", "Options" };
-    private static readonly string[] SingletonNames = { "Instance", "Current", "Settings", "Config", "Default" };
+    private static readonly string[] SingletonNames = SettingsSingletonRules.SingletonNames;
     private static readonly string[] HolderProps = { "Config", "Settings", "Configuration", "Options", "Current" };
     private static readonly string[] ExcludedBases = { "ViewModel", "CampaignBehaviorBase", "MissionBehavior", "MissionLogic", "MBSubModuleBase", "ScreenBase", "GameModel", "MissionView" };
     private static readonly string[] ExcludedNameParts = { "Template", "Snapshot", "Dto", "ViewModel", "VM" };
@@ -71,6 +71,7 @@ public sealed class StaticSettingsSource : ISettingsSource
         public bool Deferred;                     // non-auto getter: only read once a campaign exists / after the grace period
         public Type? HolderType;
         public Func<object?>? Holder;
+        public int NullReads;                     // reads that returned null once it could be read
     }
 
     private readonly Dictionary<string, StaticObject> _objects = new Dictionary<string, StaticObject>(StringComparer.Ordinal);
@@ -198,7 +199,17 @@ public sealed class StaticSettingsSource : ISettingsSource
                 if (_blacklist.Add(p.Type.FullName ?? p.Type.Name)) Log.Warn($"static settings: {p.Type.FullName} skipped: {ex.GetBaseException().Message}");
                 continue;
             }
-            if (instance == null) continue;   // not created yet; try again next tick
+            if (instance == null)
+            {
+                // Not created yet; try again next tick, but not for ever: a getter whose mod swallows its own
+                // exception returns null on every read (SettingsSingletonRules.MaxNullReads).
+                if (SettingsSingletonRules.GiveUp(++p.NullReads))
+                {
+                    _pending.Remove(p);
+                    Log.Info($"static settings: {p.Type.FullName} given up: its singleton stayed null for {p.NullReads} reads");
+                }
+                continue;
+            }
             var resolve = p.Resolve;
             var refs = MemberRefs(instance.GetType(), resolve, wantStatic: false);
             _pending.Remove(p);
@@ -263,15 +274,18 @@ public sealed class StaticSettingsSource : ISettingsSource
         catch { return false; }
         if (NameSuffixes.Any(s => t.Name.EndsWith(s, StringComparison.OrdinalIgnoreCase))) return true;
         if (SingletonOnlyExcludedSuffixes.Any(s => t.Name.EndsWith(s, StringComparison.Ordinal))) return false;
-        return SingletonMember(t, t) != null;
+        return SingletonMember(t, t, SettingsSingletonRules.EvidenceByThemselves) != null;
     }
 
     /// <summary>A public static Instance/Current/... member of the wanted type on holder; returns a resolver or null.</summary>
-    private static Func<object?>? SingletonMember(Type holder, Type wanted)
+    private static Func<object?>? SingletonMember(Type holder, Type wanted) => SingletonMember(holder, wanted, SingletonNames);
+
+    /// <summary>The same, looking only at the given member names.</summary>
+    private static Func<object?>? SingletonMember(Type holder, Type wanted, string[] names)
     {
         try
         {
-            foreach (var name in SingletonNames)
+            foreach (var name in names)
             {
                 var p = holder.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
                 if (p != null && p.GetGetMethod() != null && wanted.IsAssignableFrom(p.PropertyType) && p.GetIndexParameters().Length == 0)

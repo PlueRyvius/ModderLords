@@ -38,6 +38,7 @@
     <Compile Include="..\..\src\ModderLords.CompatSync\Testing\TestAgent.cs" Link="Module\Testing\TestAgent.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\Testing\ErrorPatterns.cs" Link="Module\Testing\ErrorPatterns.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\LegacyRecipePolicy.cs" Link="Module\LegacyRecipePolicy.cs" />
+    <Compile Include="..\..\src\ModderLords.CompatSync\SettingsSingletonRules.cs" Link="Module\SettingsSingletonRules.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\ValueConverter.cs" Link="Module\ValueConverter.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\PropertyRef.cs" Link="Module\PropertyRef.cs" />
     <Compile Include="..\..\src\ModderLords.CompatSync\ISettingsSource.cs" Link="Module\ISettingsSource.cs" />
