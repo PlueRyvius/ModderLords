@@ -426,7 +426,9 @@ public sealed class CompatDbTests : IDisposable
     /// <summary>
     /// The TAOM recipe. TAOM.Dependencies bundles UIExtenderEx/ButterLib/MCM and lists UIExtenderEx first with no
     /// DedicatedServerType tag, so it must run DependencyOnly - but its own bootstrap has to survive that, or TAOM
-    /// loses the dependency wiring it expects. TAOM itself is view-bound and its data lives in &lt;Xmls&gt;.
+    /// loses the dependency wiring it expects. TAOM runs AsShipped: from 2.0.41 its client-only code is a TAOM.Client
+    /// submodule tagged DedicatedServerType=none, so the server loads TAOM.dll and skips the client half; older TAOM
+    /// tags TAOM.SubModule itself, so AsShipped skips it as DependencyOnly would.
     /// </summary>
     [Fact]
     public void BundledSeedFile_CarriesTheTaomRecipe()
@@ -435,7 +437,7 @@ public sealed class CompatDbTests : IDisposable
         Assert.Empty(db.Problems);
 
         Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("TAOM.Dependencies"));
-        Assert.Equal(ServerRole.DependencyOnly, db.DefaultRoleFor("TAOM"));
+        Assert.Equal(ServerRole.AsShipped, db.DefaultRoleFor("TAOM"));
         Assert.Equal(ServerRole.Run, db.DefaultRoleFor("TAOM_Map"));
         Assert.Equal(ServerRole.Run, db.DefaultRoleFor("LOTRLOME_Armory"));
 
