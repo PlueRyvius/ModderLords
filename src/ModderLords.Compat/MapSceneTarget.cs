@@ -39,13 +39,16 @@ internal static class MapSceneTarget
     internal static Type Headless()
     {
         var mapScene = Base;
-        var headless = AppDomain.CurrentDomain.GetAssemblies()
+        // Found by what it is, not by name: the obfuscated name changes between server builds ("A.G" for Coop 0.1.7 on
+        // v1.4.8, "A.g" for Coop 0.1.8 on v1.5.7). It is the one SandBox.MapScene subclass in DedicatedServer.Core.
+        var candidates = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => a.GetName().Name == "DedicatedServer.Core")
-            .Select(a => a.GetType("A.G"))
-            .FirstOrDefault(t => t != null);
-        if (headless == null || !mapScene.IsAssignableFrom(headless))
-            throw new MissingMemberException("Unsupported DedicatedServer.Core headless MapScene implementation");
-        return headless;
+            .SelectMany(a => { try { return a.GetTypes(); } catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null)!; } })
+            .Where(t => t != mapScene && mapScene.IsAssignableFrom(t) && !t.IsAbstract)
+            .ToList();
+        if (candidates.Count != 1)
+            throw new MissingMemberException($"Unsupported DedicatedServer.Core headless MapScene implementation ({candidates.Count} SandBox.MapScene subclasses: {string.Join(", ", candidates.Select(t => t.FullName))})");
+        return candidates[0];
     }
 
     /// <summary>

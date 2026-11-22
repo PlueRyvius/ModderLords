@@ -40,6 +40,8 @@ public sealed class CompatSubModule : MBSubModuleBase
             }
             var installed = Guards.InstallAll(Harmony);
             Log.Info($"server guards installed: {installed}");
+            try { Log.Info("roster cache guard: " + RosterCacheGuard.Install(Harmony)); }
+            catch (Exception ex) { Log.Info("roster cache guard: not installed: " + ex.GetBaseException().Message); }
             try { ServerName.Install(Harmony); }
             catch (Exception ex) { Log.Info("server name: not installed: " + ex.GetBaseException().Message); }
 
