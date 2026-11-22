@@ -124,6 +124,8 @@ public static class InGameTestRun
             catch (Exception ex) { return Stop("suite: " + ex.Message); }
             if (testPlan.Mode == SuiteMode.Both) testPlan = testPlan.ForMode(options.SinglePlayer);
             if (testPlan.Clients > 1) return Stop($"suite {testPlan.Name} needs {testPlan.Clients} players' games; this version starts one.");
+            if (testPlan.After is { } first)
+                return Stop($"suite {testPlan.Name} continues the world suite {first} keeps; run its module (--modules) so {first} runs first");
             // An API v2 suite leaves the world and the wait for the map and Coop's join to the run's setup, so it
             // runs as the one picked suite below. Without that setup its steps started while the game was loading.
             if (testPlan.Api >= 2)
@@ -209,13 +211,38 @@ public static class InGameTestRun
         // core's launch.
         var launches = SuiteSelection.CoopLaunches(chosen);
         var exit = 0;
+        // What each suite's launch kept (suite → world) and reported, for the suites that continue its world.
+        var keptBy = new Dictionary<string, string>(StringComparer.Ordinal);
+        var valuesBy = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
         for (int n = 0; n < launches.Count && !cancel.IsCancellationRequested; n++)
         {
             say($"[ModderLords] launch {n + 1}/{launches.Count}: {string.Join(", ", launches[n].Select(p => p.Name))}");
             var composed = SuiteSelection.Compose(launches.Count == 1 ? "selected" : $"selected-{n + 1}", launches[n], SuiteSelection.CoopSetup) with { Loads = loads };
+            var launchOptions = options;
+            if (launches[n][0].After is { } after)
+            {
+                // The server starts on the world the suite before kept in this run, and the steps can read its values.
+                if (!keptBy.TryGetValue(after, out var kept))
+                {
+                    say($"[ModderLords] {launches[n][0].Name} continues {after}'s world, and {after} kept none in this run (it failed before coop.saveWorld?); skipped");
+                    exit = 1;
+                    continue;
+                }
+                launchOptions = options with { World = kept, NewWorld = false };
+                composed = composed with { Seed = valuesBy[after] };
+            }
             var fresh = ProfileStore.Load(options.ProfileName)!;
-            var one = await RunCoop(fresh, composed, options, say, cancel);
-            if (one.Report is not null) reports.Add(one.Report);
+            var keptNow = new Dictionary<string, string>(StringComparer.Ordinal);
+            var one = await RunCoop(fresh, composed, launchOptions, say, cancel, keptNow);
+            if (one.Report is not null)
+            {
+                reports.Add(one.Report);
+                foreach (var suite in launches[n])
+                {
+                    valuesBy[suite.Name] = one.Report.Values;
+                    if (keptNow.TryGetValue(suite.Name, out var world)) keptBy[suite.Name] = world;
+                }
+            }
             if (one.Folder is not null) folders.Add(one.Folder);
             if (one.ExitCode != 0) exit = 1;
             if (ClientLauncher.IsClientRunning()) { say("[ModderLords] the game is still running (kept open?); the remaining launches are skipped."); return new InGameTestResult(1, reports, folders, "the game was kept open"); }
@@ -355,6 +382,45 @@ public static class InGameTestRun
     }
 
     /// <summary>
+    /// Keeps the world a passed <c>coop.saveWorld</c> step asked for (value <c>keptWorld</c>): the server's shutdown save
+    /// <paramref name="serverSave"/>, copied into test-worlds with Coop's session file beside it as <c>&lt;world&gt;.json</c>
+    /// (what <see cref="SavePreparer.ImportFrom"/> copies back) and a note as <c>&lt;world&gt;.kept.json</c>. Call it once
+    /// the server has stopped.
+    /// </summary>
+    public static IReadOnlyList<string> KeepCoopWorlds(TestReport report, string serverSaves, string serverSave, string worldsDir, Dictionary<string, string>? kept = null)
+    {
+        var said = new List<string>();
+        foreach (var step in report.Steps.Where(s => s.Outcome == StepOutcome.Pass && s.Step == "coop.saveWorld"))
+        {
+            if (!step.Values.TryGetValue("keptWorld", out var world)) continue;
+            if (world.Length == 0 || world.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                said.Add($"not keeping world \"{world}\": not a file name");
+                continue;
+            }
+            var from = Path.Combine(serverSaves, serverSave + ".sav");
+            var session = SavePreparer.SessionPath(from);
+            if (!File.Exists(from) || !File.Exists(session)) { said.Add($"not keeping world {world}: {(File.Exists(from) ? session : from)} is missing"); continue; }
+            Directory.CreateDirectory(worldsDir);
+            var to = Path.Combine(worldsDir, world + ".sav");
+            File.Copy(from, to, overwrite: true);
+            File.Copy(session, SavePreparer.SessionPath(to), overwrite: true);
+            var note = new System.Text.Json.Nodes.JsonObject
+            {
+                ["world"] = world,
+                ["madeBy"] = $"{report.RunId} {step.Suite}/{step.Step}".Trim(),
+                ["from"] = from,
+                ["at"] = DateTimeOffset.Now.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+                ["versions"] = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(report.Versions)),
+            };
+            File.WriteAllText(Path.Combine(worldsDir, world + ".kept.json"), note.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            if (kept is not null && step.Suite.Length > 0) kept[step.Suite] = world;
+            said.Add($"kept the server's shutdown save {serverSave} with its Coop session as test world {world} -> {to}");
+        }
+        return said;
+    }
+
+    /// <summary>
     /// <c>--package</c>: checks the release zip; if it is fit to publish, unpacks it into
     /// %LOCALAPPDATA%\ModderLords\package-tests\&lt;Mod&gt;-&lt;version&gt;-&lt;hash&gt; and pins that copy in the profile, in memory.
     /// With no suite or modules named, the run then picks the test modules that require the mod. Null when ready; the
@@ -442,8 +508,9 @@ public static class InGameTestRun
     public static string? MissingStepsDll(TestModule m, string? bundledRoot = null) =>
         m.StepsDll is null || File.Exists(StepsDllPath(m, bundledRoot)) ? null : StepsDllPath(m, bundledRoot);
 
+    /// <param name="kept">Filled with each suite's kept world (suite → test world) when its <c>coop.saveWorld</c> passed.</param>
     private static async Task<(int ExitCode, TestReport? Report, string? Folder, string? Problem)> RunCoop(Profile profile, TestPlan testPlan,
-        InGameTestOptions options, Action<string> say, CancellationToken cancel)
+        InGameTestOptions options, Action<string> say, CancellationToken cancel, Dictionary<string, string>? kept = null)
     {
         (int, TestReport?, string?, string?) Stop(string problem) { say("[ModderLords] " + problem); return (2, null, null, problem); }
         if (profile.Server.Password.Length > 0) return Stop("This server has a password, and Coop's automatic join cannot send one. Clear it for the test.");
@@ -480,8 +547,8 @@ public static class InGameTestRun
                                 if (line.Text.Contains("worldcreate:", StringComparison.OrdinalIgnoreCase)) say("[ModderLords] " + line.Text.Trim());
                             },
                         }, cancel);
-                    var kept = ProfileTestWorld.Keep(SavePreparer.SavePath(paths, generated), TestSuites.WorldsDir, world, mods);
-                    say($"[ModderLords] test world kept -> {kept}");
+                    var keptAt = ProfileTestWorld.Keep(SavePreparer.SavePath(paths, generated), TestSuites.WorldsDir, world, mods);
+                    say($"[ModderLords] test world kept -> {keptAt}");
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
                 {
@@ -617,6 +684,10 @@ public static class InGameTestRun
             say("[ModderLords] stopping the server…");
             await server.StopAsync(TimeSpan.FromSeconds(60));
         }
+        // The world a coop.saveWorld step asked to keep is the server's shutdown save, so it is copied once the server
+        // has stopped (and a server kept running has saved nothing yet).
+        if (testReport is not null && server.Exited.IsCompleted)
+            foreach (var line in KeepCoopWorlds(testReport, paths.SavesDir, profile.SaveName, TestSuites.WorldsDir, kept)) say("[ModderLords] " + line);
         // Both reports count: steps that pass in a game that then crashed, or where Coop logged a fatal error, still fail.
         var passed = testReport?.Passed == true && smokeReport.Overall != Core.Smoke.SmokeVerdict.Fail;
         return (passed ? 0 : 1, testReport, channel.Folder, testReport is null ? "the game never reached the campaign map" : null);

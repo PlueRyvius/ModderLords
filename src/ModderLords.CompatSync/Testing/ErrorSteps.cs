@@ -42,6 +42,7 @@ internal static class ErrorSteps
     /// </summary>
     internal static void Arm(DateTime now)
     {
+        AnswerKnown();
         if (_armed && now < _nextArm) return;
         _armed = true;
         _nextArm = now.AddSeconds(1);
@@ -59,7 +60,72 @@ internal static class ErrorSteps
     }
 
     private static void OnMessage(InformationMessage message) => Add("message", message?.Information);
-    private static void OnInquiry(InquiryData data, bool pause, bool prioritize) => Add("pop-up", $"{data?.TitleText}: {data?.Text}");
+    private static void OnInquiry(InquiryData data, bool pause, bool prioritize)
+    {
+        Add("pop-up", $"{data?.TitleText}: {data?.Text}");
+        if (data != null && (IsKnown(data) || IsNotice(data)))
+            lock (Gate) Pending.Add(data);
+    }
+
+    /// <summary>
+    /// Pop-ups a mod shows that a test run answers by itself: they tell or ask the player something about their own
+    /// setup, and left open they pause the game. Matched on the title and the start of the text. Answered with the
+    /// negative button when there is one, else the only one. TAOM 2.0.41 shows the first three together as a game loads.
+    /// </summary>
+    private static readonly (string Title, string Text)[] KnownPopups =
+    {
+        ("TAOM: battle performance settings", ""),      // "Keep mine": leaves the ragdoll and corpse options as they are
+        ("TAOM: the last game ended unexpectedly", ""), // the run closed the last game without TAOM's clean exit
+        ("TAOM", "TAOM.Dependencies already provides"), // "Ok": the profile also loads the Workshop Harmony, ButterLib, ...
+    };
+
+    internal static bool IsKnown(InquiryData data) => KnownPopups.Any(k =>
+        (data.TitleText ?? "").StartsWith(k.Title, StringComparison.OrdinalIgnoreCase)
+        && (data.Text ?? "").StartsWith(k.Text, StringComparison.Ordinal));
+
+    /// <summary>
+    /// A notice: one button and nothing to choose (TAOM 2.0.41 shows one per new feature, "Hidden Hosts" as a battle
+    /// ends). Left open it pauses the game, so a run closes it as the player would; it stays in the messages all the same.
+    /// </summary>
+    internal static bool IsNotice(InquiryData data) => !data.IsNegativeOptionShown && data.IsAffirmativeOptionShown;
+
+    /// <summary>Known pop-ups and notices shown and not yet answered, oldest first.</summary>
+    private static readonly List<InquiryData> Pending = new List<InquiryData>();
+
+    /// <summary>
+    /// The pop-up on screen: the game shows one at a time and queues the rest (GauntletQueryManager._activeQueryData,
+    /// a static). Null where that is not found (a server has no Gauntlet UI): then the oldest pending one is taken as shown.
+    /// </summary>
+    private static readonly Lazy<System.Reflection.FieldInfo?> ActiveField = new Lazy<System.Reflection.FieldInfo?>(() => AppDomain.CurrentDomain.GetAssemblies()
+        .Where(a => a.GetName().Name == "TaleWorlds.MountAndBlade.GauntletUI")
+        .Select(a => a.GetType("TaleWorlds.MountAndBlade.GauntletUI.GauntletQueryManager", false))
+        .FirstOrDefault(t => t != null)
+        ?.GetField("_activeQueryData", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic));
+
+    /// <summary>
+    /// Answers a known pop-up once it is the one on screen. HideInquiry closes whatever is showing, so answering one that
+    /// is still queued behind another would close the wrong one. One per tick; the next one shows after it.
+    /// </summary>
+    private static void AnswerKnown()
+    {
+        InquiryData? data;
+        lock (Gate)
+        {
+            if (Pending.Count == 0) return;
+            var active = ActiveField.Value;
+            data = active == null ? Pending[0] : active.GetValue(null) as InquiryData;
+            if (data == null || !Pending.Remove(data)) return;
+        }
+        try
+        {
+            InformationManager.HideInquiry();
+            var negative = data.IsNegativeOptionShown && data.NegativeAction != null;
+            if (negative) data.NegativeAction!.Invoke();
+            else data.AffirmativeAction?.Invoke();
+            Add("answered", $"{data.TitleText}: {(negative ? data.NegativeText : data.AffirmativeText)}");
+        }
+        catch (Exception ex) { Add("answer failed", $"{data.TitleText}: {ex.GetType().Name} {ex.Message}"); }
+    }
     private static void OnTextInquiry(TextInquiryData data, bool pause, bool prioritize) => Add("text pop-up", $"{data?.TitleText}: {data?.Text}");
 
     /// <summary>

@@ -1,0 +1,5 @@
+{
+  "id": "session",
+  "title": "Coop session",
+  "description": "Coop: a player leaves and joins again and gets their own hero back; the server saves with Coop's save, a new server loads that save and the player's hero, gold and goods come back; and a field battle against map bandits, attacked as a player attacks, ends the same on the server and the player's game."
+}

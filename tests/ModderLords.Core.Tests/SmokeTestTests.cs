@@ -108,6 +108,49 @@ public sealed class SmokeEvaluatorTests
 
     private static SmokeVerdict VerdictOf(IReadOnlyList<SmokeCheck> checks, string name) => checks.Single(c => c.Name == name).Verdict;
 
+    private const string Gone = "Engine     @DS@{\"ev\":\"players\",\"list\":[]}";
+    private const string BackOnMap = "Engine     @DS@{\"ev\":\"players\",\"list\":[{\"id\":1,\"name\":\"Phorys\",\"state\":\"on map\",\"addr\":\"127.0.0.1:57999\"}]}";
+
+    [Fact]
+    public void A_player_who_leaves_unannounced_is_dropped_after_the_grace()
+    {
+        var o = HealthyJoin();
+        o.ObserveServer(Gone, T0.AddSeconds(120));
+        o.Tick(T0.AddSeconds(125));
+        Assert.False(o.PlayerDropped);   // within the grace: the game's own log may not have been read yet
+        o.Tick(T0.AddSeconds(131));
+        Assert.True(o.PlayerDropped);
+        Assert.Equal(SmokeVerdict.Fail, VerdictOf(SmokeEvaluator.Evaluate(o, Done), "Stayed connected"));
+    }
+
+    [Fact]
+    public void An_announced_rejoin_is_not_a_drop_even_when_the_server_reports_it_first()
+    {
+        var o = HealthyJoin();
+        // The server's list arrives live; the announcement only when the runner next reads the game's log.
+        o.ObserveServer(Gone, T0.AddSeconds(120));
+        o.ObserveCompatClient("01:53:00.000 [ModderLords.Compat] coop rejoin: leaving", T0.AddSeconds(122));
+        o.Tick(T0.AddSeconds(200));
+        Assert.False(o.PlayerDropped);
+        Assert.False(o.RejoinOverdue(T0.AddSeconds(200)));
+        o.ObserveServer(BackOnMap, T0.AddSeconds(230));
+        o.ObserveCompatClient("01:54:50.000 [ModderLords.Compat] coop rejoin: back", T0.AddSeconds(231));
+        o.Tick(T0.AddSeconds(300));
+        Assert.False(o.PlayerDropped);
+        Assert.Equal(1, o.Rejoins);
+        Assert.Equal(SmokeVerdict.Pass, VerdictOf(SmokeEvaluator.Evaluate(o, Done), "Stayed connected"));
+    }
+
+    [Fact]
+    public void A_rejoin_that_never_comes_back_is_overdue()
+    {
+        var o = HealthyJoin();
+        o.ObserveCompatClient("01:53:00.000 [ModderLords.Compat] coop rejoin: leaving", T0.AddSeconds(120));
+        o.ObserveServer(Gone, T0.AddSeconds(121));
+        Assert.False(o.RejoinOverdue(T0.AddSeconds(120) + SmokeSignals.RejoinAllowance));
+        Assert.True(o.RejoinOverdue(T0.AddSeconds(121) + SmokeSignals.RejoinAllowance));
+    }
+
     [Fact]
     public void AHealthyJoinPasses()
     {

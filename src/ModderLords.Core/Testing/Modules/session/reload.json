@@ -1,0 +1,19 @@
+{
+  // Second half of a save and reload: the server started on the world session/save kept (a new launch: a new server
+  // process and a new game), and the player joined it. They must play the same hero, with the gold and grain they had
+  // when it was saved, on both sides.
+  "api": 2,
+  "name": "reload",
+  "mode": "coop",
+  "after": "save",
+  "description": "A new server loads the world session/save kept; the player joins and plays the same hero, with the gold and grain they had, on both sides.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "hero.gold", "side": "client:1", "as": "sameHero", "args": { "heroName": "$save/me.heroName", "expected": "$save/gold.value" } },
+    { "compare": "hero.parity", "sides": ["server", "client:1"], "args": { "heroName": "$save/me.heroName" }, "continueOnFail": true },
+    { "compare": "hero.gold", "sides": ["server", "client:1"], "args": { "heroName": "$save/me.heroName" } },
+    { "id": "party.itemCount", "side": "client:1", "args": { "item": "grain", "expected": "$save/goods.value" } },
+    { "compare": "party.itemCount", "sides": ["server", "client:1"], "args": { "heroName": "$save/me.heroName", "item": "grain" } },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

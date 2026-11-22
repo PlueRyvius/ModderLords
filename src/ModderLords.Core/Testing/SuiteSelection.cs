@@ -67,10 +67,26 @@ public static class SuiteSelection
             }
             picked.Add(plan);
         }
+        // A suite that continues another's kept world runs only with that suite, in the launch right after its.
+        var continuing = picked.Where(p => p.After is not null).ToList();
+        foreach (var plan in continuing)
+        {
+            picked.Remove(plan);
+            if (!picked.Any(p => p.Module == plan.Module && p.Name == plan.After))
+                notes.Add($"{(plan.Module.Length > 0 ? plan.Module + "/" : "")}{plan.Name}: runs after {plan.After}, which this run does not include");
+        }
         // The suites that share a world ride on core's: core changes little, and in Coop they then cost no launch of
         // their own. Each suite that needs a fresh world follows, and only it sees the world it leaves.
+        var fresh = new List<TestPlan>();
+        foreach (var plan in picked.Where(p => !p.SharesWorld))
+        {
+            fresh.Add(plan);
+            // Each continuation follows its suite, and a continuation of a continuation follows that one.
+            for (int k = fresh.Count - 1; k < fresh.Count; k++)
+                fresh.AddRange(continuing.Where(c => c.Module == fresh[k].Module && c.After == fresh[k].Name));
+        }
         return [core.ForMode(singlePlayer), .. picked.Where(p => p.SharesWorld).Select(p => p.ForMode(singlePlayer)),
-            .. picked.Where(p => !p.SharesWorld).Select(p => p.ForMode(singlePlayer))];
+            .. fresh.Select(p => p.ForMode(singlePlayer))];
     }
 
     /// <summary>
@@ -225,7 +241,7 @@ public static class SuiteSelection
             foreach (var step in setup(suite, i).Concat(suite.Steps))
             {
                 var args = step.Args.ToDictionary(kv => kv.Key,
-                    kv => TestPlan.Reference(kv.Value) is { } r ? $"${Prefix(r.Step)}.{r.Key}" : kv.Value, StringComparer.Ordinal);
+                    kv => TestPlan.Reference(kv.Value) is { } r && !TestPlan.IsOtherSuite(r.Step) ? $"${Prefix(r.Step)}.{r.Key}" : kv.Value, StringComparer.Ordinal);
                 if (step.Id == NoErrorsStep && patterns is not null) args["patterns"] = patterns;
                 steps.Add(step with { As = Prefix(step.Name), Args = args, Suite = suite.Name });
             }

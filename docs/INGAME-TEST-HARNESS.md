@@ -488,7 +488,10 @@ ModderLords.Cli test --profile "My Mods" --single-player --mod ModularArmor2 [--
   with `world 1: core, parity, ... (shared)`, one line per world.
 - **Coop:** the run's setup waits for the join and stops campaign time before the first suite of a launch. A suite
   that needs a fresh world starts a new launch (the server starts on a fresh copy); shared suites run in core's
-  launch. Restarting the server inside one launch comes later.
+  launch. Restarting the server inside one launch comes later. A suite with `"after"` continues the world another
+  suite kept with `coop.saveWorld`: it gets the launch after that suite's, its server starts on the kept save (and
+  Coop's session file), and it starts with that launch's values (`"$suite/step.key"`). The launcher keeps the save as
+  `test-worlds\<world>.sav` with the session file as `<world>.json` and a note as `<world>.kept.json`.
 - **The built-in Coop suites share a world** (2026-11-08): `parity`, `perks/both-perks`, `stash`, `sync/hero-level`
   and `sync/sync-basics` are API 2 with `"world": "shared"`, so `--modules stash,sync,perks,parity` is one launch
   instead of six. Each reads its "before" value or checks a total the server reports: `hero.adminLevel` raises the
@@ -774,6 +777,9 @@ The first battle (`smithing.yumiBattle`, 2026-11-19) took a day of runs; these a
 - "TEST MODE" in the server's player list (decision 6); the log lines are there.
 - The delivery-quest and Living Economy suites; a second player's game; an App button.
 - Everything in v2 (above) that the build order has not reached.
+- Coop battles are covered by the `session` module's `battle` suite (`battle.placeEnemy`, `battle.fight`,
+  `battle.party`); a player leaving and joining again by `rejoin` (`coop.rejoin`); a server save and reload by `save`
+  and `reload` (`coop.saveWorld`, `"after"`).
 - A general battle step. `smithing.yumiBattle` (single player) starts a field battle against a map bandit party, hands
   the hero to the AI and counts shots and hits; its setup (encounter, deployment, AI handover, side camera) could move
   into `BuiltInSteps` for other modules. Coop battles are not covered.

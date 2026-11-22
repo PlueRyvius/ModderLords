@@ -106,7 +106,8 @@ public sealed class TestSequencer
         var steps = new List<StepReport>();
         var notes = new List<string>();
         var versions = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        // An earlier launch's values, for a suite that continues its world ("$suite/step.key").
+        var values = new Dictionary<string, string>(plan.Seed, StringComparer.Ordinal);
         long seq = 0;
 
         // 1. Every side announces itself, with the steps it has.
@@ -186,6 +187,7 @@ public sealed class TestSequencer
             Versions = versions,
             Notes = notes,
             Worlds = plan.Worlds,
+            Values = values,
         };
     }
 
