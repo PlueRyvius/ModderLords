@@ -33,9 +33,10 @@
       "setup": [
         "Create a world from the launcher: enable the TAOM modules, leave the save name empty and Launch. The launcher prepares the server's copy of TAOM's assets and map.",
         "TroopWeight is off under co-op by default; the host can turn it back on in Mod settings.",
-        "Leave LOTRLOME_Armory off the server, and do not use TAOM.CoopCompat (see their entries)."
+        "On Bannerlord v1.4.8, leave LOTRLOME_Armory off the server (see its entry)."
       ],
       "limits": [
+        "With TAOM 2.0.41 (Bannerlord v1.5.7), siege-defence rewards are not carried per player yet.",
         "Not available in co-op: enlisting under a lord, and TAOM's hero picker in character creation. Both say so in the game.",
         "A supply caravan travels and is drawn in a straight line to the player (TAOM's route search crashes the server), and an order waits while its owner is offline."
       ]
@@ -221,29 +222,16 @@
       "moduleIds": [
         "LOTRLOME_Armory"
       ],
-      "status": "Broken",
-      "summary": "Leave it off the server; players can keep it.",
-      "details": [],
-      "needsCompat": false,
-      "since": "",
-      "setup": [],
-      "limits": [
-        "Its animations exist only in client packs, so the server stops at start-up with it. No server role fixes this."
-      ]
-    },
-    {
-      "name": "TAOM.CoopCompat",
-      "moduleIds": [
-        "TAOM.CoopCompat"
+      "status": "Works",
+      "summary": "Runs on the server with TAOM 2.0.41 on Bannerlord v1.5.7.",
+      "details": [
+        "The server loads it and hosts a TAOM world with it on Bannerlord v1.5.7."
       ],
-      "status": "Broken",
-      "summary": "Do not use with ModderLords; TAOM support is built in.",
-      "details": [],
       "needsCompat": false,
       "since": "",
       "setup": [],
       "limits": [
-        "It needs its own project's replacement server files; on the stock server it waits forever at start-up."
+        "On Bannerlord v1.4.8 (TAOM 2.0.26 to 2.0.28) its animations exist only in client packs and the server stops at start-up, so leave it off the server there. Players can keep it."
       ]
     },
     {
