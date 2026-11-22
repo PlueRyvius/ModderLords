@@ -195,6 +195,17 @@ the API is there and the approach is sound, but no step does it yet: prove it wi
   (`party.toTownGate` moves the party to the gate first).
 - **Find a player's hero by name** across sides: its `StringId` is local (`main_hero` on every player's game).
 - **Stop campaign time** before reading numbers (`game.pause`; the run's setup does it in Coop).
+- **Let time run with an unstoppable mode** in single player (`CampaignTimeControlMode.UnstoppableFastForward`, as the
+  game's own wait menus do): the stoppable modes stand still while the player's party holds still
+  (`Campaign.TickMapTime` checks `IsMainPartyWaiting`), and a test party never moves. Retinues' `retinues.passDays`
+  waited two minutes for a day that never came.
+- **Answer a pop-up only once it is the one on screen.** The game shows one at a time and queues the rest, and
+  `InformationManager.HideInquiry()` closes whichever is showing: a step that captured a queued pop-up and hid it closed
+  the one in front, and its own then stayed open, pausing the game. The queue also outlives a world reload, so a pop-up
+  one suite left open blocks every suite after it (Retinues' `retinues.giveFief` and `retinues.makeRuler` wait for
+  theirs).
+- **A compare passes on only `value`.** Later steps cannot read a compare's other reports (`$step.key`); run the step
+  once on its own side for those, then compare.
 - **Wait on conditions, never fixed times:** `ctx.Until(...)`, `ctx.Settled(...)` (a value that stopped changing).
   `ctx.Delay` passes on a fast PC only.
 - **Never name a battle-only static field in a coroutine that starts outside a battle** (`MovementOrder.MovementOrderCharge`

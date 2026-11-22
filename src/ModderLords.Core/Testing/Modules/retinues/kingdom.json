@@ -1,0 +1,26 @@
+{
+  // A ruler's kingdom gets its own troop tree beside the clan's; the player edits it like the clan's. In Coop the server allows a kingdom's troops only to the player who rules it.
+  "api": 2,
+  "name": "kingdom",
+  "mode": "both",
+  "description": "A player's clan founds a kingdom; Retinues makes the kingdom's troops, and a rename of the kingdom's retinue lands on both sides.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.makeRuler", "side": "game", "as": "realm", "args": {"heroName": "$me.heroName"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "realmTroops", "args": {"faction": "kingdom"}},
+    {"id": "retinues.rename", "side": "player", "args": {"troop": "$realmTroops.retinue", "name": "Harness Royal Guard"}},
+    {"id": "retinues.troop", "side": "player", "as": "renamed", "args": {"troop": "$realmTroops.retinue", "expectedName": "Harness Royal Guard"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$realmTroops.retinue", "expectedName": "Harness Royal Guard"}, "as": "renamedSides", "mode": "coop"},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

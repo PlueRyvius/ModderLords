@@ -98,7 +98,7 @@ src/ModderLords.Core/Testing/Modules/          (built in, embedded like today's 
   perks/     module.json  both-perks.json
   parity/    module.json  parity.json
   world/     module.json  sp-world.json
-  retinues/  module.json  editor.json
+  retinues/  module.json  editor.json  unlocks.json  recruit.json  troops.json  kingdom.json  appearance.json  skills.json  equipment.json  retinues.json  special.json  xp.json  persist.json  persist-save.json  persist-reload.json  doctrines.json  global.json  timed.json  importexport.json
   smithing/  module.json  health.json  ammo.json  tier-preview.json  heal-on-load.json  coop-craft.json  ballista.json  ballista-coop.json  pax-vanilla.json  looks-sample.json  looks-listed.json
   taom/      module.json  supply-lines.json  navpath.json (manual)
 src/ModderLords.Tests.Retinues/                (retinues' steps: references Retinues' DLL at compile time only)
@@ -663,7 +663,13 @@ Parity steps (`ParitySteps.cs`), for what quietly differs between the sides:
   `errorPatterns`. With `new: true` it looks only at messages since the last check. `messages-<side>.txt` has every
   message; the game's error log (`game-errors-<side>.txt`) and the last 60 lines of its log
   (`game-log-tail-<side>.txt`) are kept as evidence only, since vanilla's asserts make the error log too noisy to fail
-  on. `game.showMessage` (`text`) shows a message as a mod does, to check this step itself.
+  on. `game.showMessage` (`text`) shows a message as a mod does, to check this step itself. `game.sawMessage`
+  (`text`) waits until a message or pop-up containing `text` has been shown at any time in the run, for a mod that must
+  tell the player something ("that is off in co-op"); one shown while the game joined counts.
+- Pop-ups during a run: a one-button pop-up (a notice) is closed as soon as it is the one on screen, whichever of its
+  two buttons is the one shown (Retinues' "Version Change" notice shows only its negative button). The run also looks
+  at the pop-up on screen each tick, not only those its listener heard: `InformationManager.Clear()` drops the
+  listener as a world loads, and a notice shown before it was re-added stayed open and kept campaign time paused.
 - `hero.parity`: one line a compare can check: level, health and its maximum, gold, and the attributes, skills, focus
   and perks (each counted and hashed, so a different set of the same size still differs). The full values are in
   `hero-parity-<side>.txt` for the diff.

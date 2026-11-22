@@ -1,0 +1,19 @@
+{
+  // Second half: a new server loads the kept world and the player joins again; the player's clan still owns its troops, renamed and equipped as before.
+  "api": 2,
+  "name": "persist-reload",
+  "mode": "coop",
+  "after": "persist-save",
+  "description": "Coop: after a save and reload the player's clan troop keeps its name and gear on both sides, and the clan still owns it.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "server"},
+    {"id": "Retinues.health", "side": "client:1"},
+    {"id": "game.whoAmI", "side": "client:1", "as": "me"},
+    {"id": "retinues.ready", "side": "client:1"},
+    {"id": "retinues.ensureTroops", "side": "client:1", "as": "troops"},
+    {"compare": "retinues.troop", "sides": ["server", "client:1"], "args": {"troop": "$persist-save/troops.retinue", "expectedName": "Harness Keeper"}},
+    {"id": "retinues.noErrors", "side": "server", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "client:1", "continueOnFail": true}
+  ]
+}

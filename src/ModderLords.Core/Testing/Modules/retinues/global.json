@@ -1,0 +1,24 @@
+{
+  // The global editor edits any culture's troops. Single player: it opens and a culture troop can be renamed. Coop: it is off (the server owns the world's troops).
+  "api": 2,
+  "name": "global",
+  "mode": "both",
+  "description": "Single player: the global editor opens and renames a culture troop. Coop: the global editor is off.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.openGlobalEditor", "side": "player", "mode": "singleplayer"},
+    {"id": "retinues.cultureTroop", "side": "player", "as": "vanilla", "mode": "singleplayer"},
+    {"id": "retinues.renameVanilla", "side": "player", "mode": "singleplayer", "args": {"troop": "$vanilla.value", "name": "Harness Recruit"}},
+    {"id": "retinues.troop", "side": "game", "mode": "singleplayer", "args": {"troop": "$vanilla.value", "expectedName": "Harness Recruit"}},
+    {"id": "retinues.openGlobalEditor", "side": "player", "mode": "coop", "args": {"expected": "off"}},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

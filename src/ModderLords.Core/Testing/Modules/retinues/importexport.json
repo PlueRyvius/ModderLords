@@ -1,0 +1,28 @@
+{
+  // Troop import and export (XML). Single player: an export, a rename, and an import puts the old name back. Coop: off, and the button says so.
+  "api": 2,
+  "name": "importexport",
+  "mode": "both",
+  "description": "Single player: exported troops imported again undo a rename. Coop: the export button says import and export are off in co-op.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.rename", "side": "player", "mode": "singleplayer", "args": {"troop": "$troops.retinue", "name": "Harness Exported"}},
+    {"id": "retinues.exportTroops", "side": "player", "mode": "singleplayer"},
+    {"id": "retinues.rename", "side": "player", "mode": "singleplayer", "args": {"troop": "$troops.retinue", "name": "Harness Changed"}},
+    {"id": "retinues.importTroops", "side": "player", "mode": "singleplayer"},
+    {"id": "retinues.troop", "side": "game", "mode": "singleplayer", "args": {"troop": "$troops.retinue", "expectedName": "Harness Exported"}},
+    {"id": "retinues.askExport", "side": "player", "mode": "coop"},
+    {"id": "game.sawMessage", "side": "player", "mode": "coop", "args": {"text": "import and export are off in co-op"}},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

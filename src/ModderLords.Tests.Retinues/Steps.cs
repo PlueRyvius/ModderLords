@@ -36,7 +36,7 @@ namespace ModderLords.Tests.Retinues;
 /// Troops are passed by StringId: the server and the player's game use the same troop ids (the server allocates them).
 /// The Coop parts of Retinues (its Coop fork) are reached by reflection, so this compiles against any Retinues build.
 /// </summary>
-public static class Steps
+public static partial class Steps
 {
     private static readonly TimeSpan Sync = TimeSpan.FromSeconds(30);
 
@@ -71,6 +71,7 @@ public static class Steps
         InGameTests.Register("retinues.troopKind", StepSide.Any, TroopKind);
         InGameTests.Register("retinues.remove", StepSide.Client, Remove);
         InGameTests.Register("retinues.noErrors", StepSide.Any, NoErrors);
+        RegisterFeatures();
     }
 
     // ---- health and session --------------------------------------------------------------------------------
@@ -139,7 +140,10 @@ public static class Steps
         {
             if (town!.OwnerClan != hero.Clan) ChangeOwnerOfSettlementAction.ApplyByDefault(hero, town);
             yield return ctx.Until(() => town.OwnerClan == hero.Clan, $"{hero.Clan?.Name} to own {town.StringId}", Sync);
-            yield return ctx.Delay(TimeSpan.FromSeconds(2));
+            // In single player the pop-up comes a few frames later, from the map; left open it pauses the game, and
+            // run 1 of retinues/troops found campaign time stuck behind it. The co-op server asks nothing.
+            var until = DateTime.UtcNow + (Fork.InSession ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(30));
+            while (asked == null && DateTime.UtcNow < until) yield return null;
         }
         finally
         {
@@ -147,9 +151,11 @@ public static class Steps
         }
         if (asked != null)
         {
-            ctx.Log($"answered '{asked.TitleText}' with '{asked.AffirmativeText}'");
+            foreach (var wait in UntilShown(ctx, asked)) yield return wait;
+            var copy = ctx.Arg("answer", "copy") == "copy";
+            ctx.Log($"answered '{asked.TitleText}' with '{(copy ? asked.AffirmativeText : asked.NegativeText)}'");
             InformationManager.HideInquiry();
-            asked.AffirmativeAction?.Invoke();
+            (copy ? asked.AffirmativeAction : asked.NegativeAction)?.Invoke();
         }
         ctx.Report("asked", asked?.TitleText ?? "");
         ctx.Report("value", town!.StringId);
@@ -161,8 +167,8 @@ public static class Steps
     /// </summary>
     private static IEnumerable<StepWait?> EnsureTroops(StepContext ctx)
     {
-        var clan = Player.Clan;
-        ctx.Assert(clan != null, "the player has no clan");
+        var clan = ctx.Arg("faction", "clan") == "kingdom" ? Player.Kingdom : Player.Clan;
+        ctx.Assert(clan != null, $"the player has no {ctx.Arg("faction", "clan")}");
         TroopBuilder.EnsureTroopsExist(clan!);
         yield return ctx.Until(() => clan!.RetinueBasic != null && clan.RetinueElite != null, "the clan's retinues", Sync);
         ctx.Report("retinue", clan!.RetinueBasic.StringId);
@@ -225,7 +231,9 @@ public static class Steps
         yield return ctx.Until(() => SkillManager.CanIncrementSkill(troop, skill!), $"{troop.StringId} to be able to raise {skill!.StringId} (XP {TroopXpBehavior.Get(troop)})", Sync);
         var before = troop.GetSkill(skill!);
         SkillManager.ModifySkill(troop, skill!, increment: true);
-        yield return ctx.Settled(() => troop.GetSkill(skill!), $"{troop.StringId}'s {skill!.StringId}", before + 1, timeout: Sync);
+        // With TrainingTroopsTakesTime the point is staged for training in a fief and the skill stays as it was.
+        var staged = ctx.Arg("staged", "false") == "true";
+        yield return ctx.Settled(() => troop.GetSkill(skill!), $"{troop.StringId}'s {skill!.StringId}", staged ? before : before + 1, timeout: Sync);
         ctx.Report("before", before);
         ctx.Report("value", troop.GetSkill(skill!));
     }
@@ -330,6 +338,7 @@ public static class Steps
             InformationManager.OnShowInquiry -= Capture;
         }
         ctx.Log("pop-up: " + asked!.TitleText);
+        foreach (var wait in UntilShown(ctx, asked)) yield return wait;
         InformationManager.HideInquiry();
         asked.AffirmativeAction?.Invoke();
         yield return ctx.Until(() => parent.UpgradeTargets.All(t => t.StringId != id), $"{id} to be gone from {parent.StringId}'s upgrades", Sync);
@@ -645,9 +654,14 @@ public static class Steps
         yield return ctx.Until(() => !(TaleWorlds.Core.Game.Current?.GameStateManager?.ActiveState is TaleWorlds.CampaignSystem.GameState.ClanState), "the clan screen to close", TimeSpan.FromSeconds(10));
     }
 
-    /// <summary>Errors and exceptions Retinues wrote to its own log since retinues.health ran (or the whole log).</summary>
+    /// <summary>
+    /// Errors and exceptions Retinues wrote to its own log since retinues.health ran (or the whole log). <c>ignore</c>:
+    /// text that marks an error this suite expects (written to the evidence, not failed on).
+    /// </summary>
     private static IEnumerable<StepWait?> NoErrors(StepContext ctx)
     {
+        var ignore = ctx.Arg("ignore", "");
+        bool Ignored(string line) => ignore.Length > 0 && line.IndexOf(ignore, StringComparison.OrdinalIgnoreCase) >= 0;
         var start = ctx.State.TryGetValue("retinues.logStart", out var s) && s is long l ? l : 0L;
         var errors = new List<string>();
         if (File.Exists(LogFile))
@@ -657,7 +671,7 @@ public static class Steps
             using var reader = new StreamReader(stream);
             string? line;
             while ((line = reader.ReadLine()) != null)
-                if (line.Contains("] [Error] ") || line.Contains("] [Critical] ")) errors.Add(line);
+                if ((line.Contains("] [Error] ") || line.Contains("] [Critical] ")) && !Ignored(line)) errors.Add(line);
         }
         if (errors.Count > 0) ctx.Dump("retinues-errors", string.Join(Environment.NewLine, errors));
         ctx.Assert(errors.Count == 0, $"Retinues logged {errors.Count} error(s) this run; first: {errors.FirstOrDefault()}");
@@ -718,6 +732,7 @@ public static class Steps
     {
         var sb = new StringBuilder();
         sb.Append(troop.StringId).Append(" '").Append(troop.Name).Append('\'');
+        sb.Append(troop.IsFemale ? " female" : " male").Append(" culture:").Append(troop.Culture?.StringId).Append(" formation:").Append((int)troop.FormationClassOverride);
         sb.Append(" skills:").Append(string.Join(",", MBObjectManager.Instance.GetObjectTypeList<SkillObject>().OrderBy(s => s.StringId).Select(s => $"{s.StringId}={troop.GetSkill(s)}")));
         var set = troop.Loadout.Get(0);
         sb.Append(" battle:").Append(string.Join(",", Enumerable.Range(0, (int)EquipmentIndex.NumEquipmentSetSlots)
@@ -760,14 +775,14 @@ public static class Steps
     {
         private static Assembly Retinues => typeof(Player).Assembly;
         private static Type ClanScreen => Retinues.GetType("Retinues.GUI.Editor.ClanScreen", true)!;
-        private static object? Vm => ClanScreen.GetProperty("Instance")?.GetValue(null) is { } screen ? screen.GetType().GetProperty("Editor")?.GetValue(screen) : null;
+        public static object? Vm => ClanScreen.GetProperty("Instance")?.GetValue(null) is { } screen ? screen.GetType().GetProperty("Editor")?.GetValue(screen) : null;
 
         public static bool IsOpen => Vm != null && TaleWorlds.Core.Game.Current?.GameStateManager?.ActiveState is TaleWorlds.CampaignSystem.GameState.ClanState;
 
         /// <summary>The player's own troops (EditorMode.Personal), as the clan screen's Troops tab opens them.</summary>
-        public static void Launch()
+        public static void Launch(string modeName = "Personal")
         {
-            var mode = Enum.Parse(Retinues.GetType("Retinues.GUI.Editor.EditorMode", true)!, "Personal");
+            var mode = Enum.Parse(Retinues.GetType("Retinues.GUI.Editor.EditorMode", true)!, modeName);
             ClanScreen.GetMethod("LaunchEditor")!.Invoke(null, new[] { mode });
         }
 
@@ -783,18 +798,25 @@ public static class Steps
         }
 
         /// <summary>Reads a property of one of the editor's pages, as its screen binds it.</summary>
+        /// <summary>A page of the editor by its property path ("TroopScreen", "TroopScreen.TroopPanel").</summary>
+        private static object Page(string page)
+        {
+            object current = Vm ?? throw new StepFailedException("the troop editor is not open");
+            foreach (var part in page.Split('.'))
+                current = current.GetType().GetProperty(part)?.GetValue(current) ?? throw new StepFailedException($"the editor has no {page}");
+            return current;
+        }
+
         public static T Get<T>(string page, string property)
         {
-            var vm = Vm ?? throw new StepFailedException("the troop editor is not open");
-            var screen = vm.GetType().GetProperty(page)?.GetValue(vm) ?? throw new StepFailedException($"the editor has no {page}");
+            var screen = Page(page);
             return (T)(screen.GetType().GetProperty(property)?.GetValue(screen) ?? throw new StepFailedException($"{page} has no {property}"));
         }
 
         /// <summary>Calls a button's method on one of the editor's pages (TroopScreen, EquipmentScreen).</summary>
         public static void Invoke(string page, string method)
         {
-            var vm = Vm ?? throw new StepFailedException("the troop editor is not open");
-            var screen = vm.GetType().GetProperty(page)?.GetValue(vm) ?? throw new StepFailedException($"the editor has no {page}");
+            var screen = Page(page);
             screen.GetType().GetMethod(method)!.Invoke(screen, null);
         }
     }

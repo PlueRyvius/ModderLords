@@ -64,7 +64,13 @@ internal sealed class StepRunner
             return null;
         }
         catch (StepFailedException ex) { return End(false, ex.Message); }
-        catch (Exception ex) { return End(false, ex.GetType().Name + ": " + ex.Message); }
+        catch (Exception ex)
+        {
+            // The stack goes into the step's log (printed under the failure): the message alone left an
+            // IndexOutOfRangeException after a Coop battle with nothing to go on (retinues/xp, 2026-11-22).
+            try { Context.Log(ex.ToString()); } catch { }
+            return End(false, ex.GetType().Name + ": " + ex.Message);
+        }
     }
 
     private bool Ready(StepWait wait, DateTime now)

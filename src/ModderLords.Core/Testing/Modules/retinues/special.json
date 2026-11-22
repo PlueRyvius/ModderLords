@@ -1,0 +1,31 @@
+{
+  // Special troops (militia, caravan guards and master, the Veteran Caravan Guard Retinues 1.5.14 added, villagers) come with doctrines, or with NoDoctrineRequirements, which co-op needs since its doctrines are off. Retinues coop.3 on 1.5.7: the Veteran Caravan Guard was left out of co-op snapshots, so its edits never reached players.
+  "api": 2,
+  "name": "special",
+  "mode": "both",
+  "description": "With NoDoctrineRequirements on, a clan with a fief has every special troop, and renames of its Veteran Caravan Guard and its militia land on both sides.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.setOption", "side": "game", "args": {"option": "NoDoctrineRequirements", "value": "true"}},
+    {"id": "retinues.setOption", "side": "player", "mode": "coop", "args": {"option": "NoDoctrineRequirements", "value": "true"}},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.specialTroops", "side": "player", "as": "special", "args": {"heroName": "$me.heroName"}},
+    {"compare": "retinues.specialTroops", "sides": ["game", "player"], "args": {"heroName": "$me.heroName"}, "as": "specialSides", "mode": "coop"},
+    {"id": "retinues.rename", "side": "player", "args": {"troop": "$special.veteranCaravanGuard", "name": "Harness Veteran Guard"}},
+    {"id": "retinues.troop", "side": "player", "as": "veteran", "args": {"troop": "$special.veteranCaravanGuard", "expectedName": "Harness Veteran Guard"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$special.veteranCaravanGuard", "expectedName": "Harness Veteran Guard"}, "as": "veteranSides", "mode": "coop"},
+    {"id": "retinues.rename", "side": "player", "args": {"troop": "$special.militiaMelee", "name": "Harness Militia"}},
+    {"id": "retinues.troop", "side": "player", "as": "militia", "args": {"troop": "$special.militiaMelee", "expectedName": "Harness Militia"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$special.militiaMelee", "expectedName": "Harness Militia"}, "as": "militiaSides", "mode": "coop"},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

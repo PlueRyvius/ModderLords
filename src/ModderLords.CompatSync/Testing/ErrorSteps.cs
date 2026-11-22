@@ -27,6 +27,24 @@ internal static class ErrorSteps
     {
         InGameTests.Register("game.noErrors", StepSide.Any, NoErrors);
         InGameTests.Register("game.showMessage", StepSide.Any, ShowMessage);
+        InGameTests.Register("game.sawMessage", StepSide.Any, SawMessage);
+    }
+
+    /// <summary>
+    /// Waits until an on-screen message or pop-up containing <c>text</c> has been shown on this game at any time in the
+    /// run (messages are kept from the start, so one shown while the game joined counts), and reports it. For a mod
+    /// that must tell the player something: "that is off in co-op", say.
+    /// </summary>
+    private static IEnumerable<StepWait?> SawMessage(StepContext ctx)
+    {
+        var text = ctx.Arg("text");
+        string? found = null;
+        yield return ctx.Until(() =>
+        {
+            lock (Gate) found = Seen.FirstOrDefault(m => m.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0);
+            return found != null;
+        }, $"a message containing '{text}'", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 30)));
+        ctx.Report("value", found);
     }
 
     /// <summary>Shows <c>text</c> as an on-screen message, as a mod does; for checking game.noErrors itself.</summary>
@@ -86,8 +104,9 @@ internal static class ErrorSteps
     /// <summary>
     /// A notice: one button and nothing to choose (TAOM 2.0.41 shows one per new feature, "Hidden Hosts" as a battle
     /// ends). Left open it pauses the game, so a run closes it as the player would; it stays in the messages all the same.
+    /// The one button can be either: Retinues' "Version Change" notice shows only its negative button, as "Ok".
     /// </summary>
-    internal static bool IsNotice(InquiryData data) => !data.IsNegativeOptionShown && data.IsAffirmativeOptionShown;
+    internal static bool IsNotice(InquiryData data) => data.IsNegativeOptionShown != data.IsAffirmativeOptionShown;
 
     /// <summary>Known pop-ups and notices shown and not yet answered, oldest first.</summary>
     private static readonly List<InquiryData> Pending = new List<InquiryData>();
@@ -111,10 +130,27 @@ internal static class ErrorSteps
         InquiryData? data;
         lock (Gate)
         {
-            if (Pending.Count == 0) return;
             var active = ActiveField.Value;
-            data = active == null ? Pending[0] : active.GetValue(null) as InquiryData;
-            if (data == null || !Pending.Remove(data)) return;
+            if (active == null)
+            {
+                if (Pending.Count == 0) return;
+                data = Pending[0];
+                Pending.RemoveAt(0);
+            }
+            else
+            {
+                // What is on screen, even one the listener missed: InformationManager.Clear() drops the listener, and a
+                // pop-up shown before it is re-added a second later is never reported. Retinues' "Version Change"
+                // notice, shown as a world loads, stayed open that way and kept campaign time paused (Retinues suites,
+                // 2026-11-22).
+                data = active.GetValue(null) as InquiryData;
+                if (data == null) return;
+                if (!Pending.Remove(data))
+                {
+                    if (!IsKnown(data) && !IsNotice(data)) return;
+                    Add("pop-up", $"{data.TitleText}: {data.Text}");
+                }
+            }
         }
         try
         {

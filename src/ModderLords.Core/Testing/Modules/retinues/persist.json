@@ -1,0 +1,30 @@
+{
+  // Edits survive a save and a reload: a clan troop's name and gear, and (global editor) a culture troop's name. Retinues also backs troops up to its module's Exports folder on every save; in a ModderLords launch view the module is a junction, and on the test PC no folder can be made through a junction under ModderLords' data folder (2026-11-22, environmental), so the suite's error check ignores that backup's error.
+  "api": 2,
+  "name": "persist",
+  "mode": "singleplayer",
+  "continuity": true,
+  "description": "A renamed and re-equipped clan troop and a renamed culture troop come back as they were after a save and reload.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "game.whoAmI", "side": "game", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "game"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "game", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.rename", "side": "game", "args": {"troop": "$troops.retinue", "name": "Harness Keeper"}},
+    {"id": "retinues.equip", "side": "game", "as": "equip", "args": {"troop": "$troops.retinue", "slot": "Head"}},
+    {"id": "retinues.troop", "side": "game", "as": "before", "args": {"troop": "$troops.retinue"}},
+    {"id": "retinues.cultureTroop", "side": "game", "as": "vanilla"},
+    {"id": "retinues.renameVanilla", "side": "game", "args": {"troop": "$vanilla.value", "name": "Harness Recruit"}},
+    {"id": "game.save", "side": "game", "args": {"name": "mltest-retinues-persist"}},
+    {"id": "game.toMainMenu", "side": "game", "timeoutSeconds": 300},
+    {"id": "game.loadSave", "side": "game", "timeoutSeconds": 900, "args": {"name": "mltest-retinues-persist"}},
+    {"id": "retinues.troop", "side": "game", "as": "after", "args": {"troop": "$troops.retinue", "expectedName": "Harness Keeper"}},
+    {"id": "retinues.troop", "side": "game", "as": "vanillaAfter", "args": {"troop": "$vanilla.value", "expectedName": "Harness Recruit"}},
+    {"id": "retinues.ensureTroops", "side": "game", "as": "reloaded", "args": {"regulars": "true"}},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true, "args": {"ignore": "auto_backup.xml"}},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true}
+  ]
+}

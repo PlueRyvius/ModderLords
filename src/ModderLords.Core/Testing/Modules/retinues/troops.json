@@ -1,0 +1,28 @@
+{
+  // A clan's first fief: in single player Retinues asks whether to copy the culture's troops or start from scratch (answered: scratch); in Coop the server copies them with no pop-up, and the player is told once what co-op turns off. Then a day passes and the fief's volunteers are the clan's own troops (Retinues swaps them daily).
+  "api": 2,
+  "name": "troops",
+  "mode": "both",
+  "description": "On a clan's first fief its regular troops are made (single player: from scratch; Coop: copied by the server), a Coop player is told which features co-op turns off, and after a day the fief offers the clan's own troops as volunteers on both sides.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "game.sawMessage", "side": "player", "mode": "coop", "args": {"text": "doctrines, the global editor"}},
+    {"id": "retinues.giveFief", "side": "game", "as": "fief", "mode": "singleplayer", "args": {"heroName": "$me.heroName", "town": "town_EN1", "answer": "scratch"}},
+    {"id": "retinues.giveFief", "side": "game", "as": "fief", "mode": "coop", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.troop", "side": "player", "as": "root", "args": {"troop": "$troops.basicRoot"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$troops.basicRoot"}, "as": "rootSides", "mode": "coop"},
+    {"id": "retinues.passDays", "side": "game", "timeoutSeconds": 400, "args": {"days": 1}},
+    {"id": "retinues.volunteers", "side": "player", "as": "volunteers", "args": {"town": "town_EN1", "expected": "custom"}},
+    {"compare": "retinues.volunteers", "sides": ["game", "player"], "args": {"town": "town_EN1", "expected": "custom"}, "as": "volunteersSides", "mode": "coop"},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

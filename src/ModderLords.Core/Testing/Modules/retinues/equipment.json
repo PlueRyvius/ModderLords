@@ -1,0 +1,36 @@
+{
+  // Equipment sets: a new set (copy of the current), deleting it, copying one troop's set onto another, and an item above the troop's tier refused. In Coop sets, pastes and deletes go through the server.
+  "api": 2,
+  "name": "equipment",
+  "mode": "both",
+  "description": "A troop gets a second equipment set and loses it again, another troop's battle set is pasted onto it, and an item above its tier is refused with no gold taken; both sides agree.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.equip", "side": "player", "as": "equip", "args": {"troop": "$troops.retinue", "slot": "Head"}},
+    {"id": "retinues.createSet", "side": "player", "as": "newSet", "args": {"troop": "$troops.retinue", "copy": "true"}},
+    {"id": "retinues.sets", "side": "player", "as": "twoSets", "args": {"troop": "$troops.retinue", "count": "$newSet.value"}},
+    {"compare": "retinues.sets", "sides": ["game", "player"], "args": {"troop": "$troops.retinue", "count": "$newSet.value"}, "as": "twoSetsSides", "mode": "coop"},
+    {"id": "retinues.deleteSet", "side": "player", "args": {"troop": "$troops.retinue", "index": "$newSet.index"}},
+    {"id": "retinues.sets", "side": "player", "as": "oneSet", "args": {"troop": "$troops.retinue"}},
+    {"compare": "retinues.sets", "sides": ["game", "player"], "args": {"troop": "$troops.retinue"}, "as": "oneSetSides", "mode": "coop"},
+    {"id": "retinues.paste", "side": "player", "args": {"troop": "$troops.eliteRetinue", "from": "$troops.retinue"}},
+    {"id": "retinues.sets", "side": "player", "as": "pasted", "args": {"troop": "$troops.eliteRetinue"}},
+    {"compare": "retinues.sets", "sides": ["game", "player"], "args": {"troop": "$troops.eliteRetinue"}, "as": "pastedSides", "mode": "coop"},
+    {"id": "retinues.tooHighTier", "side": "player", "args": {"troop": "$troops.retinue", "slot": "Body"}},
+    {"id": "retinues.troop", "side": "player", "as": "refused", "args": {"troop": "$troops.retinue"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$troops.retinue"}, "as": "refusedSides", "mode": "coop"},
+    {"id": "hero.gold", "side": "player", "args": {"heroName": "$me.heroName"}},
+    {"compare": "hero.gold", "sides": ["game", "player"], "args": {"heroName": "$me.heroName"}, "mode": "coop"},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}
