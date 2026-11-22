@@ -63,7 +63,8 @@ internal sealed class SupplyLinesComponent : ITaomComponent
         var sourceInfo = t.GetType("TAOM.Features.SupplyLines.SupplySourceInfo", false);
         _escortType = t.GetType("TAOM.Features.SupplyLines.Domain.SupplyEscortOption", false);
         _orderType = t.GetType("TAOM.Features.SupplyLines.Domain.SupplyOrder", false);
-        var visuals = t.GetType("TAOM.Features.SupplyLines.SupplyRouteVisualService", false);
+        // In TAOM.Client.dll since 2.0.41, which a dedicated server never loads: nothing there for the server to blank.
+        var visuals = TaomTypes.Find(t, "TAOM.Features.SupplyLines.SupplyRouteVisualService");
         const BindingFlags inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
         _orders = service?.GetField("_orders", inst);
@@ -103,7 +104,7 @@ internal sealed class SupplyLinesComponent : ITaomComponent
         if (_frameTick == null || _hourlyTick == null || _cancelCamp == null || _activeOrders == null) missing.Add("SupplyOrderService ticks/ActiveOrders");
         if (ClientSkipped.Count != 5) missing.Add("SupplyOrderService tick handlers");
         if (_getSources == null) missing.Add("ISupplySourceService.GetSources()");
-        if (Visuals.Count != 2) missing.Add("SupplyRouteVisualService.Update/ClearAll");
+        if (visuals == null ? !TaomTypes.HasClientSplit(t) : Visuals.Count != 2) missing.Add("SupplyRouteVisualService.Update/ClearAll");
         if (_navPath?.ReturnType != typeof(List<Vec2>)) missing.Add("SupplyCaravanService.ComputeNavPathPoints(Vec2, Vec2)");
         return missing.Count == 0 ? null : "TAOM changed; not found: " + string.Join(", ", missing);
     }

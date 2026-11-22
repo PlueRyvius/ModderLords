@@ -44,9 +44,14 @@ internal sealed class EmissaryComponent : ITaomComponent
         var t = context.Taom;
         _taom = t;
         var owner = t.GetType("TAOM.Adapters.SettlementOwnerInfo", false);
-        _executePurchase = owner == null ? null : t.GetType("TAOM.Features.EliteEmissary.Hooks.EliteEmissaryInquiryPresenter", false)
-            ?.GetMethod("ExecutePurchase", BindingFlags.Instance | BindingFlags.NonPublic, null,
-                new[] { owner, typeof(string), typeof(string), typeof(int) }, null);
+        // TAOM 2.0.41 added a fifth parameter, localResourceName (the currency name its own guest-trade reply shows);
+        // the prefix only reads troopId and qty, so either shape will do.
+        var presenter = t.GetType("TAOM.Features.EliteEmissary.Hooks.EliteEmissaryInquiryPresenter", false);
+        _executePurchase = owner == null ? null
+            : presenter?.GetMethod("ExecutePurchase", BindingFlags.Instance | BindingFlags.NonPublic, null,
+                  new[] { owner, typeof(string), typeof(string), typeof(int), typeof(string) }, null)
+              ?? presenter?.GetMethod("ExecutePurchase", BindingFlags.Instance | BindingFlags.NonPublic, null,
+                  new[] { owner, typeof(string), typeof(string), typeof(int) }, null);
         var service = t.GetType("TAOM.Features.EliteEmissary.IEliteEmissaryService", false);
         _purchase = service?.GetMethod("Purchase", new[] { typeof(string), typeof(string), typeof(string), typeof(string), typeof(int) });
         _isKeySettlement = service?.GetMethod("IsKeySettlement", new[] { typeof(string) });
@@ -102,7 +107,10 @@ internal sealed class EmissaryComponent : ITaomComponent
 
         var owner = _ownerInfo!.Invoke(owners, new object[] { settlement })!;
         string? O(string name) => owner.GetType().GetProperty(name)?.GetValue(owner) as string;
-        var result = _purchase!.Invoke(service, new object?[] { hero.StringId, O("OwnerKingdomId"), O("OwnerCultureId"), troopId, qty })!;
+        object result;
+        // The answer below carries the new balances, so the charge is not pushed a second time (TAOM 2.0.41 push on write).
+        using (SpecialResourceEarningsComponent.NotPushedFor(hero.StringId))
+            result = _purchase!.Invoke(service, new object?[] { hero.StringId, O("OwnerKingdomId"), O("OwnerCultureId"), troopId, qty })!;
         var status = result.GetType().GetProperty("Status")?.GetValue(result)?.ToString();
         int I(string name) => result.GetType().GetProperty(name)?.GetValue(result) is int v ? v : 0;
         var resource = result.GetType().GetProperty("ResourceDisplayName")?.GetValue(result) as string ?? "";

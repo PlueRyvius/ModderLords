@@ -24,19 +24,32 @@ namespace ModderLords.CompatSync.Coop.Taom;
 /// Server only:
 /// - a battle, siege or raid is player-involved when any connected player's party took part, or a party of any
 ///   player's kingdom did;
-/// - TAOM's single "player kingdom / culture / mercenary" answers come from a real player. Inside a per-player call
-///   (PlayerScope: camp, emissary, ...) "the player" is already that player and is left alone; otherwise the first
-///   connected player with a kingdom speaks for the session (co-op groups normally share one).
+/// - TAOM's single "player kingdom / clan / culture / mercenary" answers come from a real player (TAOM 2.0.41 added
+///   GetPlayerClanId). Inside a per-player call (PlayerScope: camp, emissary, ...) "the player" is already that player
+///   and is left alone; otherwise the first connected player with a kingdom speaks for the session (co-op groups
+///   normally share one).
+///
+/// The player's culture: up to 2.0.28 TAOM asked PlayerContextAdapter.GetPlayerCultureId, whose only caller was the
+/// execution relation model (the player as executor), and that answer is substituted. 2.0.41 dropped both and asks
+/// FactionSides.OfPlayer (kingdom and culture together) from about fourteen places (battle relations, good deeds, long
+/// memory, gifts, encounter lines, wanderer and oath dialogs, ...). Substituting OfPlayer everywhere would make every one
+/// of those answer for the first player with a kingdom, so player B's battle could run against player A's kingdom.
+/// So OfPlayer is substituted only while the 2.0.41 counterpart of the old consumer runs: TAOM's execution relation
+/// postfix (ExecutionCampaignBehavior_BloodFeudRelationPenalty_Patch.Postfix). Everything else keeps TAOM's own answer.
 /// </summary>
 internal sealed class PlayerContextComponent : ITaomComponent
 {
     private const string Owner = "ModderLords.Taom.PlayerContext";
 
     private static MethodInfo? _kingdom;
+    private static MethodInfo? _clan;
     private static MethodInfo? _culture;
+    private static MethodInfo? _ofPlayer;
+    private static MethodInfo? _ofFaction;
     private static MethodInfo? _mercenary;
     private static MethodInfo? _isPlayerRelated;
     private static MethodInfo? _fromMapEvent;
+    private static MethodInfo? _executionRelation;
 
     public string Id => "player-context";
 
@@ -46,7 +59,14 @@ internal sealed class PlayerContextComponent : ITaomComponent
         var t = context.Taom;
         var adapter = t.GetType("TAOM.Adapters.PlayerContextAdapter", false);
         _kingdom = adapter?.GetMethod("GetPlayerKingdomId", Type.EmptyTypes);
-        _culture = adapter?.GetMethod("GetPlayerCultureId", Type.EmptyTypes);
+        _clan = adapter?.GetMethod("GetPlayerClanId", Type.EmptyTypes);   // 2.0.41 and later
+        _culture = adapter?.GetMethod("GetPlayerCultureId", Type.EmptyTypes);   // up to 2.0.28
+        var sides = t.GetType("TAOM.Adapters.FactionSides", false);   // 2.0.41 and later
+        _ofPlayer = sides?.GetMethod("OfPlayer", BindingFlags.Static | BindingFlags.Public, null, Type.EmptyTypes, null);
+        _ofFaction = sides?.GetMethod("Of", BindingFlags.Static | BindingFlags.Public, null, new[] { typeof(IFaction) }, null);
+        // 2.0.41: the one OfPlayer consumer the old GetPlayerCultureId substitution covered (see the class summary).
+        _executionRelation = t.GetType("TAOM.Features.Execution.Hooks.ExecutionCampaignBehavior_BloodFeudRelationPenalty_Patch", false)
+            ?.GetMethod("Postfix", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
         _mercenary = adapter?.GetMethod("IsUnderMercenaryService", Type.EmptyTypes);
         var snapshots = t.GetType("TAOM.Adapters.WarEventSnapshotAdapter", false);
         _isPlayerRelated = snapshots?.GetMethod("IsPlayerRelated", BindingFlags.Static | BindingFlags.NonPublic, null,
@@ -54,8 +74,11 @@ internal sealed class PlayerContextComponent : ITaomComponent
         _fromMapEvent = snapshots?.GetMethod("FromMapEvent", new[] { typeof(MapEvent) });
 
         var missing = new List<string>();
-        if (_kingdom?.ReturnType != typeof(string) || _culture?.ReturnType != typeof(string) || _mercenary?.ReturnType != typeof(bool))
-            missing.Add("PlayerContextAdapter.GetPlayerKingdomId/GetPlayerCultureId/IsUnderMercenaryService");
+        if (_kingdom?.ReturnType != typeof(string) || _mercenary?.ReturnType != typeof(bool))
+            missing.Add("PlayerContextAdapter.GetPlayerKingdomId/IsUnderMercenaryService");
+        if (_culture?.ReturnType != typeof(string)
+            && (_ofPlayer == null || _ofFaction == null || _ofPlayer.ReturnType != _ofFaction.ReturnType || _executionRelation == null))
+            missing.Add("PlayerContextAdapter.GetPlayerCultureId or FactionSides.OfPlayer/Of(IFaction) and ExecutionCampaignBehavior_BloodFeudRelationPenalty_Patch.Postfix");
         if (_isPlayerRelated?.ReturnType != typeof(bool)) missing.Add("WarEventSnapshotAdapter.IsPlayerRelated(PartyBase, string)");
         if (_fromMapEvent == null) missing.Add("WarEventSnapshotAdapter.FromMapEvent(MapEvent)");
         return missing.Count == 0 ? null : "TAOM changed; not found: " + string.Join(", ", missing);
@@ -65,7 +88,16 @@ internal sealed class PlayerContextComponent : ITaomComponent
     {
         var h = new Harmony(Owner);
         h.Patch(_kingdom!, postfix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(KingdomPostfix)));
-        h.Patch(_culture!, postfix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(CulturePostfix)));
+        if (_culture?.ReturnType == typeof(string))
+            h.Patch(_culture, postfix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(CulturePostfix)));
+        else
+        {
+            h.Patch(_executionRelation!, prefix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(ExecutionEnterPrefix)),
+                finalizer: new HarmonyMethod(typeof(PlayerContextComponent), nameof(ExecutionLeaveFinalizer)));
+            h.Patch(_ofPlayer!, postfix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(OfPlayerPostfix)));
+        }
+        if (_clan?.ReturnType == typeof(string))
+            h.Patch(_clan, postfix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(ClanPostfix)));
         h.Patch(_mercenary!, postfix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(MercenaryPostfix)));
         h.Patch(_isPlayerRelated!, postfix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(IsPlayerRelatedPostfix)));
         h.Patch(_fromMapEvent!, postfix: new HarmonyMethod(typeof(PlayerContextComponent), nameof(FromMapEventPostfix)));
@@ -111,6 +143,29 @@ internal sealed class PlayerContextComponent : ITaomComponent
     private static void CulturePostfix(ref string __result)
     {
         if (Substitute && Representative() is { } hero) __result = hero.Culture?.StringId ?? "";
+    }
+
+    private static void ClanPostfix(ref string __result)
+    {
+        if (Substitute && Representative() is { } hero) __result = hero.Clan?.StringId ?? "";
+    }
+
+    /// <summary>Depth of TAOM's execution relation postfix on the stack (game thread only).</summary>
+    private static int _inExecutionRelation;
+
+    private static void ExecutionEnterPrefix() => _inExecutionRelation++;
+
+    private static void ExecutionLeaveFinalizer() => _inExecutionRelation--;
+
+    /// <summary>
+    /// TAOM 2.0.41: the player's side (kingdom and culture ids), only inside the execution relation postfix (the class
+    /// summary says why not everywhere).
+    /// </summary>
+    private static void OfPlayerPostfix(ref object __result)
+    {
+        if (_inExecutionRelation <= 0 || !Substitute || Representative() is not { } hero || hero.Clan == null) return;
+        try { __result = _ofFaction!.Invoke(null, new object?[] { hero.Clan.MapFaction }) ?? __result; }
+        catch { }
     }
 
     private static void MercenaryPostfix(ref bool __result)

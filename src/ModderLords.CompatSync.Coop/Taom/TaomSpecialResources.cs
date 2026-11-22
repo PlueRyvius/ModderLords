@@ -109,6 +109,8 @@ internal sealed class SpecialResourceSyncComponent : ITaomComponent
         if (op != "report" || Storage() is not { } storage) return TaomActionOutcome.Fail("");
         var prefix = hero.StringId + ":";
         var stored = 0;
+        // What the client just reported is what it already holds: not pushed back to it (TAOM 2.0.41 push on write).
+        using var quiet = SpecialResourceEarningsComponent.NotPushedFor(hero.StringId);
         for (var i = 0; i + 1 < args.Count; i += 2)
         {
             var key = args[i];

@@ -24,9 +24,11 @@ internal sealed class MessengerNoticeComponent : ITaomComponent
     public string? SkipReason(TaomContext context)
     {
         if (context.IsServer) return "server";
-        _send = context.Taom.GetType("TAOM.Features.Messengers.MessengerCampaignBehavior", false)
-            ?.GetMethod("SendMessenger", new[] { typeof(Hero) });
-        return _send == null ? "TAOM changed; not found: MessengerCampaignBehavior.SendMessenger(Hero)" : null;
+        // TAOM 2.0.41 added inPerson (true when sent from a lord's dialog, false from the encyclopedia); the prefix
+        // refuses either way, so either shape will do.
+        var behavior = context.Taom.GetType("TAOM.Features.Messengers.MessengerCampaignBehavior", false);
+        _send = behavior?.GetMethod("SendMessenger", new[] { typeof(Hero), typeof(bool) }) ?? behavior?.GetMethod("SendMessenger", new[] { typeof(Hero) });
+        return _send == null ? "TAOM changed; not found: MessengerCampaignBehavior.SendMessenger(Hero, bool)" : null;
     }
 
     public string Install(TaomContext context)

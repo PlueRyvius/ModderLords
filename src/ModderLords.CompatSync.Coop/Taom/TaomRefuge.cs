@@ -67,7 +67,8 @@ internal sealed class RefugeComponent : ITaomComponent
         var wardens = t.GetType("TAOM.Features.Refuge.IWardenService", false);
         var candidate = t.GetType("TAOM.Features.Refuge.WardenCandidate", false);
         var menus = t.GetType("TAOM.Features.Refuge.Hooks.RefugeMenuController", false);
-        var visuals = t.GetType("TAOM.Features.Refuge.Visuals.RefugeVisualService", false);
+        // In TAOM.Client.dll since 2.0.41, which a dedicated server never loads: nothing there for the server to blank.
+        var visuals = TaomTypes.Find(t, "TAOM.Features.Refuge.Visuals.RefugeVisualService");
         const BindingFlags inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
         _book = _service?.GetField("_refuges", inst);
@@ -109,7 +110,7 @@ internal sealed class RefugeComponent : ITaomComponent
         if (ClientSkipped.Count != 6) missing.Add("RefugeService tick handlers");
         if (_onWardenChosen == null) missing.Add("RefugeMenuController.OnWardenChosen(List<InquiryElement>)");
         if (_candidates == null || _resolveWarden == null || _unwindPromotion == null) missing.Add("IWardenService.Candidates/ResolveWarden/UnwindPromotion");
-        if (Visuals.Count != 4) missing.Add("RefugeVisualService.Show/Remove/ClearAll/TickWind");
+        if (visuals == null ? !TaomTypes.HasClientSplit(t) : Visuals.Count != 4) missing.Add("RefugeVisualService.Show/Remove/ClearAll/TickWind");
         return missing.Count == 0 ? null : "TAOM changed; not found: " + string.Join(", ", missing);
     }
 

@@ -81,6 +81,9 @@ public static class Steps
             "other" => c.Verdict.StartsWith("Refused", StringComparison.Ordinal),
             _ => true,
         });
+        // A lookup that failed for every wanderer is a broken step (TAOM changed), not "nobody to hire".
+        ctx.Assert(side == "any" || candidates.Count == 0 || !candidates.All(c => c.Verdict.StartsWith("unknown", StringComparison.Ordinal)),
+            $"TAOM's wanderer allegiance could not be asked: {candidates.FirstOrDefault().Verdict}");
         ctx.Assert(picked.Hero != null, $"no hireable wanderer ({side}) among {candidates.Count} in towns");
         ctx.Log($"picked {picked.Hero!.StringId} \"{picked.Hero.Name}\" ({picked.Hero.Culture?.StringId}) in {picked.Hero.CurrentSettlement!.StringId}: {picked.Verdict}");
         ctx.Report("heroId", picked.Hero.StringId);
@@ -123,7 +126,7 @@ public static class Steps
 
         // The path to the hire: the options to pick when offered, in order of preference. Anything else offered is a
         // step of the wanderer's introduction; the first clickable option that does not leave moves it on.
-        string[] wanted = ["player_companion_hire_response_1", "main_option_faction_hire"];
+        string[] wanted = ["player_companion_hire_response_1", "taom_oath_accept", "main_option_faction_hire"];
         string[] leaving = ["player_is_leaving", "companion_hire_capacity_full", "player_companion_hire_response_2", "hero_special_request"];
         var pickedHire = false;
         var refused = false;
@@ -166,7 +169,7 @@ public static class Steps
                 else if (wanted.Select(w => options.FirstOrDefault(o => o.Id == w)).FirstOrDefault(o => o.Id != null) is { Id: not null } hire)
                 {
                     if (!hire.IsClickable) { problem = $"the option {hire.Id} is offered but not clickable: {hire.HintText}"; return true; }
-                    if (hire.Id == "player_companion_hire_response_1") pickedHire = true;
+                    if (hire.Id is "player_companion_hire_response_1" or "taom_oath_accept") pickedHire = true;
                     Note($"P  -> {hire.Id}");
                     cm.DoOption(hire.Id);
                 }
@@ -218,10 +221,34 @@ public static class Steps
     {
         try
         {
-            var service = IoC.Resolve<TAOM.Features.WandererAllegiance.IWandererAllegianceService>();
-            var clan = Clan.PlayerClan;
-            return service.Evaluate(wanderer.StringId, wanderer.Culture?.StringId, clan?.Kingdom?.StringId,
-                clan?.Culture?.StringId ?? Hero.MainHero?.Culture?.StringId).ToString();
+            // By name, both shapes: TAOM 2.0.28 registers IWandererAllegianceService with
+            // Evaluate(wandererId, wandererCulture, kingdomId, playerCulture); 2.0.41 dropped the interface, registers the
+            // concrete WandererAllegianceService, and takes Evaluate(wandererId, wandererCulture, SideIds playerSide),
+            // which its own dialog fills from FactionSides.OfPlayer().
+            var taom = typeof(IoC).Assembly;
+            var type = taom.GetType("TAOM.Features.WandererAllegiance.WandererAllegianceService", false) is { } concrete
+                       && taom.GetType("TAOM.Features.WandererAllegiance.IWandererAllegianceService", false) == null
+                ? concrete
+                : taom.GetType("TAOM.Features.WandererAllegiance.IWandererAllegianceService", false);
+            if (type == null) return "unknown (no WandererAllegianceService)";
+            var resolve = typeof(IoC).GetMethod("Resolve", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, null, Type.EmptyTypes, null);
+            var service = resolve?.MakeGenericMethod(type).Invoke(null, null);
+            var evaluate = type.GetMethods().FirstOrDefault(m => m.Name == "Evaluate" && m.GetParameters().Length is 3 or 4);
+            if (service == null || evaluate == null) return "unknown (service or Evaluate not found)";
+            object?[] args;
+            if (evaluate.GetParameters().Length == 4)
+            {
+                var clan = Clan.PlayerClan;
+                args = new object?[] { wanderer.StringId, wanderer.Culture?.StringId, clan?.Kingdom?.StringId,
+                    clan?.Culture?.StringId ?? Hero.MainHero?.Culture?.StringId };
+            }
+            else
+            {
+                var ofPlayer = taom.GetType("TAOM.Adapters.FactionSides", false)?.GetMethod("OfPlayer", Type.EmptyTypes);
+                if (ofPlayer == null) return "unknown (no FactionSides.OfPlayer)";
+                args = new object?[] { wanderer.StringId, wanderer.Culture?.StringId, ofPlayer.Invoke(null, null) };
+            }
+            return evaluate.Invoke(service, args)?.ToString() ?? "null";
         }
         catch (Exception ex) { return "unknown (" + ex.GetType().Name + ")"; }
     }

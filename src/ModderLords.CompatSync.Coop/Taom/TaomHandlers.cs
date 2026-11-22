@@ -48,9 +48,9 @@ namespace Coop.Core.Client.Services.ModderLordsCompat.Handlers
                     Sequence = ++actionSequence, ProtocolVersion = ProtocolVersion,
                 });
             LeStateMirror.RequestFull = () => network.SendAll(new NetworkTaomStateRequest { ProtocolVersion = ProtocolVersion });
-            TaomFieldCamp.Send = (op, campType) =>
+            TaomFieldCamp.Send = (op, campType, ignoreTownDistance) =>
             {
-                network.SendAll(new NetworkTaomCampOp { Op = op, CampType = campType, ProtocolVersion = ProtocolVersion });
+                network.SendAll(new NetworkTaomCampOp { Op = op, CampType = campType, IgnoreTownDistance = ignoreTownDistance, ProtocolVersion = ProtocolVersion });
                 Log.Info("TAOM layer: field-camp sent '" + op + "' to the server");
             };
         }
@@ -301,7 +301,7 @@ namespace Coop.Core.Server.Services.ModderLordsCompat.Handlers
                         return;
                     }
                     objects.TryGetObject<MobileParty>(player.MobilePartyId, out var party);
-                    var (ran, detail) = TaomFieldCamp.ServerRun(hero, party, msg.Op, msg.CampType);
+                    var (ran, detail) = TaomFieldCamp.ServerRun(hero, party, msg.Op, msg.CampType, msg.IgnoreTownDistance);
                     Reply(ran, detail);
                 }
                 catch (Exception ex) { Reply(false, "failed: " + ex.GetBaseException().Message); }
