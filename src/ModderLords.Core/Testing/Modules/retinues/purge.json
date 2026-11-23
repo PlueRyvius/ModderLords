@@ -1,0 +1,22 @@
+{
+  // Purge (MCM, "Purge Custom Troop Data") in Coop: the server owns every troop, so a player's game refuses to purge its copy.
+  "api": 2,
+  "name": "purge",
+  "mode": "coop",
+  "description": "On a player's game the purge is refused for co-op, and the player's troops are still there and still match the server's.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "server"},
+    {"id": "Retinues.health", "side": "client:1"},
+    {"id": "game.whoAmI", "side": "client:1", "as": "me"},
+    {"id": "retinues.ready", "side": "client:1"},
+    {"id": "retinues.giveFief", "side": "server", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "client:1", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.purgeRefused", "side": "client:1", "args": {"troop": "$troops.retinue"}},
+    {"compare": "retinues.troop", "sides": ["server", "client:1"], "args": {"troop": "$troops.retinue"}, "as": "sides"},
+    {"id": "retinues.noErrors", "side": "server", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "client:1", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "server", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "client:1", "continueOnFail": true}
+  ]
+}

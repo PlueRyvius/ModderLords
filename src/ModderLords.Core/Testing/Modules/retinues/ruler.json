@@ -1,0 +1,23 @@
+{
+  // Capturing a kingdom ruler: the captured-lord answer that makes them reveal their culture's vassal reward items. In Coop only the server may take a lord prisoner or unlock items, so the player's game sends the answer and the server does both.
+  "api": 2,
+  "name": "ruler",
+  "mode": "both",
+  "description": "An enemy ruler reveals their secrets: a locked vassal reward item of their culture is unlocked on both sides and the ruler goes free; in Coop the player is told what was unlocked.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.enemyRuler", "side": "game", "as": "ruler", "args": {"heroName": "$me.heroName"}},
+    {"id": "retinues.isUnlocked", "side": "player", "args": {"item": "$ruler.item", "expected": "false"}},
+    {"id": "retinues.rulerSecrets", "side": "player", "args": {"ruler": "$ruler.value", "item": "$ruler.item"}},
+    {"id": "retinues.isUnlocked", "side": "game", "args": {"item": "$ruler.item", "expected": "true"}},
+    {"id": "game.sawMessage", "side": "player", "mode": "coop", "args": {"text": "You have unlocked the secrets of"}},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

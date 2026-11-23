@@ -1,7 +1,7 @@
 {
   "id": "retinues",
   "title": "Retinues",
-  "description": "Retinues and its Coop fork, feature by feature: a clan's and a kingdom's troops, the editor's edits (names, looks, skills and their caps, gear and equipment sets, upgrades), retinue conversion, rank-ups and joining by renown, special troops, unlocks from kills and discards, volunteers and Recruit Anywhere, battle XP, save and reload, and in single player doctrines, the global editor, timed training and import and export (in Coop: off, and the player is told). In Coop, both sides then hold the same troops.",
+  "description": "Retinues and its Coop fork, feature by feature: a clan's and a kingdom's troops, the editor's edits (names, looks, skills and their caps, gear, equipment sets and their battle rules, upgrades), retinue conversion, rank-ups and joining by renown, special troops, unlocks from kills, discards and a captured ruler, volunteers and Recruit Anywhere, battle XP, save and reload, and in single player doctrines, the global editor, timed training and import and export (in Coop: off, and the player is told; purge is refused). In Coop, both sides then hold the same troops.",
   "requires": [ { "id": "Retinues" } ],
   "steps": "ModderLords.Tests.Retinues.dll"
 }
