@@ -1,0 +1,28 @@
+{
+  // Doctrines: in single player a doctrine bought with its feats done takes effect (Iron Discipline: +5 to skill caps), and Captains gives troops a captain. In Coop doctrines are off for everyone, and the player is told so.
+  "api": 2,
+  "name": "doctrines",
+  "mode": "both",
+  "description": "Single player: Iron Discipline raises the skill cap and Captains gives a troop a captain. Coop: doctrines are off and the player was told why.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.coopRules", "side": "player", "mode": "coop"},
+    {"id": "game.sawMessage", "side": "player", "mode": "coop", "args": {"text": "doctrines, the global editor"}},
+    {"id": "retinues.skillRules", "side": "player", "as": "rulesBefore", "mode": "singleplayer", "args": {"troop": "$troops.basicRoot"}},
+    {"id": "retinues.acquireDoctrine", "side": "player", "mode": "singleplayer", "args": {"doctrine": "IronDiscipline"}},
+    {"id": "retinues.skillRules", "side": "player", "mode": "singleplayer", "args": {"troop": "$troops.basicRoot", "capAbove": "$rulesBefore.cap"}},
+    {"id": "retinues.acquireDoctrine", "side": "player", "mode": "singleplayer", "args": {"doctrine": "Captains"}},
+    {"id": "retinues.captain", "side": "player", "mode": "singleplayer", "args": {"troop": "$troops.basicRoot"}},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

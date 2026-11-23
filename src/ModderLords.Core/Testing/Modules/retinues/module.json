@@ -1,7 +1,7 @@
 {
   "id": "retinues",
   "title": "Retinues",
-  "description": "Retinues' troop editor: a player's clan gets its troops, and a rename, a skill point, equipping and unequipping (gold taken once), and adding and removing an upgrade land on that player's own troops. In Coop, both sides then hold the same troops.",
+  "description": "Retinues and its Coop fork, feature by feature: a clan's and a kingdom's troops, the editor's edits (names, looks, skills and their caps, gear and equipment sets, upgrades), retinue conversion, rank-ups and joining by renown, special troops, unlocks from kills and discards, volunteers and Recruit Anywhere, battle XP, save and reload, and in single player doctrines, the global editor, timed training and import and export (in Coop: off, and the player is told). In Coop, both sides then hold the same troops.",
   "requires": [ { "id": "Retinues" } ],
   "steps": "ModderLords.Tests.Retinues.dll"
 }

@@ -1,0 +1,32 @@
+{
+  // The troop panel's gender, culture and formation buttons. In Coop these change the troop on the player's game and are sent to the server as one appearance edit.
+  "api": 2,
+  "name": "appearance",
+  "mode": "both",
+  "description": "A troop's gender, culture and formation class (with AllowFormationOverrides on) are changed with the editor's buttons and pickers; both sides agree after each.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.setOption", "side": "game", "args": {"option": "AllowFormationOverrides", "value": "true"}},
+    {"id": "retinues.setOption", "side": "player", "mode": "coop", "args": {"option": "AllowFormationOverrides", "value": "true"}},
+    {"id": "retinues.toggleGender", "side": "player", "args": {"troop": "$troops.retinue"}},
+    {"id": "retinues.troop", "side": "player", "as": "gender", "args": {"troop": "$troops.retinue"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$troops.retinue"}, "as": "genderSides", "mode": "coop"},
+    {"id": "retinues.pickCulture", "side": "player", "args": {"troop": "$troops.retinue", "culture": "khuzait"}},
+    {"id": "retinues.troop", "side": "player", "as": "culture", "args": {"troop": "$troops.retinue"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$troops.retinue"}, "as": "cultureSides", "mode": "coop"},
+    {"id": "retinues.pickFormation", "side": "player", "args": {"troop": "$troops.retinue", "formation": "Cavalry"}},
+    {"id": "retinues.troop", "side": "player", "as": "formation", "args": {"troop": "$troops.retinue"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$troops.retinue"}, "as": "formationSides", "mode": "coop"},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

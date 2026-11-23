@@ -1,0 +1,33 @@
+{
+  // Skill points cost the troop's XP, stop at the tier's cap or total, and lowering one refunds (with ForceXpRefunds; otherwise only the Adaptive Training doctrine refunds). Upgrades stop at MaxBasicUpgrades. In Coop the server decides each.
+  "api": 2,
+  "name": "skills",
+  "mode": "both",
+  "description": "A troop with plenty of XP raises a skill until the editor refuses at the tier's cap, lowers it with a refund, and a troop takes upgrades up to the limit; both sides agree.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.setOption", "side": "game", "args": {"option": "ForceXpRefunds", "value": "true"}},
+    {"id": "retinues.setOption", "side": "player", "mode": "coop", "args": {"option": "ForceXpRefunds", "value": "true"}},
+    {"id": "retinues.giveXp", "side": "game", "args": {"troop": "$troops.basicRoot", "amount": 200000}},
+    {"id": "retinues.skillToCap", "side": "player", "as": "capped", "timeoutSeconds": 900, "args": {"troop": "$troops.basicRoot", "skill": "OneHanded"}},
+    {"id": "retinues.skillRules", "side": "player", "as": "rules", "args": {"troop": "$troops.basicRoot"}},
+    {"compare": "retinues.skillRules", "sides": ["game", "player"], "args": {"troop": "$troops.basicRoot"}, "as": "rulesSides", "mode": "coop"},
+    {"id": "retinues.skillDown", "side": "player", "args": {"troop": "$troops.basicRoot", "skill": "OneHanded"}},
+    {"id": "retinues.troop", "side": "player", "as": "lowered", "args": {"troop": "$troops.basicRoot"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$troops.basicRoot"}, "as": "loweredSides", "mode": "coop"},
+    {"id": "retinues.fillUpgrades", "side": "player", "as": "branches", "args": {"troop": "$troops.basicRoot"}},
+    {"id": "retinues.troop", "side": "player", "as": "upgrades", "args": {"troop": "$troops.basicRoot"}},
+    {"compare": "retinues.troop", "sides": ["game", "player"], "args": {"troop": "$troops.basicRoot"}, "as": "upgradesSides", "mode": "coop"},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}

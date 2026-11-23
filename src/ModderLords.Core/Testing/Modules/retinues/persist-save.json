@@ -1,0 +1,25 @@
+{
+  // First half of a Coop save and reload: a player's troop is renamed and equipped, then the server saves the world (FactionId now at save field 100).
+  "api": 2,
+  "name": "persist-save",
+  "mode": "coop",
+  "description": "Coop: a player's clan troop is renamed and equipped, and the server saves the world for retinues/persist-reload.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "server"},
+    {"id": "Retinues.health", "side": "client:1"},
+    {"id": "game.whoAmI", "side": "client:1", "as": "me"},
+    {"id": "hero.addGold", "side": "server", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "client:1"},
+    {"id": "retinues.giveFief", "side": "server", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "client:1", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.rename", "side": "client:1", "args": {"troop": "$troops.retinue", "name": "Harness Keeper"}},
+    {"id": "retinues.equip", "side": "client:1", "as": "equip", "args": {"troop": "$troops.retinue", "slot": "Head"}},
+    {"compare": "retinues.troop", "sides": ["server", "client:1"], "args": {"troop": "$troops.retinue", "expectedName": "Harness Keeper"}, "as": "before"},
+    {"id": "retinues.noErrors", "side": "server", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "client:1", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "server", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "client:1", "continueOnFail": true},
+    {"id": "coop.saveWorld", "side": "server", "as": "saved", "timeoutSeconds": 600, "args": {"world": "retinues-persist"}}
+  ]
+}

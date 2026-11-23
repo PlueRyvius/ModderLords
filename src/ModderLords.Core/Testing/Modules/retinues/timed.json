@@ -1,0 +1,26 @@
+{
+  // With TrainingTroopsTakesTime on, a skill point is staged, and trained by waiting in a fief with Retinues' town menu option. (Coop forces it off: retinues/doctrines checks the co-op rules.)
+  "api": 2,
+  "name": "timed",
+  "mode": "singleplayer",
+  "description": "With timed training on, a skill point waits until the party trains it in its fief, then lands.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "game.whoAmI", "side": "game", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "game"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "game", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.setOption", "side": "game", "args": {"option": "TrainingTroopsTakesTime", "value": "true"}},
+    {"id": "retinues.giveXp", "side": "game", "args": {"troop": "$troops.retinue", "amount": 5000}},
+    {"id": "retinues.skillUp", "side": "game", "args": {"troop": "$troops.retinue", "skill": "OneHanded", "staged": "true"}},
+    {"id": "retinues.staged", "side": "game", "args": {"troop": "$troops.retinue", "expected": 1}},
+    {"id": "retinues.toTown", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "settlement.enter", "side": "game", "args": {"town": "town_EN1"}},
+    {"id": "retinues.trainInTown", "side": "game", "timeoutSeconds": 400, "args": {"troop": "$troops.retinue", "skill": "OneHanded"}},
+    {"id": "retinues.staged", "side": "game", "args": {"troop": "$troops.retinue", "expected": 0}},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true}
+  ]
+}
