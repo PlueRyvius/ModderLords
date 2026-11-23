@@ -6,6 +6,8 @@ using System.Reflection;
 using ModderLords.Testing;
 using Retinues.Configuration;
 using Retinues.Doctrines;
+using Retinues.Features.Agents;
+using Retinues.Features.Unlocks;
 using Retinues.Features.Experience;
 using Retinues.Features.Staging;
 using Retinues.Game;
@@ -68,6 +70,11 @@ public static partial class Steps
         InGameTests.Register("retinues.volunteers", StepSide.Any, Volunteers);
         InGameTests.Register("retinues.addInfluence", StepSide.Server, AddInfluence);
         InGameTests.Register("retinues.retinueSource", StepSide.Client, RetinueSource);
+        InGameTests.Register("retinues.setRule", StepSide.Client, SetRule);
+        InGameTests.Register("retinues.rules", StepSide.Any, Rules);
+        InGameTests.Register("retinues.enemyRuler", StepSide.Server, EnemyRuler);
+        InGameTests.Register("retinues.rulerSecrets", StepSide.Client, RulerSecrets);
+        InGameTests.Register("retinues.purgeRefused", StepSide.Client, PurgeRefused);
     }
 
     // ---- kingdom -------------------------------------------------------------------------------------------
@@ -115,6 +122,135 @@ public static partial class Steps
             asked.AffirmativeAction?.Invoke();
         }
         ctx.Report("value", clan.Kingdom!.StringId);
+    }
+
+    // ---- equipment set rules ---------------------------------------------------------------------------------
+
+    // The equipment page's button for each rule, and the rule it flips.
+    private static readonly Dictionary<string, (string Method, PolicyToggleType Type)> RuleButtons = new()
+    {
+        ["field"] = ("ExecuteToggleEnableSetForFieldBattle", PolicyToggleType.FieldBattle),
+        ["naval"] = ("ExecuteToggleEnableSetForNavalBattle", PolicyToggleType.NavalBattle),
+        ["siegeDefense"] = ("ExecuteToggleEnableSetForSiegeDefense", PolicyToggleType.SiegeDefense),
+        ["siegeAssault"] = ("ExecuteToggleEnableSetForSiegeAssault", PolicyToggleType.SiegeAssault),
+        ["gender"] = ("ExecuteToggleGenderOverride", PolicyToggleType.GenderOverride),
+    };
+
+    /// <summary>
+    /// Player: on the equipment page, with <c>troop</c>'s set <c>index</c> shown, presses the button of one rule
+    /// (<c>rule</c>: field, naval, siegeDefense, siegeAssault or gender) and waits for it to flip. Retinues coop.4: the
+    /// flip stayed on the player's game, so the server kept the old rules and the next snapshot undid it.
+    /// </summary>
+    private static IEnumerable<StepWait?> SetRule(StepContext ctx)
+    {
+        var troop = TroopArg(ctx);
+        var index = ctx.ArgInt("index");
+        var rule = ctx.Arg("rule");
+        if (!RuleButtons.TryGetValue(rule, out var button)) throw new StepFailedException($"unknown rule '{rule}'");
+        ctx.Assert(index < troop.Loadout.Equipments.Count, $"{troop.StringId} has no set {index}");
+        var before = CombatAgentBehavior.IsEnabled(troop, index, button.Type);
+        foreach (var wait in OpenEditor(ctx, troop)) yield return wait;
+        Editor.SwitchScreen("Equipment");
+        Editor.SelectSet(troop.Loadout.Get(index));
+        yield return null;
+        Editor.Invoke("EquipmentScreen", button.Method);
+        yield return ctx.Settled(() => CombatAgentBehavior.IsEnabled(troop, index, button.Type), $"{troop.StringId} set {index} {rule}", !before, timeout: Sync);
+        Editor.SwitchScreen("Troop");
+        foreach (var wait in CloseEditor(ctx)) yield return wait;
+        ctx.Report("value", !before);
+    }
+
+    /// <summary>Every rule of each of <c>troop</c>'s sets ("0:F N SD SA G", - for off), settled, for compares.</summary>
+    private static IEnumerable<StepWait?> Rules(StepContext ctx)
+    {
+        var troop = TroopArg(ctx);
+        var rules = new[]
+        {
+            ("F", PolicyToggleType.FieldBattle), ("N", PolicyToggleType.NavalBattle), ("SD", PolicyToggleType.SiegeDefense),
+            ("SA", PolicyToggleType.SiegeAssault), ("G", PolicyToggleType.GenderOverride),
+        };
+        string Text() => string.Join(" | ", troop.Loadout.Equipments.Select((e, i) =>
+            $"{i}:" + string.Join(" ", rules.Select(r => CombatAgentBehavior.IsEnabled(troop, i, r.Item2) ? r.Item1 : "-"))));
+        yield return ctx.Settled(Text, $"{troop.StringId}'s set rules");
+        ctx.Dump("rules", Text());
+        ctx.Report("value", Text());
+    }
+
+    // ---- capturing a ruler -----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Server: a kingdom ruler whose culture still has a locked vassal reward item, at war with the hero's faction
+    /// (war is declared when needed), as after the hero beats them in battle. Reports the ruler's id (value) and one
+    /// locked item (item).
+    /// </summary>
+    private static IEnumerable<StepWait?> EnemyRuler(StepContext ctx)
+    {
+        var hero = HeroArg(ctx);
+        var kingdom = Kingdom.All
+            .Where(k => k != hero.MapFaction && k.Leader != null && k.Leader.IsAlive && !k.Leader.IsPrisoner && k.Culture?.VassalRewardItems != null)
+            .OrderBy(k => k.StringId)
+            .FirstOrDefault(k => k.Culture.VassalRewardItems.Any(i => i != null && !UnlocksBehavior.IsUnlocked(i.StringId)))
+            ?? throw new StepFailedException("no kingdom has a ruler with a locked vassal reward item");
+        if (!FactionManager.IsAtWarAgainstFaction(hero.MapFaction, kingdom))
+            DeclareWarAction.ApplyByDefault(hero.MapFaction, kingdom);
+        yield return ctx.Until(() => FactionManager.IsAtWarAgainstFaction(hero.MapFaction, kingdom), $"war with {kingdom.Name}", Sync);
+        var item = kingdom.Culture.VassalRewardItems.First(i => i != null && !UnlocksBehavior.IsUnlocked(i.StringId));
+        ctx.Log($"{kingdom.Leader.Name} rules {kingdom.Name}; {item.StringId} is locked");
+        ctx.Report("kingdom", kingdom.StringId);
+        ctx.Report("item", item.StringId);
+        ctx.Report("value", kingdom.Leader.StringId);
+    }
+
+    /// <summary>
+    /// Player: the captured-lord answer "Reveal the secrets of your most precious artifacts", for <c>ruler</c>. Checks
+    /// <c>item</c> gets unlocked and the ruler goes free. In Coop the player's game sends it to the server, as the
+    /// answer does; in single player it runs here. Retinues coop.4: the unlock stayed on the player's game and the
+    /// next snapshot undid it, and the ruler was neither taken nor freed.
+    /// </summary>
+    private static IEnumerable<StepWait?> RulerSecrets(StepContext ctx)
+    {
+        var ruler = Hero.AllAliveHeroes.FirstOrDefault(h => h.StringId == ctx.Arg("ruler")) ?? throw new StepFailedException($"no hero '{ctx.Arg("ruler")}'");
+        var item = ctx.Arg("item");
+        if (Fork.InSession)
+            Fork.Relay("rulerSecrets", ruler.StringId);
+        else
+        {
+            var reveal = typeof(Player).Assembly.GetType("Retinues.Features.Unlocks.Patches.VassalRewardSecretsPatch", false)
+                ?.GetMethod("RevealSecrets", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new StepFailedException("this Retinues has no VassalRewardSecretsPatch.RevealSecrets");
+            reveal.Invoke(null, new object[] { ruler, PartyBase.MainParty, false });
+        }
+        yield return ctx.Settled(() => UnlocksBehavior.IsUnlocked(item), $"whether {item} is unlocked", true, timeout: Sync);
+        yield return ctx.Settled(() => ruler.IsPrisoner, $"whether {ruler.Name} is a prisoner", false, timeout: Sync);
+        ctx.Report("value", UnlocksBehavior.IsUnlocked(item));
+    }
+
+    // ---- purge -----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Player, Coop: Retinues' purge (MCM, "Purge Custom Troop Data") is refused, and <c>troop</c> is still there.
+    /// Retinues coop.4: it ran on the player's game and broke that game's copy of every troop.
+    /// </summary>
+    private static IEnumerable<StepWait?> PurgeRefused(StepContext ctx)
+    {
+        var troop = TroopArg(ctx);
+        var run = typeof(Player).Assembly.GetType("Retinues.Safety.Uninstall.UninstallCleanup", false)
+            ?.GetMethod("Run", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new StepFailedException("this Retinues has no UninstallCleanup.Run");
+        string? refused = null;
+        try
+        {
+            run.Invoke(null, new object[] { false });
+        }
+        catch (TargetInvocationException e) when (e.InnerException is InvalidOperationException inner)
+        {
+            refused = inner.Message;
+        }
+        ctx.Assert(refused != null && refused.IndexOf("co-op", StringComparison.OrdinalIgnoreCase) >= 0,
+            $"the purge was not refused for co-op ({refused ?? "it ran"})");
+        yield return null;
+        ctx.Assert(troop.Base != null && troop.IsCustom, $"{troop.StringId} is gone after the refused purge");
+        ctx.Report("value", refused!);
     }
 
     // ---- appearance ----------------------------------------------------------------------------------------

@@ -763,6 +763,15 @@ public static partial class Steps
         public static bool IsClient => Read(State, "IsClient");
         public static bool Ready => Read(Bridge, "Ready");
 
+        /// <summary>Sends a troop edit to the server, as the editor's buttons do on a player's game.</summary>
+        public static void Relay(string op, params object[] args)
+        {
+            var relay = Bridge?.GetMethod("Relay", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new StepFailedException("this Retinues has no CoopBridge.Relay");
+            if (relay.Invoke(null, new object[] { op, args }) is not true)
+                throw new StepFailedException($"CoopBridge.Relay did not send '{op}' (not a player's game in a session?)");
+        }
+
         public static void SendAppearanceIfChanged(WCharacter troop) =>
             Bridge?.GetMethod("SendAppearanceIfChanged", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, new object[] { troop });
 
@@ -789,6 +798,10 @@ public static partial class Steps
         /// <summary>Picks a troop, as clicking it in the editor's troop list does.</summary>
         public static void SelectTroop(WCharacter troop) =>
             Retinues.GetType("Retinues.GUI.Editor.State", true)!.GetMethod("UpdateTroop")!.Invoke(null, new object[] { troop });
+
+        /// <summary>Shows one of the troop's equipment sets, as its arrows on the equipment page do.</summary>
+        public static void SelectSet(WEquipment set) =>
+            Retinues.GetType("Retinues.GUI.Editor.State", true)!.GetMethod("UpdateEquipment")!.Invoke(null, new object[] { set });
 
         public static void SwitchScreen(string screen)
         {

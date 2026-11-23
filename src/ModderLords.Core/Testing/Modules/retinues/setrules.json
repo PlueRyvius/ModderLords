@@ -1,0 +1,30 @@
+{
+  // Equipment set rules: which battles a set is used in, and its gender override. In Coop the editor's buttons go through the server, which keeps the rules and sends them to every player's game, where battles spawn troops by them.
+  "api": 2,
+  "name": "setrules",
+  "mode": "both",
+  "description": "A troop's second set is kept out of field battles and siege defence and gets a gender override, from the equipment page's buttons; both sides then hold the same rules.",
+  "requires": [{"id": "Retinues"}],
+  "steps": [
+    {"id": "Retinues.health", "side": "game"},
+    {"id": "Retinues.health", "side": "player", "mode": "coop"},
+    {"id": "game.whoAmI", "side": "player", "as": "me"},
+    {"id": "hero.addGold", "side": "game", "args": {"heroName": "$me.heroName", "amount": 20000}},
+    {"id": "retinues.ready", "side": "player"},
+    {"id": "retinues.giveFief", "side": "game", "args": {"heroName": "$me.heroName", "town": "town_EN1"}},
+    {"id": "retinues.ensureTroops", "side": "player", "as": "troops", "args": {"regulars": "true"}},
+    {"id": "retinues.createSet", "side": "player", "as": "newSet", "args": {"troop": "$troops.retinue", "copy": "true"}},
+    {"id": "retinues.rules", "side": "player", "as": "before", "args": {"troop": "$troops.retinue"}},
+    {"id": "retinues.setRule", "side": "player", "args": {"troop": "$troops.retinue", "index": "$newSet.index", "rule": "field"}},
+    {"id": "retinues.setRule", "side": "player", "args": {"troop": "$troops.retinue", "index": "$newSet.index", "rule": "siegeDefense"}},
+    {"id": "retinues.setRule", "side": "player", "args": {"troop": "$troops.retinue", "index": "$newSet.index", "rule": "gender"}},
+    {"id": "retinues.rules", "side": "player", "as": "after", "args": {"troop": "$troops.retinue"}},
+    {"compare": "retinues.rules", "sides": ["game", "player"], "args": {"troop": "$troops.retinue"}, "as": "sides", "mode": "coop"},
+    {"id": "retinues.setRule", "side": "player", "args": {"troop": "$troops.retinue", "index": "$newSet.index", "rule": "field"}},
+    {"compare": "retinues.rules", "sides": ["game", "player"], "args": {"troop": "$troops.retinue"}, "as": "backOn", "mode": "coop"},
+    {"id": "retinues.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "retinues.noErrors", "side": "player", "mode": "coop", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "game", "continueOnFail": true},
+    {"id": "game.noErrors", "side": "player", "mode": "coop", "continueOnFail": true}
+  ]
+}
