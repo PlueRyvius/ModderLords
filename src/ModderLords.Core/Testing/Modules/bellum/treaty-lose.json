@@ -1,0 +1,26 @@
+{
+  // The player's realm is losing. Before Bellum puts a treaty forward it asks whether each realm's council would take it,
+  // except the player's own realm, whose player decides. On a dedicated server the player's realm was judged as a
+  // lord's, by Bellum's AI reading of the player's own hero, which refuses to lose: the treaty never reached the player.
+  // The module's draft gate leaves that realm to its player (TreatyDraftGate). Fails without it at bellum.queueTreaty.
+  "api": 2,
+  "name": "treaty-lose",
+  "mode": "coop",
+  "description": "The player's realm is losing a long war: Bellum's treaty still reaches the realm as a peace vote, the ruler votes yes, and the war ends on both sides.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.declareWar", "side": "server", "as": "enemy", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "war" } },
+    { "id": "bellum.passDays", "side": "server", "timeoutSeconds": 480, "args": { "days": "1" } },
+    { "id": "bellum.queueTreaty", "side": "server", "timeoutSeconds": 90, "args": { "a": "$realm.value", "b": "$enemy.value", "battleScore": "-100" } },
+    { "id": "bellum.awaitPeaceVote", "side": "server", "timeoutSeconds": 660, "args": { "realm": "$realm.value", "enemy": "$enemy.value" } },
+    { "id": "bellum.treaties", "side": "server", "continueOnFail": true },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": " for war |Treaty draft gate: on the server" } },
+    { "id": "bellum.voteForPeace", "side": "client:1", "timeoutSeconds": 90, "args": { "enemy": "$enemy.value" } },
+    { "id": "bellum.war", "side": "server", "timeoutSeconds": 240, "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "ended", "timeoutSeconds": "180" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "ended" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

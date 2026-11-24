@@ -1,0 +1,25 @@
+{
+  // A treaty Bellum drafts for a realm a player rules is put to that realm as a peace vote (TreatyVote). On a dedicated
+  // server no realm is "the player's", so without the module Bellum's AI councils decided it; a player's clan holds no
+  // council seat, so a realm of players refused every draft.
+  "api": 2,
+  "name": "treaty-vote",
+  "mode": "coop",
+  "description": "A Bellum treaty for the player's realm arrives as a peace vote; the ruler votes yes, Bellum signs its treaty on the server, and the war ends on both sides.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.declareWar", "side": "server", "as": "enemy", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "war" } },
+    { "id": "bellum.passDays", "side": "server", "timeoutSeconds": 480, "args": { "days": "1" } },
+    { "id": "bellum.queueTreaty", "side": "server", "timeoutSeconds": 90, "args": { "a": "$realm.value", "b": "$enemy.value" } },
+    { "id": "bellum.awaitPeaceVote", "side": "server", "timeoutSeconds": 660, "args": { "realm": "$realm.value", "enemy": "$enemy.value" } },
+    { "id": "bellum.treaties", "side": "server", "continueOnFail": true },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": " for war " } },
+    { "id": "bellum.voteForPeace", "side": "client:1", "timeoutSeconds": 90, "args": { "enemy": "$enemy.value" } },
+    { "id": "bellum.war", "side": "server", "timeoutSeconds": 240, "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "ended", "timeoutSeconds": "180" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "ended" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

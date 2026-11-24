@@ -1,0 +1,39 @@
+{
+  // Bellum's politics are the server's: on a player's PC the compat module keeps Bellum's ticks from running and its calls
+  // from reaching the server, lets Coop's diplomacy through Bellum's client-kingdom rules, and reads relations as Coop
+  // sends them (docs/BELLUM-COOP-COVERAGE.md, X1 to X7).
+  // Regression checks that fail without the module: a court vote Bellum files on the player's PC reaches the server
+  // (bellum.policyVote), Bellum founds a kingdom on the player's PC (bellum.foundKingdom), a client kingdom at war shows
+  // at peace on the player's PC (bellum.war), and Bellum's ticks run there (bellum.skipped).
+  "api": 2,
+  "name": "server-decides",
+  "mode": "coop",
+  "description": "Bellum's politics run on the server only: a player's PC files no votes, founds no kingdoms, shows Bellum's dialogue lines to nobody, sees a client kingdom's war and the server's relations, and skips Bellum's ticks.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "Server decides: on a player's PC|Player actions: on a player's PC|Server screens: the server runs" } },
+    { "id": "bellum.compat", "side": "client:1", "args": { "expect": "Server decides: on a player's PC|Player actions: on a player's PC|Server screens: the server runs" } },
+
+    { "id": "bellum.dialogLines", "side": "client:1" },
+    { "id": "bellum.foundKingdom", "side": "client:1" },
+
+    { "id": "bellum.modDecision", "side": "client:1", "as": "court" },
+    { "id": "bellum.policyVote", "side": "server", "args": { "kingdom": "$court.value", "policy": "$court.policy", "holdSeconds": "20", "expect": "none" } },
+
+    { "id": "bellum.changeRelation", "side": "server", "as": "rel" },
+    { "compare": "bellum.relation", "sides": ["server", "client:1"], "args": { "a": "$rel.a", "b": "$rel.b" } },
+
+    { "id": "bellum.pickKingdoms", "side": "server", "as": "realms" },
+    { "id": "bellum.makeClient", "side": "server", "args": { "client": "$realms.value", "suzerain": "$realms.second" } },
+    { "id": "bellum.declareWar", "side": "server", "args": { "kingdom": "$realms.second", "target": "$realms.third" } },
+    { "id": "bellum.war", "side": "server", "args": { "a": "$realms.value", "b": "$realms.third", "expect": "war" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realms.value", "b": "$realms.third", "expect": "war" } },
+
+    { "id": "bellum.passDays", "side": "server", "timeoutSeconds": 480, "args": { "days": "1" } },
+    { "id": "bellum.skipped", "side": "client:1", "args": { "expect": "FactionManagerBehavior.OnDailyTick|IdeologyBehavior.OnDailyTick|CourtAgendaBehavior.Tick|ClaimFeudBehavior.OnDailyTick|ForeignTreatyBehavior.OnDailyTick" } },
+    { "compare": "bellum.kingdoms", "sides": ["server", "client:1"] },
+
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

@@ -16,16 +16,19 @@ namespace BellumCivileCoopCompat
     // every PC, so a PC's own copy of a rebellion or treaty changed only that PC.
     //
     // Only while a co-op session is running:
-    // - Both sides: Bellum's council caches are locked so Coop's parallel party tick can read them.
-    // - Players' PCs: Bellum founds no kingdoms (the server's arrive through Coop), and a kingdom
-    //   made there anyway is taken back out. Bellum's Peace Parley is off; peace is the kingdom vote.
-    //   Bellum's queue that ends civil wars and feuds does nothing there.
-    // - Server: a peace voted in a players' kingdom gets past Bellum's guard, a treaty Bellum
-    //   drafts for a realm a connected player rules is put to that realm as a kingdom vote, and
-    //   Bellum's queue that ends civil wars and feuds runs (it waited for a map screen).
+    // - Both sides: Bellum's council and title-name caches are locked so Coop's parallel party tick can read them.
+    // - Players' PCs: Bellum's politics are the server's. Its ticks don't run there, nothing it does there reaches the
+    //   server (decisions, prisoner releases, alliances, new clans), Coop's replays of the server's diplomacy get past
+    //   its client-kingdom rules, and relations read as Coop sends them. Bellum founds no kingdoms there. Its Peace
+    //   Parley is off (peace is the kingdom vote), and so are its own player actions and dialogue lines; vanilla's
+    //   proposals go to the server as in any co-op game.
+    // - Server: a peace voted in a players' kingdom gets past Bellum's guard, a treaty Bellum drafts for a realm a
+    //   connected player rules is put to that realm as a kingdom vote (and is no longer dropped beforehand because
+    //   Bellum's AI thinks the player's hero would refuse it), and Bellum's processors that wait for a map
+    //   screen (ending civil wars and feuds, retiring landless realms, disputed elections) run.
     //
-    // Not covered yet: what Bellum 1.5 added after 1.3 (defensive and hostage pacts, court agendas,
-    // succession, lordships, voluntary pacts). Those still run on every PC as in single player.
+    // Next (docs/BELLUM-COOP-COVERAGE.md): Bellum's AI keeps away from players' clans on the server, then players
+    // get Bellum's own actions back, carried out by the server.
     // Single player and the main menu are untouched. No network messages of its own: everything
     // runs on the server and reaches players through Coop's own sync.
     public sealed class SubModule : MBSubModuleBase
@@ -55,7 +58,10 @@ namespace BellumCivileCoopCompat
 
             var harmony = new Harmony(HarmonyId);
             foreach (var install in new Action<Harmony>[]
-                     { ThreadSafety.Install, ClientKingdoms.Install, PeaceInCoop.Install, VotePeace.Install, TreatyVote.Install, InternalPeace.Install })
+                     {
+                         ThreadSafety.Install, ClientKingdoms.Install, PeaceInCoop.Install, VotePeace.Install, TreatyVote.Install, InternalPeace.Install,
+                         ServerDecides.Install, PlayerActions.Install, ServerScreens.Install, TreatyDraftGate.Install,
+                     })
             {
                 try { install(harmony); }
                 catch (Exception ex) { Log(install.Method.DeclaringType?.Name + " not installed: " + ex.GetBaseException().Message); }
