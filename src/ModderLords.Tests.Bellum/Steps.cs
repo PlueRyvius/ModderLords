@@ -20,8 +20,8 @@ namespace ModderLords.Tests.Bellum;
 /// </summary>
 public static class Steps
 {
-    private static readonly TimeSpan Sync = TimeSpan.FromSeconds(30);
-    private const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    internal static readonly TimeSpan Sync = TimeSpan.FromSeconds(30);
+    internal const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
 
     public static void Register()
     {
@@ -34,6 +34,7 @@ public static class Steps
         InGameTests.Register("bellum.addInfluence", StepSide.Server, AddInfluence);
         InGameTests.Register("bellum.proposePeace", StepSide.Client, ProposePeace);
         InGameTests.Register("bellum.voteForPeace", StepSide.Client, VoteForPeace);
+        CoopSteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------
@@ -277,13 +278,13 @@ public static class Steps
 
     // ---- helpers ---------------------------------------------------------------------------------------------------
 
-    private static Kingdom? KingdomById(string id) => Kingdom.All.FirstOrDefault(k => k != null && k.StringId == id);
+    internal static Kingdom? KingdomById(string id) => Kingdom.All.FirstOrDefault(k => k != null && k.StringId == id);
 
     // This game's own player clan's realm. Enough for the suite: it runs on a fresh world, where players join no kingdom
     // until bellum.makeRuler, and that realm is named to every step that needs it.
-    private static bool HasPlayers(Kingdom kingdom) => Clan.PlayerClan != null && kingdom.Clans.Contains(Clan.PlayerClan);
+    internal static bool HasPlayers(Kingdom kingdom) => Clan.PlayerClan != null && kingdom.Clans.Contains(Clan.PlayerClan);
 
-    private static Type? FindType(string name)
+    internal static Type? FindType(string name)
     {
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
@@ -300,10 +301,10 @@ public static class Steps
     }
 
     // Campaign time on the server; in Coop through Coop's own time command (setting the mode here does not reach Coop's clock).
-    private static void SetTime(StepContext ctx, bool play)
+    internal static void SetTime(StepContext ctx, bool play, bool fast = false)
     {
         if (CommandLineFunctionality.HasFunctionForCommand("coop.debug.set_time_mode"))
-            ctx.Log(CommandLineFunctionality.CallFunction("coop.debug.set_time_mode", new List<string> { play ? "Play_1x" : "Pause" }, out _));
+            ctx.Log(CommandLineFunctionality.CallFunction("coop.debug.set_time_mode", new List<string> { play ? (fast ? "Play_2x" : "Play_1x") : "Pause" }, out _));
         else
             Campaign.Current.TimeControlMode = play ? CampaignTimeControlMode.UnstoppableFastForward : CampaignTimeControlMode.Stop;
     }

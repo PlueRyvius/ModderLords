@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.1.0 (by ModderLords)
+Bellum Civile Coop Compat v1.2.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -9,26 +9,39 @@ only changed that PC (empty kingdoms, treaties nobody else saw, peace votes
 that kept coming back).
 
 Only while a co-op game is running (single player is untouched):
-- Everywhere: Bellum's council lookups are made safe for Coop's parallel
-  party updates, so parties stop skipping moves.
-- Players' PCs: Bellum doesn't found kingdoms (the server's show up through
-  Coop), and its Peace Parley is off. Peace for your realm is the kingdom
-  vote, like vanilla. Civil wars and feuds are ended by the server.
+- Everywhere: Bellum's council and title-name lookups are made safe for
+  Coop's parallel party updates, so parties stop skipping moves.
+- Players' PCs: Bellum's politics are the server's. Bellum's daily and
+  hourly politics don't run on a player's PC, and nothing Bellum does there
+  reaches the server (votes, prisoner releases, alliances, new clans). War
+  and peace of client kingdoms show as the server has them, and relations
+  are the server's. Bellum doesn't found kingdoms there (the server's show
+  up through Coop).
+- Players' PCs: Bellum's Peace Parley is off; peace for your realm is the
+  kingdom vote, like vanilla. Bellum's own actions (factions, ultimatums,
+  feud petitions, crown actions, the privy council, titles, succession law)
+  say that in co-op the server decides, and Bellum's dialogue lines don't
+  show. Vanilla's votes, proposals, diplomacy and marriage work as in any
+  co-op game.
 - Server: a peace your kingdom votes for isn't blocked by Bellum any more
   (unless an ally's call to arms forbids a separate peace). When Bellum
   drafts a treaty for a realm a player rules, that realm gets a peace vote
   with the treaty's tribute on it. If the vote passes, Bellum signs its
   treaty with all its terms; if not, the war goes on and the realm isn't
   asked again about that war for 14 days. A draft Bellum would cancel anyway
-  is never put to a vote.
-- Server: civil wars, rival claimants' wars and claim feuds end. Bellum 1.5
-  ends them only while a map screen is open, and a dedicated server has none.
+  is never put to a vote. Bellum no longer drops a treaty because it thinks
+  your own lord wouldn't take it: you decide, as in single player.
+- Server: civil wars, rival claimants' wars and claim feuds end, landless
+  realms retire and disputed elections go on. Bellum 1.5 does those only
+  while a map screen is open, and a dedicated server has none.
 
-What you lose: writing a treaty's terms yourself in the parley screen.
+What you lose: writing a treaty's terms yourself in the parley screen, and
+for now Bellum's own player actions (above). What you see in Bellum's own
+screens (factions, titles, councils) is what the server had when you
+joined.
 
-Not covered yet: what Bellum 1.5 added after 1.3 (defensive and hostage
-pacts, court agendas, succession, lordships, voluntary pacts). They run on
-every PC as in single player, and may differ between players.
+Coming next: Bellum's AI leaves players' clans alone on the server, then
+Bellum's own actions come back for players, carried out by the server.
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).

@@ -124,6 +124,8 @@ namespace BellumCivileCoopCompat
             new Target(Patches + "RulerPeaceOfferParleyPatch", "Prefix", BellumPeaceAnswer.RunOriginal),
             new Target(Patches + "KingdomPeaceVoteNotificationParleyPatch", "Prefix", BellumPeaceAnswer.RunOriginal),
             new Target(Patches + "KingdomPeaceDecisionScreenFallbackPatch", "Prefix", BellumPeaceAnswer.RunOriginal),
+            // With the Diplomacy mod, its direct peace button: Bellum opened its own terms screen or parley there.
+            new Target(Patches + "DiplomacyDirectPeaceCompatibilityPatch", "Prefix", BellumPeaceAnswer.RunOriginal),
             // Bellum 1.5 drops a peace vote while an ally's call to arms forbids peace. The server's Bellum decides that;
             // a player's PC dropping a vote the server sent would leave it there and nowhere else.
             new Target(Patches + "KingdomPeaceDecisionAddedParleyCleanupPatch", "Prefix", BellumPeaceAnswer.RunOriginal),

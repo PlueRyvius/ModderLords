@@ -129,7 +129,7 @@ namespace BellumCivileCoopCompat
             return replacement;
         }
 
-        private static GameState ActiveState(GameStateManager states)
+        internal static GameState ActiveState(GameStateManager states)
         {
             var real = states?.ActiveState;
             if (!Coop.OnServer || real is MapState)

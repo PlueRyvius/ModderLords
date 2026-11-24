@@ -27,6 +27,8 @@ namespace BellumCivileCoopCompat
             {
                 "_aspectIndexDirty", "_nextAspectIndexExpiryDay", "_aspectMultiplierByLookup", "_aspectMultiplierByKey", "_aspectExpiryDayByKey",
             },
+            // Hero.Name with a feudal title: the cache is filled inside the name getter, which Coop may call off the main thread.
+            ["BellumCivile.Patches.FeudalTitleHeroNamePatch"] = new[] { "NameCache" },
         };
 
         private static readonly object Gate = new object();

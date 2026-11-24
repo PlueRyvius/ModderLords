@@ -1,7 +1,7 @@
 {
   "id": "bellum",
   "title": "Bellum Civile",
-  "description": "Bellum Civile with its Coop compat module (coop-compat/BellumCivileCoopCompat) in Coop: every part of the module finds what it patches in this Bellum, a civil war is ended by the server and the players see it end, and a peace a player's realm proposes gets past Bellum's guard on the server.",
+  "description": "Bellum Civile with its Coop compat module (coop-compat/BellumCivileCoopCompat) in Coop: every part of the module finds what it patches in this Bellum; the server ends civil wars and claim feuds and the players see them end; a player's realm votes on peace and on Bellum's treaties, held to an ally's call to arms; and Bellum's politics run on the server only, so a player's PC files no votes, founds no kingdoms and follows the server's diplomacy and relations.",
   "requires": [ { "id": "BellumCivile" }, { "id": "BellumCivile.CoopCompat" } ],
   "steps": "ModderLords.Tests.Bellum.dll"
 }

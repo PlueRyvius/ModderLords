@@ -1,0 +1,17 @@
+{
+  // A claim feud comes to war and ends on the server, and the player sees both. Bellum ends a feud's war from a queue it
+  // ran only while a map screen was open, which a dedicated server never has (InternalPeace).
+  "api": 2,
+  "name": "feud",
+  "mode": "coop",
+  "description": "A claim feud started on the server comes to war, the server ends it, and the player sees the war start and end.",
+  "steps": [
+    { "id": "bellum.startFeud", "side": "server", "as": "feud", "timeoutSeconds": 420 },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$feud.value", "b": "$feud.other", "expect": "war" } },
+    { "compare": "bellum.kingdoms", "sides": ["server", "client:1"] },
+    { "id": "bellum.endInternalWar", "side": "server", "timeoutSeconds": 150, "args": { "a": "$feud.value", "b": "$feud.other" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$feud.value", "b": "$feud.other", "expect": "ended" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

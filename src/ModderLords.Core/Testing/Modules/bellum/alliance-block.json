@@ -1,0 +1,23 @@
+{
+  // An ally's call to arms forbids a separate peace (Bellum's AlliancePeaceRestriction). A peace the player's realm votes
+  // for gets past Bellum's guard on the server (VotePeace), except this one: the war goes on, on both sides.
+  "api": 2,
+  "name": "alliance-block",
+  "mode": "coop",
+  "description": "The player's realm, called to arms by an ally, votes for a separate peace: the server keeps the war, and the player sees it go on.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.pickKingdoms", "side": "server", "as": "realms" },
+    { "id": "bellum.callToArms", "side": "server", "args": { "caller": "$realms.value", "called": "$realm.value", "enemy": "$realms.second" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realm.value", "b": "$realms.second", "expect": "war" } },
+    { "id": "bellum.addInfluence", "side": "server", "args": { "heroName": "$me.heroName", "amount": "1000" } },
+    { "id": "bellum.proposePeace", "side": "client:1", "args": { "enemy": "$realms.second" } },
+    { "id": "bellum.voteForPeace", "side": "client:1", "args": { "enemy": "$realms.second" } },
+    { "id": "bellum.compat", "side": "server", "timeoutSeconds": 240, "args": { "expect": "is left to Bellum, which refuses it" } },
+    { "id": "bellum.war", "side": "server", "args": { "a": "$realm.value", "b": "$realms.second", "expect": "war" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realm.value", "b": "$realms.second", "expect": "war" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
