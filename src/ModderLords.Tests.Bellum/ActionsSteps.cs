@@ -91,7 +91,7 @@ public static class ActionsSteps
     /// <summary>Server: waits until the module carried out <c>expect</c> for a player ("RealmLawBehavior.TryApplyPlayerLaw done").</summary>
     private static IEnumerable<StepWait?> Carried(StepContext ctx)
     {
-        var field = FindType("BellumCivileCoopCompat.RemoteCalls")?.GetField("Carried", Any) ?? throw new StepFailedException("the compat module has no RemoteCalls (older than 1.5.0)");
+        var field = FindType("BellumCivileCoopCompat.RemoteCalls")?.GetField("Carried", Any) ?? throw new StepFailedException("the compat module has no RemoteCalls (older than 1.6.0)");
         var carried = (List<string>)field.GetValue(null)!;
         bool Seen() { lock (carried) return carried.Contains(ctx.Arg("expect")); }
         yield return ctx.Until(Seen, $"the server to carry out {ctx.Arg("expect")}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 60)));

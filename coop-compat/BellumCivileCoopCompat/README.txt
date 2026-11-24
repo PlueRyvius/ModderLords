@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.5.0 (by ModderLords)
+Bellum Civile Coop Compat v1.6.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -75,8 +75,15 @@ joined.
   Not answered in 10 minutes: nothing happens, except that a feud ruling
   is accepted and a feud you don't judge is judged as a lord would.
 
-Coming next: Bellum's other screens (claim feuds, titles, succession law,
-the privy council) and votes on Bellum's own decisions.
+- Bellum's own actions work in co-op (new in 1.6.0): titles (claim,
+  usurp, renounce, revoke, grant, dissolve, rename, set service,
+  challenge), lordships, claim feud petitions, succession law, your vote
+  in an elective succession, and dismissing a councillor. Bellum's own
+  screens and questions show on your PC; the server carries out the
+  action as you, with Bellum's checks and costs.
+
+Coming next: crown actions, council proposals, title and marriage
+reviews, forming a title, and votes on Bellum's own decisions.
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).
