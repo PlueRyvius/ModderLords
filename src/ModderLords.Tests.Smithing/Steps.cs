@@ -477,7 +477,7 @@ public static class Steps
     private static IEnumerable<StepWait?> PrepareFor(StepContext ctx)
     {
         var name = ctx.Arg("heroName");
-        var found = Hero.AllAliveHeroes.Where(h => h.Name?.ToString() == name).ToList();
+        var found = Hero.AllAliveHeroes.Where(h => HeroNames.Is(h, name)).ToList();
         ctx.Assert(found.Count == 1, found.Count == 0 ? $"no hero named '{name}' on the server" : $"{found.Count} heroes are named '{name}'");
         var hero = found[0];
         var party = hero.PartyBelongedTo;
