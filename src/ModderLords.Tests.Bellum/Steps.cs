@@ -35,6 +35,7 @@ public static class Steps
         InGameTests.Register("bellum.proposePeace", StepSide.Client, ProposePeace);
         InGameTests.Register("bellum.voteForPeace", StepSide.Client, VoteForPeace);
         CoopSteps.Register();
+        PlayersSteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------

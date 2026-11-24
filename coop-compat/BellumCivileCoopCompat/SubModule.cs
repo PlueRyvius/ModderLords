@@ -27,8 +27,11 @@ namespace BellumCivileCoopCompat
     //   Bellum's AI thinks the player's hero would refuse it), and Bellum's processors that wait for a map
     //   screen (ending civil wars and feuds, retiring landless realms, disputed elections) run.
     //
-    // Next (docs/BELLUM-COOP-COVERAGE.md): Bellum's AI keeps away from players' clans on the server, then players
-    // get Bellum's own actions back, carried out by the server.
+    // - Server: Bellum's AI leaves real players' clans, heroes and realms alone (no ultimatum, treason purge, marriage,
+    //   regency, partition, pact, espionage, feud or court business decided for them), and a ruler's death is settled
+    //   once, by Bellum's succession law, instead of Coop's random ruling clan and king vote.
+    //
+    // Next (docs/BELLUM-COOP-COVERAGE.md, stage 3): players get Bellum's own actions back, carried out by the server.
     // Single player and the main menu are untouched. No network messages of its own: everything
     // runs on the server and reaches players through Coop's own sync.
     public sealed class SubModule : MBSubModuleBase
@@ -61,6 +64,7 @@ namespace BellumCivileCoopCompat
                      {
                          ThreadSafety.Install, ClientKingdoms.Install, PeaceInCoop.Install, VotePeace.Install, TreatyVote.Install, InternalPeace.Install,
                          ServerDecides.Install, PlayerActions.Install, ServerScreens.Install, TreatyDraftGate.Install,
+                         PlayersNotAi.Install, CrownAccession.Install,
                      })
             {
                 try { install(harmony); }
@@ -80,6 +84,7 @@ namespace BellumCivileCoopCompat
             {
                 if (Coop.OnPlayerPc) ClientKingdoms.Tick();
                 if (Coop.OnServer) TreatyVote.Tick();
+                CrownAccession.TryHookCoop();
             }
             catch (Exception ex) { Log("Tick failed: " + ex.GetBaseException().Message); }
         }
