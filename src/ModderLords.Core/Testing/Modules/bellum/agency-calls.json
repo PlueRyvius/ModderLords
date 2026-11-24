@@ -1,0 +1,107 @@
+{
+  // A call to a civil-war side (Calls, docs/BELLUM-COOP-COVERAGE.md stage 3, A1). Bellum asks "the player" whether to join a rebellion
+  // they belong to; on the server that was the placeholder, so nobody was asked and the player was swept along. Here the
+  // player is in the faction, the ruler refuses its ultimatum, and the server asks the player, who joins.
+  "api": 2,
+  "name": "agency-calls",
+  "mode": "coop",
+  "description": "A rebellion rises in the player's realm while the player is in the rebel faction: the server asks the player whether to join, the player answers yes, and their clan is in the rebel realm on both sides.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.answerSeconds",
+      "side": "server",
+      "args": {
+        "seconds": "180"
+      }
+    },
+    {
+      "id": "bellum.factionIn",
+      "side": "server",
+      "as": "f",
+      "args": {
+        "kingdom": "$q.value",
+        "memberHero": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.refuseUltimatum",
+      "side": "server",
+      "as": "r",
+      "args": {
+        "kingdom": "$q.value",
+        "leader": "$f.leader"
+      }
+    },
+    {
+      "id": "bellum.promptShown",
+      "side": "client:1",
+      "as": "p"
+    },
+    {
+      "id": "bellum.answer",
+      "side": "client:1",
+      "args": {
+        "id": "$p.value",
+        "answer": "yes"
+      }
+    },
+    {
+      "id": "bellum.clanKingdom",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "expect": "$r.rebels"
+      }
+    },
+    {
+      "id": "bellum.clanKingdom",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "expect": "$r.rebels"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "answered yes to a call to a civil-war side"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

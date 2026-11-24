@@ -32,6 +32,14 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.FactionManagerBehavior",
             "BellumCivile.Behaviors.ClaimFeudBehavior",
             "BellumCivile.Behaviors.FeudalTitleBehavior",
+            "BellumCivile.Behaviors.FeudalClaimFabricationBehavior",
+            "BellumCivile.Behaviors.LordshipBehavior",
+            "BellumCivile.Behaviors.RealmLawBehavior",
+            "BellumCivile.Behaviors.ElectiveSuccessionBehavior",
+            "BellumCivile.Behaviors.PrivyCouncilBehavior",
+            "BellumCivile.Behaviors.SuccessionChallengeBehavior",
+            "BellumCivile.Behaviors.CourtAgendaBehavior",
+            "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior",
         };
 
         private const int Chunk = 24 * 1024;
@@ -156,6 +164,28 @@ namespace BellumCivileCoopCompat
             }
         }
 
+        /// <summary>One object (a kingdom decision, say) in the same encoding: its saveable fields, game objects by id.</summary>
+        public static byte[] EncodeObject(object value)
+        {
+            using (var memory = new MemoryStream())
+            {
+                using (var writer = new BinaryWriter(memory))
+                    new Codec().Write(writer, value);
+                return memory.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Reads an object from <see cref="EncodeObject"/>. Objects are built with their own parameterless constructor where
+        /// they have one, so fields the encoding doesn't carry keep their usual start values.
+        /// </summary>
+        public static object DecodeObject(byte[] bytes)
+        {
+            using (var memory = new MemoryStream(bytes ?? new byte[0]))
+            using (var reader = new BinaryReader(memory))
+                return memory.Length == 0 ? null : new Codec { UseConstructors = true }.Read(reader);
+        }
+
         public static void Decode(CampaignBehaviorBase behaviour, byte[] bytes)
         {
             var store = new Store(saving: false);
@@ -206,7 +236,29 @@ namespace BellumCivileCoopCompat
 
         private sealed class Codec
         {
-            private enum Tag : byte { Null, Bool, Int, Long, Float, Double, String, Enum, GameObject, Ref, List, Dict, Set, Array, Object, Struct, Byte, Short, UInt, ULong }
+            private enum Tag : byte { Null, Bool, Int, Long, Float, Double, String, Enum, GameObject, Ref, List, Dict, Set, Array, Object, Struct, Byte, Short, UInt, ULong, PlayerClanId, PlayerHeroId }
+
+            // A player's clan and hero ids differ between PCs, and Bellum keeps many as plain strings (a title's holder, a
+            // feud's sides): on the server those strings go as the player's name, and a PC reads its own id for that name.
+            private Dictionary<string, string> _playerClans, _playerHeroes;
+
+            private void PlayerIds()
+            {
+                if (_playerClans != null) return;
+                _playerClans = new Dictionary<string, string>();
+                _playerHeroes = new Dictionary<string, string>();
+                if (!Coop.OnServer) return;
+                foreach (var hero in Hero.AllAliveHeroes.Where(Coop.IsPlayerHero))
+                {
+                    var name = hero.Name?.ToString() ?? "";
+                    if (name.Length == 0) continue;
+                    _playerHeroes[hero.StringId] = name;
+                    if (hero.Clan != null && hero.Clan.Leader == hero) _playerClans[hero.Clan.StringId] = name;
+                }
+            }
+
+            /// <summary>Build objects with their parameterless constructor where they have one (else uninitialized).</summary>
+            public bool UseConstructors;
 
             private readonly Dictionary<object, int> _written = new Dictionary<object, int>(ReferenceComparer.Instance);
             private readonly List<object> _read = new List<object>();
@@ -223,7 +275,11 @@ namespace BellumCivileCoopCompat
                     case long l: w.Write((byte)Tag.Long); w.Write(l); return;
                     case float f: w.Write((byte)Tag.Float); w.Write(f); return;
                     case double d: w.Write((byte)Tag.Double); w.Write(d); return;
-                    case string s: w.Write((byte)Tag.String); w.Write(s); return;
+                    case string s:
+                        PlayerIds();
+                        if (_playerClans.TryGetValue(s, out var clanOf)) { w.Write((byte)Tag.PlayerClanId); w.Write(s); w.Write(clanOf); return; }
+                        if (_playerHeroes.TryGetValue(s, out var heroOf)) { w.Write((byte)Tag.PlayerHeroId); w.Write(s); w.Write(heroOf); return; }
+                        w.Write((byte)Tag.String); w.Write(s); return;
                     case byte by: w.Write((byte)Tag.Byte); w.Write(by); return;
                     case short sh: w.Write((byte)Tag.Short); w.Write(sh); return;
                     case uint ui: w.Write((byte)Tag.UInt); w.Write(ui); return;
@@ -298,6 +354,18 @@ namespace BellumCivileCoopCompat
                     case Tag.Float: return r.ReadSingle();
                     case Tag.Double: return r.ReadDouble();
                     case Tag.String: return r.ReadString();
+                    case Tag.PlayerClanId:
+                    {
+                        var id = r.ReadString(); var name = r.ReadString();
+                        return (Clan.All.FirstOrDefault(c => c?.StringId == id && c.Leader?.Name?.ToString() == name)
+                                ?? Clan.All.FirstOrDefault(c => c?.Leader?.Name?.ToString() == name))?.StringId ?? id;
+                    }
+                    case Tag.PlayerHeroId:
+                    {
+                        var id = r.ReadString(); var name = r.ReadString();
+                        return (Hero.FindFirst(h => h.StringId == id && h.Name?.ToString() == name)
+                                ?? Hero.AllAliveHeroes.FirstOrDefault(h => h.Name?.ToString() == name))?.StringId ?? id;
+                    }
                     case Tag.Byte: return r.ReadByte();
                     case Tag.Short: return r.ReadInt16();
                     case Tag.UInt: return r.ReadUInt32();
@@ -349,7 +417,13 @@ namespace BellumCivileCoopCompat
                     case Tag.Struct:
                     {
                         var t = ReadType(r);
-                        var value = FormatterServices.GetUninitializedObject(t);
+                        object value = null;
+                        if (UseConstructors && tag == Tag.Object && t.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null) != null)
+                        {
+                            try { value = Activator.CreateInstance(t, true); }
+                            catch { value = null; }
+                        }
+                        if (value == null) value = FormatterServices.GetUninitializedObject(t);
                         if (tag == Tag.Object) _read.Add(value);
                         var n = r.ReadInt32();
                         var fields = FieldsOf(t).ToDictionary(f => f.Name);

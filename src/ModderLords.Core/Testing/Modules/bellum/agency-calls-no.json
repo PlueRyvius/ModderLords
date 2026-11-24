@@ -1,0 +1,107 @@
+{
+  // A call to a civil-war side, refused (Calls, stage 3, A1): the player stands with the crown and stays in the realm. Without
+  // the module the player, still a faction member, would have been carried into the rebel realm without being asked.
+  "api": 2,
+  "name": "agency-calls-no",
+  "mode": "coop",
+  "description": "A rebellion rises in the player's realm while the player is in the rebel faction: the player refuses the call and stays in the realm on both sides.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.answerSeconds",
+      "side": "server",
+      "args": {
+        "seconds": "180"
+      }
+    },
+    {
+      "id": "bellum.factionIn",
+      "side": "server",
+      "as": "f",
+      "args": {
+        "kingdom": "$q.value",
+        "memberHero": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.refuseUltimatum",
+      "side": "server",
+      "as": "r",
+      "args": {
+        "kingdom": "$q.value",
+        "leader": "$f.leader"
+      }
+    },
+    {
+      "id": "bellum.promptShown",
+      "side": "client:1",
+      "as": "p"
+    },
+    {
+      "id": "bellum.answer",
+      "side": "client:1",
+      "args": {
+        "id": "$p.value",
+        "answer": "no"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "answered no to a call to a civil-war side",
+        "waitSeconds": "30"
+      }
+    },
+    {
+      "id": "bellum.clanKingdom",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "expect": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.clanKingdom",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "expect": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

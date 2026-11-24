@@ -19,7 +19,20 @@ anything Bellum would ask the player becomes a prompt to that player in the agen
 | 2 | X4 (Bellum's AI leaves players' clans alone on the server, `PlayersNotAi`); crown accession on a ruler's death | 1.3.0 | `players-not-ai`, `crown` |
 | 3a | Player agency: the channel (`Agency`, `BellumCivile.CoopCompat.Net.dll`), acting as a player (`AsPlayer`, Coop's own scope), prompts (`Prompts`) with the first site, an ultimatum to a player's realm | 1.4.0 | `agency-channel`, `agency-ultimatum`, `agency-ultimatum-yes`, `agency-timeout` |
 | 3b | Bellum's state on players' screens (`StateMirror`: factions, claim feuds, titles), and the Factions tab's buttons carried out by the server (`FactionActions`, A2) | 1.4.0 | `agency-state`, `agency-factions` |
-| 3c | The rest of A1 (civil-war calls, treason solidarity, succession opportunity, feud rulings), then A3 to A6 | later | `agency-*` |
+| 3c | The rest of A1: a call to a civil-war side, treason solidarity, a succession opportunity (`Calls`); claim feud rulings, a player ruler's judgment, a feud's call for supporters, a demand to surrender a title (`Feuds`); list questions (pick one of several) in `Prompts` | 1.5.0 | `agency-calls`, `agency-calls-no`, `agency-calls-timeout`, `agency-treason`, `agency-feud-judge`, `agency-feud-judge-timeout`, `agency-feud-ruling` |
+| 3d | Bellum's own actions carried out by the server (`RemoteCalls`): titles, lordships, feud petitions, succession law, elective vote, council dismissal; more state mirrored (claim fabrication, lordships, laws, elections, privy council, succession challenges) | 1.5.0 | `agency-law` |
+| 3e | Bellum's standing questions from its tick, once per connected player as that player (`Pollers`: court business, succession challenge pledges, claim fabrication setbacks, lordship questions); a fabrication's news as a notice; the Factions tab's title petition and marriage reviews (`RemoteCalls`); an open question isn't sent twice | 1.5.0 | `agency-fabrication` |
+| 3f | Crown actions and council motions (Bellum's private `PlayerMotion`, `RemoteCalls`); forming a title (the formation is rebuilt on the server with Bellum's own builder); A6, votes on Bellum's own decisions (`DecisionSync`, registered with Coop's `KingdomDecisionTypeRegistry` on both sides) | 1.5.0 | `agency-crown`, `agency-vote` |
+| later | Bellum's dialogue lines (marriage, hostage, barter and similar conversation options), still hidden on players' PCs; the peace parley UI (stage 0) | | |
+
+Stage 3c notes (defaults, reversible): an unanswered civil-war call, treason appeal, feud support call or title
+demand does nothing (the player stays where they are, pledges nothing, keeps the title for now); an unanswered feud
+ruling is accepted; a feud a player ruler doesn't judge in time is judged by Bellum's AI and isn't put to them again; a
+succession opportunity for an absent player is "not yet". A player in a faction whose ultimatum is refused is taken out
+of it first and asked, as Bellum does for the player. X4 no longer keeps a player's clan out of claim feuds
+(`IsValidFeudClan`): a lord may press a claim on a player's fief, and the ruling comes to the player. Not staged in a suite: the succession opportunity (it needs a
+ruler's death with a strong player-led faction waiting) and the feud support call and title demand; their patches are
+checked at install (the module logs "not found" otherwise, which `bellum.compat` fails on).
 
 Stage 1 notes: Bellum's dialogue lines and buttons are off on players' PCs, not routed, until stage 3. Bellum's own
 inquiries are not suppressed generically (its diplomacy action menu wraps vanilla's war and peace proposals), but the

@@ -220,7 +220,7 @@ namespace BellumCivileCoopCompat
         public static IDisposable Enter(Hero hero)
         {
             Resolve();
-            if (hero == null || !Coop.OnServer || _current != null)
+            if (hero == null || !Coop.OnServer)
                 return null;
             if (_scope == null)
             {
@@ -234,22 +234,24 @@ namespace BellumCivileCoopCompat
                 SubModule.Log("Agency: could not act as " + hero.StringId + ": " + ex.GetBaseException().Message);
                 return null;
             }
+            var outer = _current;
             _current = hero;
-            return new Exit(hero, scope);
+            return new Exit(hero, outer, scope);
         }
 
         private sealed class Exit : IDisposable
         {
-            private readonly Hero _hero;
+            private readonly Hero _hero, _outer;
             private IDisposable _scope;
 
-            public Exit(Hero hero, IDisposable scope) { _hero = hero; _scope = scope; }
+            public Exit(Hero hero, Hero outer, IDisposable scope) { _hero = hero; _outer = outer; _scope = scope; }
 
+            // Coop's scope restores whoever was the player before it, so scopes nest (one player's answer asking another).
             public void Dispose()
             {
                 if (_scope == null)
                     return;
-                _current = null;
+                _current = _outer;
                 try { _scope.Dispose(); }
                 catch (Exception ex) { SubModule.Log("Agency: could not leave " + _hero.StringId + "'s scope: " + ex.GetBaseException().Message); }
                 _scope = null;

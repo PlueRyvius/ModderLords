@@ -37,6 +37,9 @@ public static class Steps
         CoopSteps.Register();
         PlayersSteps.Register();
         AgencySteps.Register();
+        CallsSteps.Register();
+        FeudSteps.Register();
+        ActionsSteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------
@@ -47,13 +50,19 @@ public static class Steps
 
     /// <summary>
     /// The compat module's own log this run: fails on any line that says a part is missing or broken, and on any
-    /// <c>expect</c> text (separated by |) that no line contains. Reports its summary.
+    /// <c>expect</c> text (separated by |) that no line contains (waited for up to <c>waitSeconds</c> when given). Reports its summary.
     /// </summary>
     private static IEnumerable<StepWait?> Compat(StepContext ctx)
     {
         var module = FindType("BellumCivileCoopCompat.SubModule") ?? throw new StepFailedException("the Bellum Civile Coop Compat module is not loaded");
         var logged = module.GetField("Logged", Any)?.GetValue(null) as List<string>
             ?? throw new StepFailedException("this compat module keeps no log for tests (older than 1.1.0)");
+        var wanted = ctx.Arg("expect", "").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+        if (ctx.HasArg("waitSeconds") && wanted.Length > 0)
+        {
+            bool Seen() { lock (logged) return wanted.All(w => logged.Any(l => l.Contains(w))); }
+            yield return ctx.Until(Seen, "the compat module to log " + string.Join(", ", wanted), TimeSpan.FromSeconds(ctx.ArgInt("waitSeconds", 60)));
+        }
         List<string> lines;
         lock (logged) lines = logged.ToList();
         ctx.Dump("bellum-compat-" + ctx.Side.Replace(':', '-'), string.Join(Environment.NewLine, lines));
@@ -279,6 +288,27 @@ public static class Steps
     }
 
     // ---- helpers ---------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether Bellum would let <paramref name="clan"/> fabricate a claim on the title of <paramref name="fief"/> (its own
+    /// FeudalClaimFabricationBehavior.TryGetFabricationTrack: a neighbouring, liege or subordinate title). Logs why not.
+    /// </summary>
+    internal static object? FabricationTarget(Clan clan, TaleWorlds.CampaignSystem.Settlements.Settlement fief, Action<string>? log = null)
+    {
+        var titlesType = FindType("BellumCivile.Behaviors.FeudalTitleBehavior");
+        var fabType = FindType("BellumCivile.Behaviors.FeudalClaimFabricationBehavior");
+        if (titlesType == null || fabType == null) return null;
+        var get = typeof(Campaign).GetMethod(nameof(Campaign.GetCampaignBehavior))!;
+        var titles = get.MakeGenericMethod(titlesType).Invoke(Campaign.Current, null);
+        var title = FindType("BellumCivile.CheatCommands")?.GetMethod("ResolveFeudalTitleForDebug", Any)?.Invoke(null, new object?[] { titles, fief.StringId });
+        var track = fabType.GetMethod("TryGetFabricationTrack", Any);
+        if (title == null || track == null) return null;
+        var args = new object?[track.GetParameters().Length];
+        args[0] = titles; args[1] = clan; args[2] = title;
+        var ok = track.Invoke(null, args) is true;
+        if (!ok) log?.Invoke($"{clan.StringId} cannot claim {fief.StringId}: {args[4]}");
+        return ok ? title : null;
+    }
 
     internal static Kingdom? KingdomById(string id) => Kingdom.All.FirstOrDefault(k => k != null && k.StringId == id);
 

@@ -29,15 +29,9 @@ namespace BellumCivileCoopCompat
         {
             [UI + "FactionsWindowVM"] = new[] { "ExecuteCreate", "ExecuteConfirmCreate", "ExecuteJoin", "ExecuteUltimatum" },
             [UI + "VanillaTabs.Kingdoms.Factions.KingdomFactionsTabVM"] = new[] { "ExecuteCreate", "ExecuteConfirmCreate", "ExecuteJoin", "ExecuteUltimatum" },
-            [UI + "ClaimFeudItemVM"] = new[] { "ExecutePetition" },
-            [UI + "CrownPanelVM"] = new[] { "ExecuteCrownActions" },
-            [UI + "FactionItemVM"] = new[] { "ExecuteReviewMarriage", "ExecuteReviewTitlePetition" },
-            [UI + "PoliticalActionVM"] = new[] { "ExecuteSelect" },
-            [UI + "VanillaTabs.Kingdoms.Factions.PrivyCouncilVM"] = new[] { "ExecuteDismiss", "ExecutePropose" },
-            [UI + "VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM"] = new[]
-                { "ExecuteChallenge", "ExecuteClaim", "ExecuteDissolve", "ExecuteForm", "ExecuteGrant", "ExecuteRename", "ExecuteRenounce", "ExecuteRevoke", "ExecuteService", "ExecuteUsurp" },
-            [UI + "VanillaTabs.Kingdoms.Succession.SuccessionLawOptionVM"] = new[] { "ExecuteSelect" },
-            [UI + "VanillaTabs.Kingdoms.Succession.ElectiveCandidateVM"] = new[] { "ExecuteSelect" },
+            // The rest of the Hierarchy, claim feud, succession law, election and council buttons run here: Bellum's
+            // own screens and questions show on this PC, and the call that changes the campaign goes to the server
+            // (RemoteCalls). The Factions tab's political action list (PoliticalActionVM) only selects.
         };
 
         /// <summary>Bellum's patches that hide a vanilla line it replaces with its own. On a player's PC vanilla's line is back.</summary>
@@ -46,7 +40,7 @@ namespace BellumCivileCoopCompat
             ("BellumCivile.Patches.HideVanillaGenericMarriageProposalPatch", "Prefix"),
         };
 
-        public const string Line = "In co-op, the server decides this. Bellum Civile's own actions aren't available to players yet.";
+        public const string Line = "In co-op, the server decides this. This Bellum Civile action isn't available to players yet.";
 
         private static Assembly _bellum;
         private static bool _told;

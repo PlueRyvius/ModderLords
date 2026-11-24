@@ -1,0 +1,77 @@
+{
+  // A claim feud a player ruler doesn't judge in time (Feuds, stage 3, A1): Bellum's AI judges it, and that feud isn't put
+  // to the ruler again.
+  "api": 2,
+  "name": "agency-feud-judge-timeout",
+  "mode": "coop",
+  "description": "A claim feud before a player ruler goes unjudged: after the answer window Bellum's AI judges it, as for a lord ruler.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.takeThrone",
+      "side": "server",
+      "as": "realm",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.answerSeconds",
+      "side": "server",
+      "args": {
+        "seconds": "15"
+      }
+    },
+    {
+      "id": "bellum.petition",
+      "side": "server",
+      "as": "f",
+      "args": {
+        "kingdom": "$realm.value"
+      }
+    },
+    {
+      "id": "bellum.promptShown",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "timeoutSeconds": 120,
+      "args": {
+        "expect": "Bellum decides as for a lord",
+        "waitSeconds": "90"
+      }
+    },
+    {
+      "id": "bellum.feudRecord",
+      "side": "server",
+      "args": {
+        "id": "$f.value",
+        "notJudgment": "None"
+      }
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

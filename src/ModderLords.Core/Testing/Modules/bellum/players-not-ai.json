@@ -19,7 +19,7 @@
     { "id": "bellum.joinKingdom", "side": "server", "as": "q", "args": { "heroName": "$me.heroName" } },
     { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.CourtMembershipEligibility", "method": "CanBelong", "args": "playerClan|playerRealm", "expect": "False" } },
     { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.CivilWarSolidarityHelper", "method": "IsEligibleCandidate", "args": "playerClan|null|null", "expect": "False" } },
-    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.ClaimFeudBehavior", "method": "IsValidFeudClan", "args": "playerClan|null", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.ClaimFeudBehavior", "method": "IsValidFeudClan", "args": "playerClan|null", "expect": "True" } },
     { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.BellumMarriageStrategyHelper", "method": "MarriageProspectEligible", "args": "playerHero", "expect": "False" } },
     { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.RegencyBehavior", "method": "CanUseRegency", "args": "playerClan", "expect": "False" } },
     { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.PartitionSuccessionBehavior", "method": "CanPartitionClan", "args": "playerClan", "expect": "False" } },

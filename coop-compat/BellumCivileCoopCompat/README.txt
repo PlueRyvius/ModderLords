@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.4.0 (by ModderLords)
+Bellum Civile Coop Compat v1.5.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -64,9 +64,36 @@ joined.
   as you, with Bellum's own checks and costs; Bellum's confirmations come
   to you as questions.
 
-Coming next: the rest of Bellum's questions (civil-war calls, treason,
-succession, feud rulings) and screens (claim feuds, titles, succession law,
-the privy council).
+- Player agency, the rest (new in 1.5.0):
+  - More of Bellum's questions come to you: a call to join a rebellion in
+    your realm (your liege rises, or your faction's ultimatum was
+    refused); an accused lord you are close to asks you to stand with
+    him; after a ruler's death, a faction you lead may strike now or
+    wait; claim feuds (the ruler's ruling on a feud over your fief or
+    your claim, the judgment of a feud in a realm you rule, a call to
+    support a feud, a lord's demand that you surrender a title).
+    Not answered in 10 minutes: nothing happens, except that a feud
+    ruling is accepted and a feud you don't judge is judged as a lord
+    would.
+  - Bellum's standing questions come to you: court business awaiting you
+    (title petitions, marriage reviews, protection requests, court agenda
+    decisions), a succession challenge's pledge, a claim fabrication's
+    setbacks, and your lordships' command and indenture questions. A
+    claim fabrication's progress comes as a notice.
+  - Bellum's own actions work: titles (claim, usurp, renounce, revoke,
+    grant, dissolve, rename, set service, challenge, form a new title),
+    lordships, claim feud petitions, succession law, your vote in an
+    elective succession, dismissing a councillor, the Crown panel's court
+    business and council motions, and the Factions tab's title petition
+    and marriage reviews. Bellum's own screens show the server's state on
+    your PC; the server carries out the action as you, with Bellum's
+    checks and costs.
+  - You vote on Bellum's own realm decisions (a defensive pact's call, a
+    voluntary pact, a mandate reform, a privy council appointment) like
+    any other kingdom decision.
+
+Not yet in co-op: Bellum's own dialogue lines (marriage, hostage and
+similar conversation options stay hidden on players' PCs).
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).

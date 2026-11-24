@@ -1,0 +1,111 @@
+{
+  // A player fabricates a claim from Bellum's Hierarchy tab (RemoteCalls and Pollers, docs/BELLUM-COOP-COVERAGE.md stage 3d/3e).
+  // The PC's call (FeudalClaimFabricationBehavior.TryStartFabrication) is carried out by the server as the player, and
+  // the fabrication's progress, which Bellum queues for "the player", reaches the player as a notice. Without the module
+  // the fabrication started only on the player's PC, and its news went to nobody.
+  "api": 2,
+  "name": "agency-fabrication",
+  "mode": "coop",
+  "description": "A player starts fabricating a claim from their PC: the server starts it as the player, and the fabrication's progress reaches the player.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.addInfluence",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "3000"
+      }
+    },
+    {
+      "id": "hero.addGold",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "50000"
+      }
+    },
+    {
+      "id": "bellum.otherFief",
+      "side": "server",
+      "as": "o",
+      "args": {
+        "kingdom": "$q.value",
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.call",
+      "side": "client:1",
+      "args": {
+        "method": "FeudalClaimFabricationBehavior.TryStartFabrication",
+        "args": "playerClan|fiefTitle|true",
+        "fief": "$o.value"
+      }
+    },
+    {
+      "id": "bellum.carried",
+      "side": "server",
+      "args": {
+        "expect": "FeudalClaimFabricationBehavior.TryStartFabrication done"
+      }
+    },
+    {
+      "id": "bellum.advanceFabrication",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "0.5"
+      }
+    },
+    {
+      "id": "bellum.noticeShown",
+      "side": "client:1",
+      "args": {
+        "contains": "Your agents report"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}
