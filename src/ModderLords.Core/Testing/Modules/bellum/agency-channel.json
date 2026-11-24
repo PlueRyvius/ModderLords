@@ -1,0 +1,19 @@
+{
+  // Player agency's channel (docs/BELLUM-COOP-COVERAGE.md, stage 3): the module's network part loads with Coop, its
+  // channel opens on the server and on the player's PC, and a request from the player reaches the server, which knows
+  // who sent it and answers that player alone.
+  "api": 2,
+  "name": "agency-channel",
+  "mode": "coop",
+  "description": "The module's agency channel opens on both sides, and a player's request reaches the server, which answers that player by name.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "Agency: the network part is loaded|Agency: the server channel is open|Prompts: on the server" } },
+    { "id": "bellum.compat", "side": "client:1", "args": { "expect": "Agency: the network part is loaded|Agency: the player channel is open" } },
+    { "id": "bellum.agencyEcho", "side": "client:1" },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

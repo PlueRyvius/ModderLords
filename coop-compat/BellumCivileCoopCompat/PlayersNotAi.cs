@@ -29,10 +29,13 @@ namespace BellumCivileCoopCompat
 
         public sealed class Target
         {
-            public Target(string type, string method, string who, Answer answer, string harm, Whose whose = Whose.Any, int parameters = -1)
+            public Target(string type, string method, string who, Answer answer, string harm, Whose whose = Whose.Any, int parameters = -1, bool asked = false)
             {
-                Type = type; Method = method; Who = who; Answer = answer; Harm = harm; Whose = whose; Parameters = parameters;
+                Type = type; Method = method; Who = who; Answer = answer; Harm = harm; Whose = whose; Parameters = parameters; Asked = asked;
             }
+
+            /// <summary>Player agency puts this decision to the player when they are connected: then it is not kept from them.</summary>
+            public bool Asked { get; }
 
             public string Type { get; }
             public string Method { get; }
@@ -54,7 +57,7 @@ namespace BellumCivileCoopCompat
         public static readonly List<Target> Targets = new List<Target>
         {
             // Crown given away: a court faction's ultimatum to a player's realm, which Bellum's AI accepts or refuses for them.
-            new Target(F + "FactionObject", "CanTriggerUltimatum", "this.ParentKingdom", Answer.False, "an ultimatum to a player's realm", Whose.Ruled),
+            new Target(F + "FactionObject", "CanTriggerUltimatum", "this.ParentKingdom", Answer.False, "an ultimatum to a player's realm", Whose.Ruled, asked: true),
             new Target(B + "IdeologyBehavior", "TriggerGrandCoalition", "kingdom", Answer.False, "a grand coalition against a player's realm", Whose.Ruled),
 
             // Clan rallied into a court faction, rebellion, civil-war side, treason solidarity or a succession challenge.
@@ -194,11 +197,15 @@ namespace BellumCivileCoopCompat
             target = null;
             if (!Coop.OnServer || !ByMethod.TryGetValue(method, out target))
                 return false;
+            if (AsPlayer.Current != null)
+                return false;   // the server is acting for a player who chose this (player agency): Bellum treats them as the player
             object who;
             try { who = Resolve(method, instance, args, target.Who); }
             catch { return false; }
             if (!IsPlayers(who, target.Whose))
                 return false;
+            if (target.Asked && who is Kingdom realm && Prompts.CanAsk(realm.RulingClan?.Leader))
+                return false;   // the connected player is asked instead (Prompts)
             var key = Short(target);
             bool first;
             lock (Kept)

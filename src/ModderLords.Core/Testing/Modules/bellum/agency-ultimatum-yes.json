@@ -1,0 +1,26 @@
+{
+  // The player's "yes" is honoured too (Prompts): an Abdication ultimatum to the player's realm, accepted by the player,
+  // runs Bellum's own acceptance as that player, so the crown passes from the player's clan, on both sides.
+  "api": 2,
+  "name": "agency-ultimatum-yes",
+  "mode": "coop",
+  "description": "The player accepts an Abdication ultimatum to their realm: Bellum's acceptance runs as the player and the crown passes from their clan, on both sides.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.clanState", "side": "server", "as": "mine", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.addVassals", "side": "server", "args": { "kingdom": "$realm.value", "count": "3" } },
+    { "id": "bellum.answerSeconds", "side": "server", "args": { "seconds": "180" } },
+    { "id": "bellum.ultimatum", "side": "server", "args": { "kingdom": "$realm.value", "type": "Abdication" } },
+    { "id": "bellum.promptShown", "side": "client:1", "as": "q" },
+    { "id": "bellum.answer", "side": "client:1", "args": { "id": "$q.value", "answer": "yes" } },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "answered yes to an ultimatum to the player's realm" } },
+    { "id": "bellum.passDays", "side": "server", "timeoutSeconds": 480, "args": { "days": "1" } },
+    { "id": "bellum.ruler", "side": "server", "args": { "kingdom": "$realm.value", "notClan": "$mine.clan" } },
+    { "compare": "bellum.ruler", "sides": ["server", "client:1"], "args": { "kingdom": "$realm.value" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

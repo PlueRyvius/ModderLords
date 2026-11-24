@@ -17,7 +17,9 @@ anything Bellum would ask the player becomes a prompt to that player in the agen
 | 0 | Peace parley off, voted peace, treaty vote, internal peace, no kingdoms on players' PCs, thread safety | 1.1.0 | `coop`, `treaty-vote`, `alliance-block`, `feud` |
 | 1 | X1, X2, X3, X5, X6, X7; client kingdoms follow Coop's replays; Diplomacy's direct peace; title-name cache locked (`ServerDecides`, `PlayerActions`, `ServerScreens`); treaty draft gate (`TreatyDraftGate`) | 1.2.0 | `server-decides`, `treaty-lose` |
 | 2 | X4 (Bellum's AI leaves players' clans alone on the server, `PlayersNotAi`); crown accession on a ruler's death | 1.3.0 | `players-not-ai`, `crown` |
-| 3 | Player agency, steps A1 to A6 | later | `agency-*` |
+| 3a | Player agency: the channel (`Agency`, `BellumCivile.CoopCompat.Net.dll`), acting as a player (`AsPlayer`, Coop's own scope), prompts (`Prompts`) with the first site, an ultimatum to a player's realm | 1.4.0 | `agency-channel`, `agency-ultimatum`, `agency-ultimatum-yes`, `agency-timeout` |
+| 3b | Bellum's state on players' screens (factions, titles), then the Factions tab's actions (A2) | next | `agency-state`, `agency-factions` |
+| 3c | The rest of A1 (civil-war calls, treason solidarity, succession opportunity, feud rulings), then A3 to A6 | later | `agency-*` |
 
 Stage 1 notes: Bellum's dialogue lines and buttons are off on players' PCs, not routed, until stage 3. Bellum's own
 inquiries are not suppressed generically (its diplomacy action menu wraps vanilla's war and peace proposals), but the
@@ -224,6 +226,20 @@ version (they already must for Coop).
 **Risks.** Bellum code run "as a player" may show UI or touch other systems that read `MainHero` (other mods, Coop
 itself): the override must be short, on the main thread, with Bellum's UI paths skipped on the server. Coop may
 already patch some of these getters; check before building piece 3. Each feature gets its own Coop suite.
+
+**Built (1.4.0).**
+- *Channel.* `BellumCivile.CoopCompat.Net.dll` is built against the Coop nightly and loaded by the module once Coop's
+  `GameInterface` is loaded. Two generic messages (`BellumAgencyRequest`, `BellumAgencyMessage`) carry a kind and
+  strings. Coop's handler discovery (namespaces `Coop.Core.Server.*` / `Coop.Core.Client.*`) builds the handlers when a
+  session starts. The server takes the sender from Coop's player list, never from the message. A PC on another
+  protocol is refused and told once.
+- *Acting as a player.* `AsPlayer` opens Coop's own `MainHeroSubstitutionScope` by reflection for one call on the
+  main thread. While it is open, stage 2's guards let Bellum treat that player as the player.
+- *Prompts.* A site runs as its connected player; the question Bellum would show is caught, sent to that player and
+  shown there; the answer runs Bellum's own yes or no as that player. Unanswered after `Prompts.AnswerSeconds` (600 s),
+  the site's fallback answers. First site: a court faction's ultimatum to a realm a connected player rules (fallback:
+  refuse; the player keeps the crown). A disconnected ruler is not asked, and stage 2 keeps the ultimatum from
+  happening.
 
 **Order** (what players feel most first; each is a small adapter on the four pieces plus a suite):
 

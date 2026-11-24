@@ -1,0 +1,29 @@
+{
+  // An ultimatum to a player's realm is put to that player (Prompts, docs/BELLUM-COOP-COVERAGE.md stage 3, A1). Without
+  // player agency Bellum's AI answered for the player on the server (stage 2 then kept it from happening at all). Here
+  // the server asks the player's PC, the player refuses, and Bellum's own refusal runs as that player: the faction rises
+  // in rebellion and the player still rules.
+  "api": 2,
+  "name": "agency-ultimatum",
+  "mode": "coop",
+  "description": "A court faction's ultimatum to the player's realm reaches the player as a question; the player refuses, the faction rebels, and the player keeps the crown.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.clanState", "side": "server", "as": "mine", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.addVassals", "side": "server", "args": { "kingdom": "$realm.value", "count": "3" } },
+    { "id": "bellum.answerSeconds", "side": "server", "args": { "seconds": "180" } },
+    { "id": "bellum.enemies", "side": "server", "as": "wars", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.ultimatum", "side": "server", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.promptShown", "side": "client:1", "as": "q" },
+    { "id": "bellum.answer", "side": "client:1", "args": { "id": "$q.value", "answer": "no" } },
+    { "id": "bellum.enemies", "side": "server", "args": { "kingdom": "$realm.value", "was": "$wars.value" } },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "answered no to an ultimatum to the player's realm" } },
+    { "id": "bellum.ruler", "side": "server", "args": { "kingdom": "$realm.value", "expectClan": "$mine.clan" } },
+    { "compare": "bellum.enemies", "sides": ["server", "client:1"], "args": { "kingdom": "$realm.value" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

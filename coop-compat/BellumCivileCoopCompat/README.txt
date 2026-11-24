@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.3.0 (by ModderLords)
+Bellum Civile Coop Compat v1.4.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -50,8 +50,15 @@ joined.
   crown changes once. Coop's own handling had given it to a random house
   and opened a king vote.
 
-Coming next: Bellum's own actions come back for players, carried out by the
-server.
+- Player agency (new in 1.4.0): when Bellum would ask you something, the
+  server asks you. First: a court faction's ultimatum to a realm you rule
+  comes to you as a question; accept or refuse, and Bellum carries it out.
+  Not answered in 10 minutes: refused (you keep the crown). Needs the
+  BellumCivile.CoopCompat.Net.dll that comes with this module (it talks to
+  Coop); without it, everything else above still works.
+
+Coming next: Bellum's own screens (factions, titles) show the server's
+state, and their buttons are carried out by the server.
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).
