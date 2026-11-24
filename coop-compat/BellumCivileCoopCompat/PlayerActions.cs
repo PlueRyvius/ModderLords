@@ -71,7 +71,8 @@ namespace BellumCivileCoopCompat
                         missing.Add(kv.Key.Substring(kv.Key.LastIndexOf('.') + 1) + "." + name);
                         continue;
                     }
-                    harmony.Patch(method, prefix: new HarmonyMethod(typeof(PlayerActions), nameof(Refuse)) { priority = Priority.First });
+                    var faction = kv.Key.EndsWith("FactionsWindowVM") || kv.Key.EndsWith("KingdomFactionsTabVM");
+                    harmony.Patch(method, prefix: new HarmonyMethod(typeof(PlayerActions), faction && FactionActions.Buttons.Contains(name) ? nameof(FactionButton) : nameof(Refuse)) { priority = Priority.First });
                     buttons++;
                 }
             }
@@ -123,6 +124,17 @@ namespace BellumCivileCoopCompat
                 SubModule.Log("A player used one of Bellum's own actions; told them the server decides (said once).");
             }
             return false;
+        }
+
+        // The Factions tab: the server carries the button out (FactionActions). Create only opens the type list in its
+        // usual mode, so the list still opens here; the other buttons do nothing on this PC.
+        private static bool FactionButton(object __instance, MethodBase __originalMethod)
+        {
+            if (!Coop.OnPlayerPc)
+                return true;
+            if (FactionActions.Send(__instance, __originalMethod.Name))
+                return __originalMethod.Name == "ExecuteCreate";
+            return Refuse();
         }
 
         private static bool RunVanilla(ref bool __result)

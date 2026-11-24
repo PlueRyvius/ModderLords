@@ -1,0 +1,26 @@
+{
+  // A player founds a court faction from Bellum's Factions screen (FactionActions, docs/BELLUM-COOP-COVERAGE.md stage 3,
+  // A2). The button sends what was chosen; the server opens Bellum's own Factions screen model as that player, presses the
+  // same button with Bellum's own checks and cost, and sends the player its state, so both sides have the faction.
+  // Without the module the button only ran on the player's PC (stage 1 turned it off, with "the server decides").
+  "api": 2,
+  "name": "agency-factions",
+  "mode": "coop",
+  "description": "A player, a vassal of a lords' realm, founds a faction from Bellum's Factions screen: the server founds it as that player, and both sides have it.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.joinKingdom", "side": "server", "as": "q", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.addInfluence", "side": "server", "args": { "heroName": "$me.heroName", "amount": "2000" } },
+    { "id": "bellum.liftGrace", "side": "server", "args": { "kingdom": "$q.value" } },
+    { "id": "bellum.stateRequest", "side": "client:1" },
+    { "id": "bellum.foundFaction", "side": "client:1", "as": "f" },
+    { "id": "bellum.hasFaction", "side": "server", "args": { "heroName": "$me.heroName", "kingdom": "$q.value", "type": "$f.value" } },
+    { "id": "bellum.hasFaction", "side": "client:1", "args": { "heroName": "$me.heroName", "kingdom": "$q.value", "type": "$f.value" } },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "Carried out ExecuteConfirmCreate for" } },
+    { "id": "bellum.compat", "side": "client:1" },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

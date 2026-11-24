@@ -45,7 +45,7 @@
     { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.CourtAgendaBehavior", "method": "TryGetCourtRuler", "args": "playerRealm|null|null", "expect": "False" } },
     { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.SuccessionChallengeSchedule", "method": "IsDue", "args": "playerRealmId|100000|0", "expect": "False" } },
 
-    { "id": "bellum.keptFromPlayers", "side": "server", "args": { "expect": "IdeologyBehavior.CanScheduleTreasonDecree|FactionObject.CanTriggerUltimatum" } },
+    { "id": "bellum.keptFromPlayers", "side": "server", "args": { "expect": "IdeologyBehavior.CanScheduleTreasonDecree" } },
     { "id": "game.noErrors", "side": "server", "continueOnFail": true },
     { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
   ]

@@ -99,11 +99,49 @@ namespace BellumCivileCoopCompat
             if (show == null) missing.Add("InformationManager.ShowInquiry");
             else harmony.Patch(show, prefix: new HarmonyMethod(typeof(Prompts), nameof(InquiryPrefix)) { priority = Priority.First });
 
+            var notifications = AccessTools.TypeByName("BellumCivile.BellumCivileNotifications");
+            foreach (var personal in notifications?.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Where(m => m.Name == "ShowPersonal") ?? Enumerable.Empty<MethodInfo>())
+                harmony.Patch(personal, prefix: new HarmonyMethod(typeof(Prompts), nameof(NoticePrefix)) { priority = Priority.First });
+
             Agency.Handle("answer", OnAnswer);
             Agency.Listen("prompt", ShowOnPlayerPc);
             SubModule.Log("Prompts: on the server, Bellum's questions to a connected player go to that player (" + Sites.Count + " sites).");
             if (missing.Count > 0)
                 SubModule.Log("Prompts: not found in this Bellum version: " + string.Join(", ", missing));
+        }
+
+        /// <summary>
+        /// Server: runs <paramref name="action"/> as <paramref name="hero"/> (a player's request), with every question
+        /// Bellum asks on the way put to that player and every line it tells "the player" sent to them as a notice.
+        /// </summary>
+        public static bool RunAsking(Hero hero, string what, Action action)
+        {
+            if (action == null || !CanAsk(hero))
+                return false;
+            var scope = AsPlayer.Enter(hero);
+            if (scope == null)
+                return false;
+            var site = new Site("", "", (i, a) => hero, fallbackYes: false, what: what);
+            _frame = new Frame { Hero = hero, Site = site, Scope = scope, Outer = _frame };
+            try { action(); }
+            catch (Exception ex) { SubModule.Log("Bellum failed carrying out " + what + " for " + hero.StringId + ": " + ex.GetBaseException().Message); }
+            finally
+            {
+                var frame = _frame;
+                _frame = frame?.Outer;
+                frame?.Scope.Dispose();
+            }
+            return true;
+        }
+
+        // While the server acts for a player, what Bellum tells "the player" goes to that player.
+        private static bool NoticePrefix(object[] __args)
+        {
+            var frame = _frame;
+            if (!Coop.OnServer || frame == null || __args == null || __args.Length == 0 || __args[0] == null)
+                return true;
+            Agency.ToPlayer(frame.Hero, "notice", __args[0].ToString());
+            return false;
         }
 
         /// <summary>Whether a site would be put to its player now (connected, and the server can reach them).</summary>

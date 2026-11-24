@@ -18,7 +18,7 @@ anything Bellum would ask the player becomes a prompt to that player in the agen
 | 1 | X1, X2, X3, X5, X6, X7; client kingdoms follow Coop's replays; Diplomacy's direct peace; title-name cache locked (`ServerDecides`, `PlayerActions`, `ServerScreens`); treaty draft gate (`TreatyDraftGate`) | 1.2.0 | `server-decides`, `treaty-lose` |
 | 2 | X4 (Bellum's AI leaves players' clans alone on the server, `PlayersNotAi`); crown accession on a ruler's death | 1.3.0 | `players-not-ai`, `crown` |
 | 3a | Player agency: the channel (`Agency`, `BellumCivile.CoopCompat.Net.dll`), acting as a player (`AsPlayer`, Coop's own scope), prompts (`Prompts`) with the first site, an ultimatum to a player's realm | 1.4.0 | `agency-channel`, `agency-ultimatum`, `agency-ultimatum-yes`, `agency-timeout` |
-| 3b | Bellum's state on players' screens (factions, titles), then the Factions tab's actions (A2) | next | `agency-state`, `agency-factions` |
+| 3b | Bellum's state on players' screens (`StateMirror`: factions, claim feuds, titles), and the Factions tab's buttons carried out by the server (`FactionActions`, A2) | 1.4.0 | `agency-state`, `agency-factions` |
 | 3c | The rest of A1 (civil-war calls, treason solidarity, succession opportunity, feud rulings), then A3 to A6 | later | `agency-*` |
 
 Stage 1 notes: Bellum's dialogue lines and buttons are off on players' PCs, not routed, until stage 3. Bellum's own
@@ -240,6 +240,16 @@ already patch some of these getters; check before building piece 3. Each feature
   the site's fallback answers. First site: a court faction's ultimatum to a realm a connected player rules (fallback:
   refuse; the player keeps the crown). A disconnected ruler is not asked, and stage 2 keeps the ultimatum from
   happening.
+
+- *State.* The server runs a Bellum behaviour's own `SyncData` into a recording data store (as a save does) and sends
+  it to players; their PC runs the same `SyncData` from it (as a load does), then drops Bellum's lookup caches. Game
+  objects travel as ids (a player's hero and clan by name, since their ids differ between PCs), Bellum's records as
+  the game's saveable fields, types without assembly versions. Mirrored: `FactionManagerBehavior`,
+  `ClaimFeudBehavior`, `FeudalTitleBehavior`; sent each game day, on request, and after a player's action.
+- *Factions tab.* Join (or leave), Found, Ultimatum and Create send the selection; the server builds Bellum's own
+  `FactionsWindowVM` as that player, selects the same faction and action from its state, and presses the same button
+  (Bellum's checks and costs apply there). A confirmation comes to the player as a question, Bellum's lines to "the
+  player" as notices, and the player then gets the server's state.
 
 **Order** (what players feel most first; each is a small adapter on the four pieces plus a suite):
 

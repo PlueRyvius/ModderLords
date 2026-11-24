@@ -64,7 +64,7 @@ namespace BellumCivileCoopCompat
                      {
                          ThreadSafety.Install, ClientKingdoms.Install, PeaceInCoop.Install, VotePeace.Install, TreatyVote.Install, InternalPeace.Install,
                          ServerDecides.Install, PlayerActions.Install, ServerScreens.Install, TreatyDraftGate.Install,
-                         PlayersNotAi.Install, CrownAccession.Install, Agency.Install, Prompts.Install,
+                         PlayersNotAi.Install, CrownAccession.Install, Agency.Install, Prompts.Install, StateMirror.Install, FactionActions.Install,
                      })
             {
                 try { install(harmony); }
@@ -87,6 +87,7 @@ namespace BellumCivileCoopCompat
                 if (Coop.OnPlayerPc) ClientKingdoms.Tick();
                 if (Coop.OnServer) TreatyVote.Tick();
                 if (Coop.OnServer) Prompts.Tick();
+                if (Coop.OnServer) StateMirror.Tick();
                 CrownAccession.TryHookCoop();
             }
             catch (Exception ex) { Log("Tick failed: " + ex.GetBaseException().Message); }

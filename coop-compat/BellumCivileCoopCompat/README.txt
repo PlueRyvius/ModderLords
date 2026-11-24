@@ -57,8 +57,16 @@ joined.
   BellumCivile.CoopCompat.Net.dll that comes with this module (it talks to
   Coop); without it, everything else above still works.
 
-Coming next: Bellum's own screens (factions, titles) show the server's
-state, and their buttons are carried out by the server.
+- Bellum's Factions, Hierarchy and title screens show the server's state
+  (sent each game day and after your actions).
+- The Factions tab works in co-op: join or leave, found a faction, issue
+  an ultimatum, abandon or surrender. The server carries out the button
+  as you, with Bellum's own checks and costs; Bellum's confirmations come
+  to you as questions.
+
+Coming next: the rest of Bellum's questions (civil-war calls, treason,
+succession, feud rulings) and screens (claim feuds, titles, succession law,
+the privy council).
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).
