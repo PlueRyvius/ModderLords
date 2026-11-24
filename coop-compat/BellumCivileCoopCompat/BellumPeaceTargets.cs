@@ -14,7 +14,7 @@ namespace BellumCivileCoopCompat
     }
 
     /// <summary>
-    /// The Bellum Civile 1.3.1 methods that turn vanilla peace into its own Peace Parley. Kept free of game types so the
+    /// The Bellum Civile 1.5 methods that turn vanilla peace into its own Peace Parley. Kept free of game types so the
     /// list can be checked in tests.
     ///
     /// <para>Two kinds. The <b>entry points</b> are where Bellum queues or opens a parley for "the player"; with those
@@ -45,12 +45,26 @@ namespace BellumCivileCoopCompat
 
         public const string Proposal = "BellumCivile.TreatyProposalRecord";
         public const string Term = "BellumCivile.TreatyTermRecord";
-        /// <summary>Bellum's rule that a war must last a set number of days before peace: <c>TryGetPeaceProposalBlock</c>.</summary>
-        public const string MinimumDuration = "BellumCivile.WarPeaceMinimumDurationHelper";
-        public const string MinimumDurationCheck = "TryGetPeaceProposalBlock";
+        /// <summary>
+        /// Bellum 1.5's rule that a realm its ally called to arms makes no separate peace:
+        /// <c>TryGetPeaceBlock(Kingdom, Kingdom, out TextObject reason)</c>. (1.3's minimum war length is gone.)
+        /// </summary>
+        public const string AllianceRule = "BellumCivile.AlliancePeaceRestriction";
+        public const string AllianceRuleCheck = "TryGetPeaceBlock";
 
         /// <summary>Where the server's Bellum ratifies a pending treaty: both councils are asked, then it is applied or rejected.</summary>
         public const string Resolve = "ResolvePendingParley";
+        /// <summary>
+        /// Bellum 1.5 repairs a pending draft before ratifying it, and cancels a draft that no longer fits the war:
+        /// <c>TryPreparePendingProposalDraft(war, proposal, out report, rebuildNpcDraft)</c>.
+        /// </summary>
+        public const string Prepare = "TryPreparePendingProposalDraft";
+        /// <summary>A white peace only stands while both sides are tired of the war: <c>WarScoreBehavior.IsMutualWhitePeaceEligible(war, out, out)</c>.</summary>
+        public const string WarScore = "BellumCivile.Behaviors.WarScoreBehavior";
+        public const string WhitePeaceEligible = "IsMutualWhitePeaceEligible";
+        /// <summary>Proposal flags Bellum checks before ratifying: a white peace (or empty draft), and a draft over its war-score budget.</summary>
+        public const string WhitePeaceOrEmpty = "IsWhitePeaceOrEmpty";
+        public const string OverBudget = "IsOverBudget";
         /// <summary>The councils' verdicts; its out parameters are bound by name.</summary>
         public const string Ratify = "EvaluateRatification";
         public const string Apply = "ApplyTreaty";
@@ -110,6 +124,9 @@ namespace BellumCivileCoopCompat
             new Target(Patches + "RulerPeaceOfferParleyPatch", "Prefix", BellumPeaceAnswer.RunOriginal),
             new Target(Patches + "KingdomPeaceVoteNotificationParleyPatch", "Prefix", BellumPeaceAnswer.RunOriginal),
             new Target(Patches + "KingdomPeaceDecisionScreenFallbackPatch", "Prefix", BellumPeaceAnswer.RunOriginal),
+            // Bellum 1.5 drops a peace vote while an ally's call to arms forbids peace. The server's Bellum decides that;
+            // a player's PC dropping a vote the server sent would leave it there and nowhere else.
+            new Target(Patches + "KingdomPeaceDecisionAddedParleyCleanupPatch", "Prefix", BellumPeaceAnswer.RunOriginal),
             new Target(Patches + "KingdomPeaceVoteNotificationQueuedParleyPatch", "Postfix", BellumPeaceAnswer.Nothing),
             new Target(Patches + "KingdomPeaceDecisionAddedParleyCleanupPatch", "Postfix", BellumPeaceAnswer.Nothing),
         };
