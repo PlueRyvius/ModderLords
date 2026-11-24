@@ -1,0 +1,95 @@
+{
+  // A call to a civil-war side nobody answers (Calls, stage 3, A1): the fallback is to do nothing, so the player stays where they are.
+  "api": 2,
+  "name": "agency-calls-timeout",
+  "mode": "coop",
+  "description": "A call to a civil-war side goes unanswered: after the answer window nothing is done, and the player stays in the realm.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.answerSeconds",
+      "side": "server",
+      "args": {
+        "seconds": "15"
+      }
+    },
+    {
+      "id": "bellum.factionIn",
+      "side": "server",
+      "as": "f",
+      "args": {
+        "kingdom": "$q.value",
+        "memberHero": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.refuseUltimatum",
+      "side": "server",
+      "as": "r",
+      "args": {
+        "kingdom": "$q.value",
+        "leader": "$f.leader"
+      }
+    },
+    {
+      "id": "bellum.promptShown",
+      "side": "client:1",
+      "as": "p"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "timeoutSeconds": 120,
+      "args": {
+        "expect": "did not answer a call to a civil-war side",
+        "waitSeconds": "90"
+      }
+    },
+    {
+      "id": "bellum.clanKingdom",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "expect": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.clanKingdom",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "expect": "$q.value"
+      }
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

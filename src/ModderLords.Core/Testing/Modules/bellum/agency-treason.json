@@ -1,0 +1,123 @@
+{
+  // Treason solidarity (Calls, stage 3, A1). An accused lord who rebels appeals to lords close to them (relation 60 or more). On
+  // the server Bellum checked the placeholder player, so no player was ever asked. Here the player is close to the rebel
+  // leader; the server asks them, and their yes moves their clan to the rebels.
+  "api": 2,
+  "name": "agency-treason",
+  "mode": "coop",
+  "description": "An accused lord the player is close to rebels and appeals to the player: the server asks the player, who stands with them and joins the rebel realm on both sides.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.answerSeconds",
+      "side": "server",
+      "args": {
+        "seconds": "180"
+      }
+    },
+    {
+      "id": "bellum.factionIn",
+      "side": "server",
+      "as": "f",
+      "args": {
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.setRelation",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "b": "$f.leaderHero",
+        "value": "80"
+      }
+    },
+    {
+      "id": "bellum.refuseUltimatum",
+      "side": "server",
+      "as": "r",
+      "args": {
+        "kingdom": "$q.value",
+        "leader": "$f.leader"
+      }
+    },
+    {
+      "id": "bellum.treasonAppeal",
+      "side": "server",
+      "args": {
+        "kingdom": "$q.value",
+        "leader": "$f.leader"
+      }
+    },
+    {
+      "id": "bellum.promptShown",
+      "side": "client:1",
+      "as": "p"
+    },
+    {
+      "id": "bellum.answer",
+      "side": "client:1",
+      "args": {
+        "id": "$p.value",
+        "answer": "yes"
+      }
+    },
+    {
+      "id": "bellum.clanKingdom",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "expect": "$r.rebels"
+      }
+    },
+    {
+      "id": "bellum.clanKingdom",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "expect": "$r.rebels"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "answered yes to an appeal from an accused lord"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

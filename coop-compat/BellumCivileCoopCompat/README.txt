@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.4.0 (by ModderLords)
+Bellum Civile Coop Compat v1.5.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 

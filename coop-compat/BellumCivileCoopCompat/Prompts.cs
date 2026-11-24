@@ -26,20 +26,35 @@ namespace BellumCivileCoopCompat
         /// <summary>How long a player has to answer before the site's fallback answers. Tests shorten it.</summary>
         public static double AnswerSeconds = 600;
 
+        /// <summary>What happens when the player does not answer in time.</summary>
+        public enum Fallback
+        {
+            /// <summary>Bellum's own "no" runs.</summary>
+            No,
+            /// <summary>Bellum's own "yes" runs.</summary>
+            Yes,
+            /// <summary>Neither runs: as if the question was never asked.</summary>
+            Nothing,
+        }
+
         public sealed class Site
         {
-            public Site(string type, string method, Func<object, object[], Hero> player, bool fallbackYes, string what)
+            public Site(string type, string method, Func<object, object[], Hero> player, Fallback fallback, string what, bool quietWhenAbsent = false)
             {
-                Type = type; Method = method; Player = player; FallbackYes = fallbackYes; What = what;
+                Type = type; Method = method; Player = player; Fallback = fallback; What = what; QuietWhenAbsent = quietWhenAbsent;
             }
 
             public string Type { get; }
             public string Method { get; }
-            /// <summary>The connected player this call concerns, or null (then the site runs as Bellum's AI would).</summary>
+            /// <summary>The player this call concerns, or null (then the site runs as Bellum's AI would).</summary>
             public Func<object, object[], Hero> Player { get; }
-            /// <summary>The answer when the player does not answer in time.</summary>
-            public bool FallbackYes { get; }
+            public Fallback Fallback { get; }
             public string What { get; }
+            /// <summary>
+            /// When the player can't be asked (not connected), the site doesn't run at all, rather than running as for
+            /// the server's own placeholder player.
+            /// </summary>
+            public bool QuietWhenAbsent { get; }
         }
 
         private sealed class Pending
@@ -55,11 +70,16 @@ namespace BellumCivileCoopCompat
         {
             // A court faction's ultimatum to a realm a player rules: accept the demands, or refuse and face the rebellion.
             new Site("BellumCivile.FactionObject", "TriggerUltimatumDetailed", (instance, args) => RulerOf(Get(instance, "ParentKingdom") as Kingdom),
-                fallbackYes: false, what: "an ultimatum to the player's realm"),
+                Fallback.No, "an ultimatum to the player's realm"),
+            // A ruler died and a faction a player leads is strong enough to strike: issue the ultimatum now, or not yet.
+            // Calls.SuccessionClan names the player as Bellum's loop reaches their faction. An absent player: not yet.
+            new Site("BellumCivile.NotificationHelper", "ShowPlayerSuccessionOpportunity", (instance, args) => Calls.SuccessionPlayer,
+                Fallback.Nothing, "a succession opportunity", quietWhenAbsent: true),
         };
 
         private static readonly Dictionary<MethodBase, Site> ByMethod = new Dictionary<MethodBase, Site>();
         private static readonly Dictionary<string, Pending> Open = new Dictionary<string, Pending>();
+        private static readonly Queue<Action> Queued = new Queue<Action>();
         [ThreadStatic] private static Frame _frame;
         private static int _next, _asked, _answered, _fallback;
 
@@ -69,6 +89,7 @@ namespace BellumCivileCoopCompat
             public Site Site;
             public IDisposable Scope;
             public Frame Outer;
+            public bool FromPrefix;
         }
 
         public static string Summary() => _asked > 0 ? "; questions put to players " + _asked + " (answered " + _answered + ", timed out " + _fallback + ")" : "";
@@ -118,20 +139,35 @@ namespace BellumCivileCoopCompat
         {
             if (action == null || !CanAsk(hero))
                 return false;
+            return InFrame(hero, new Site("", "", (i, a) => hero, Fallback.No, what), action);
+        }
+
+        /// <summary>
+        /// Server: runs <paramref name="action"/> as <paramref name="hero"/>, with the question Bellum asks on the way
+        /// put to that player under <paramref name="site"/>'s fallback. False if the server could not act as them.
+        /// </summary>
+        public static bool InFrame(Hero hero, Site site, Action action)
+        {
             var scope = AsPlayer.Enter(hero);
             if (scope == null)
                 return false;
-            var site = new Site("", "", (i, a) => hero, fallbackYes: false, what: what);
-            _frame = new Frame { Hero = hero, Site = site, Scope = scope, Outer = _frame };
+            var frame = new Frame { Hero = hero, Site = site, Scope = scope, Outer = _frame };
+            _frame = frame;
             try { action(); }
-            catch (Exception ex) { SubModule.Log("Bellum failed carrying out " + what + " for " + hero.StringId + ": " + ex.GetBaseException().Message); }
+            catch (Exception ex) { SubModule.Log("Bellum failed with " + site.What + " for " + hero.StringId + ": " + ex.GetBaseException().Message); }
             finally
             {
-                var frame = _frame;
-                _frame = frame?.Outer;
-                frame?.Scope.Dispose();
+                _frame = frame.Outer;
+                frame.Scope.Dispose();
             }
             return true;
+        }
+
+        /// <summary>Server: runs <paramref name="action"/> on the next tick, outside whatever Bellum is doing now.</summary>
+        public static void Later(Action action)
+        {
+            if (action != null)
+                lock (Queued) Queued.Enqueue(action);
         }
 
         // While the server acts for a player, what Bellum tells "the player" goes to that player.
@@ -163,28 +199,33 @@ namespace BellumCivileCoopCompat
 
         // ---- server: a site runs as its player, and its question is caught ----
 
-        private static void SitePrefix(MethodBase __originalMethod, object __instance, object[] __args)
+        private static bool SitePrefix(MethodBase __originalMethod, object __instance, object[] __args)
         {
-            if (!Coop.OnServer || !ByMethod.TryGetValue(__originalMethod, out var site) || AsPlayer.Current != null)
-                return;
+            if (!Coop.OnServer || !ByMethod.TryGetValue(__originalMethod, out var site))
+                return true;
             Hero hero;
             try { hero = site.Player(__instance, __args); }
-            catch { return; }
+            catch { return true; }
+            if (hero == null)
+                return true;
             if (!CanAsk(hero))
-                return;
-            var scope = AsPlayer.Enter(hero);
-            if (scope == null)
-                return;
-            _frame = new Frame { Hero = hero, Site = site, Scope = scope, Outer = _frame };
+                return !site.QuietWhenAbsent;
+            // Already acting as this player (their own answer led here): no new scope, but this site's question.
+            var already = ReferenceEquals(AsPlayer.Current, hero);
+            var scope = already ? null : AsPlayer.Enter(hero);
+            if (scope == null && !already)
+                return !site.QuietWhenAbsent;
+            _frame = new Frame { Hero = hero, Site = site, Scope = scope, Outer = _frame, FromPrefix = true };
+            return true;
         }
 
         private static Exception SiteFinalizer(MethodBase __originalMethod, Exception __exception)
         {
             var frame = _frame;
-            if (frame != null && ByMethod.TryGetValue(__originalMethod, out var site) && ReferenceEquals(frame.Site, site))
+            if (frame != null && frame.FromPrefix && ByMethod.TryGetValue(__originalMethod, out var site) && ReferenceEquals(frame.Site, site))
             {
                 _frame = frame.Outer;
-                frame.Scope.Dispose();
+                frame.Scope?.Dispose();
             }
             return __exception;
         }
@@ -240,6 +281,13 @@ namespace BellumCivileCoopCompat
         public static void Tick()
         {
             if (!Coop.OnServer) return;
+            List<Action> queued;
+            lock (Queued) { queued = Queued.ToList(); Queued.Clear(); }
+            foreach (var action in queued)
+            {
+                try { action(); }
+                catch (Exception ex) { SubModule.Log("Prompts: a queued question failed: " + ex.GetBaseException().Message); }
+            }
             List<Pending> due;
             lock (Open)
             {
@@ -249,7 +297,10 @@ namespace BellumCivileCoopCompat
             foreach (var p in due)
             {
                 _fallback++;
-                Apply(p, p.Site.FallbackYes, "not answered");
+                if (p.Site.Fallback == Fallback.Nothing)
+                    SubModule.Log(p.Hero.StringId + " did not answer " + p.Site.What + " (" + p.Id + "); nothing was done.");
+                else
+                    Apply(p, p.Site.Fallback == Fallback.Yes, "not answered");
             }
         }
 
@@ -260,11 +311,8 @@ namespace BellumCivileCoopCompat
             var action = yes ? data.AffirmativeAction : data.NegativeAction;
             SubModule.Log(pending.Hero.StringId + " " + how + " " + (yes ? "yes" : "no") + " to " + pending.Site.What + " (" + pending.Id + ").");
             if (action == null) return;
-            var ran = AsPlayer.Run(pending.Hero, () =>
-            {
-                try { action(); }
-                catch (Exception ex) { SubModule.Log("Bellum failed applying " + pending.Id + ": " + ex.GetBaseException().Message); }
-            });
+            // As that player, and what Bellum then asks or tells "the player" goes to them too.
+            var ran = InFrame(pending.Hero, pending.Site, action);
             if (!ran)
             {
                 try { action(); }   // the scope could not open: Bellum's own answer still runs, as for a lord
