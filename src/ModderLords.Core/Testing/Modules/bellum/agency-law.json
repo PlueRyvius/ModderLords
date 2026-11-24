@@ -1,0 +1,117 @@
+{
+  // A player ruler changes the realm's succession law from Bellum's Succession tab (RemoteCalls, docs/BELLUM-COOP-COVERAGE.md
+  // stage 3d). The PC runs Bellum's own screen and question; the change itself (RealmLawBehavior.TryApplyPlayerLaw)
+  // goes to the server, which carries it out as the player and sends back its state. Without the module the button only
+  // changed the player's PC (stage 1 then turned it off).
+  "api": 2,
+  "name": "agency-law",
+  "mode": "coop",
+  "description": "A player ruler changes the realm's succession law from their PC: the server carries it out as the player, and both sides have the new law.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.makeRuler",
+      "side": "server",
+      "as": "realm",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.addVassals",
+      "side": "server",
+      "args": {
+        "kingdom": "$realm.value",
+        "count": "2"
+      }
+    },
+    {
+      "id": "bellum.addInfluence",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "3000"
+      }
+    },
+    {
+      "id": "bellum.activeLaw",
+      "side": "server",
+      "as": "before",
+      "args": {
+        "kingdom": "$realm.value",
+        "group": "succession"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.call",
+      "side": "client:1",
+      "as": "c",
+      "args": {
+        "method": "RealmLawBehavior.TryApplyPlayerLaw",
+        "args": "playerRealm|lawOther:succession|lawActive:succession"
+      }
+    },
+    {
+      "id": "bellum.carried",
+      "side": "server",
+      "args": {
+        "expect": "RealmLawBehavior.TryApplyPlayerLaw done"
+      }
+    },
+    {
+      "id": "bellum.activeLaw",
+      "side": "server",
+      "args": {
+        "kingdom": "$realm.value",
+        "group": "succession",
+        "expect": "$c.law"
+      }
+    },
+    {
+      "id": "bellum.activeLaw",
+      "side": "client:1",
+      "args": {
+        "kingdom": "$realm.value",
+        "group": "succession",
+        "expect": "$c.law"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "(15 of 15)"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}
