@@ -20,6 +20,9 @@ public static class ActionsSteps
         InGameTests.Register("bellum.call", StepSide.Client, Call);
         InGameTests.Register("bellum.carried", StepSide.Server, Carried);
         InGameTests.Register("bellum.activeLaw", StepSide.Any, ActiveLaw);
+        InGameTests.Register("bellum.otherFief", StepSide.Server, OtherFief);
+        InGameTests.Register("bellum.advanceFabrication", StepSide.Server, AdvanceFabrication);
+        InGameTests.Register("bellum.noticeShown", StepSide.Client, NoticeShown);
     }
 
     private static object? Behavior(Type type) =>
@@ -37,7 +40,7 @@ public static class ActionsSteps
     /// <summary>
     /// Player: calls Bellum's <c>method</c> ("Type.Method", e.g. RealmLawBehavior.TryApplyPlayerLaw) as its button does,
     /// with <c>args</c> (| separated: playerClan, playerHero, playerRealm, text:..., null, true, false, int:N, enum:Name,
-    /// lawOther:GROUP (a law of the group other than the realm's), lawActive:GROUP). In co-op the module sends the call to
+    /// lawOther:GROUP (a law of the group other than the realm's), lawActive:GROUP, fiefTitle (the title of settlement <c>fief</c>)). In co-op the module sends the call to
     /// the server. Reports value (what the call answered here) and law (the law picked, if any).
     /// </summary>
     private static IEnumerable<StepWait?> Call(StepContext ctx)
@@ -65,6 +68,7 @@ public static class ActionsSteps
                 _ when token.StartsWith("text:") => token.Substring(5),
                 _ when token.StartsWith("int:") => int.Parse(token.Substring(4), CultureInfo.InvariantCulture),
                 _ when token.StartsWith("enum:") => Enum.Parse(parameters[i].ParameterType, token.Substring(5)),
+                "fiefTitle" => FiefTitle(ctx.Arg("fief")),
                 _ when token.StartsWith("lawActive:") => Active(realm ?? throw new StepFailedException("the player has no realm"), token.Substring(10)),
                 _ when token.StartsWith("lawOther:") => law = OtherLaw(realm ?? throw new StepFailedException("the player has no realm"), token.Substring(9)),
                 _ => throw new StepFailedException($"unknown argument '{token}'"),
@@ -77,6 +81,49 @@ public static class ActionsSteps
         yield return null;
         ctx.Report("value", result?.ToString() ?? "");
         ctx.Report("law", law);
+    }
+
+    private static object FiefTitle(string fief)
+    {
+        var titles = Behavior(FindType("BellumCivile.Behaviors.FeudalTitleBehavior") ?? throw new StepFailedException("Bellum has no titles"));
+        var resolve = FindType("BellumCivile.CheatCommands")?.GetMethod("ResolveFeudalTitleForDebug", Any) ?? throw new StepFailedException("Bellum has no ResolveFeudalTitleForDebug");
+        return resolve.Invoke(null, new object?[] { titles, fief }) ?? throw new StepFailedException($"{fief} has no feudal title");
+    }
+
+    /// <summary>Server: a castle or town of realm <c>kingdom</c> that neither the ruler nor the hero's clan (<c>heroName</c>) holds.</summary>
+    private static IEnumerable<StepWait?> OtherFief(StepContext ctx)
+    {
+        var kingdom = KingdomById(ctx.Arg("kingdom")) ?? throw new StepFailedException($"no kingdom '{ctx.Arg("kingdom")}'");
+        var mine = HeroNames.Single(ctx.Arg("heroName")).Clan;
+        var fief = kingdom.Settlements.Where(st => (st.IsCastle || st.IsTown) && st.OwnerClan != null && st.OwnerClan != mine && st.OwnerClan != kingdom.RulingClan)
+            .OrderBy(st => st.IsTown ? 1 : 0).ThenBy(st => st.StringId).FirstOrDefault() ?? throw new StepFailedException($"no lord's fief in {kingdom.StringId}");
+        ctx.Report("value", fief.StringId);
+        yield break;
+    }
+
+    /// <summary>Server: the claim fabrication of the hero's clan (<c>heroName</c>) advances by <c>amount</c> (Bellum's own DebugAdvanceFabrication).</summary>
+    private static IEnumerable<StepWait?> AdvanceFabrication(StepContext ctx)
+    {
+        var clan = HeroNames.Single(ctx.Arg("heroName")).Clan ?? throw new StepFailedException("the hero has no clan");
+        var type = FindType("BellumCivile.Behaviors.FeudalClaimFabricationBehavior") ?? throw new StepFailedException("Bellum has no claim fabrication");
+        var fabrication = Behavior(type) ?? throw new StepFailedException("Bellum's claim fabrication is not running");
+        var args = new object?[] { clan, float.Parse(ctx.Arg("amount", "0.5"), CultureInfo.InvariantCulture), null };
+        var ok = type.GetMethod("DebugAdvanceFabrication", Any)!.Invoke(fabrication, args);
+        ctx.Log($"advanced: {ok} {args[2]}");
+        yield return null;
+        ctx.Report("value", args[2]?.ToString() ?? "");
+    }
+
+    /// <summary>Player: waits for a notice from the server containing <c>contains</c>.</summary>
+    private static IEnumerable<StepWait?> NoticeShown(StepContext ctx)
+    {
+        var recent = FindType("BellumCivileCoopCompat.Agency")?.GetProperty("Recent", Any) ?? throw new StepFailedException("the compat module has no Agency");
+        string? seen = null;
+        yield return ctx.Until(() => (seen = (recent.GetValue(null) as List<string> ?? new List<string>())
+                .FirstOrDefault(r => r.StartsWith("notice ") && r.IndexOf(ctx.Arg("contains"), StringComparison.OrdinalIgnoreCase) >= 0)) != null,
+            $"a notice with '{ctx.Arg("contains")}'", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 60)));
+        ctx.Log(seen!);
+        ctx.Report("value", seen!);
     }
 
     private static string OtherLaw(Kingdom realm, string group)

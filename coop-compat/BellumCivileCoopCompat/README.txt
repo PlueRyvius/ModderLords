@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.6.0 (by ModderLords)
+Bellum Civile Coop Compat v1.7.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -82,8 +82,15 @@ joined.
   screens and questions show on your PC; the server carries out the
   action as you, with Bellum's checks and costs.
 
-Coming next: crown actions, council proposals, title and marriage
-reviews, forming a title, and votes on Bellum's own decisions.
+- Bellum's standing questions come to you (new in 1.7.0): court business
+  awaiting you (title petitions, marriage reviews, protection requests,
+  court agenda decisions), a succession challenge's pledge, a claim
+  fabrication's setbacks, and your lordships' command and indenture
+  questions. A claim fabrication's progress comes as a notice. The
+  Factions tab's title petition and marriage reviews work.
+
+Coming next: crown actions, council proposals, forming a title, and votes
+on Bellum's own decisions.
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).

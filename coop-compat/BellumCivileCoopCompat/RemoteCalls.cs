@@ -41,6 +41,10 @@ namespace BellumCivileCoopCompat
             (B + "PrivyCouncilBehavior", "TryDismissOfficeHolderByRuler"),
             (B + "RealmLawBehavior", "TryApplyPlayerLaw"),
             (B + "ElectiveSuccessionBehavior", "SetPlayerSupport"),
+            // A faction's title petition and marriage review: these mark the court business; Bellum's standing question
+            // (Pollers) then asks the player.
+            (B + "CourtAgendaBehavior", "RequestTitlePetitionReview"),
+            (B + "CourtAgendaBehavior", "RequestDynasticReview"),
         };
 
         public const string Sent = "Sent to the server, which carries it out for you.";
@@ -131,7 +135,7 @@ namespace BellumCivileCoopCompat
 
         private static bool Encodable(Type type) =>
             type == typeof(Clan) || type == typeof(Hero) || type == typeof(Kingdom) || type == typeof(Settlement) || type == typeof(string)
-            || type == typeof(bool) || type == typeof(int) || type == typeof(float) || type.IsEnum || type.Name == "FeudalTitleRecord";
+            || type == typeof(bool) || type == typeof(int) || type == typeof(float) || type.IsEnum || type.Name == "FeudalTitleRecord" || type.Name == "FactionObject";
 
         private static string Encode(object value)
         {
@@ -147,6 +151,13 @@ namespace BellumCivileCoopCompat
                 case int number: return "v:" + number.ToString(CultureInfo.InvariantCulture);
                 case float number: return "v:" + number.ToString("R", CultureInfo.InvariantCulture);
                 case Enum e: return "e:" + e;
+            }
+            if (value.GetType().Name == "FactionObject")
+            {
+                // A Bellum faction has no id: its realm, type and leader.
+                var realm = AccessTools.Property(value.GetType(), "ParentKingdom")?.GetValue(value, null) as Kingdom;
+                var leader = AccessTools.Property(value.GetType(), "Leader")?.GetValue(value, null) as Clan;
+                return "f:" + realm?.StringId + "|" + AccessTools.Property(value.GetType(), "Type")?.GetValue(value, null) + "|" + Encode(leader);
             }
             var title = AccessTools.Property(value.GetType(), "TitleId")?.GetValue(value, null) as string;
             return title != null ? "t:" + title : "~";
@@ -173,6 +184,19 @@ namespace BellumCivileCoopCompat
                     if (type == typeof(float)) return float.Parse(body, CultureInfo.InvariantCulture);
                     return null;
                 case 'e': return Enum.Parse(type, body);
+                case 'f':
+                {
+                    var parts = body.Split(new[] { '|' }, 3);
+                    if (parts.Length < 3) return null;
+                    var realm = Kingdom.All.FirstOrDefault(k => k?.StringId == parts[0]);
+                    var leader = Decode(parts[2], typeof(Clan), sender) as Clan;
+                    var manager = Behaviour("BellumCivile.Behaviors.FactionManagerBehavior");
+                    var factions = realm == null || manager == null ? null
+                        : AccessTools.Method(manager.GetType(), "GetFactionsInKingdom")?.Invoke(manager, new object[] { realm }) as System.Collections.IEnumerable;
+                    return factions?.Cast<object>().FirstOrDefault(f =>
+                        AccessTools.Property(f.GetType(), "Type")?.GetValue(f, null)?.ToString() == parts[1]
+                        && ReferenceEquals(AccessTools.Property(f.GetType(), "Leader")?.GetValue(f, null), leader));
+                }
                 case 't':
                     var titles = Behaviour("BellumCivile.Behaviors.FeudalTitleBehavior");
                     return titles == null ? null : AccessTools.Method(titles.GetType(), "GetTitle", new[] { typeof(string) })?.Invoke(titles, new object[] { body });

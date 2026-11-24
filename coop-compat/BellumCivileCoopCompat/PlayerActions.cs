@@ -30,7 +30,6 @@ namespace BellumCivileCoopCompat
             [UI + "FactionsWindowVM"] = new[] { "ExecuteCreate", "ExecuteConfirmCreate", "ExecuteJoin", "ExecuteUltimatum" },
             [UI + "VanillaTabs.Kingdoms.Factions.KingdomFactionsTabVM"] = new[] { "ExecuteCreate", "ExecuteConfirmCreate", "ExecuteJoin", "ExecuteUltimatum" },
             [UI + "CrownPanelVM"] = new[] { "ExecuteCrownActions" },
-            [UI + "FactionItemVM"] = new[] { "ExecuteReviewMarriage", "ExecuteReviewTitlePetition" },
             [UI + "VanillaTabs.Kingdoms.Factions.PrivyCouncilVM"] = new[] { "ExecutePropose" },
             [UI + "VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM"] = new[] { "ExecuteForm" },
             // The rest of the Hierarchy, claim feud, succession law, election and council buttons run here: Bellum's

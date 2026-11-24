@@ -250,6 +250,8 @@ namespace BellumCivileCoopCompat
             var frame = _frame;
             if (!Coop.OnServer || frame == null || data == null)
                 return true;
+            if (AlreadyAsked(frame.Hero, data.TitleText, data.Text))
+                return false;
             var pending = new Pending
             {
                 Id = "p" + (++_next), Hero = frame.Hero, Site = frame.Site, Data = data,
@@ -273,6 +275,8 @@ namespace BellumCivileCoopCompat
             var frame = _frame;
             if (!Coop.OnServer || frame == null || data == null)
                 return true;
+            if (AlreadyAsked(frame.Hero, data.TitleText, data.DescriptionText))
+                return false;
             var pending = new Pending
             {
                 Id = "p" + (++_next), Hero = frame.Hero, Site = frame.Site, Choice = data, Instance = frame.Instance, Args = frame.Args,
@@ -295,6 +299,14 @@ namespace BellumCivileCoopCompat
             SubModule.Log("Asked " + pending.Hero.StringId + " to choose (" + frame.Site.What + ", " + pending.Id + ")" + (sent ? "." : "; could not reach them, the fallback answers."));
             if (!sent) pending.Expires = DateTime.MinValue;
             return false;
+        }
+
+        // The same question to the same player while they still have it open (a poller asking again) is not sent twice.
+        private static bool AlreadyAsked(Hero hero, string title, string text)
+        {
+            lock (Open)
+                return Open.Values.Any(p => ReferenceEquals(p.Hero, hero)
+                    && (p.Data != null ? p.Data.TitleText == title && p.Data.Text == text : p.Choice.TitleText == title && p.Choice.DescriptionText == text));
         }
 
         private static bool Enabled(Func<ValueTuple<bool, string>> check)
