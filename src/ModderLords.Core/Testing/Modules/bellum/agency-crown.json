@@ -1,0 +1,77 @@
+{
+  // A player ruler files court business from Bellum's Crown panel (RemoteCalls, docs/BELLUM-COOP-COVERAGE.md stage 3f). The
+  // PC shows Bellum's own lists of motions (from the court's state the server sends); the filing goes to the server as
+  // the motion's identity, and the server files the same motion from what Bellum offers the player there.
+  "api": 2,
+  "name": "agency-crown",
+  "mode": "coop",
+  "description": "A player ruler files a court motion from Bellum's Crown panel: the server files it as the player.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.takeThrone",
+      "side": "server",
+      "as": "realm",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.addInfluence",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "3000"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.fileCrownMotion",
+      "side": "client:1",
+      "as": "m"
+    },
+    {
+      "id": "bellum.carried",
+      "side": "server",
+      "args": {
+        "expect": "CourtAgendaBehavior.FilePlayerCrownBusiness done"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "(21 of 21)"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

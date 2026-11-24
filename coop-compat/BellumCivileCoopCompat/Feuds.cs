@@ -32,7 +32,7 @@ namespace BellumCivileCoopCompat
         private static readonly HashSet<string> AiJudged = new HashSet<string>();
 
         [ThreadStatic] private static Hero _revocationPlayer;
-        private static int _revocationRewrites, _supportCalls;
+        private static int _revocationRewrites, _supportCalls, _houseRewrites;
         private static MethodInfo _support, _resolve, _setState;
         private static FieldInfo _shownJudgments;
         private static object _petitionReady;
@@ -84,6 +84,17 @@ namespace BellumCivileCoopCompat
                 harmony.Patch(revocation, transpiler: new HarmonyMethod(typeof(Feuds), nameof(RevocationTranspiler)));
                 if (_revocationRewrites != 1)
                     missing.Add("the player test in EvaluateClanForClaimedRevocation (found " + _revocationRewrites + ")");
+            }
+
+            // A player's clan counts as a noble house in a claim feud, as the game's own player clan does.
+            var valid = behavior == null ? null : AccessTools.Method(behavior, "IsValidFeudClan");
+            if (valid == null)
+                missing.Add("ClaimFeudBehavior.IsValidFeudClan");
+            else
+            {
+                harmony.Patch(valid, transpiler: new HarmonyMethod(typeof(Feuds), nameof(HouseTranspiler)));
+                if (_houseRewrites != 1)
+                    missing.Add("the player test in IsValidFeudClan (found " + _houseRewrites + ")");
             }
 
             SubModule.Log("Feuds: Bellum's claim feud rulings, judgments, calls and title demands go to the players they concern.");
@@ -171,6 +182,36 @@ namespace BellumCivileCoopCompat
         }
 
         private static readonly Prompts.Site SupportCall = new Prompts.Site("", "", null, Prompts.Fallback.Nothing, "a call to support a claim feud");
+
+        // ---- a player's clan in a claim feud ----
+
+        // clan.IsMinorFaction && clan != Clan.PlayerClan  ->  ... && clan != HouseClan(clan)
+        // Bellum lets the player's clan into a feud even where the game counts it a minor faction (a co-op player's clan
+        // is one on the server); on the server, any player's clan is let in the same way.
+        private static IEnumerable<CodeInstruction> HouseTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            var playerClan = AccessTools.PropertyGetter(typeof(Clan), nameof(Clan.PlayerClan));
+            CodeInstruction previous = null;
+            foreach (var code in instructions)
+            {
+                if (code.operand is MethodInfo called && called == playerClan && previous != null && previous.opcode == OpCodes.Ldarg_0)
+                {
+                    _houseRewrites++;
+                    var dup = new CodeInstruction(OpCodes.Dup);
+                    dup.labels.AddRange(code.labels);
+                    dup.blocks.AddRange(code.blocks);
+                    yield return dup;
+                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Feuds), nameof(HouseClan)));
+                    previous = null;
+                    continue;
+                }
+                previous = code;
+                yield return code;
+            }
+        }
+
+        /// <summary>The clan itself when a player leads it (on the server), else the game's player clan.</summary>
+        private static Clan HouseClan(Clan clan) => Coop.OnServer && clan != null && Coop.IsPlayerHero(clan.Leader) ? clan : Clan.PlayerClan;
 
         // ---- a demand to surrender a title ----
 

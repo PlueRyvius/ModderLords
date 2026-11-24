@@ -29,6 +29,6 @@ namespace BellumCivileCoopCompat
         public static bool OnVoteDeadline(KingdomDecision decision, bool rulerVoted) => TreatyVote.OnDeadline(decision, rulerVoted);
 
         /// <summary>A short line of what the module did this session, for a launcher's log.</summary>
-        public static string Summary() => PeaceInCoop.Summary() + VotePeace.Summary() + TreatyVote.Summary() + InternalPeace.Summary() + ServerDecides.Summary() + PlayersNotAi.Summary() + CrownAccession.Summary() + Prompts.Summary() + Calls.Summary() + Feuds.Summary() + StateMirror.Summary() + FactionActions.Summary() + RemoteCalls.Summary() + Pollers.Summary();
+        public static string Summary() => PeaceInCoop.Summary() + VotePeace.Summary() + TreatyVote.Summary() + InternalPeace.Summary() + ServerDecides.Summary() + PlayersNotAi.Summary() + CrownAccession.Summary() + Prompts.Summary() + Calls.Summary() + Feuds.Summary() + StateMirror.Summary() + FactionActions.Summary() + RemoteCalls.Summary() + Pollers.Summary() + DecisionSync.Summary();
     }
 }

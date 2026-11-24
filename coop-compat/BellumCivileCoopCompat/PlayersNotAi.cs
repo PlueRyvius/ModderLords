@@ -103,7 +103,8 @@ namespace BellumCivileCoopCompat
             // Claims, feuds, revocations and titles on a player's behalf or against them.
             new Target(B + "FeudalPoliticalOptionsBehavior", "TryRunPoliticalOptionsForClan", "clan", Answer.False, "title and claim moves made for a player's clan"),
             new Target(B + "ClaimFeudBehavior", "TryRunAutonomousLandedAmbitionEvaluationForClan", "clan", Answer.False, "claims pressed for a player's clan"),
-            new Target(B + "ClaimFeudBehavior", "IsValidFeudClan", "clan", Answer.False, "a player's clan in a claim feud"),
+            // A player's clan may be in a claim feud since 1.5.0: Feuds puts the ruling, judgment, calls and title demands to
+            // the player, so a feud over a player's fief is no longer decided for them.
             new Target(F + "FeudalTitlePlayerActionService", "TryExecuteRevocation", "title.DeFactoHolderClanId", Answer.False, "a player's title revoked by AI"),
 
             // Clan members split off into a mercenary band.

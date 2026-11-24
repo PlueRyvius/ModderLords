@@ -38,6 +38,8 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.ElectiveSuccessionBehavior",
             "BellumCivile.Behaviors.PrivyCouncilBehavior",
             "BellumCivile.Behaviors.SuccessionChallengeBehavior",
+            "BellumCivile.Behaviors.CourtAgendaBehavior",
+            "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior",
         };
 
         private const int Chunk = 24 * 1024;
@@ -162,6 +164,28 @@ namespace BellumCivileCoopCompat
             }
         }
 
+        /// <summary>One object (a kingdom decision, say) in the same encoding: its saveable fields, game objects by id.</summary>
+        public static byte[] EncodeObject(object value)
+        {
+            using (var memory = new MemoryStream())
+            {
+                using (var writer = new BinaryWriter(memory))
+                    new Codec().Write(writer, value);
+                return memory.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Reads an object from <see cref="EncodeObject"/>. Objects are built with their own parameterless constructor where
+        /// they have one, so fields the encoding doesn't carry keep their usual start values.
+        /// </summary>
+        public static object DecodeObject(byte[] bytes)
+        {
+            using (var memory = new MemoryStream(bytes ?? new byte[0]))
+            using (var reader = new BinaryReader(memory))
+                return memory.Length == 0 ? null : new Codec { UseConstructors = true }.Read(reader);
+        }
+
         public static void Decode(CampaignBehaviorBase behaviour, byte[] bytes)
         {
             var store = new Store(saving: false);
@@ -232,6 +256,9 @@ namespace BellumCivileCoopCompat
                     if (hero.Clan != null && hero.Clan.Leader == hero) _playerClans[hero.Clan.StringId] = name;
                 }
             }
+
+            /// <summary>Build objects with their parameterless constructor where they have one (else uninitialized).</summary>
+            public bool UseConstructors;
 
             private readonly Dictionary<object, int> _written = new Dictionary<object, int>(ReferenceComparer.Instance);
             private readonly List<object> _read = new List<object>();
@@ -390,7 +417,13 @@ namespace BellumCivileCoopCompat
                     case Tag.Struct:
                     {
                         var t = ReadType(r);
-                        var value = FormatterServices.GetUninitializedObject(t);
+                        object value = null;
+                        if (UseConstructors && tag == Tag.Object && t.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null) != null)
+                        {
+                            try { value = Activator.CreateInstance(t, true); }
+                            catch { value = null; }
+                        }
+                        if (value == null) value = FormatterServices.GetUninitializedObject(t);
                         if (tag == Tag.Object) _read.Add(value);
                         var n = r.ReadInt32();
                         var fields = FieldsOf(t).ToDictionary(f => f.Name);

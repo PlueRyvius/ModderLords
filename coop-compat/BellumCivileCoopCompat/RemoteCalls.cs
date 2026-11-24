@@ -45,6 +45,14 @@ namespace BellumCivileCoopCompat
             // (Pollers) then asks the player.
             (B + "CourtAgendaBehavior", "RequestTitlePetitionReview"),
             (B + "CourtAgendaBehavior", "RequestDynasticReview"),
+            // Crown actions and council proposals: a motion travels by its identity, and the server files the same motion
+            // from what Bellum offers that player there (as Bellum's own filing re-checks it).
+            (B + "CourtAgendaBehavior", "FilePlayerCrownBusiness"),
+            (B + "CourtAgendaBehavior", "FileMandateMotion"),
+            (B + "CourtAgendaBehavior", "TryScheduleRoyalPeace"),
+            // Forming a title: the chosen formation travels as its type, seed, child titles and name, and the server builds
+            // it again with Bellum's own builder for that player.
+            (B + "FeudalTitleBehavior", "TryFormTitleWithDetails"),
         };
 
         public const string Sent = "Sent to the server, which carries it out for you.";
@@ -66,10 +74,11 @@ namespace BellumCivileCoopCompat
                 var type = AccessTools.TypeByName(typeName);
                 var methods = type?.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)
                     .Where(m => m.Name == name && !m.IsAbstract && !m.IsGenericMethodDefinition).ToList() ?? new List<MethodInfo>();
-                var method = methods.Count == 1 ? methods[0] : null;
+                // Overloads: the fullest one (Bellum's shorter overloads call it, so the call is caught there).
+                var method = methods.OrderByDescending(m => m.GetParameters().Length).FirstOrDefault();
                 if (method == null || method.GetParameters().Any(p => !p.IsOut && !Encodable(p.ParameterType)))
                 {
-                    missing.Add(Short(typeName) + "." + name + (methods.Count > 1 ? " (overloaded)" : ""));
+                    missing.Add(Short(typeName) + "." + name);
                     continue;
                 }
                 var key = Short(typeName) + "." + name;
@@ -135,7 +144,8 @@ namespace BellumCivileCoopCompat
 
         private static bool Encodable(Type type) =>
             type == typeof(Clan) || type == typeof(Hero) || type == typeof(Kingdom) || type == typeof(Settlement) || type == typeof(string)
-            || type == typeof(bool) || type == typeof(int) || type == typeof(float) || type.IsEnum || type.Name == "FeudalTitleRecord" || type.Name == "FactionObject";
+            || type == typeof(bool) || type == typeof(int) || type == typeof(float) || type.IsEnum || type.Name == "FeudalTitleRecord" || type.Name == "FactionObject"
+            || type.Name == "PlayerMotion" || type.Name == "CourtAgendaRecord" || type.Name == "FeudalTitleFormationCandidate";
 
         private static string Encode(object value)
         {
@@ -159,11 +169,38 @@ namespace BellumCivileCoopCompat
                 var leader = AccessTools.Property(value.GetType(), "Leader")?.GetValue(value, null) as Clan;
                 return "f:" + realm?.StringId + "|" + AccessTools.Property(value.GetType(), "Type")?.GetValue(value, null) + "|" + Encode(leader);
             }
+            if (value.GetType().Name == "PlayerMotion")
+            {
+                // A court motion: its kind and its candidate's identity, and the filing cost the player saw.
+                var candidate = Member(value, "Candidate");
+                return "m:" + Member(value, "Kind") + "|" + Member(candidate, "TargetId") + "|" + Member(candidate, "ActionId") + "|" + Member(candidate, "BeneficiaryId") + "|" + Member(value, "FilingCost");
+            }
+            if (value.GetType().Name == "FeudalTitleFormationCandidate")
+            {
+                var children = Member(value, "ChildTitleIds") as System.Collections.IEnumerable;
+                return "q:" + Member(value, "TargetType") + "|" + Member(value, "SeedTitleId") + "|"
+                       + string.Join(",", children?.Cast<object>().Select(c => c?.ToString()) ?? Enumerable.Empty<string>()) + "|" + Member(value, "Name");
+            }
+            if (value.GetType().Name == "CourtAgendaRecord")
+            {
+                // The player's term mandate in a realm (FileMandateMotion's only record).
+                return Member(value, "Realm") is Kingdom realm ? "a:" + realm.StringId : "~";
+            }
             var title = AccessTools.Property(value.GetType(), "TitleId")?.GetValue(value, null) as string;
             return title != null ? "t:" + title : "~";
         }
 
-        private static object Decode(string token, Type type, Hero sender)
+        private static object Member(object o, string name)
+        {
+            if (o == null) return null;
+            var field = AccessTools.Field(o.GetType(), name);
+            if (field != null) return field.GetValue(o);
+            return AccessTools.Property(o.GetType(), name)?.GetValue(o, null);
+        }
+
+        // Decoded inside the player's scope: a mandate and a motion are what Bellum offers that player now. A motion is found
+        // among those offered for the record or realm decoded before it.
+        private static object Decode(string token, Type type, Hero sender, object[] earlier = null)
         {
             if (token == "~") return null;
             if (token == "@clan") return sender.Clan;
@@ -197,6 +234,48 @@ namespace BellumCivileCoopCompat
                         AccessTools.Property(f.GetType(), "Type")?.GetValue(f, null)?.ToString() == parts[1]
                         && ReferenceEquals(AccessTools.Property(f.GetType(), "Leader")?.GetValue(f, null), leader));
                 }
+                case 'a':
+                {
+                    var realm = Kingdom.All.FirstOrDefault(k => k?.StringId == body);
+                    var court = Behaviour("BellumCivile.Behaviors.CourtAgendaBehavior");
+                    return realm == null || court == null ? null : AccessTools.Method(court.GetType(), "GetPlayerTermAgenda")?.Invoke(court, new object[] { realm });
+                }
+                case 'm':
+                {
+                    var parts = body.Split('|');
+                    if (parts.Length < 5) return null;
+                    var court = Behaviour("BellumCivile.Behaviors.CourtAgendaBehavior");
+                    if (court == null) return null;
+                    var agenda = earlier?.FirstOrDefault(v => v != null && v.GetType().Name == "CourtAgendaRecord");
+                    if (agenda == null && earlier?.OfType<Kingdom>().FirstOrDefault() is Kingdom realm)
+                        agenda = AccessTools.Method(court.GetType(), "NewPlayerCrownBusiness")?.Invoke(court, new object[] { realm });
+                    if (agenda == null) return null;
+                    var offered = AccessTools.Method(court.GetType(), "AvailablePlayerMotions")?.Invoke(court, new[] { agenda, parts[0] }) as System.Collections.IEnumerable;
+                    string Str(object o) => o?.ToString() ?? "";
+                    return offered?.Cast<object>().FirstOrDefault(m =>
+                    {
+                        var c = Member(m, "Candidate");
+                        return Str(Member(c, "TargetId")) == parts[1] && Str(Member(c, "ActionId")) == parts[2] && Str(Member(c, "BeneficiaryId")) == parts[3]
+                               && Str(Member(m, "FilingCost")) == parts[4];
+                    });
+                }
+                case 'q':
+                {
+                    var parts = body.Split(new[] { '|' }, 4);
+                    if (parts.Length < 4) return null;
+                    var titleBehavior = Behaviour("BellumCivile.Behaviors.FeudalTitleBehavior");
+                    var build = titleBehavior == null ? null : AccessTools.Method(titleBehavior.GetType(), "TryBuildFormationCandidateWithDetails");
+                    var typeOfTitle = AccessTools.TypeByName("BellumCivile.FeudalTitleType");
+                    if (build == null || typeOfTitle == null) return null;
+                    var buildArgs = new object[build.GetParameters().Length];
+                    buildArgs[0] = sender.Clan;
+                    buildArgs[1] = Enum.Parse(typeOfTitle, parts[0]);
+                    buildArgs[2] = parts[2].Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                    buildArgs[3] = parts[1].Length == 0 ? null : parts[1];
+                    buildArgs[4] = parts[3];
+                    buildArgs[5] = true;
+                    return build.Invoke(titleBehavior, buildArgs) is true ? buildArgs[6] : null;
+                }
                 case 't':
                     var titles = Behaviour("BellumCivile.Behaviors.FeudalTitleBehavior");
                     return titles == null ? null : AccessTools.Method(titles.GetType(), "GetTitle", new[] { typeof(string) })?.Invoke(titles, new object[] { body });
@@ -229,23 +308,29 @@ namespace BellumCivileCoopCompat
                 return;
             }
             var values = new object[parameters.Length];
-            for (var i = 0; i < parameters.Length; i++)
-            {
-                if (parameters[i].IsOut) continue;
-                try { values[i] = Decode(args[i + 1], parameters[i].ParameterType, sender); }
-                catch { values[i] = null; }
-                if (values[i] == null && args[i + 1] != "~")
-                {
-                    Agency.ToPlayer(sender, "notice", "That is no longer there.");
-                    SubModule.Log("Bellum actions: " + args[0] + " from " + sender.StringId + ": " + args[i + 1] + " is no longer there; ignored.");
-                    return;
-                }
-            }
             var instance = method.IsStatic ? null : Behaviour(method.DeclaringType.FullName);
             if (!method.IsStatic && instance == null)
                 return;
             object result = null;
-            var ok = Prompts.RunAsking(sender, "Bellum's " + args[0], () => result = method.Invoke(instance, values));
+            string gone = null;
+            var ok = Prompts.RunAsking(sender, "Bellum's " + args[0], () =>
+            {
+                for (var i = 0; i < parameters.Length; i++)
+                {
+                    if (parameters[i].IsOut) continue;
+                    try { values[i] = Decode(args[i + 1], parameters[i].ParameterType, sender, values); }
+                    catch { values[i] = null; }
+                    if (values[i] == null && args[i + 1] != "~") { gone = args[i + 1]; return; }
+                }
+                result = method.Invoke(instance, values);
+            });
+            if (gone != null)
+            {
+                Agency.ToPlayer(sender, "notice", "That is no longer there.");
+                SubModule.Log("Bellum actions: " + args[0] + " from " + sender.StringId + ": " + gone + " is no longer there; ignored.");
+                StateMirror.SendTo(sender);
+                return;
+            }
             var reason = string.Join(" ", parameters.Select((p, i) => p.IsOut ? values[i] : null).OfType<object>()
                 .Where(v => v is string || v is TextObject).Select(v => v.ToString()).Where(s => s.Length > 0));
             var outcome = !ok ? "not carried out" : result is bool b ? (b ? "done" : "refused") : "done";

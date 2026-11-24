@@ -1,7 +1,8 @@
 {
   // Treason solidarity (Calls, stage 3, A1). An accused lord who rebels appeals to lords close to them (relation 60 or more). On
   // the server Bellum checked the placeholder player, so no player was ever asked. Here the player is close to the rebel
-  // leader; the server asks them, and their yes moves their clan to the rebels.
+  // leader; the server asks them, and their yes moves their clan to the rebels. The rebellion first calls the player to a
+  // side (Calls); they decline that call, so the appeal is what moves them.
   "api": 2,
   "name": "agency-treason",
   "mode": "coop",
@@ -59,6 +60,19 @@
       "args": {
         "kingdom": "$q.value",
         "leader": "$f.leader"
+      }
+    },
+    {
+      "id": "bellum.promptShown",
+      "side": "client:1",
+      "as": "call"
+    },
+    {
+      "id": "bellum.answer",
+      "side": "client:1",
+      "args": {
+        "id": "$call.value",
+        "answer": "no"
       }
     },
     {

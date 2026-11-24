@@ -38,6 +38,14 @@
       }
     },
     {
+      "id": "hero.addGold",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "50000"
+      }
+    },
+    {
       "id": "bellum.otherFief",
       "side": "server",
       "as": "o",

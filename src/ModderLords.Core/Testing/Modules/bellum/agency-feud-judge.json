@@ -21,19 +21,11 @@
       "side": "client:1"
     },
     {
-      "id": "bellum.makeRuler",
+      "id": "bellum.takeThrone",
       "side": "server",
       "as": "realm",
       "args": {
         "heroName": "$me.heroName"
-      }
-    },
-    {
-      "id": "bellum.addVassals",
-      "side": "server",
-      "args": {
-        "kingdom": "$realm.value",
-        "count": "3"
       }
     },
     {

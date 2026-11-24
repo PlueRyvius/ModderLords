@@ -1,0 +1,72 @@
+{
+  // Players vote on Bellum's own decisions (DecisionSync, docs/BELLUM-COOP-COVERAGE.md stage 3, A6). Coop sends a realm's
+  // decisions only of types it knows, or that a mod registers with its KingdomDecisionTypeRegistry; Bellum's were
+  // decided by the server's AI. Here a lord proposes a privy council appointment and the player's PC has the vote too.
+  "api": 2,
+  "name": "agency-vote",
+  "mode": "coop",
+  "description": "A lord of the player's realm proposes a privy council appointment: the vote reaches the player's PC.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.addCouncilDecision",
+      "side": "server",
+      "as": "d",
+      "args": {
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.hasDecision",
+      "side": "server",
+      "args": {
+        "kingdom": "$q.value",
+        "type": "PrivyCouncilAppointmentDecision"
+      }
+    },
+    {
+      "id": "bellum.hasDecision",
+      "side": "client:1",
+      "args": {
+        "kingdom": "$q.value",
+        "type": "PrivyCouncilAppointmentDecision"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "Votes: players vote on Bellum's own decisions"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1",
+      "args": {
+        "expect": "Votes: players vote on Bellum's own decisions"
+      }
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

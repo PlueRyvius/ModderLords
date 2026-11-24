@@ -289,6 +289,27 @@ public static class Steps
 
     // ---- helpers ---------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Whether Bellum would let <paramref name="clan"/> fabricate a claim on the title of <paramref name="fief"/> (its own
+    /// FeudalClaimFabricationBehavior.TryGetFabricationTrack: a neighbouring, liege or subordinate title). Logs why not.
+    /// </summary>
+    internal static object? FabricationTarget(Clan clan, TaleWorlds.CampaignSystem.Settlements.Settlement fief, Action<string>? log = null)
+    {
+        var titlesType = FindType("BellumCivile.Behaviors.FeudalTitleBehavior");
+        var fabType = FindType("BellumCivile.Behaviors.FeudalClaimFabricationBehavior");
+        if (titlesType == null || fabType == null) return null;
+        var get = typeof(Campaign).GetMethod(nameof(Campaign.GetCampaignBehavior))!;
+        var titles = get.MakeGenericMethod(titlesType).Invoke(Campaign.Current, null);
+        var title = FindType("BellumCivile.CheatCommands")?.GetMethod("ResolveFeudalTitleForDebug", Any)?.Invoke(null, new object?[] { titles, fief.StringId });
+        var track = fabType.GetMethod("TryGetFabricationTrack", Any);
+        if (title == null || track == null) return null;
+        var args = new object?[track.GetParameters().Length];
+        args[0] = titles; args[1] = clan; args[2] = title;
+        var ok = track.Invoke(null, args) is true;
+        if (!ok) log?.Invoke($"{clan.StringId} cannot claim {fief.StringId}: {args[4]}");
+        return ok ? title : null;
+    }
+
     internal static Kingdom? KingdomById(string id) => Kingdom.All.FirstOrDefault(k => k != null && k.StringId == id);
 
     // This game's own player clan's realm. Enough for the suite: it runs on a fresh world, where players join no kingdom

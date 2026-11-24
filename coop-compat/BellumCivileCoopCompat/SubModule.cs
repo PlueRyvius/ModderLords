@@ -70,6 +70,9 @@ namespace BellumCivileCoopCompat
                 try { install(harmony); }
                 catch (Exception ex) { Log(install.Method.DeclaringType?.Name + " not installed: " + ex.GetBaseException().Message); }
             }
+            // Coop compares the decision types both sides sync when a player joins, before any campaign tick.
+            try { DecisionSync.TryRegister(); }
+            catch (Exception ex) { Log("Votes not set up: " + ex.GetBaseException().Message); }
         }
 
         // Every 3 seconds, on the main thread, while a campaign runs.
@@ -89,6 +92,7 @@ namespace BellumCivileCoopCompat
                 if (Coop.OnServer) Prompts.Tick();
                 if (Coop.OnServer) StateMirror.Tick();
                 CrownAccession.TryHookCoop();
+                DecisionSync.TryRegister();
             }
             catch (Exception ex) { Log("Tick failed: " + ex.GetBaseException().Message); }
         }

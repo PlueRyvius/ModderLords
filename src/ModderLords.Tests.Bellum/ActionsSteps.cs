@@ -23,6 +23,9 @@ public static class ActionsSteps
         InGameTests.Register("bellum.otherFief", StepSide.Server, OtherFief);
         InGameTests.Register("bellum.advanceFabrication", StepSide.Server, AdvanceFabrication);
         InGameTests.Register("bellum.noticeShown", StepSide.Client, NoticeShown);
+        InGameTests.Register("bellum.fileCrownMotion", StepSide.Client, FileCrownMotion);
+        InGameTests.Register("bellum.addCouncilDecision", StepSide.Server, AddCouncilDecision);
+        InGameTests.Register("bellum.hasDecision", StepSide.Any, HasDecision);
     }
 
     private static object? Behavior(Type type) =>
@@ -90,13 +93,15 @@ public static class ActionsSteps
         return resolve.Invoke(null, new object?[] { titles, fief }) ?? throw new StepFailedException($"{fief} has no feudal title");
     }
 
-    /// <summary>Server: a castle or town of realm <c>kingdom</c> that neither the ruler nor the hero's clan (<c>heroName</c>) holds.</summary>
+    /// <summary>Server: a castle or town of realm <c>kingdom</c>, held by neither the ruler nor the hero's clan (<c>heroName</c>), whose title Bellum lets that clan claim.</summary>
     private static IEnumerable<StepWait?> OtherFief(StepContext ctx)
     {
         var kingdom = KingdomById(ctx.Arg("kingdom")) ?? throw new StepFailedException($"no kingdom '{ctx.Arg("kingdom")}'");
         var mine = HeroNames.Single(ctx.Arg("heroName")).Clan;
+        // One whose title Bellum lets the player's clan claim (a neighbouring, liege or subordinate title).
         var fief = kingdom.Settlements.Where(st => (st.IsCastle || st.IsTown) && st.OwnerClan != null && st.OwnerClan != mine && st.OwnerClan != kingdom.RulingClan)
-            .OrderBy(st => st.IsTown ? 1 : 0).ThenBy(st => st.StringId).FirstOrDefault() ?? throw new StepFailedException($"no lord's fief in {kingdom.StringId}");
+            .OrderBy(st => st.IsTown ? 1 : 0).ThenBy(st => st.StringId)
+            .FirstOrDefault(st => mine == null || FabricationTarget(mine, st, ctx.Log) != null) ?? throw new StepFailedException($"no fief in {kingdom.StringId} the player's clan could claim");
         ctx.Report("value", fief.StringId);
         yield break;
     }
@@ -126,6 +131,60 @@ public static class ActionsSteps
         ctx.Report("value", seen!);
     }
 
+    /// <summary>
+    /// Player (a ruler): files the first court motion Bellum's crown actions offer that the player can pay for, as the Crown
+    /// panel's last confirmation does (CourtAgendaBehavior.FilePlayerCrownBusiness with a motion from AvailablePlayerMotions).
+    /// In co-op the module sends it to the server. Reports value (the motion's kind) and label.
+    /// </summary>
+    private static IEnumerable<StepWait?> FileCrownMotion(StepContext ctx)
+    {
+        var type = FindType("BellumCivile.Behaviors.CourtAgendaBehavior") ?? throw new StepFailedException("Bellum has no court agenda");
+        var court = Behavior(type) ?? throw new StepFailedException("Bellum's court agenda is not running");
+        var realm = Clan.PlayerClan?.Kingdom ?? throw new StepFailedException("the player has no realm");
+        var draft = type.GetMethod("NewPlayerCrownBusiness", Any)!.Invoke(court, new object[] { realm });
+        var offered = (type.GetMethod("AvailablePlayerMotions", Any)!.Invoke(court, new object?[] { draft, null }) as IEnumerable)?.Cast<object>().ToList() ?? new List<object>();
+        object? Member(object o, string name) => o.GetType().GetField(name, Any)?.GetValue(o) ?? o.GetType().GetProperty(name, Any)?.GetValue(o);
+        var influence = Clan.PlayerClan.Influence;
+        ctx.Log("offered: " + string.Join(", ", offered.Select(m => $"{Member(m, "Kind")} ({Member(m, "FilingCost")})")));
+        var skip = new HashSet<string>(ctx.Arg("skip", "").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries));
+        var motion = offered.FirstOrDefault(m => !skip.Contains(Member(m, "Kind") as string ?? "") && Convert.ToInt32(Member(m, "FilingCost")) <= influence)
+                     ?? throw new StepFailedException($"Bellum offers the player no court motion they can pay for ({offered.Count} offered, influence {influence:0})");
+        var filed = type.GetMethod("FilePlayerCrownBusiness", Any)!.Invoke(court, new[] { realm, motion });
+        ctx.Log($"filed {Member(motion, "Kind")}: {filed}");
+        yield return null;
+        ctx.Report("value", Member(motion, "Kind")?.ToString() ?? "");
+        ctx.Report("label", Member(motion, "Label")?.ToString() ?? "");
+    }
+
+    /// <summary>
+    /// Server: a lord of realm <c>kingdom</c> proposes a privy council appointment (Bellum's own
+    /// PrivyCouncilAppointmentDecision, for the first office), added to the realm's decisions as Bellum adds it.
+    /// </summary>
+    private static IEnumerable<StepWait?> AddCouncilDecision(StepContext ctx)
+    {
+        var kingdom = KingdomById(ctx.Arg("kingdom")) ?? throw new StepFailedException($"no kingdom '{ctx.Arg("kingdom")}'");
+        var type = FindType("BellumCivile.PrivyCouncilAppointmentDecision") ?? throw new StepFailedException("Bellum has no PrivyCouncilAppointmentDecision");
+        var office = Enum.GetValues(FindType("BellumCivile.PrivyCouncilOffice") ?? throw new StepFailedException("Bellum has no PrivyCouncilOffice")).GetValue(0);
+        var proposer = kingdom.Clans.Where(c => c != null && !c.IsEliminated && !c.IsMinorFaction && c.Leader != null && c != kingdom.RulingClan)
+            .OrderByDescending(c => c.Tier).FirstOrDefault() ?? kingdom.RulingClan;
+        var ctor = type.GetConstructor(new[] { typeof(Clan), office.GetType() }) ?? throw new StepFailedException("PrivyCouncilAppointmentDecision has changed shape");
+        var decision = (TaleWorlds.CampaignSystem.Election.KingdomDecision)ctor.Invoke(new[] { proposer, office });
+        kingdom.AddDecision(decision, true);
+        ctx.Log($"{proposer.StringId} proposes a {office} appointment in {kingdom.StringId}; allowed: {decision.IsAllowed()}");
+        yield return null;
+        ctx.Report("value", type.Name);
+    }
+
+    /// <summary>Either side: waits until realm <c>kingdom</c> has an open decision of type <c>type</c> (a short name).</summary>
+    private static IEnumerable<StepWait?> HasDecision(StepContext ctx)
+    {
+        var kingdom = KingdomById(ctx.Arg("kingdom")) ?? throw new StepFailedException($"no kingdom '{ctx.Arg("kingdom")}'");
+        string Read() => string.Join(",", kingdom.UnresolvedDecisions.Select(d => d.GetType().Name));
+        yield return ctx.Until(() => kingdom.UnresolvedDecisions.Any(d => d.GetType().Name == ctx.Arg("type")),
+            $"{kingdom.StringId} to have a {ctx.Arg("type")}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 30)));
+        ctx.Report("value", Read());
+    }
+
     private static string OtherLaw(Kingdom realm, string group)
     {
         var active = Active(realm, group);
@@ -138,7 +197,7 @@ public static class ActionsSteps
     /// <summary>Server: waits until the module carried out <c>expect</c> for a player ("RealmLawBehavior.TryApplyPlayerLaw done").</summary>
     private static IEnumerable<StepWait?> Carried(StepContext ctx)
     {
-        var field = FindType("BellumCivileCoopCompat.RemoteCalls")?.GetField("Carried", Any) ?? throw new StepFailedException("the compat module has no RemoteCalls (older than 1.6.0)");
+        var field = FindType("BellumCivileCoopCompat.RemoteCalls")?.GetField("Carried", Any) ?? throw new StepFailedException("the compat module has no RemoteCalls (older than 1.5.0)");
         var carried = (List<string>)field.GetValue(null)!;
         bool Seen() { lock (carried) return carried.Contains(ctx.Arg("expect")); }
         yield return ctx.Until(Seen, $"the server to carry out {ctx.Arg("expect")}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 60)));

@@ -29,9 +29,6 @@ namespace BellumCivileCoopCompat
         {
             [UI + "FactionsWindowVM"] = new[] { "ExecuteCreate", "ExecuteConfirmCreate", "ExecuteJoin", "ExecuteUltimatum" },
             [UI + "VanillaTabs.Kingdoms.Factions.KingdomFactionsTabVM"] = new[] { "ExecuteCreate", "ExecuteConfirmCreate", "ExecuteJoin", "ExecuteUltimatum" },
-            [UI + "CrownPanelVM"] = new[] { "ExecuteCrownActions" },
-            [UI + "VanillaTabs.Kingdoms.Factions.PrivyCouncilVM"] = new[] { "ExecutePropose" },
-            [UI + "VanillaTabs.Kingdoms.Hierarchy.HierarchyTitleNodeVM"] = new[] { "ExecuteForm" },
             // The rest of the Hierarchy, claim feud, succession law, election and council buttons run here: Bellum's
             // own screens and questions show on this PC, and the call that changes the campaign goes to the server
             // (RemoteCalls). The Factions tab's political action list (PoliticalActionVM) only selects.
