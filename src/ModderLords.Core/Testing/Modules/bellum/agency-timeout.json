@@ -1,0 +1,25 @@
+{
+  // A question nobody answers (Prompts): the player is asked about an ultimatum to their realm and does not answer in
+  // time, so the site's fallback answers. For an ultimatum that is "refuse" (keep the crown; the faction rebels).
+  "api": 2,
+  "name": "agency-timeout",
+  "mode": "coop",
+  "description": "An ultimatum to the player's realm goes unanswered: after the answer window the server refuses it for the player, who keeps the crown.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.clanState", "side": "server", "as": "mine", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.addVassals", "side": "server", "args": { "kingdom": "$realm.value", "count": "3" } },
+    { "id": "bellum.answerSeconds", "side": "server", "args": { "seconds": "15" } },
+    { "id": "bellum.enemies", "side": "server", "as": "wars", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.ultimatum", "side": "server", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.promptShown", "side": "client:1" },
+    { "id": "bellum.enemies", "side": "server", "timeoutSeconds": 120, "args": { "kingdom": "$realm.value", "was": "$wars.value", "timeoutSeconds": "90" } },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "not answered no to an ultimatum to the player's realm" } },
+    { "id": "bellum.ruler", "side": "server", "args": { "kingdom": "$realm.value", "expectClan": "$mine.clan" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

@@ -8,6 +8,10 @@ set "LOG=%OUT%\bellumcivile-coopcompat-build.log"
 if not exist "%OUT%" mkdir "%OUT%"
 echo Building BellumCivile.CoopCompat... > "%LOG%"
 dotnet build BellumCivileCoopCompat.csproj -c Release -o "%~dp0bin\Release" >> "%LOG%" 2>&1
+if errorlevel 1 goto failed
+rem The network part (player agency), built against the Coop nightly installed in the game's Modules\Coop.
+dotnet build ..\BellumCivileCoopCompat.Net\BellumCivileCoopCompat.Net.csproj -c Release -o "%~dp0bin\Release" >> "%LOG%" 2>&1
+:failed
 if errorlevel 1 (
   echo BUILD FAILED >> "%LOG%"
   echo Build failed. See %LOG%
@@ -21,10 +25,12 @@ copy /y SubModule.xml "%MOD%\" >> "%LOG%"
 copy /y README.txt "%MOD%\" >> "%LOG%"
 copy /y "bin\Release\BellumCivile.CoopCompat.dll" "%MOD%\bin\Win64_Shipping_Client\" >> "%LOG%"
 copy /y "bin\Release\BellumCivile.CoopCompat.dll" "%MOD%\bin\Win64_Shipping_Server\" >> "%LOG%"
-if exist "%OUT%\BellumCivile.CoopCompat-v1.3.0.zip" del /q "%OUT%\BellumCivile.CoopCompat-v1.3.0.zip"
+copy /y "bin\Release\BellumCivile.CoopCompat.Net.dll" "%MOD%\bin\Win64_Shipping_Client\" >> "%LOG%"
+copy /y "bin\Release\BellumCivile.CoopCompat.Net.dll" "%MOD%\bin\Win64_Shipping_Server\" >> "%LOG%"
+if exist "%OUT%\BellumCivile.CoopCompat-v1.4.0.zip" del /q "%OUT%\BellumCivile.CoopCompat-v1.4.0.zip"
 rem Windows' own tar writes / in zip entry names. PowerShell's ZipFile and
 rem Compress-Archive on Windows PowerShell 5 write \, which breaks the zip elsewhere.
-tar -a -c -f "%OUT%\BellumCivile.CoopCompat-v1.3.0.zip" -C "%OUT%" BellumCivile.CoopCompat >> "%LOG%" 2>&1
+tar -a -c -f "%OUT%\BellumCivile.CoopCompat-v1.4.0.zip" -C "%OUT%" BellumCivile.CoopCompat >> "%LOG%" 2>&1
 echo BUILD OK >> "%LOG%"
-echo Done. %OUT%\BellumCivile.CoopCompat-v1.3.0.zip
+echo Done. %OUT%\BellumCivile.CoopCompat-v1.4.0.zip
 pause

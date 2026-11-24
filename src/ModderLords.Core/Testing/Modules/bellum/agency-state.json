@@ -1,0 +1,23 @@
+{
+  // Bellum's screens on a player's PC show the server's state (StateMirror, docs/BELLUM-COOP-COVERAGE.md stage 3b). Bellum's
+  // ticks don't run on a player's PC (stage 1) and Coop sends none of Bellum's own state, so a faction formed on the server
+  // was missing from the player's Factions screen. Here the server's state reaches the player, and Bellum's factions and
+  // titles match on both sides. Fails without the mirror: the player has no such faction (bellum.factions).
+  "api": 2,
+  "name": "agency-state",
+  "mode": "coop",
+  "description": "A court faction forms on the server; the player's PC gets the server's Bellum state, and both sides list the same factions and titles.",
+  "steps": [
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "State: Bellum's screens on a player's PC" } },
+    { "id": "bellum.createFaction", "side": "server", "as": "faction" },
+    { "id": "bellum.stateRequest", "side": "client:1" },
+    { "id": "bellum.factions", "side": "client:1", "args": { "contains": "$faction.value" } },
+    { "compare": "bellum.factions", "sides": ["server", "client:1"] },
+    { "compare": "bellum.titles", "sides": ["server", "client:1"] },
+    { "id": "bellum.compat", "side": "client:1" },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

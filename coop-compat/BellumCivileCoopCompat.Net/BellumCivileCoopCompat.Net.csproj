@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The network part of Bellum Civile Coop Compat (player agency, docs/BELLUM-COOP-COVERAGE.md stage 3). Built
+       against the Coop nightly's own messaging; the module loads it only once Coop is loaded, so the module itself
+       never references Coop. Shipped next to BellumCivile.CoopCompat.dll in both bin folders. Build with ..\BellumCivileCoopCompat\Build.cmd. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>BellumCivile.CoopCompat.Net</AssemblyName>
+    <RootNamespace>BellumCivileCoopCompat.Net</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>1.4.0</Version>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <SteamFolder Condition="'$(SteamFolder)' == '' And Exists('C:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord')">C:\Program Files (x86)\Steam</SteamFolder>
+    <SteamFolder Condition="'$(SteamFolder)' == '' And Exists('D:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord')">D:\Program Files (x86)\Steam</SteamFolder>
+    <GameFolder Condition="'$(GameFolder)' == ''">$(SteamFolder)\steamapps\common\Mount &amp; Blade II Bannerlord</GameFolder>
+    <GameBin>$(GameFolder)\bin\Win64_Shipping_Client</GameBin>
+    <!-- The Coop nightly for game 1.5.7 (module id CoopNightly, installed as Modules\Coop). -->
+    <CoopBin Condition="'$(CoopBin)' == ''">$(GameFolder)\Modules\Coop\bin\Win64_Shipping_Client</CoopBin>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
+    <ProjectReference Include="..\BellumCivileCoopCompat\BellumCivileCoopCompat.csproj" Private="false" />
+    <Reference Include="TaleWorlds.Library"><HintPath>$(GameBin)\TaleWorlds.Library.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.Core"><HintPath>$(GameBin)\TaleWorlds.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.ObjectSystem"><HintPath>$(GameBin)\TaleWorlds.ObjectSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.CampaignSystem"><HintPath>$(GameBin)\TaleWorlds.CampaignSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Common"><HintPath>$(CoopBin)\Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="GameInterface"><HintPath>$(CoopBin)\GameInterface.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="LiteNetLib"><HintPath>$(CoopBin)\LiteNetLib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="protobuf-net"><HintPath>$(CoopBin)\protobuf-net.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="protobuf-net.Core"><HintPath>$(CoopBin)\protobuf-net.Core.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

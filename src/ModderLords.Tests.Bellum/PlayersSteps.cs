@@ -205,10 +205,14 @@ public static class PlayersSteps
             var enemies = Kingdom.All.Where(k => k != null && k != realm && !k.IsEliminated && realm.IsAtWarWith(k)).Select(k => k.StringId).OrderBy(x => x, StringComparer.Ordinal).ToList();
             return enemies.Count == 0 ? "none" : string.Join(",", enemies);
         }
+        if (ctx.HasArg("was"))
+            yield return ctx.Until(() => Read() != ctx.Arg("was"), $"{realm.StringId}'s wars to change", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 60)));
         yield return ctx.Settled(Read, $"{realm.StringId}'s wars", quiet: TimeSpan.FromSeconds(3));
         var value = Read();
         if (ctx.HasArg("expect"))
             ctx.Assert(value == ctx.Arg("expect"), $"{realm.StringId} is at war with {value}, was {ctx.Arg("expect")}");
+        if (ctx.HasArg("was"))
+            ctx.Assert(value != ctx.Arg("was"), $"{realm.StringId}'s wars did not change ({value})");
         ctx.Report("value", value);
     }
 
@@ -260,6 +264,11 @@ public static class PlayersSteps
         var value = Read();
         if (ctx.HasArg("expectClan") && ctx.Arg("expectClan").Length > 0)
             ctx.Assert(value.StartsWith(ctx.Arg("expectClan") + "|"), $"{realm.StringId} is ruled by {value.Split('|')[0]}, Bellum's law names {ctx.Arg("expectClan")}");
+        if (ctx.HasArg("notClan"))
+        {
+            yield return ctx.Until(() => !Read().StartsWith(ctx.Arg("notClan") + "|"), $"{realm.StringId} to pass from {ctx.Arg("notClan")}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 60)));
+            value = Read();
+        }
         if (ctx.HasArg("expectVote"))
             ctx.Assert(value.EndsWith("|" + ctx.Arg("expectVote")), $"{realm.StringId}: {value}, expected {ctx.Arg("expectVote")}");
         ctx.Report("value", value);
