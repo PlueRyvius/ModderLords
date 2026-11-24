@@ -5,9 +5,9 @@
   // them, and Bellum's daily AI put players in factions, marriages, regencies, partitions, feuds, pacts and espionage.
   // A player's clan is a minor clan on the server, and Bellum already leaves minor clans out of its factions, feuds,
   // marriages, regency, partition and treason: those checks (bellum.ask on a clan) pass without the module too and
-  // guard against that changing. The realm-level ones are regression checks that fail without the module (2026-11-24):
-  // a court faction's ultimatum starts a rebellion against the player's realm (bellum.enemies), and Bellum's espionage
-  // AI may spend a player ruler's gold (IsValidAiSubterfugeKingdom). bellum.keptFromPlayers confirms the guards fired.
+  // guard against that changing. Checked without the module (2026-11-24): Bellum's espionage AI takes a player ruler's
+  // realm (IsValidAiSubterfugeKingdom answers True), which fails here. The ultimatum leaves the player's crown and wars
+  // unchanged either way within the test's wait; bellum.keptFromPlayers confirms the module stopped it before it began.
   "api": 2,
   "name": "players-not-ai",
   "mode": "coop",
