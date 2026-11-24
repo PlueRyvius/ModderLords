@@ -227,7 +227,7 @@ public static class AgencySteps
         var used = ctx.State.TryGetValue("bellum.prompts", out var u) && u is HashSet<string> set ? set : new HashSet<string>();
         ctx.State["bellum.prompts"] = used;
         string? prompt = null;
-        yield return ctx.Until(() => (prompt = Recent().Where(r => r.StartsWith("prompt ")).FirstOrDefault(r => !used.Contains(r.Substring(7).Split('|')[0]))) != null,
+        yield return ctx.Until(() => (prompt = Recent().Where(r => r.StartsWith("prompt ") || r.StartsWith("choose ")).FirstOrDefault(r => !used.Contains(r.Substring(7).Split('|')[0]))) != null,
             "a question from the server", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 60)));
         var parts = prompt!.Substring(7).Split('|');
         used.Add(parts[0]);
@@ -238,11 +238,20 @@ public static class AgencySteps
         ctx.Report("title", parts.ElementAtOrDefault(1) ?? "");
     }
 
-    /// <summary>Player: answers question <c>id</c> yes or no (<c>answer</c>), as its buttons do.</summary>
+    /// <summary>Player: answers question <c>id</c> yes or no (<c>answer</c>), or a list question "pick:N", as its buttons do.</summary>
     private static IEnumerable<StepWait?> AnswerPrompt(StepContext ctx)
     {
+        var said = ctx.Arg("answer", "no");
+        if (said.StartsWith("pick:"))
+        {
+            // A list question: the choices by place, as its buttons send them.
+            var reply = Prompts().GetMethod("Reply", Any) ?? throw new StepFailedException("Prompts has no Reply (older than 1.5.0)");
+            ctx.Assert(reply.Invoke(null, new object[] { ctx.Arg("id"), said }) is true, "the answer could not be sent");
+            ctx.Report("value", said);
+            yield break;
+        }
         var answer = Prompts().GetMethod("Answer", Any) ?? throw new StepFailedException("Prompts has no Answer");
-        var yes = ctx.Arg("answer", "no") == "yes";
+        var yes = said == "yes";
         ctx.Assert(answer.Invoke(null, new object[] { ctx.Arg("id"), yes }) is true, "the answer could not be sent");
         ctx.Report("value", yes ? "yes" : "no");
         yield break;

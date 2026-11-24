@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
 using TaleWorlds.Library;
 
 namespace BellumCivileCoopCompat
@@ -55,6 +56,11 @@ namespace BellumCivileCoopCompat
             /// the server's own placeholder player.
             /// </summary>
             public bool QuietWhenAbsent { get; }
+            /// <summary>
+            /// For a list question (pick one of several) nobody answers: what runs instead of the fallback, with the
+            /// site's own instance and arguments, outside the player's scope (Bellum's AI deciding, say).
+            /// </summary>
+            public Action<object, object[]> Unanswered { get; set; }
         }
 
         private sealed class Pending
@@ -63,6 +69,9 @@ namespace BellumCivileCoopCompat
             public Hero Hero;
             public Site Site;
             public InquiryData Data;
+            public MultiSelectionInquiryData Choice;
+            public object Instance;
+            public object[] Args;
             public DateTime Expires;
         }
 
@@ -90,6 +99,8 @@ namespace BellumCivileCoopCompat
             public IDisposable Scope;
             public Frame Outer;
             public bool FromPrefix;
+            public object Instance;
+            public object[] Args;
         }
 
         public static string Summary() => _asked > 0 ? "; questions put to players " + _asked + " (answered " + _answered + ", timed out " + _fallback + ")" : "";
@@ -119,6 +130,9 @@ namespace BellumCivileCoopCompat
             var show = AccessTools.Method(typeof(InformationManager), nameof(InformationManager.ShowInquiry), new[] { typeof(InquiryData), typeof(bool), typeof(bool) });
             if (show == null) missing.Add("InformationManager.ShowInquiry");
             else harmony.Patch(show, prefix: new HarmonyMethod(typeof(Prompts), nameof(InquiryPrefix)) { priority = Priority.First });
+            var choose = AccessTools.Method(typeof(MBInformationManager), nameof(MBInformationManager.ShowMultiSelectionInquiry));
+            if (choose == null) missing.Add("MBInformationManager.ShowMultiSelectionInquiry");
+            else harmony.Patch(choose, prefix: new HarmonyMethod(typeof(Prompts), nameof(ChoicePrefix)) { priority = Priority.First });
 
             var notifications = AccessTools.TypeByName("BellumCivile.BellumCivileNotifications");
             foreach (var personal in notifications?.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Where(m => m.Name == "ShowPersonal") ?? Enumerable.Empty<MethodInfo>())
@@ -126,6 +140,7 @@ namespace BellumCivileCoopCompat
 
             Agency.Handle("answer", OnAnswer);
             Agency.Listen("prompt", ShowOnPlayerPc);
+            Agency.Listen("choose", ShowChoiceOnPlayerPc);
             SubModule.Log("Prompts: on the server, Bellum's questions to a connected player go to that player (" + Sites.Count + " sites).");
             if (missing.Count > 0)
                 SubModule.Log("Prompts: not found in this Bellum version: " + string.Join(", ", missing));
@@ -215,7 +230,7 @@ namespace BellumCivileCoopCompat
             var scope = already ? null : AsPlayer.Enter(hero);
             if (scope == null && !already)
                 return !site.QuietWhenAbsent;
-            _frame = new Frame { Hero = hero, Site = site, Scope = scope, Outer = _frame, FromPrefix = true };
+            _frame = new Frame { Hero = hero, Site = site, Scope = scope, Outer = _frame, FromPrefix = true, Instance = __instance, Args = __args };
             return true;
         }
 
@@ -251,6 +266,37 @@ namespace BellumCivileCoopCompat
             return false;   // the server shows nothing
         }
 
+        // A list question (pick one of several, MBInformationManager.ShowMultiSelectionInquiry): sent as "choose", with each
+        // choice as three values (enabled, title, hint).
+        private static bool ChoicePrefix(MultiSelectionInquiryData data)
+        {
+            var frame = _frame;
+            if (!Coop.OnServer || frame == null || data == null)
+                return true;
+            var pending = new Pending
+            {
+                Id = "p" + (++_next), Hero = frame.Hero, Site = frame.Site, Choice = data, Instance = frame.Instance, Args = frame.Args,
+                Expires = DateTime.UtcNow.AddSeconds(AnswerSeconds),
+            };
+            lock (Open) Open[pending.Id] = pending;
+            _asked++;
+            var args = new List<string>
+            {
+                pending.Id, data.TitleText ?? "", data.DescriptionText ?? "", data.MinSelectableOptionCount.ToString(), data.MaxSelectableOptionCount.ToString(),
+                data.AffirmativeText ?? "", data.IsExitShown ? data.NegativeText ?? "" : "", ((int)AnswerSeconds).ToString(),
+            };
+            foreach (var element in data.InquiryElements ?? new List<InquiryElement>())
+            {
+                args.Add(element.IsEnabled ? "1" : "0");
+                args.Add(element.Title ?? "");
+                args.Add(element.Hint ?? "");
+            }
+            var sent = Agency.ToPlayer(pending.Hero, "choose", args.ToArray());
+            SubModule.Log("Asked " + pending.Hero.StringId + " to choose (" + frame.Site.What + ", " + pending.Id + ")" + (sent ? "." : "; could not reach them, the fallback answers."));
+            if (!sent) pending.Expires = DateTime.MinValue;
+            return false;
+        }
+
         private static bool Enabled(Func<ValueTuple<bool, string>> check)
         {
             if (check == null) return true;
@@ -274,7 +320,10 @@ namespace BellumCivileCoopCompat
                 Open.Remove(pending.Id);
             }
             _answered++;
-            Apply(pending, args[1] == "yes", "answered");
+            if (pending.Choice != null)
+                ApplyChoice(pending, args[1], "answered");
+            else
+                Apply(pending, args[1] == "yes", "answered");
         }
 
         /// <summary>Server, every few seconds: prompts nobody answered get the site's fallback.</summary>
@@ -297,7 +346,9 @@ namespace BellumCivileCoopCompat
             foreach (var p in due)
             {
                 _fallback++;
-                if (p.Site.Fallback == Fallback.Nothing)
+                if (p.Choice != null)
+                    ChoiceUnanswered(p);
+                else if (p.Site.Fallback == Fallback.Nothing)
                     SubModule.Log(p.Hero.StringId + " did not answer " + p.Site.What + " (" + p.Id + "); nothing was done.");
                 else
                     Apply(p, p.Site.Fallback == Fallback.Yes, "not answered");
@@ -320,6 +371,52 @@ namespace BellumCivileCoopCompat
             }
         }
 
+        private static void ChoiceUnanswered(Pending pending)
+        {
+            if (pending.Site.Unanswered != null)
+            {
+                SubModule.Log(pending.Hero.StringId + " did not choose for " + pending.Site.What + " (" + pending.Id + "); Bellum decides as for a lord.");
+                try { pending.Site.Unanswered(pending.Instance, pending.Args ?? new object[0]); }
+                catch (Exception ex) { SubModule.Log("Bellum failed deciding " + pending.Id + ": " + ex.GetBaseException().Message); }
+                return;
+            }
+            switch (pending.Site.Fallback)
+            {
+                case Fallback.Nothing:
+                    SubModule.Log(pending.Hero.StringId + " did not answer " + pending.Site.What + " (" + pending.Id + "); nothing was done.");
+                    return;
+                case Fallback.Yes:
+                    var first = (pending.Choice.InquiryElements ?? new List<InquiryElement>()).FindIndex(e => e.IsEnabled);
+                    ApplyChoice(pending, first < 0 ? "no" : "pick:" + first, "not answered");
+                    return;
+                default:
+                    ApplyChoice(pending, "no", "not answered");
+                    return;
+            }
+        }
+
+        // A list answer: "pick:0,2" (the choices, by place) or "no" (the list's own cancel button).
+        private static void ApplyChoice(Pending pending, string answer, string how)
+        {
+            var data = pending.Choice;
+            var elements = data.InquiryElements ?? new List<InquiryElement>();
+            var picked = new List<InquiryElement>();
+            if (answer != null && answer.StartsWith("pick:"))
+                foreach (var part in answer.Substring(5).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                    if (int.TryParse(part, out var i) && i >= 0 && i < elements.Count && elements[i].IsEnabled && !picked.Contains(elements[i]))
+                        picked.Add(elements[i]);
+            var yes = picked.Count > 0 && picked.Count >= data.MinSelectableOptionCount && picked.Count <= Math.Max(1, data.MaxSelectableOptionCount);
+            var action = yes ? data.AffirmativeAction : data.NegativeAction;
+            SubModule.Log(pending.Hero.StringId + " " + how + " " + (yes ? string.Join(", ", picked.Select(e => e.Title)) : "no") + " to " + pending.Site.What + " (" + pending.Id + ").");
+            if (action == null) return;
+            var chosen = yes ? picked : new List<InquiryElement>();
+            if (!InFrame(pending.Hero, pending.Site, () => action(chosen)))
+            {
+                try { action(chosen); }
+                catch (Exception ex) { SubModule.Log("Bellum failed applying " + pending.Id + ": " + ex.GetBaseException().Message); }
+            }
+        }
+
         // ---- player's PC: show the question, send the answer ----
 
         /// <summary>The last question shown on this PC (id), for tests.</summary>
@@ -337,7 +434,27 @@ namespace BellumCivileCoopCompat
             InformationManager.ShowInquiry(data, true, true);
         }
 
+        private static void ShowChoiceOnPlayerPc(string[] args)
+        {
+            if (args.Length < 8) return;
+            var id = args[0];
+            LastShown = id;
+            int.TryParse(args[3], out var min);
+            int.TryParse(args[4], out var max);
+            var elements = new List<InquiryElement>();
+            for (int i = 8, n = 0; i + 2 < args.Length; i += 3, n++)
+                elements.Add(new InquiryElement(n, args[i + 1], null, args[i] == "1", args[i + 2]));
+            var noText = args[6];
+            var data = new MultiSelectionInquiryData(args[1], args[2], elements, noText.Length > 0, Math.Max(1, min), Math.Max(1, max), args[5], noText,
+                picked => Agency.ToServer("answer", id, "pick:" + string.Join(",", (picked ?? new List<InquiryElement>()).Select(e => e.Identifier))),
+                _ => Agency.ToServer("answer", id, "no"));
+            MBInformationManager.ShowMultiSelectionInquiry(data, true);
+        }
+
         /// <summary>Player's PC: answers a question as the buttons do (for tests).</summary>
         public static bool Answer(string id, bool yes) => Agency.ToServer("answer", id, yes ? "yes" : "no");
+
+        /// <summary>Player's PC: answers "yes", "no" or, for a list, "pick:N" (for tests).</summary>
+        public static bool Reply(string id, string answer) => Agency.ToServer("answer", id, answer);
     }
 }

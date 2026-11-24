@@ -38,6 +38,7 @@ public static class Steps
         PlayersSteps.Register();
         AgencySteps.Register();
         CallsSteps.Register();
+        FeudSteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------

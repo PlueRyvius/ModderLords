@@ -1,0 +1,97 @@
+{
+  // A claim feud judged by a player ruler (Feuds, docs/BELLUM-COOP-COVERAGE.md stage 3, A1). On the server Bellum's "is the
+  // ruler the player?" met only the placeholder, so its AI judged every feud in a player's realm. Here the petition runs
+  // as the ruler, Bellum's judgment list goes to the player's PC, and the player's choice is Bellum's judgment.
+  "api": 2,
+  "name": "agency-feud-judge",
+  "mode": "coop",
+  "description": "A claim feud between two lords of the player's realm comes before the player as ruler: the server sends Bellum's judgment list, the player rules for the claimant, and Bellum records that judgment.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.makeRuler",
+      "side": "server",
+      "as": "realm",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.addVassals",
+      "side": "server",
+      "args": {
+        "kingdom": "$realm.value",
+        "count": "3"
+      }
+    },
+    {
+      "id": "bellum.answerSeconds",
+      "side": "server",
+      "args": {
+        "seconds": "180"
+      }
+    },
+    {
+      "id": "bellum.petition",
+      "side": "server",
+      "as": "f",
+      "args": {
+        "kingdom": "$realm.value"
+      }
+    },
+    {
+      "id": "bellum.promptShown",
+      "side": "client:1",
+      "as": "p"
+    },
+    {
+      "id": "bellum.answer",
+      "side": "client:1",
+      "args": {
+        "id": "$p.value",
+        "answer": "pick:0"
+      }
+    },
+    {
+      "id": "bellum.feudRecord",
+      "side": "server",
+      "args": {
+        "id": "$f.value",
+        "expectJudgment": "UpholdClaimant"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "answered Rule for the Claimant"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

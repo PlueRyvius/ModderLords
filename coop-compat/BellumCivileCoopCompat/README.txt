@@ -64,9 +64,19 @@ joined.
   as you, with Bellum's own checks and costs; Bellum's confirmations come
   to you as questions.
 
-Coming next: the rest of Bellum's questions (civil-war calls, treason,
-succession, feud rulings) and screens (claim feuds, titles, succession law,
-the privy council).
+- More of Bellum's questions come to you (new in 1.5.0):
+  - a call to join a rebellion in your realm (your liege rises, or your
+    faction's ultimatum was refused);
+  - an accused lord you are close to asks you to stand with him;
+  - after a ruler's death, a faction you lead may strike now or wait;
+  - claim feuds: the ruler's ruling on a feud over your fief or your
+    claim, the judgment of a feud in a realm you rule (pick one), a call
+    to support a feud, and a lord's demand that you surrender a title.
+  Not answered in 10 minutes: nothing happens, except that a feud ruling
+  is accepted and a feud you don't judge is judged as a lord would.
+
+Coming next: Bellum's other screens (claim feuds, titles, succession law,
+the privy council) and votes on Bellum's own decisions.
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).

@@ -1,0 +1,91 @@
+{
+  // A ruling on a claim feud against a player (Feuds, stage 3, A1). The player holds a fief a lord claims; the AI ruler
+  // rules, and Bellum asks "the player" (the holder) to accept or refuse. On the server that was the placeholder, so
+  // Bellum's AI answered for the player. Here the petition runs as the holder and the ruling goes to the player's PC.
+  "api": 2,
+  "name": "agency-feud-ruling",
+  "mode": "coop",
+  "description": "A lord's claim on the player's fief is brought before the realm's ruler: the ruling comes to the player, who accepts it, and the feud moves on from waiting for the player.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.answerSeconds",
+      "side": "server",
+      "args": {
+        "seconds": "180"
+      }
+    },
+    {
+      "id": "bellum.petition",
+      "side": "server",
+      "as": "f",
+      "args": {
+        "kingdom": "$q.value",
+        "fief": "$q.fief"
+      }
+    },
+    {
+      "id": "bellum.promptShown",
+      "side": "client:1",
+      "as": "p"
+    },
+    {
+      "id": "bellum.answer",
+      "side": "client:1",
+      "args": {
+        "id": "$p.value",
+        "answer": "yes"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "answered yes to a ruling on a claim feud",
+        "waitSeconds": "30"
+      }
+    },
+    {
+      "id": "bellum.feudRecord",
+      "side": "server",
+      "args": {
+        "id": "$f.value",
+        "notState": "AwaitingPlayerResponse"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}
