@@ -1,0 +1,52 @@
+{
+  // Bellum's AI leaves a real player's clan and realm alone on the server (docs/BELLUM-COOP-COVERAGE.md, stage 2). On a
+  // dedicated server "the player" is a placeholder, so Bellum ran its AI for real players: a treason purge could execute
+  // a player's leader and take their fiefs, a court faction's ultimatum to a player's realm was accepted or refused for
+  // them, and Bellum's daily AI put players in factions, marriages, regencies, partitions, feuds, pacts and espionage.
+  // A player's clan is a minor clan on the server, and Bellum already leaves minor clans out of its factions, feuds,
+  // marriages, regency, partition and treason: those checks (bellum.ask on a clan) pass without the module too and
+  // guard against that changing. The realm-level ones are regression checks that fail without the module (2026-11-24):
+  // a court faction's ultimatum starts a rebellion against the player's realm (bellum.enemies), and Bellum's espionage
+  // AI may spend a player ruler's gold (IsValidAiSubterfugeKingdom). bellum.keptFromPlayers confirms the guards fired.
+  "api": 2,
+  "name": "players-not-ai",
+  "mode": "coop",
+  "description": "Bellum's AI leaves the player alone on the server: a treason decree leaves them alive with their fief, an ultimatum leaves their realm theirs, and Bellum's daily AI never picks them for factions, marriages, regency, partition, feuds, pacts, espionage or court business.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "Players not AI: on the server|Crown accession: on the server" } },
+
+    { "id": "bellum.joinKingdom", "side": "server", "as": "q", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.CourtMembershipEligibility", "method": "CanBelong", "args": "playerClan|playerRealm", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.CivilWarSolidarityHelper", "method": "IsEligibleCandidate", "args": "playerClan|null|null", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.ClaimFeudBehavior", "method": "IsValidFeudClan", "args": "playerClan|null", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.BellumMarriageStrategyHelper", "method": "MarriageProspectEligible", "args": "playerHero", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.RegencyBehavior", "method": "CanUseRegency", "args": "playerClan", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.PartitionSuccessionBehavior", "method": "CanPartitionClan", "args": "playerClan", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.ExiledClanRecoveryBehavior", "method": "IsRecoverableExileCandidate", "args": "playerClan", "expect": "False" } },
+
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.IdeologyBehavior", "method": "CanScheduleTreasonDecree", "args": "playerRealm|playerClan", "expect": "False" } },
+    { "id": "bellum.treason", "side": "server", "args": { "heroName": "$me.heroName", "mode": "decree" } },
+    { "id": "bellum.clanState", "side": "server", "args": { "heroName": "$me.heroName", "expect": "alive" } },
+    { "id": "bellum.clanState", "side": "server", "args": { "heroName": "$me.heroName", "expect": "$q.value" } },
+    { "id": "bellum.clanState", "side": "server", "args": { "heroName": "$me.heroName", "expect": "$q.fief" } },
+    { "compare": "bellum.clanState", "sides": ["server", "client:1"], "args": { "heroName": "$me.heroName" } },
+
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.clanState", "side": "server", "as": "mine", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.addVassals", "side": "server", "args": { "kingdom": "$realm.value", "count": "3" } },
+    { "id": "bellum.enemies", "side": "server", "as": "wars", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.ultimatum", "side": "server", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.ruler", "side": "server", "args": { "kingdom": "$realm.value", "expectClan": "$mine.clan" } },
+    { "id": "bellum.enemies", "side": "server", "args": { "kingdom": "$realm.value", "expect": "$wars.value" } },
+    { "id": "bellum.enemies", "side": "client:1", "args": { "kingdom": "$realm.value", "expect": "$wars.value" } },
+    { "compare": "bellum.kingdoms", "sides": ["server", "client:1"] },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.ProxyWarBehavior", "method": "IsValidAiSubterfugeKingdom", "args": "playerRealm", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.Behaviors.CourtAgendaBehavior", "method": "TryGetCourtRuler", "args": "playerRealm|null|null", "expect": "False" } },
+    { "id": "bellum.ask", "side": "server", "args": { "heroName": "$me.heroName", "type": "BellumCivile.SuccessionChallengeSchedule", "method": "IsDue", "args": "playerRealmId|100000|0", "expect": "False" } },
+
+    { "id": "bellum.keptFromPlayers", "side": "server", "args": { "expect": "IdeologyBehavior.CanScheduleTreasonDecree|FactionObject.CanTriggerUltimatum" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

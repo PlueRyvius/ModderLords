@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.2.0 (by ModderLords)
+Bellum Civile Coop Compat v1.3.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -40,8 +40,18 @@ for now Bellum's own player actions (above). What you see in Bellum's own
 screens (factions, titles, councils) is what the server had when you
 joined.
 
-Coming next: Bellum's AI leaves players' clans alone on the server, then
-Bellum's own actions come back for players, carried out by the server.
+- Server: Bellum's AI leaves players alone. It doesn't accept or refuse an
+  ultimatum for your realm, purge your house for treason (a passed vote
+  expels you, as in vanilla), marry off your family, put your clan under a
+  regent or split it, drag your realm into pacts or court wars, spend your
+  gold on spies, or press claims for you. Until co-op players get Bellum's
+  own choices, those simply don't happen to them.
+- Server: when a ruler dies, Bellum's succession law picks the heir and the
+  crown changes once. Coop's own handling had given it to a random house
+  and opened a king vote.
+
+Coming next: Bellum's own actions come back for players, carried out by the
+server.
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).

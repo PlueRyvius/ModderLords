@@ -16,7 +16,7 @@ anything Bellum would ask the player becomes a prompt to that player in the agen
 |---|---|---|---|
 | 0 | Peace parley off, voted peace, treaty vote, internal peace, no kingdoms on players' PCs, thread safety | 1.1.0 | `coop`, `treaty-vote`, `alliance-block`, `feud` |
 | 1 | X1, X2, X3, X5, X6, X7; client kingdoms follow Coop's replays; Diplomacy's direct peace; title-name cache locked (`ServerDecides`, `PlayerActions`, `ServerScreens`); treaty draft gate (`TreatyDraftGate`) | 1.2.0 | `server-decides`, `treaty-lose` |
-| 2 | X4 (Bellum's AI leaves players' clans alone on the server); crown accession on a ruler's death | next | `players-not-ai`, `crown` |
+| 2 | X4 (Bellum's AI leaves players' clans alone on the server, `PlayersNotAi`); crown accession on a ruler's death | 1.3.0 | `players-not-ai`, `crown` |
 | 3 | Player agency, steps A1 to A6 | later | `agency-*` |
 
 Stage 1 notes: Bellum's dialogue lines and buttons are off on players' PCs, not routed, until stage 3. Bellum's own
@@ -144,7 +144,51 @@ Columns: **Where it acts** (S = the server's copy matters, P = players' PCs act 
 | First-year civil-war grace | S | Set at new game and reaches players in the save; date-based, so every PC agrees. | As is. | – |
 | Diplomacy mod's direct peace | P | `DiplomacyDirectPeaceCompatibilityPatch` is missing from the module's peace targets. | Add it to `BellumPeaceTargets`. | L |
 
-## Player agency (second stage)
+## Stage 2: Bellum's AI leaves players alone on the server
+
+Until stage 3 asks players, Bellum's AI must not act *for* or *against* a real player's clan, hero or realm on the
+server. Bellum tells the player apart with `== Clan.PlayerClan`, which on a dedicated server is the placeholder, so
+every real player gets the AI treatment.
+
+**Design.** One data-driven patcher (`PlayersNotAi`): a list of Bellum methods, each with the argument that names a
+clan, hero or realm, and the answer to give when that is a player's (skip, false, null). On the server, a prefix
+reads the argument and, for a player's, answers without running Bellum's AI. The list is chosen so each early answer
+leaves no half-done state (no pending flag that would wait forever). Each entry is logged at install; one missing is a
+"not found" line the `bellum.compat` step fails on. Single player and players' PCs are untouched.
+
+**What it covers** (high harm first):
+
+| Harm | Bellum path | Answer for a player's clan or realm |
+|---|---|---|
+| Crown given away | a court faction's ultimatum to a player-ruled realm, accepted by the AI | the faction issues no ultimatum there |
+| Leader executed, fiefs confiscated | a treason or expulsion outcome against a player's clan | a plain expulsion only |
+| Family married off | strategic and dynastic marriages | no marriage of a player clan's members without their offer |
+| Clan split or ruled by a regent | partition, cadet households, regency, mercenary bands | none for a player's clan |
+| Crown contested | succession challenges and disputed elections answered by the AI | not for a player's realm |
+| Dragged into war | defensive and voluntary pacts, court business, protection | not for a player's realm |
+| Hostages | taken from a player's family, or executed while a player holds them | none |
+| Gold spent | espionage paid from a player's purse | none |
+| Clan rallied | into a court faction, rebellion, civil-war side or feud | not a player's clan |
+
+Found while testing: a new player's clan is a minor clan on the server, and Bellum refuses to charge a minor clan
+with treason, so the treason entries rarely fire today; they stay for clans that grow out of it. Bellum's other AI
+tests (factions, marriages, regency, partition, feuds, refuge) do take players' clans, and those entries fire.
+
+Choices made here (Andy can reverse them): a player's clan is kept out of Bellum's hereditary crown line (a player can
+still be elected or made ruler in vanilla ways), and a disputed election is skipped in any realm with a player in it.
+
+**Crown accession.** Coop replaces `KillCharacterAction.ApplyInternal`, where Bellum hooks a ruler's death, so Coop
+picks a new ruler and opens a king vote, and an hour later Bellum installs its own heir: the crown changes twice.
+On the server, when Bellum owns that death, Coop's leader-death handling steps aside and Bellum's accession runs once.
+
+**Tests** (module `bellum`):
+- `players-not-ai`: on the server, Bellum's own cheats aim each path at the player's clan or realm (an ultimatum, a
+  treason charge, a marriage, an heir challenge, a pact); the player's hero is alive, rules, keeps its fiefs and family,
+  and is at peace, on both sides. Each check fails without the module's entry.
+- `crown`: an AI realm's ruler dies on the server; the crown changes once, to Bellum's heir, and the same on the
+  player's PC, with no king vote left open.
+
+## Player agency (stage 3)
 
 Without it, co-op players live in a world Bellum runs but can't play its politics. They can't found or join a faction,
 issue an ultimatum, lead a rebellion, press a claim, sit on a council, change succession law, take titles or grant

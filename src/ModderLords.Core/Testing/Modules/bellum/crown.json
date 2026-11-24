@@ -1,0 +1,20 @@
+{
+  // A ruler's death is settled once, by Bellum's succession law (docs/BELLUM-COOP-COVERAGE.md, stage 2). Coop replaces the
+  // game's death handling that Bellum hooks, so without the module Coop gave the crown to a random clan and opened a king
+  // vote, and Bellum then gave up ("a different house has taken the Crown"). Fails without the module: another clan
+  // rules, or a king vote is open (bellum.ruler).
+  "api": 2,
+  "name": "crown",
+  "mode": "coop",
+  "description": "A hereditary realm's ruler dies on the server: the crown passes once, to the heir Bellum's law names, with no king vote, and the player sees the same ruler.",
+  "steps": [
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "Crown accession: on the server" } },
+    { "id": "bellum.killRuler", "side": "server", "as": "crown" },
+    { "id": "bellum.passDays", "side": "server", "timeoutSeconds": 300, "args": { "days": "1" } },
+    { "id": "bellum.ruler", "side": "server", "args": { "kingdom": "$crown.value", "expectClan": "$crown.heirClan", "expectVote": "no vote" } },
+    { "compare": "bellum.ruler", "sides": ["server", "client:1"], "args": { "kingdom": "$crown.value" } },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "Bellum's succession law settles the crown" } },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
