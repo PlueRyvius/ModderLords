@@ -511,7 +511,8 @@ public static class Steps
     /// to the server, and the item arrives with the server's answer. Waits up to <c>seconds</c> (default 60) for a
     /// crafted record that was not there before, with its item in the party's inventory. A denial shown by MS2 fails the
     /// step at once. Reports <c>value</c> (the item id), <c>weight</c>, <c>armor</c>, <c>tier</c>, and <c>stats</c>
-    /// (as smithing.itemStats).
+    /// (as smithing.itemStats). With <c>expectDenied</c>, the server must refuse the craft instead, with a reason that
+    /// contains that text, and no new item may arrive; reports the reason as <c>value</c>.
     /// </summary>
     private static IEnumerable<StepWait?> CoopCraft(StepContext ctx)
     {
@@ -545,6 +546,16 @@ public static class Steps
             }, "the server's crafted item in this party", TimeSpan.FromSeconds(ctx.ArgInt("seconds", 60)));
         }
         finally { InformationManager.DisplayMessageInternal -= watch; }
+        if (ctx.HasArg("expectDenied"))
+        {
+            var want = ctx.Arg("expectDenied");
+            ctx.Assert(denials.Count > 0, $"the server crafted {made?.StringId}; it should have refused ({want})");
+            var reason = string.Join(" | ", denials);
+            ctx.Assert(reason.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0, $"the server refused, but not for {want}: {reason}");
+            ctx.Assert(!persistence.Records.Any(r => !known.Contains(r.StringId)), "the server refused, yet a new crafted item arrived");
+            ctx.Report("value", reason);
+            yield break;
+        }
         ctx.Assert(denials.Count == 0, "MS2 refused the craft: " + string.Join(" | ", denials));
         var crafted = MBObjectManager.Instance.GetObject<ItemObject>(made!.StringId);
         ctx.Log($"crafted {made.StringId} '{crafted.Name}' quality {made.TierId}, skill {made.SmithingEffect}");

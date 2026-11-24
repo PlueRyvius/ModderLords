@@ -1,0 +1,55 @@
+{
+  // MS2's Pax Vanilla setting in Coop. The server crafts every player's item, and the player's game rebuilds it from
+  // the server's record, so both must craft under the same setting: MS2 puts pax_vanilla in the hash each craft request
+  // carries, and the server refuses a request whose hash differs from its own. With Pax on on both sides, a player's
+  // best head, full body and best leg stacks come out as vanilla's best pieces, a thinner helmet scales as designed,
+  // horse armor is unchanged, and every item is the same on the server and the player's game. With Pax on the server
+  // only, the server refuses the craft and no item arrives. The settings are put back after. Every check reads the new
+  // items only, so the suite runs on the shared world.
+  "api": 2,
+  "name": "pax-coop",
+  "mode": "coop",
+  "world": "shared",
+  "description": "Pax Vanilla in Coop: with it on on both sides, a player's armor crafted by the server follows vanilla tiers and is the same on both sides; with it on the server only, the server refuses the craft.",
+  "errorPatterns": [ "\\[MSmith\\].*(?<!\\b(?:0|no|zero)\\s)\\b(failed|error)" ],
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "smithing.setSetting", "side": "server", "as": "serverOn", "args": { "name": "pax_vanilla", "value": "true" } },
+    { "id": "smithing.setSetting", "side": "client:1", "as": "playerOn", "args": { "name": "pax_vanilla", "value": "true" } },
+
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "slot": "head", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "headBest", "timeoutSeconds": 120, "args": { "slot": "head", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "compare": "smithing.itemStats", "sides": ["server", "client:1"], "args": { "item": "$headBest.value" } },
+    { "id": "smithing.pax", "side": "server", "continueOnFail": true, "args": { "item": "$headBest.value", "expect": "vanilla", "armor": "55/0/0/0", "maxKg": "3.0" } },
+    { "id": "smithing.pax", "side": "client:1", "continueOnFail": true, "args": { "item": "$headBest.value", "expect": "vanilla", "armor": "55/0/0/0", "maxKg": "3.0" } },
+
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "slot": "head", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "size": 50 } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "headThin", "timeoutSeconds": 120, "args": { "slot": "head", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "size": 50 } },
+    { "compare": "smithing.itemStats", "sides": ["server", "client:1"], "args": { "item": "$headThin.value" } },
+    { "id": "smithing.pax", "side": "client:1", "continueOnFail": true, "args": { "item": "$headThin.value", "expect": "vanilla" } },
+
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "slot": "body", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "coverage": "extended" } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "bodyFull", "timeoutSeconds": 120, "args": { "slot": "body", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "coverage": "extended" } },
+    { "compare": "smithing.itemStats", "sides": ["server", "client:1"], "args": { "item": "$bodyFull.value" } },
+    { "id": "smithing.pax", "side": "client:1", "continueOnFail": true, "args": { "item": "$bodyFull.value", "expect": "vanilla", "armor": "0/57/25/26", "maxKg": "20" } },
+
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "slot": "legs", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "legsBest", "timeoutSeconds": 120, "args": { "slot": "legs", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "compare": "smithing.itemStats", "sides": ["server", "client:1"], "args": { "item": "$legsBest.value" } },
+    { "id": "smithing.pax", "side": "client:1", "continueOnFail": true, "args": { "item": "$legsBest.value", "expect": "vanilla", "armor": "0/0/0/26", "maxKg": "2.6" } },
+
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "slot": "horse_armor", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "horse", "timeoutSeconds": 120, "args": { "slot": "horse_armor", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "compare": "smithing.itemStats", "sides": ["server", "client:1"], "args": { "item": "$horse.value" } },
+    { "id": "smithing.pax", "side": "client:1", "continueOnFail": true, "args": { "item": "$horse.value", "expect": "unchanged" } },
+
+    // The player's game turns Pax off; the server keeps it on and must refuse.
+    { "id": "smithing.setSetting", "side": "client:1", "as": "playerOff", "args": { "name": "pax_vanilla", "value": "false" } },
+    { "id": "smithing.prepareFor", "side": "server", "args": { "heroName": "$me.heroName", "slot": "hands", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness" } },
+    { "id": "smithing.coopCraft", "side": "client:1", "as": "mismatch", "timeoutSeconds": 120, "args": { "slot": "hands", "inner": "gambeson_quilted", "middle": "riveted_mail", "outer": "plate_harness", "expectDenied": "mismatch" } },
+
+    { "id": "smithing.setSetting", "side": "server", "as": "serverBack", "args": { "name": "pax_vanilla", "value": "$serverOn.before" } },
+    { "id": "smithing.setSetting", "side": "client:1", "as": "playerBack", "args": { "name": "pax_vanilla", "value": "$playerOn.before" } },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
