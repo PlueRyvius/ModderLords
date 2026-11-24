@@ -24,6 +24,8 @@
     <ProjectReference Include="..\ModderLords.Tests.Retinues\ModderLords.Tests.Retinues.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(HasRetinuesAssemblies)' == 'true'" />
     <ProjectReference Include="..\ModderLords.Tests.Smithing\ModderLords.Tests.Smithing.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(HasSmithingAssemblies)' == 'true'" />
     <ProjectReference Include="..\ModderLords.Tests.Taom\ModderLords.Tests.Taom.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Condition="'$(HasTaomAssemblies)' == 'true'" />
+    <!-- Reads Bellum Civile by reflection only, so it builds everywhere. -->
+    <ProjectReference Include="..\ModderLords.Tests.Bellum\ModderLords.Tests.Bellum.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,6 +45,7 @@
     <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModderLords.Tests.Retinues\bin\$(Configuration)\ModderLords.Tests.Retinues.dll" DestinationFolder="$(OutDir)compat\" SkipUnchangedFiles="true" Condition="'$(HasRetinuesAssemblies)' == 'true'" />
     <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModderLords.Tests.Smithing\bin\$(Configuration)\ModderLords.Tests.Smithing.dll" DestinationFolder="$(OutDir)compat\" SkipUnchangedFiles="true" Condition="'$(HasSmithingAssemblies)' == 'true'" />
     <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModderLords.Tests.Taom\bin\$(Configuration)\ModderLords.Tests.Taom.dll" DestinationFolder="$(OutDir)compat\" SkipUnchangedFiles="true" Condition="'$(HasTaomAssemblies)' == 'true'" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)..\ModderLords.Tests.Bellum\bin\$(Configuration)\ModderLords.Tests.Bellum.dll" DestinationFolder="$(OutDir)compat\" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

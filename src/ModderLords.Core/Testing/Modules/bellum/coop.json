@@ -1,0 +1,35 @@
+{
+  // Bellum Civile with its Coop compat module, on a world of its own (it starts a rebellion and a player's kingdom).
+  // 1. Every part of the module found what it patches, on the server and on the player's game.
+  // 2. A civil war ends on the server. Bellum 1.5 ends civil wars and feuds from a queue it runs only while a map screen
+  //    is open; a dedicated server never has one, so without the module the war below never ends.
+  // 3. A peace a player's realm proposes is applied on the server. Bellum refuses every peace between two lords'
+  //    kingdoms that it did not make itself; the module applies the vote as a Bellum treaty.
+  "api": 2,
+  "name": "coop",
+  "mode": "coop",
+  "description": "Bellum Civile in Coop with its compat module: every part finds Bellum's methods, the server ends a civil war and the player sees it end, and a peace a player's realm proposes ends the war on both sides.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "Peace: on a player's PC|Voted peace: on the server|Treaty vote: on the server|Internal peace: civil wars and feuds are ended by the server" } },
+    { "id": "bellum.compat", "side": "client:1", "args": { "expect": "Peace: on a player's PC|Voted peace: on the server|Treaty vote: on the server|Internal peace: civil wars and feuds are ended by the server" } },
+
+    { "id": "bellum.rebellion", "side": "server", "as": "civil", "timeoutSeconds": 120 },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$civil.value", "b": "$civil.parent", "expect": "war" } },
+    { "id": "bellum.endInternalWar", "side": "server", "timeoutSeconds": 150, "args": { "a": "$civil.value", "b": "$civil.parent" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$civil.value", "b": "$civil.parent", "expect": "ended" } },
+
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.declareWar", "side": "server", "as": "enemy", "args": { "kingdom": "$realm.value" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "war" } },
+    { "id": "bellum.addInfluence", "side": "server", "args": { "heroName": "$me.heroName", "amount": "1000" } },
+    { "id": "bellum.proposePeace", "side": "client:1", "args": { "enemy": "$enemy.value" } },
+    { "id": "bellum.voteForPeace", "side": "client:1", "args": { "enemy": "$enemy.value" } },
+    { "id": "bellum.war", "side": "server", "timeoutSeconds": 240, "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "ended", "timeoutSeconds": "180" } },
+    { "id": "bellum.war", "side": "client:1", "args": { "a": "$realm.value", "b": "$enemy.value", "expect": "ended" } },
+    { "id": "bellum.compat", "side": "server", "args": { "expect": "Applying the peace vote of" } },
+
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

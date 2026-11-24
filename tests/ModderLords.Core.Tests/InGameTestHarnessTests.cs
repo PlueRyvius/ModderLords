@@ -46,7 +46,7 @@ public class TestPlanTests
     {
         var modules = TestSuites.Modules();
         Assert.Equal("core", modules[0].Id);
-        Assert.Equal(["core", "parity", "perks", "retinues", "session", "smithing", "stash", "sync", "taom", "world"], modules.Select(m => m.Id));
+        Assert.Equal(["core", "bellum", "parity", "perks", "retinues", "session", "smithing", "stash", "sync", "taom", "world"], modules.Select(m => m.Id));
         // The smithing module (Modular Smithing 2): a new world (armor), an ongoing one (upgrade), and the manual
         // suite that keeps the upgrade world.
         var smithing = TestSuites.Module("smithing")!;

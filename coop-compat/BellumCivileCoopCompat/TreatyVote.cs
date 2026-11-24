@@ -24,8 +24,11 @@ namespace BellumCivileCoopCompat
     // own treaty with all its terms. After a refusal or no answer the realm is not asked again about
     // that war for AskAgainDays days. No messages of its own: the vote is vanilla, and Coop syncs it.
     //
-    // Left to Bellum: forced treaties (total defeat), realms a lord rules, and realms whose ruling
-    // player is not connected.
+    // Left to Bellum: forced treaties (total defeat), realms a lord rules, realms whose ruling
+    // player is not connected, and (Bellum 1.5) a draft Bellum would cancel before any council sees
+    // it: one that no longer fits the war, a white peace the realms are no longer tired enough to
+    // take, or terms over the war-score budget. Asking players about those only for Bellum to cancel
+    // the treaty they accepted would be worse than not asking.
     internal static class TreatyVote
     {
         public const int AskAgainDays = 14;
@@ -63,7 +66,7 @@ namespace BellumCivileCoopCompat
         private static readonly Dictionary<string, double> AskAgainAfter = new Dictionary<string, double>();
 
         private static bool _installed;
-        private static MethodInfo _resolve, _summary;
+        private static MethodInfo _resolve, _summary, _prepare, _whitePeaceEligible, _warScoreBehavior;
         private static Held _resolving;
         private static int _asked, _answered;
 
@@ -82,6 +85,16 @@ namespace BellumCivileCoopCompat
                 SubModule.Log("Treaty vote: " + missing + "; Bellum's councils still decide treaties for realms players rule.");
                 return;
             }
+            _prepare = AccessTools.Method(treaty, BellumPeaceTargets.Prepare);
+            if (_prepare != null && (_prepare.GetParameters().Length != 4 || _prepare.ReturnType != typeof(bool)))
+                _prepare = null;
+            var warScore = AccessTools.TypeByName(BellumPeaceTargets.WarScore);
+            _whitePeaceEligible = warScore == null ? null : AccessTools.Method(warScore, BellumPeaceTargets.WhitePeaceEligible);
+            if (_whitePeaceEligible != null && _whitePeaceEligible.GetParameters().Length != 3)
+                _whitePeaceEligible = null;
+            _warScoreBehavior = warScore == null ? null : AccessTools.Method(typeof(Campaign), nameof(Campaign.GetCampaignBehavior))?.MakeGenericMethod(warScore);
+            if (_prepare == null || _whitePeaceEligible == null)
+                SubModule.Log("Treaty vote: Bellum's draft checks were not found; a draft Bellum cancels afterwards may still be put to a vote.");
             harmony.Patch(_resolve, prefix: new HarmonyMethod(typeof(TreatyVote), nameof(ResolvePrefix)));
             harmony.Patch(ratify, postfix: new HarmonyMethod(typeof(TreatyVote), nameof(RatifyPostfix)));
             if (Missing(apply, BellumPeaceTargets.ApplyParameters) == null)
@@ -117,6 +130,12 @@ namespace BellumCivileCoopCompat
                 if (Flag(proposal, "IsForced") || Get(proposal, "State")?.ToString() != BellumPeaceTargets.PendingState)
                     return true;
 
+                if (!WouldReachCouncils(__instance, war, proposal, out var why))
+                {
+                    SubModule.Log("Treaty " + id + " is not put to a vote; Bellum cancels it: " + why);
+                    return true;
+                }
+
                 var winner = KingdomById(Text(proposal, "WinnerKingdomId"));
                 var loser = KingdomById(Text(proposal, "LoserKingdomId"));
                 if (winner == null || loser == null || winner == loser || !winner.IsAtWarWith(loser))
@@ -150,6 +169,42 @@ namespace BellumCivileCoopCompat
                 SubModule.Log("Could not put a treaty to its players, Bellum's councils decide it: " + ex.GetBaseException().Message);
                 return true;
             }
+        }
+
+        // Bellum 1.5's own checks before its councils vote, in its order: repair the draft (which can cancel it), then a
+        // council-run white peace needs both sides tired of the war, then the terms must fit the war-score budget. Repairing
+        // is what Bellum does first anyway, so doing it now changes nothing; the other two only read.
+        private static bool WouldReachCouncils(object behavior, object war, object proposal, out string why)
+        {
+            why = "";
+            if (_prepare != null)
+            {
+                var args = new[] { war, proposal, null, (object)true };
+                if (!(_prepare.Invoke(behavior, args) is true))
+                {
+                    why = args[2] as string ?? "the draft no longer fits the war";
+                    return false;
+                }
+            }
+            if (Flag(proposal, BellumPeaceTargets.WhitePeaceOrEmpty) && !Flag(proposal, "IsForced") && !WhitePeaceStillWanted(war))
+            {
+                why = "a white peace neither side is tired enough to take";
+                return false;
+            }
+            if (Flag(proposal, BellumPeaceTargets.OverBudget))
+            {
+                why = "the terms ask more than the war score allows";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool WhitePeaceStillWanted(object war)
+        {
+            if (_whitePeaceEligible == null || _warScoreBehavior == null || Campaign.Current == null)
+                return true;
+            var scores = _warScoreBehavior.Invoke(Campaign.Current, null);
+            return scores == null || _whitePeaceEligible.Invoke(scores, new[] { war, null, null }) is true;
         }
 
         // A vanilla peace decision that applies nothing (applyResults off), marked as an offer so

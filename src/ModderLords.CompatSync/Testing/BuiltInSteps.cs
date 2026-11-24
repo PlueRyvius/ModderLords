@@ -78,11 +78,12 @@ internal static class BuiltInSteps
         yield return ctx.Until(() => Hero.MainHero != null && MobileParty.MainParty != null, "this player's hero");
         ctx.Report("hero", Hero.MainHero.StringId);
         ctx.Report("party", MobileParty.MainParty.StringId);
-        // The hero's StringId is local ("main_hero" on every player's game), so other sides find it by name.
-        ctx.Report("heroName", Hero.MainHero.Name?.ToString());
+        // The hero's StringId is local ("main_hero" on every player's game), so other sides find it by name: its stored
+        // name, which mods that add titles to Hero.Name leave alone (HeroNames).
+        ctx.Report("heroName", HeroNames.Plain(Hero.MainHero));
         // A suite can check it is still the same hero, e.g. after a save and reload.
         if (ctx.HasArg("heroName"))
-            ctx.Assert(Hero.MainHero.Name?.ToString() == ctx.Arg("heroName"), $"this player's hero is {Hero.MainHero.Name}, expected {ctx.Arg("heroName")}");
+            ctx.Assert(HeroNames.Is(Hero.MainHero, ctx.Arg("heroName")), $"this player's hero is {Hero.MainHero.Name}, expected {ctx.Arg("heroName")}");
     }
 
     /// <summary>
@@ -493,12 +494,7 @@ internal static class BuiltInSteps
             // Hero.FindAll searches Campaign.Characters, which on a player's game lacks Coop's local copy of that
             // player's own hero (run 5), so this player's hero is matched by name too. On the server, a player hero
             // can be missing from it as well (both-perks run 1), so the campaign's own hero lists are searched too.
-            var found = Hero.FindAll(h => h.Name?.ToString() == name)
-                .Concat(Hero.AllAliveHeroes.Concat(Hero.DeadOrDisabledHeroes).Where(h => h.Name?.ToString() == name))
-                .Distinct().ToList();
-            if (Hero.MainHero != null && Hero.MainHero.Name?.ToString() == name && !found.Contains(Hero.MainHero)) found.Add(Hero.MainHero);
-            if (found.Count != 1) throw new StepFailedException(found.Count == 0 ? $"no hero named '{name}' in this world" : $"{found.Count} heroes are named '{name}'");
-            return found[0];
+            return HeroNames.Single(name);
         }
         if (!ctx.HasArg("hero"))
             return !ctx.IsServer && Hero.MainHero != null ? Hero.MainHero : throw new StepFailedException("the plan gives no argument 'hero'");

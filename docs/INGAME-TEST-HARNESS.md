@@ -101,6 +101,8 @@ src/ModderLords.Core/Testing/Modules/          (built in, embedded like today's 
   retinues/  module.json  editor.json  unlocks.json  recruit.json  troops.json  kingdom.json  appearance.json  skills.json  equipment.json  retinues.json  special.json  xp.json  persist.json  persist-save.json  persist-reload.json  doctrines.json  global.json  timed.json  importexport.json
   smithing/  module.json  health.json  ammo.json  tier-preview.json  heal-on-load.json  coop-craft.json  ballista.json  ballista-coop.json  pax-vanilla.json  looks-sample.json  looks-listed.json
   taom/      module.json  supply-lines.json  navpath.json (manual)
+  bellum/    module.json  coop.json
+src/ModderLords.Tests.Bellum/                  (bellum's steps: reads Bellum and its compat module by reflection only)
 src/ModderLords.Tests.Retinues/                (retinues' steps: references Retinues' DLL at compile time only)
 src/ModderLords.Tests.Smithing/                (smithing's steps: references MS2's DLL at compile time only)
 src/ModderLords.Tests.Taom/                    (taom's steps: references TAOM.dll at compile time only)
@@ -296,6 +298,12 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
       caravans did, with and without region switch costs: the call that crashed. TAOM needs a generated world, so a
       Coop run on a TAOM profile makes one first (#309), and the player's first join compiles TAOM's shaders for
       several minutes (#307).
+   6. `bellum` (Bellum Civile with its standalone Coop compat module, `coop-compat/BellumCivileCoopCompat`).
+      **Built 2026-11-23** for Bellum 1.5.1 on game 1.5.7. `coop` checks every part of the module found what it
+      patches (`bellum.compat` reads the module's own log), starts a rebellion with Bellum's own faction cheat and has
+      the server end it through Bellum's settlement queue (which waited for a map screen a dedicated server never has),
+      and has a player's new realm propose peace in a war it declared: Bellum's guard refuses a peace it did not make,
+      and the module applies the vote as a Bellum treaty.
 4. The world cache, then `game.saveAndReload`, then the history file and table. **Single player's save and reload
    built 2026-11-13** as steps (`game.save`, then `game.toMainMenu` and `game.loadSave`); Coop's waits.
 5. `--package` and upgrade worlds, then the release step in `docs/RELEASING.md` (decision 27). **Upgrade worlds built

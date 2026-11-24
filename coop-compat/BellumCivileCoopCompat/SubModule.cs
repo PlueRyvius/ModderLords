@@ -8,7 +8,8 @@ using TaleWorlds.MountAndBlade;
 
 namespace BellumCivileCoopCompat
 {
-    // Makes Bellum Civile safe in Bannerlord Coop (built against Coop 0.1.6 and Bellum Civile 1.3.1).
+    // Makes Bellum Civile safe in Bannerlord Coop (built against Bellum Civile 1.5.1 on game 1.5.7,
+    // with the Coop nightly for 1.5.7; earlier it was 1.3.1 with Coop 0.1.6).
     //
     // How Coop works: the server runs the campaign. A player's PC asks the server through vanilla
     // paths (kingdom votes, proposals) and gets the results back. Bellum runs its politics on
@@ -18,8 +19,13 @@ namespace BellumCivileCoopCompat
     // - Both sides: Bellum's council caches are locked so Coop's parallel party tick can read them.
     // - Players' PCs: Bellum founds no kingdoms (the server's arrive through Coop), and a kingdom
     //   made there anyway is taken back out. Bellum's Peace Parley is off; peace is the kingdom vote.
-    // - Server: a peace voted in a players' kingdom gets past Bellum's guard, and a treaty Bellum
-    //   drafts for a realm a connected player rules is put to that realm as a kingdom vote.
+    //   Bellum's queue that ends civil wars and feuds does nothing there.
+    // - Server: a peace voted in a players' kingdom gets past Bellum's guard, a treaty Bellum
+    //   drafts for a realm a connected player rules is put to that realm as a kingdom vote, and
+    //   Bellum's queue that ends civil wars and feuds runs (it waited for a map screen).
+    //
+    // Not covered yet: what Bellum 1.5 added after 1.3 (defensive and hostage pacts, court agendas,
+    // succession, lordships, voluntary pacts). Those still run on every PC as in single player.
     // Single player and the main menu are untouched. No network messages of its own: everything
     // runs on the server and reaches players through Coop's own sync.
     public sealed class SubModule : MBSubModuleBase
@@ -49,7 +55,7 @@ namespace BellumCivileCoopCompat
 
             var harmony = new Harmony(HarmonyId);
             foreach (var install in new Action<Harmony>[]
-                     { ThreadSafety.Install, ClientKingdoms.Install, PeaceInCoop.Install, VotePeace.Install, TreatyVote.Install })
+                     { ThreadSafety.Install, ClientKingdoms.Install, PeaceInCoop.Install, VotePeace.Install, TreatyVote.Install, InternalPeace.Install })
             {
                 try { install(harmony); }
                 catch (Exception ex) { Log(install.Method.DeclaringType?.Name + " not installed: " + ex.GetBaseException().Message); }
@@ -72,8 +78,16 @@ namespace BellumCivileCoopCompat
             catch (Exception ex) { Log("Tick failed: " + ex.GetBaseException().Message); }
         }
 
+        /// <summary>What the module has logged this run, newest last (at most 200 lines), for a test harness to read.</summary>
+        internal static readonly System.Collections.Generic.List<string> Logged = new System.Collections.Generic.List<string>();
+
         internal static void Log(string text)
         {
+            lock (Logged)
+            {
+                if (Logged.Count >= 200) Logged.RemoveAt(0);
+                Logged.Add(text);
+            }
             try { Debug.Print("[BellumCivile.CoopCompat] " + text); }
             catch { }
         }
