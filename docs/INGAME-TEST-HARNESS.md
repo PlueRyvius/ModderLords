@@ -509,6 +509,8 @@ ModderLords.Cli test --profile "My Mods" --single-player --mod ModularArmor2 [--
   run folder and report. A kept game that cannot rejoin (the join step fails, or it never reaches the map) is closed
   and that launch runs again with a game of its own; a game that crashed, or could not leave, is closed and the next
   launch starts its own. Coop's log copy (`coop-client-1.log`) stays in the run folder of the game's first launch.
+  Each fresh world has no hero for this player, so the smoke test's random character creation runs again on every
+  rejoin (about 35 s of the roughly 2.5 minutes a launch takes; the server's start and world load is another 60 s).
   A suite with `"after"` continues the world another
   suite kept with `coop.saveWorld`: it gets the launch after that suite's, its server starts on the kept save (and
   Coop's session file), and it starts with that launch's values (`"$suite/step.key"`). The launcher keeps the save as
