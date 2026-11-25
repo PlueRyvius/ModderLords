@@ -6,7 +6,9 @@ using System.Reflection;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Election;
 using TaleWorlds.Localization;
+using TaleWorlds.ObjectSystem;
 
 namespace BellumCivileCoopCompat
 {
@@ -58,6 +60,15 @@ namespace BellumCivileCoopCompat
             (B + "LordshipBehavior", "TrySignIndenture"),
             (B + "LordshipBehavior", "ReturnVassalLordship"),
             (B + "ClientKingdomBehavior", "TryVoluntarilyRelease"),
+            // Vote lobbying (stage 4b): a persuaded or bribed lord's vote, as Bellum records it once the persuasion succeeds
+            // or the bribe is accepted. The lobbying conversation runs on the PC; these are the calls that record the vote.
+            (B + "FiefDeliberationBehavior", "SetBribedCandidateVote"),
+            (B + "FiefDeliberationBehavior", "SetBribedVote"),
+            (B + "PolicyDeliberationBehavior", "SetBribedVote"),
+            (B + "ExpulsionDeliberationBehavior", "SetBribedVote"),
+            (B + "CouncilAppointmentDeliberationBehavior", "SetCommittedCandidateVote"),
+            (B + "ElectiveSuccessionBehavior", "TryCommitPromise"),
+            (B + "CourtAgendaBehavior", "CommitMandate"),
         };
 
         /// <summary>
@@ -68,6 +79,7 @@ namespace BellumCivileCoopCompat
         {
             "LordshipBehavior.TryGrantFromPlayerHouse", "LordshipBehavior.TryRevoke", "LordshipBehavior.TrySignIndenture",
             "LordshipBehavior.ReturnVassalLordship", "ClientKingdomBehavior.TryVoluntarilyRelease",
+            "ElectiveSuccessionBehavior.TryCommitPromise", "CourtAgendaBehavior.CommitMandate",
         };
 
         public const string Sent = "Sent to the server, which carries it out for you.";
@@ -160,7 +172,7 @@ namespace BellumCivileCoopCompat
         private static bool Encodable(Type type) =>
             type == typeof(Clan) || type == typeof(Hero) || type == typeof(Kingdom) || type == typeof(Settlement) || type == typeof(string)
             || type == typeof(bool) || type == typeof(int) || type == typeof(float) || type == typeof(double) || type.IsEnum || type.Name == "FeudalTitleRecord" || type.Name == "FactionObject"
-            || type.Name == "PlayerMotion" || type.Name == "CourtAgendaRecord" || type.Name == "FeudalTitleFormationCandidate" || type.Name == "ReleaseOffer";
+            || type.Name == "PlayerMotion" || type.Name == "CourtAgendaRecord" || type.Name == "FeudalTitleFormationCandidate" || type.Name == "ReleaseOffer" || type == typeof(PolicyObject);
 
         private static string Encode(object value)
         {
@@ -170,6 +182,7 @@ namespace BellumCivileCoopCompat
                 case Clan clan: return ReferenceEquals(clan, Clan.PlayerClan) ? "@clan" : "c:" + clan.StringId + "|" + clan.Leader?.Name;
                 case Hero hero: return ReferenceEquals(hero, Hero.MainHero) ? "@hero" : "h:" + hero.StringId + "|" + hero.Name;
                 case Kingdom kingdom: return "k:" + kingdom.StringId + "|" + kingdom.Name;
+                case PolicyObject policy: return "o:" + policy.StringId;
                 case Settlement settlement: return "s:" + settlement.StringId;
                 case string text: return "x:" + text;
                 case bool flag: return "v:" + (flag ? "1" : "0");
@@ -281,6 +294,7 @@ namespace BellumCivileCoopCompat
                                && Str(Member(m, "FilingCost")) == parts[4];
                     });
                 }
+                case 'o': return MBObjectManager.Instance?.GetObject<PolicyObject>(body);
                 case 'r':
                 {
                     var recipient = Decode(body, typeof(Hero), sender) as Hero;

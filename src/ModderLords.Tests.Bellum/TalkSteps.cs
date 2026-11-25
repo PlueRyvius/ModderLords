@@ -7,6 +7,8 @@ using System.Reflection;
 using System.Text;
 using ModderLords.Testing;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.BarterSystem;
 using TaleWorlds.CampaignSystem.Conversation;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -27,6 +29,10 @@ public static class TalkSteps
         InGameTests.Register("bellum.lordship", StepSide.Any, Lordship);
         InGameTests.Register("bellum.peacefulRealm", StepSide.Server, PeacefulRealm);
         InGameTests.Register("bellum.clientOf", StepSide.Any, ClientOf);
+        InGameTests.Register("bellum.queuePolicyVote", StepSide.Server, QueuePolicyVote);
+        InGameTests.Register("bellum.policyBribe", StepSide.Any, PolicyBribe);
+        InGameTests.Register("bellum.bribableLord", StepSide.Server, BribableLord);
+        InGameTests.Register("bellum.goldSpent", StepSide.Any, GoldSpent);
     }
 
     private static object? Behavior(string typeName)
@@ -43,9 +49,13 @@ public static class TalkSteps
     /// <summary>
     /// Player: talks to hero <c>heroId</c> in a map conversation and follows <c>path</c>, the ids of the player's lines to
     /// pick, in order ("a|b|c"). The other side's lines are let through; where the player has options and none is the next
-    /// line on the path, a later one on the path is picked if offered, else the step fails with what was offered. After the
+    /// line on the path, a later one on the path is picked if offered (a greyed-out line gives way to a later one that can be
+    /// picked), else the step fails with what was offered. After the
     /// last line the conversation is left (any "leave" line), or closed. Every line and option is in the
     /// <c>conversation</c> dump. Reports value (the last line said).
+    /// With <c>barter: accept</c>, the path's last line opens a barter: the player offers gold (as little as is accepted, up
+    /// to all they have) with what the barter already offers, and the barter is accepted as its Offer button does. Reports
+    /// gold (what was offered).
     /// </summary>
     private static IEnumerable<StepWait?> Talk(StepContext ctx)
     {
@@ -54,6 +64,10 @@ public static class TalkSteps
         var path = ctx.Arg("path").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).ToList();
         var cm = Campaign.Current.ConversationManager;
         var transcript = new StringBuilder();
+        BarterData? barter = null;
+        var wantsBarter = ctx.Arg("barter", "") == "accept";
+        BarterManager.BarterBeginEventDelegate began = data => barter = data;
+        if (wantsBarter) BarterManager.Instance.BarterBegin += began;
         void Note(string line)
         {
             transcript.AppendLine(line);
@@ -98,7 +112,10 @@ public static class TalkSteps
                 }
                 else
                 {
-                    var at = path.FindIndex(id => options.Any(o => o.Id == id));
+                    // The first line on the path that is offered and can be picked; a greyed-out one gives way to a later one
+                    // on the path (alternatives, such as swaying a vote for or against).
+                    var at = path.FindIndex(id => options.Any(o => o.Id == id && o.IsClickable));
+                    if (at < 0) at = path.FindIndex(id => options.Any(o => o.Id == id));
                     if (at < 0 && TokenName(cm, cm.ActiveToken) != "hero_main_options"
                         && options.FirstOrDefault(o => o.IsClickable && !o.Id.Contains("leav") && !o.Id.Contains("goodbye")) is { Id: not null } on)
                     {
@@ -127,7 +144,18 @@ public static class TalkSteps
             }
             return false;
         }
-        while (!Step()) yield return ctx.Delay(TimeSpan.FromMilliseconds(300));
+        while (!(wantsBarter && path.Count == 0 && barter != null) && !Step()) yield return ctx.Delay(TimeSpan.FromMilliseconds(300));
+        if (wantsBarter)
+        {
+            if (problem == null && path.Count == 0)
+            {
+                yield return ctx.Until(() => barter != null, "the barter to open", TimeSpan.FromSeconds(30));
+                var offered = AcceptBarter(barter!, Note);
+                ctx.Report("gold", offered);
+                yield return ctx.Delay(TimeSpan.FromSeconds(1));
+            }
+            BarterManager.Instance.BarterBegin -= began;
+        }
         ctx.Dump("conversation", transcript.ToString());
         if (cm.IsConversationInProgress)
         {
@@ -137,6 +165,33 @@ public static class TalkSteps
         ctx.Assert(path.Count == 0, $"the conversation ended before {string.Join(", ", path)}");
         yield return ctx.Until(() => !cm.IsConversationInProgress, "the conversation to close", TimeSpan.FromSeconds(30));
         ctx.Report("value", said);
+    }
+
+    // The barter's own terms stay as offered; the player's gold is raised until the other side accepts, then the barter is
+    // applied and closed as its Offer button does (BarterManager.ApplyAndFinalizePlayerBarter, then Close).
+    private static int AcceptBarter(BarterData data, Action<string> note)
+    {
+        var manager = BarterManager.Instance;
+        var other = data.OtherHero;
+        note($"barter with {other?.StringId}: {string.Join(" | ", data.GetBarterables().Select(b => $"{b.GetType().Name} {b.OriginalOwner?.StringId} x{b.CurrentAmount}{(b.IsOffered ? " offered" : "")}"))}");
+        var gold = data.GetBarterables().OfType<TaleWorlds.CampaignSystem.BarterSystem.Barterables.GoldBarterable>().FirstOrDefault(g => g.OriginalOwner == Hero.MainHero);
+        var amount = 0;
+        if (!manager.IsOfferAcceptable(data, other, data.OtherParty))
+        {
+            if (gold == null) throw new StepFailedException("the barter wants more and offers the player no gold to give");
+            gold.SetIsOffered(true);
+            var most = Hero.MainHero.Gold;
+            for (amount = Math.Min(1000, most); ; amount = Math.Min(most, amount * 2))
+            {
+                gold.CurrentAmount = amount;
+                if (manager.IsOfferAcceptable(data, other, data.OtherParty)) break;
+                if (amount >= most) throw new StepFailedException($"the lord would not accept even {most} gold");
+            }
+        }
+        note($"offering {amount} gold; accepted");
+        manager.ApplyAndFinalizePlayerBarter(Hero.MainHero, other, data);
+        try { manager.Close(); } catch (Exception ex) { note("closing the barter threw: " + ex.Message); }
+        return amount;
     }
 
     private static readonly FieldInfo? SentencesField = typeof(ConversationManager).GetField("_sentences", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -233,5 +288,83 @@ public static class TalkSteps
         if (ctx.HasArg("expect"))
             ctx.Assert(value == ctx.Arg("expect"), $"{client.StringId}'s suzerain is {value}, expected {ctx.Arg("expect")}");
         ctx.Report("value", value);
+    }
+
+    /// <summary>
+    /// Server: a lord of kingdom <c>kingdom</c> (a house's leader, not its ruler's house nor player <c>heroName</c>'s) who
+    /// would bargain over his vote: Bellum asks a lord's honor, mercy and generosity (a lord with any of them refuses
+    /// bribes outright), calculation and his relation with the player. Reports value (the lord's id).
+    /// </summary>
+    private static IEnumerable<StepWait?> BribableLord(StepContext ctx)
+    {
+        var kingdom = KingdomById(ctx.Arg("kingdom")) ?? throw new StepFailedException($"no kingdom '{ctx.Arg("kingdom")}'");
+        var player = HeroNames.Single(ctx.Arg("heroName"));
+        var clan = kingdom.Clans.Where(c => c != null && c != kingdom.RulingClan && c != player.Clan && c.IsNoble && !c.IsMinorFaction && !c.IsEliminated
+                && !c.IsUnderMercenaryService && c.Leader != null && c.Leader.IsAlive && !c.Leader.IsChild && !c.Leader.IsPrisoner
+                && c.Leader.GetTraitLevel(DefaultTraits.Honor) <= 0 && c.Leader.GetTraitLevel(DefaultTraits.Mercy) <= 0
+                && c.Leader.GetTraitLevel(DefaultTraits.Generosity) <= 0 && c.Leader.GetTraitLevel(DefaultTraits.Calculating) >= 0
+                && c.Leader.GetRelation(player) >= 0)
+            .OrderBy(c => c.StringId).FirstOrDefault() ?? throw new StepFailedException($"{kingdom.StringId} has no lord who would bargain over his vote");
+        ctx.Log($"{clan.StringId}, led by {clan.Leader.StringId}");
+        ctx.Report("value", clan.Leader.StringId);
+        yield break;
+    }
+
+    /// <summary>
+    /// Server: Bellum queues a vote on a policy kingdom <c>kingdom</c> lacks (PolicyDeliberationBehavior.QueuePolicyVote,
+    /// moved by its ruling house), as a faction's motion does. Reports value (the policy's id).
+    /// </summary>
+    private static IEnumerable<StepWait?> QueuePolicyVote(StepContext ctx)
+    {
+        var kingdom = KingdomById(ctx.Arg("kingdom")) ?? throw new StepFailedException($"no kingdom '{ctx.Arg("kingdom")}'");
+        var policies = Behavior("BellumCivile.Behaviors.PolicyDeliberationBehavior") ?? throw new StepFailedException("Bellum's policy deliberation is not running");
+        var queue = policies.GetType().GetMethod("QueuePolicyVote", Any) ?? throw new StepFailedException("Bellum has no QueuePolicyVote");
+        var pending = policies.GetType().GetMethod("HasPendingVoteForPolicy", Any);
+        foreach (var policy in TaleWorlds.ObjectSystem.MBObjectManager.Instance.GetObjectTypeList<PolicyObject>().Where(p => !kingdom.ActivePolicies.Contains(p)).OrderBy(p => p.StringId))
+        {
+            if (pending?.Invoke(policies, new object[] { kingdom, policy }) is true) { ctx.Report("value", policy.StringId); yield break; }
+            var args = new object?[] { kingdom, policy, false, null, kingdom.RulingClan, null };
+            if (queue.Invoke(policies, args) is true)
+            {
+                ctx.Log($"{kingdom.StringId} deliberates on {policy.StringId}");
+                ctx.Report("value", policy.StringId);
+                yield break;
+            }
+        }
+        throw new StepFailedException($"Bellum would queue no policy vote in {kingdom.StringId}");
+    }
+
+    /// <summary>
+    /// Either side: the vote Bellum records for lord <c>heroId</c>'s house on policy <c>policy</c> in <c>kingdom</c>
+    /// (PolicyDeliberationBehavior.GetBribedVote; "none" without one), waited for until it is set when <c>expect</c> is
+    /// "set", or is <c>expect</c>. Reports it.
+    /// </summary>
+    private static IEnumerable<StepWait?> PolicyBribe(StepContext ctx)
+    {
+        var kingdom = KingdomById(ctx.Arg("kingdom")) ?? throw new StepFailedException($"no kingdom '{ctx.Arg("kingdom")}'");
+        var policy = TaleWorlds.ObjectSystem.MBObjectManager.Instance.GetObject<PolicyObject>(ctx.Arg("policy")) ?? throw new StepFailedException($"no policy '{ctx.Arg("policy")}'");
+        var clan = HeroById(ctx.Arg("heroId")).Clan ?? throw new StepFailedException("the lord has no house");
+        var policies = Behavior("BellumCivile.Behaviors.PolicyDeliberationBehavior") ?? throw new StepFailedException("Bellum's policy deliberation is not running");
+        var get = policies.GetType().GetMethod("GetBribedVote", Any) ?? throw new StepFailedException("Bellum has no GetBribedVote");
+        string Read() => get.Invoke(policies, new object[] { kingdom, policy, clan }) is int v ? v.ToString(CultureInfo.InvariantCulture) : "none";
+        bool Matches(string value) => ctx.Arg("expect", "") == "set" ? value != "none" : !ctx.HasArg("expect") || value == ctx.Arg("expect");
+        if (ctx.HasArg("expect"))
+            yield return ctx.Until(() => Matches(Read()), $"{clan.StringId}'s vote on {policy.StringId} to be {ctx.Arg("expect")}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 30)));
+        var value = Read();
+        ctx.Assert(Matches(value), $"{clan.StringId}'s vote on {policy.StringId} is {value}, expected {ctx.Arg("expect", "")}");
+        ctx.Report("value", value);
+    }
+
+    /// <summary>
+    /// Either side: hero <c>heroName</c> has spent exactly <c>spent</c> gold since having <c>before</c> (waited for, as gold
+    /// travels from the server). Paying twice, or not at all, fails. Reports value (the gold now).
+    /// </summary>
+    private static IEnumerable<StepWait?> GoldSpent(StepContext ctx)
+    {
+        var hero = HeroNames.Single(ctx.Arg("heroName"));
+        var want = ctx.ArgInt("before") - ctx.ArgInt("spent");
+        yield return ctx.Until(() => hero.Gold == want, $"{hero.StringId}'s gold to be {want}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 15)));
+        ctx.Assert(hero.Gold == want, $"{hero.StringId} has {hero.Gold} gold, expected {want} ({ctx.Arg("before")} less {ctx.Arg("spent")})");
+        ctx.Report("value", hero.Gold.ToString(CultureInfo.InvariantCulture));
     }
 }
