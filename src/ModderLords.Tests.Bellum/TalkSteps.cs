@@ -12,6 +12,9 @@ using TaleWorlds.CampaignSystem.BarterSystem;
 using TaleWorlds.CampaignSystem.Conversation;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
 using static ModderLords.Tests.Bellum.Steps;
 
 namespace ModderLords.Tests.Bellum;
@@ -35,6 +38,10 @@ public static class TalkSteps
         InGameTests.Register("bellum.goldSpent", StepSide.Any, GoldSpent);
         InGameTests.Register("bellum.recruitTarget", StepSide.Server, RecruitTarget);
         InGameTests.Register("bellum.rebelFaction", StepSide.Any, RebelFaction);
+        InGameTests.Register("bellum.ransomBroker", StepSide.Any, RansomBroker);
+        InGameTests.Register("bellum.captiveKin", StepSide.Server, CaptiveKin);
+        InGameTests.Register("bellum.ransomPrice", StepSide.Server, RansomPrice);
+        InGameTests.Register("bellum.prisoner", StepSide.Any, Prisoner);
     }
 
     private static object? Behavior(string typeName)
@@ -62,7 +69,10 @@ public static class TalkSteps
     private static IEnumerable<StepWait?> Talk(StepContext ctx)
     {
         yield return ctx.Until(() => MobileParty.MainParty != null && Campaign.Current?.ConversationManager != null, "this player's party");
-        var hero = HeroById(ctx.Arg("heroId"));
+        // A hero (heroId), or a character who is no hero (characterId: a ransom broker, a tavern keeper).
+        var hero = ctx.HasArg("heroId") ? HeroById(ctx.Arg("heroId")) : null;
+        var character = hero?.CharacterObject ?? TaleWorlds.ObjectSystem.MBObjectManager.Instance.GetObject<CharacterObject>(ctx.Arg("characterId"))
+            ?? throw new StepFailedException($"no character '{ctx.Arg("characterId")}'");
         var path = ctx.Arg("path").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).ToList();
         var cm = Campaign.Current.ConversationManager;
         var transcript = new StringBuilder();
@@ -70,15 +80,22 @@ public static class TalkSteps
         var wantsBarter = ctx.Arg("barter", "") == "accept";
         BarterManager.BarterBeginEventDelegate began = data => barter = data;
         if (wantsBarter) BarterManager.Instance.BarterBegin += began;
+        // With pick, a list Bellum opens on the way (a multi-selection inquiry) is answered with the entry whose title
+        // contains pick, as its Confirm button does.
+        MultiSelectionInquiryData? inquiry = null;
+        Action<MultiSelectionInquiryData, bool, bool> shown = (data, _, _) => inquiry = data;
+        if (ctx.HasArg("pick")) MBInformationManager.OnShowMultiSelectionInquiry += shown;
         void Note(string line)
         {
             transcript.AppendLine(line);
             ModderLords.CompatSync.Log.Info("bellum.talk: " + line);
         }
-        Note($"talking to {hero.StringId} \"{hero.Name}\" of {hero.Clan?.StringId} ({hero.Clan?.Kingdom?.StringId}); path {string.Join(" > ", path)}");
+        Note(hero != null
+            ? $"talking to {hero.StringId} \"{hero.Name}\" of {hero.Clan?.StringId} ({hero.Clan?.Kingdom?.StringId}); path {string.Join(" > ", path)}"
+            : $"talking to {character.StringId} \"{character.Name}\" ({character.Occupation}); path {string.Join(" > ", path)}");
         CampaignMapConversation.OpenConversation(new ConversationCharacterData(CharacterObject.PlayerCharacter, PartyBase.MainParty),
-            new ConversationCharacterData(hero.CharacterObject, hero.PartyBelongedTo?.Party));
-        yield return ctx.Until(() => cm.IsConversationInProgress && cm.OneToOneConversationHero == hero, "the conversation to open", TimeSpan.FromSeconds(30));
+            new ConversationCharacterData(character, hero?.PartyBelongedTo?.Party));
+        yield return ctx.Until(() => cm.IsConversationInProgress && cm.OneToOneConversationCharacter == character, "the conversation to open", TimeSpan.FromSeconds(30));
         Note($"open: [{TokenName(cm, cm.ActiveToken)}] {LastSentenceId(cm)}: {Safe(() => cm.CurrentSentenceText)}");
 
         string? problem = null;
@@ -91,6 +108,22 @@ public static class TalkSteps
             if (!cm.IsConversationInProgress) return true;
             try
             {
+                if (inquiry != null)
+                {
+                    var data = inquiry;
+                    inquiry = null;
+                    var pick = ctx.Arg("pick");
+                    var element = data.InquiryElements.FirstOrDefault(e => e.IsEnabled && (e.Title ?? "").Contains(pick));
+                    if (element == null)
+                    {
+                        problem = $"the list '{data.TitleText}' has no entry with '{pick}': {string.Join(" | ", data.InquiryElements.Select(e => e.Title + (e.IsEnabled ? "" : " (disabled)")))}";
+                        return true;
+                    }
+                    Note($"P  -> {element.Title} (in '{data.TitleText}'; confirm {data.AffirmativeAction?.Method.DeclaringType?.Name}.{data.AffirmativeAction?.Method.Name ?? "none"})");
+                    InformationManager.HideInquiry();
+                    data.AffirmativeAction?.Invoke(new List<InquiryElement> { element });
+                    return false;
+                }
                 var state = $"{cm.ActiveToken}/{LastSentenceId(cm)}";
                 sameState = state == lastState ? sameState + 1 : 0;
                 lastState = state;
@@ -158,6 +191,7 @@ public static class TalkSteps
             }
             BarterManager.Instance.BarterBegin -= began;
         }
+        if (ctx.HasArg("pick")) MBInformationManager.OnShowMultiSelectionInquiry -= shown;
         ctx.Dump("conversation", transcript.ToString());
         if (cm.IsConversationInProgress)
         {
@@ -409,5 +443,73 @@ public static class TalkSteps
         var value = Read();
         ctx.Assert(want == "" || value == want, $"{clan.StringId}'s faction is {value}, expected {want}");
         ctx.Report("value", value);
+    }
+
+    /// <summary>Either side: a ransom broker's character (occupation RansomBroker), whom the player has met. Reports value (its id).</summary>
+    private static IEnumerable<StepWait?> RansomBroker(StepContext ctx)
+    {
+        var broker = TaleWorlds.ObjectSystem.MBObjectManager.Instance.GetObjectTypeList<CharacterObject>()
+            .Where(c => c.Occupation == Occupation.RansomBroker && !c.IsHero).OrderBy(c => c.StringId).FirstOrDefault()
+            ?? throw new StepFailedException("no ransom broker character");
+        // The player has met the brokers, so a conversation opened on the map takes vanilla's "has met" greeting: the
+        // first-meeting one reads the settlement the player is in, which a real player always is (a tavern).
+        var tavern = FindType("SandBox.CampaignBehaviors.TavernEmployeesCampaignBehavior") is Type t
+            ? typeof(Campaign).GetMethod(nameof(Campaign.GetCampaignBehavior))!.MakeGenericMethod(t).Invoke(Campaign.Current, null) : null;
+        var met = tavern?.GetType().GetField("_hasMetWithRansomBroker", Any) ?? throw new StepFailedException("vanilla's tavern employees have no ransom broker");
+        met.SetValue(tavern, true);
+        ctx.Report("value", broker.StringId);
+        yield break;
+    }
+
+    /// <summary>
+    /// Server: a lord joins player <c>heroName</c>'s house (an adult of another house, not its leader, in no party), and
+    /// is taken prisoner by the party of a lord of a third house. Reports value (the captive's id) and captor (that
+    /// house's id).
+    /// </summary>
+    private static IEnumerable<StepWait?> CaptiveKin(StepContext ctx)
+    {
+        var player = HeroNames.Single(ctx.Arg("heroName"));
+        var house = player.Clan ?? throw new StepFailedException("the player has no house");
+        var kin = Hero.AllAliveHeroes.Where(h => h.IsLord && !h.IsChild && h.Clan != null && h.Clan != house && h.Clan.Leader != h && !h.Clan.IsMinorFaction
+                && !h.IsPrisoner && h.PartyBelongedTo == null && h.Spouse == null && h.Age >= 18 && h.Age < 50)
+            .OrderBy(h => h.StringId).FirstOrDefault() ?? throw new StepFailedException("no lord to join the player's house");
+        var captor = MobileParty.AllLordParties.Where(p => p.IsActive && p.LeaderHero != null && p.LeaderHero.Clan != null && p.LeaderHero.Clan != house
+                && p.LeaderHero.Clan != kin.Clan && !p.LeaderHero.Clan.IsMinorFaction && p.MapEvent == null && p.CurrentSettlement == null)
+            .OrderBy(p => p.StringId).FirstOrDefault() ?? throw new StepFailedException("no lord's party to hold the captive");
+        ctx.Log($"{kin.StringId} of {kin.Clan.StringId} joins {house.StringId}; held by {captor.StringId} of {captor.LeaderHero.Clan.StringId}");
+        kin.Clan = house;
+        TakePrisonerAction.Apply(captor.Party, kin);
+        ctx.Assert(kin.IsPrisoner && kin.PartyBelongedToAsPrisoner == captor.Party, $"{kin.StringId} was not taken prisoner");
+        ctx.Report("value", kin.StringId);
+        ctx.Report("captor", captor.LeaderHero.Clan.StringId);
+        ctx.Report("name", kin.Name.ToString());
+        yield break;
+    }
+
+    /// <summary>
+    /// Server: Bellum's ransom price for captive <c>heroId</c> (HouseholdRansomBehavior.CalculateRansomPrice, from his
+    /// captor as Bellum resolves it). Reports value.
+    /// </summary>
+    private static IEnumerable<StepWait?> RansomPrice(StepContext ctx)
+    {
+        var prisoner = HeroById(ctx.Arg("heroId"));
+        var type = FindType("BellumCivile.Behaviors.HouseholdRansomBehavior") ?? throw new StepFailedException("Bellum has no household ransom");
+        var captor = type.GetMethod("ResolveCaptorClan", Any)?.Invoke(null, new object[] { prisoner }) as Clan ?? throw new StepFailedException("Bellum finds no captor");
+        var price = type.GetMethod("CalculateRansomPrice", Any)?.Invoke(null, new object[] { prisoner, captor, prisoner.PartyBelongedToAsPrisoner }) is int p ? p
+            : throw new StepFailedException("Bellum has no CalculateRansomPrice");
+        ctx.Log($"{prisoner.StringId} held by {captor.StringId}: {price} gold");
+        ctx.Report("value", price.ToString(CultureInfo.InvariantCulture));
+        yield break;
+    }
+
+    /// <summary>Either side: whether hero <c>heroId</c> is a prisoner ("yes" or "no"), waited for to be <c>expect</c>.</summary>
+    private static IEnumerable<StepWait?> Prisoner(StepContext ctx)
+    {
+        var hero = HeroById(ctx.Arg("heroId"));
+        string Read() => hero.IsPrisoner ? "yes" : "no";
+        if (ctx.HasArg("expect"))
+            yield return ctx.Until(() => Read() == ctx.Arg("expect"), $"{hero.StringId} to be a prisoner: {ctx.Arg("expect")}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 30)));
+        ctx.Assert(!ctx.HasArg("expect") || Read() == ctx.Arg("expect"), $"{hero.StringId} is a prisoner: {Read()}");
+        ctx.Report("value", Read());
     }
 }

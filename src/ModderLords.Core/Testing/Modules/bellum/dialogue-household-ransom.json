@@ -1,0 +1,137 @@
+{
+  // A player ransoms a captured member of their house through a ransom broker (stage 4d, Bellum's HouseholdRansomBehavior
+  // lines and its ransom list). The PC sends the captive the player confirmed; the server runs Bellum's own ransom as the
+  // player, which pays the captor Bellum's price and frees the captive, and both sides then have him free.
+  "api": 2,
+  "name": "dialogue-household-ransom",
+  "mode": "coop",
+  "description": "A player ransoms a captured kinsman through a ransom broker: the server pays Bellum's price and frees him.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "hero.addGold",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "500000"
+      }
+    },
+    {
+      "id": "bellum.captiveKin",
+      "side": "server",
+      "as": "kin",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.ransomPrice",
+      "side": "server",
+      "as": "price",
+      "args": {
+        "heroId": "$kin.value"
+      }
+    },
+    {
+      "id": "hero.gold",
+      "side": "server",
+      "as": "before",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.prisoner",
+      "side": "client:1",
+      "args": {
+        "heroId": "$kin.value",
+        "expect": "yes"
+      }
+    },
+    {
+      "id": "bellum.ransomBroker",
+      "side": "client:1",
+      "as": "broker"
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "args": {
+        "characterId": "$broker.value",
+        "pick": "$kin.name",
+        "path": "bc_household_ransom_start"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "Ransom of"
+      }
+    },
+    {
+      "id": "bellum.prisoner",
+      "side": "server",
+      "args": {
+        "heroId": "$kin.value",
+        "expect": "no"
+      }
+    },
+    {
+      "id": "bellum.prisoner",
+      "side": "client:1",
+      "args": {
+        "heroId": "$kin.value",
+        "expect": "no"
+      }
+    },
+    {
+      "id": "bellum.goldSpent",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "before": "$before.value",
+        "spent": "$price.value"
+      }
+    },
+    {
+      "id": "bellum.goldSpent",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "before": "$before.value",
+        "spent": "$price.value"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}
