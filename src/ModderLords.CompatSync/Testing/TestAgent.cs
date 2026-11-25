@@ -78,6 +78,15 @@ internal sealed class TestAgent
     public static string ResultsFile(string side) => "results-" + side.Replace(':', '-') + ".jsonl";
     public bool Ended => _ended || _refused;
 
+    /// <summary>
+    /// Where this game's part goes on once this run has ended: the launcher's <c>next</c> line names the next suite's
+    /// run folder (the same switch value a launch passes), so one player's game serves several suites of a Coop run.
+    /// </summary>
+    public TestRunSwitch? Next { get; private set; }
+
+    /// <summary>Module step DLLs this process already loaded and registered, by path: a later run reuses their steps.</summary>
+    private static readonly Dictionary<string, int> LoadedDlls = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Every frame on the game's main thread.</summary>
     public void Tick(DateTime now)
     {
@@ -100,6 +109,15 @@ internal sealed class TestAgent
                 catch (FormatException) { _log("test run: unreadable control line: " + line); continue; }
                 var op = MiniJson.GetString(command, "op");
                 if (op == "end") { _ended = true; _log("test run: ended by the launcher"); return; }
+                if (op == "next" && MiniJson.GetString(command, "side") == _switch.Side)
+                {
+                    var next = TestRunSwitch.Parse(MiniJson.GetString(command, "switch") ?? "");
+                    if (next == null || next.Side != _switch.Side) { _log("test run: unusable next line: " + line); continue; }
+                    Next = next;
+                    _ended = true;
+                    _log("test run: handed over to the next run, " + next.Folder);
+                    return;
+                }
                 if (op != "step" || MiniJson.GetString(command, "side") != _switch.Side) continue;
                 Start(command, now);
                 if (_running != null) return;   // the rest waits until this step is done
@@ -163,6 +181,11 @@ internal sealed class TestAgent
             if (missing.Count > 0) { skipped.Add($"test module {module} not loaded here: this game has no {string.Join(", ", missing)}"); continue; }
             var dll = MiniJson.GetString(load, "dll") ?? "";
             var typeName = MiniJson.GetString(load, "type") ?? "";
+            if (LoadedDlls.TryGetValue(dll, out var already))
+            {
+                _log($"test run: test module {module} already loaded ({already} step(s)) from {dll}");
+                continue;
+            }
             try
             {
                 var before = InGameTests.Ids(_switch.Side).Count;
@@ -172,7 +195,11 @@ internal sealed class TestAgent
                 register.Invoke(null, null);
                 var added = InGameTests.Ids(_switch.Side).Count - before;
                 if (added <= 0) errors.Add($"{module}: {typeName}.Register() registered no steps for {_switch.Side}");
-                else _log($"test run: test module {module} loaded ({added} step(s)) from {dll}");
+                else
+                {
+                    LoadedDlls[dll] = added;
+                    _log($"test run: test module {module} loaded ({added} step(s)) from {dll}");
+                }
             }
             catch (Exception ex) { errors.Add($"{module}: {Path.GetFileName(dll)}: {ex.GetBaseException().Message}"); }
         }

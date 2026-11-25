@@ -4,6 +4,7 @@ using ModderLords.Core.Launch;
 using ModderLords.Core.Modules;
 using ModderLords.Core.Overlay;
 using ModderLords.Core.Profiles;
+using ModderLords.Core.Smoke;
 using ModderLords.Core.Testing;
 
 namespace ModderLords.Coop.Testing;
@@ -207,9 +208,26 @@ public static class InGameTestRun
             return Collect(await RunSinglePlayer(profile, composed, options, say, cancel));
         }
 
-        // Coop: a fresh world costs a launch for now (the server restarts on the fresh copy); shared suites run in
-        // core's launch.
+        // Coop: each fresh world restarts the server on a fresh copy, and the player's game, started once, goes back to
+        // the main menu and joins it again (docs/INGAME-TEST-HARNESS.md, "One launch, many suites"); shared suites run
+        // with the suite before them. A game that cannot rejoin is closed and that suite started again from scratch.
         var launches = SuiteSelection.CoopLaunches(chosen);
+        var carry = new CoopClientCarry();
+        try { return await RunCoopLaunches(); }
+        finally
+        {
+            // A game kept for a suite that never ran (cancelled, or a launch that stopped before its server started).
+            if (carry.Game is { HasExited: false } waiting && !options.KeepClient)
+            {
+                say("[ModderLords] closing the game kept for the next suite…");
+                await CloseGame(waiting);
+            }
+            // Not while a game kept open (--keep-client) runs: Coop's auto-join keeps the file read-only until it closes.
+            if (carry.Config is { } config && !ClientLauncher.IsClientRunning()) say("[ModderLords] " + config.Restore());
+        }
+
+        async Task<InGameTestResult> RunCoopLaunches()
+        {
         var exit = 0;
         // What each suite's launch kept (suite → world) and reported, for the suites that continue its world.
         var keptBy = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -233,7 +251,17 @@ public static class InGameTestRun
             }
             var fresh = ProfileStore.Load(options.ProfileName)!;
             var keptNow = new Dictionary<string, string>(StringComparer.Ordinal);
-            var one = await RunCoop(fresh, composed, launchOptions, say, cancel, keptNow);
+            carry.NextName = n + 1 < launches.Count ? $"selected-{n + 2}" : null;
+            var rejoining = carry.Game is { HasExited: false };
+            var one = await RunCoop(fresh, composed, launchOptions, say, cancel, keptNow, carry);
+            if (rejoining && carry.RejoinFailed && !cancel.IsCancellationRequested)
+            {
+                // The kept game could not join the restarted server: this suite starts again with a game of its own.
+                carry.RejoinFailed = false;
+                if (one.Folder is not null) say($"[ModderLords] the kept game did not rejoin (evidence: {one.Folder}); starting the game again for {launches[n][0].Name}");
+                keptNow.Clear();
+                one = await RunCoop(ProfileStore.Load(options.ProfileName)!, composed, launchOptions, say, cancel, keptNow, carry);
+            }
             if (one.Report is not null)
             {
                 reports.Add(one.Report);
@@ -245,9 +273,10 @@ public static class InGameTestRun
             }
             if (one.Folder is not null) folders.Add(one.Folder);
             if (one.ExitCode != 0) exit = 1;
-            if (ClientLauncher.IsClientRunning()) { say("[ModderLords] the game is still running (kept open?); the remaining launches are skipped."); return new InGameTestResult(1, reports, folders, "the game was kept open"); }
+            if (carry.Game is null && ClientLauncher.IsClientRunning()) { say("[ModderLords] the game is still running (kept open?); the remaining launches are skipped."); return new InGameTestResult(1, reports, folders, "the game was kept open"); }
         }
         return new InGameTestResult(exit, reports, folders, null);
+        }
 
         InGameTestResult Collect((int ExitCode, TestReport? Report, string? Folder, string? Problem) one)
         {
@@ -508,11 +537,58 @@ public static class InGameTestRun
     public static string? MissingStepsDll(TestModule m, string? bundledRoot = null) =>
         m.StepsDll is null || File.Exists(StepsDllPath(m, bundledRoot)) ? null : StepsDllPath(m, bundledRoot);
 
-    /// <param name="kept">Filled with each suite's kept world (suite → test world) when its <c>coop.saveWorld</c> passed.</param>
-    private static async Task<(int ExitCode, TestReport? Report, string? Folder, string? Problem)> RunCoop(Profile profile, TestPlan testPlan,
-        InGameTestOptions options, Action<string> say, CancellationToken cancel, Dictionary<string, string>? kept = null)
+    /// <summary>
+    /// The player's game carried from one launch of a Coop run to the next: the server restarts on each fresh world,
+    /// the game stays open at the main menu and joins it again.
+    /// </summary>
+    private sealed class CoopClientCarry
     {
-        (int, TestReport?, string?, string?) Stop(string problem) { say("[ModderLords] " + problem); return (2, null, null, problem); }
+        /// <summary>The next launch's plan name, so this launch hands its game over to it; null on the last launch.</summary>
+        public string? NextName { get; set; }
+        /// <summary>The game kept at the main menu, already told to go on in <see cref="Next"/>'s run folder.</summary>
+        public System.Diagnostics.Process? Game { get; set; }
+        public FileTestRunChannel.Reservation? Next { get; set; }
+        /// <summary>engine_config.txt before the run's first game started; put back once the last game closes.</summary>
+        public EngineConfigGuard? Config { get; set; }
+        /// <summary>The kept game never got back onto the map: the caller starts this launch again with a new game.</summary>
+        public bool RejoinFailed { get; set; }
+    }
+
+    /// <summary>How long the player's game may take to leave to the main menu between suites.</summary>
+    private static readonly TimeSpan LeaveTimeout = TimeSpan.FromMinutes(4);
+
+    private static async Task CloseGame(System.Diagnostics.Process game)
+    {
+        try { game.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
+        try { await game.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token); } catch (OperationCanceledException) { }
+    }
+
+    /// <param name="kept">Filled with each suite's kept world (suite → test world) when its <c>coop.saveWorld</c> passed.</param>
+    /// <param name="carry">
+    /// The run's player's game between launches: reused when one is kept, handed on at the end when there is a next
+    /// launch; null for a run of one launch.
+    /// </param>
+    private static async Task<(int ExitCode, TestReport? Report, string? Folder, string? Problem)> RunCoop(Profile profile, TestPlan testPlan,
+        InGameTestOptions options, Action<string> say, CancellationToken cancel, Dictionary<string, string>? kept = null, CoopClientCarry? carry = null)
+    {
+        (int, TestReport?, string?, string?) Stop(string problem)
+        {
+            say("[ModderLords] " + problem);
+            // A game kept for this launch was told to run here: it cannot serve the next one.
+            if (carry?.Game is { } waiting)
+            {
+                if (!waiting.HasExited) CloseGame(waiting).GetAwaiter().GetResult();
+                carry.Game = null;
+                carry.Next = null;
+                if (carry.Config is { } config) say("[ModderLords] " + config.Restore());
+            }
+            return (2, null, null, problem);
+        }
+        async Task CloseAndRestore(System.Diagnostics.Process? game)
+        {
+            if (game is { HasExited: false }) await CloseGame(game);
+            if (carry?.Config is { } config) say("[ModderLords] " + config.Restore());
+        }
         if (profile.Server.Password.Length > 0) return Stop("This server has a password, and Coop's automatic join cannot send one. Clear it for the test.");
         var paths = options.Paths ?? LaunchSession.ResolvePaths(profile);
 
@@ -581,12 +657,18 @@ public static class InGameTestRun
             foreach (var m in prepared.Messages) say("[ModderLords] " + m);
             return Stop(unrequested);
         }
-        var channel = FileTestRunChannel.Create(Path.Combine(ProfileStore.RootDir, "tests"), testPlan, DateTimeOffset.Now);
+        // A game kept from the launch before waits at the main menu for this run's folder, which it was told about.
+        var keptGame = carry?.Game is { HasExited: false } carried && carry.Next is not null ? carried : null;
+        var testsRoot = Path.Combine(ProfileStore.RootDir, "tests");
+        var channel = FileTestRunChannel.Create(testsRoot, testPlan, DateTimeOffset.Now, keptGame is not null ? carry!.Next : null);
         say($"[ModderLords] test run {channel.RunId} -> {channel.Folder}");
         foreach (var m in prepared.Messages) say("[ModderLords] " + m);
         if (!prepared.Selections.Any(sel => sel.Module.Id.Equals(LaunchSession.SyncModuleId, StringComparison.OrdinalIgnoreCase)))
             return Stop($"the test agent lives in {LaunchSession.SyncModuleId}, which this profile does not load.");
-        say("[ModderLords] " + ClientModuleInstaller.Ensure(ClientLauncher.ResolveGameRoot(profile)).Message);
+        // The kept game has it loaded: its files are in use, and the first launch installed them.
+        if (keptGame is null) say("[ModderLords] " + ClientModuleInstaller.Ensure(ClientLauncher.ResolveGameRoot(profile)).Message);
+        if (carry is not null) carry.Config ??= new EngineConfigGuard(EngineConfigGuard.DefaultPath);
+        var handOver = carry?.NextName is not null;
         ClientLaunchSession.Prepared client;
         try { client = ServerMatchedClient.Prepare(prepared, profile); }
         catch (Exception ex) { return Stop("client plan: " + ex.Message); }
@@ -603,6 +685,8 @@ public static class InGameTestRun
 
         string? gameGone = null;
         EngineProcess? engine = null;
+        // Rejoining: Coop's join failing ends the wait for the map at once, rather than at the smoke test's timeouts.
+        using var joinFailed = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         // The server and the player's game write crash reports to the same folder; either one crashing ends the run.
         var crash = new CrashWatch(ServerPaths.CrashesDir)
         {
@@ -626,12 +710,15 @@ public static class InGameTestRun
             // Still wait for the server to list the player on the map, but not the 15 s guess after it: the run's setup
             // waits for Coop's own join-finished signal on the player's game.
             JoinSettle = TimeSpan.Zero,
-            CloseClientWhenDone = !options.KeepClient,
+            CloseClientWhenDone = !options.KeepClient && !handOver,
+            ClientAlreadyRunning = keptGame is not null,
+            EngineConfig = carry?.Config,
             ReportRoot = channel.Folder,
             // No time command: the steps pause the campaign themselves (game.pause), so the numbers they read hold still.
             SendServerCommand = null,
             ExtraLaunchArguments = [FileTestRunChannel.ClientArgument, channel.SwitchValue("client:1")],
-            WhileOnMap = token => testRun = sequencer.RunAsync(testPlan, channel.RunId, token),
+            // Handing over, the run is ended after the game has left (the sequencer's End below).
+            WhileOnMap = token => testRun = sequencer.RunAsync(testPlan, channel.RunId, cancel, end: !handOver),
         });
         runner.Progress += line => say("[smoke] " + line);
 
@@ -648,17 +735,64 @@ public static class InGameTestRun
 
         using var windowWatch = new CancellationTokenSource();
         var responder = CrashResponder.RunAsync(crash, () => serverDump.Writing, say, windowWatch.Token);
+        Task? joinWatch = null;
+        if (carry is not null) { carry.Game = null; carry.Next = null; }
         var smokeReport = await runner.RunAsync(args =>
         {
+            if (keptGame is not null)
+            {
+                // The server is serving: the kept game joins it as Coop's own automatic join would at start.
+                say("[ModderLords] the game kept from the last suite joins the restarted server");
+                channel.Send(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["op"] = "step", ["seq"] = 0, ["side"] = "client:1", ["step"] = "coop.join",
+                    ["args"] = new System.Text.Json.Nodes.JsonObject(), ["timeoutMs"] = (long)TimeSpan.FromMinutes(10).TotalMilliseconds,
+                }.ToJsonString());
+                joinWatch = WatchJoin(channel.Folder, say, joinFailed, windowWatch.Token);
+                _ = TestGameWindow.Watch(keptGame, options.Minimized, note => say("[ModderLords] " + note), windowWatch.Token);
+                return keptGame;
+            }
             var started = ClientLaunchSession.Start(client.Plan with { ExtraArguments = args }, note => say("[ModderLords] " + note));
             _ = TestGameWindow.Watch(started, options.Minimized, note => say("[ModderLords] " + note), windowWatch.Token);
             return started;
-        }, cancel);
+        }, joinFailed.Token);
         // The game or server may have gone before the steps finished; the step waiting is then reported as such.
         gameGone = "the game or the server exited before the step finished";
         var testReport = testRun is null ? null : await testRun;
         // A game kept open is the player's from here.
         windowWatch.Cancel();
+        if (joinWatch is not null) await joinWatch;
+        var game = runner.Client ?? keptGame;
+        if (keptGame is not null && testReport is null && carry is not null)
+        {
+            // The kept game never got back onto the map: no step of this suite ran, so the caller runs it again with a
+            // game of its own.
+            carry.RejoinFailed = true;
+            sequencer.End();
+            await CloseAndRestore(game);
+        }
+        else if (handOver)
+        {
+            // Between suites: the game leaves to the main menu while the server still runs, then is told where the next
+            // suite's run will be. Anything that went wrong closes it instead, and the next suite starts its own.
+            gameGone = null;
+            var fit = testReport is not null && game is { HasExited: false } && crash.CrashedSides().Count == 0 && !server.Exited.IsCompleted;
+            var leave = fit ? await sequencer.RunStepAsync("client:1", "coop.leave", LeaveTimeout, cancel) : null;
+            if (leave?.Outcome == StepOutcome.Pass)
+            {
+                var next = FileTestRunChannel.Reserve(testsRoot, carry!.NextName!, DateTimeOffset.Now);
+                sequencer.End("client:1", next);
+                carry.Game = game;
+                carry.Next = next;
+                say("[ModderLords] the game left to the main menu; it stays open for the next suite");
+            }
+            else
+            {
+                sequencer.End();
+                if (leave is not null) say($"[ModderLords] the game could not leave to the main menu ({leave.Outcome}: {leave.Message}); closing it, the next suite starts its own");
+                await CloseAndRestore(game);
+            }
+        }
         say("");
         say(smokeReport.ToText());
         if (testReport is null) say("[ModderLords] the game never reached the campaign map, so no step ran; see the smoke report above.");
@@ -679,7 +813,7 @@ public static class InGameTestRun
         foreach (var file in crash.CopyLogs(channel.Folder)) say("[ModderLords] crash log kept: " + file);
         foreach (var file in serverDump.Files()) say($"[ModderLords] server dump kept: {file} (open with dotnet-dump analyze; clrstack -all)");
         say($"[ModderLords] evidence and logs: {channel.Folder}");
-        if (!options.KeepServer && !server.Exited.IsCompleted)
+        if ((!options.KeepServer || handOver) && !server.Exited.IsCompleted)
         {
             say("[ModderLords] stopping the server…");
             await server.StopAsync(TimeSpan.FromSeconds(60));
@@ -691,6 +825,30 @@ public static class InGameTestRun
         // Both reports count: steps that pass in a game that then crashed, or where Coop logged a fatal error, still fail.
         var passed = testReport?.Passed == true && smokeReport.Overall != Core.Smoke.SmokeVerdict.Fail;
         return (passed ? 0 : 1, testReport, channel.Folder, testReport is null ? "the game never reached the campaign map" : null);
+    }
+
+    /// <summary>
+    /// Watches the kept game's <c>coop.join</c> (sent with seq 0, outside the plan) in the run folder, and cancels
+    /// <paramref name="failed"/> when it fails, so the wait for the map ends and the suite is started again.
+    /// </summary>
+    private static async Task WatchJoin(string folder, Action<string> say, CancellationTokenSource failed, CancellationToken stop)
+    {
+        var tail = new Core.Smoke.LogTail(Path.Combine(folder, FileTestRunChannel.ResultsFile("client:1")), fromStart: true);
+        while (!stop.IsCancellationRequested && !failed.IsCancellationRequested)
+        {
+            foreach (var line in tail.ReadNew())
+            {
+                System.Text.Json.Nodes.JsonNode? node;
+                try { node = System.Text.Json.Nodes.JsonNode.Parse(line); }
+                catch (System.Text.Json.JsonException) { continue; }
+                if (node?["op"]?.ToString() != "result" || node["seq"]?.ToString() != "0") continue;
+                if (node["status"]?.ToString() == "pass") { say("[ModderLords] the kept game joined the restarted server"); return; }
+                say($"[ModderLords] the kept game could not join: {node["message"]}");
+                failed.Cancel();
+                return;
+            }
+            try { await Task.Delay(500, stop); } catch (OperationCanceledException) { return; }
+        }
     }
 
     /// <summary>

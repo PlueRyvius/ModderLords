@@ -457,7 +457,7 @@ suite's steps on each side (give an item, enter a town, use the stash, compare b
   released versions check that old saves still load.
 - **Suites share a world where they can.** The built-in Coop checks each read a value before they change it, so they
   run one after another on the same world, in one launch of the server and the game. A suite that needs a fresh world
-  costs a launch of its own.
+  restarts the server on a fresh copy, and the player's game, still open, goes back to the main menu and joins again.
 
 Each run leaves a report, evidence and each side's logs in a run folder; the newest 50 are kept, and a crash dump
 for a week. Test mode is off unless the launch switches

@@ -56,8 +56,8 @@ ModderLords.Cli test --profile "My Host" --suite C:\scratch\try-this.json
   - `coop-<side>.log`, `server-console.log` and the smoke report's log slices, in Coop.
   - Only the newest 50 runs are kept, and a crash dump only for 7 days; copy a run elsewhere to keep it.
 - **A one-off suite file** (`--suite <path>`) is the quickest way to try a step before giving it a home in a module.
-- **Single player** takes about a minute (it creates a world by code each run). **Coop** takes a few minutes per launch
-  (shared suites all run in one) and needs a Host profile, the dedicated server, and Coop's automatic join (no server password).
+- **Single player** takes about a minute (it creates a world by code each run). **Coop** takes a few minutes to start the game once,
+  then about a minute per fresh world (the server restarts and the game rejoins; shared suites need none) and needs a Host profile, the dedicated server, and Coop's automatic join (no server password).
   A Coop profile whose world ModderLords generates (TAOM, or the Host tab's "generate the world" box) gets a test
   world of its own, `test-worlds\profile-<profile>.sav`, and every run starts from a fresh copy of it; the profile's
   own save is left alone. The first run generates it, as the Host tab does, which takes several minutes more; so does

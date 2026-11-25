@@ -23,6 +23,8 @@ internal static class SessionSteps
     {
         InGameTests.Register("coop.saveWorld", StepSide.Server, SaveWorld);
         InGameTests.Register("coop.rejoin", StepSide.Client, Rejoin);
+        InGameTests.Register("coop.leave", StepSide.Client, Leave);
+        InGameTests.Register("coop.join", StepSide.Client, Join);
     }
 
     // ---- coop.saveWorld -----------------------------------------------------------------------------------------
@@ -61,35 +63,14 @@ internal static class SessionSteps
         var before = Hero.MainHero.Name?.ToString() ?? "";
         var gold = Hero.MainHero.Gold;
         var coopMod = FindCoopMod();
-        var session = coopMod.GetType().GetField("Coop", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
-        var running = session?.GetType().GetProperty("Running");
-        ctx.Assert(session != null && running != null, "CoopMod.Coop or its Running property is not there in this Coop");
-        bool Running() => running!.GetValue(session, null) is true;
-        ctx.Log($"leaving as {before} ({gold} gold); Coop running: {Running()}");
+        ctx.Log($"leaving as {before} ({gold} gold)");
 
         var left = DateTime.UtcNow;
         // Read by the launcher's smoke watch: the server is about to drop this player, on purpose.
         ModderLords.CompatSync.Log.Info("coop rejoin: leaving");
-        MBGameManager.EndGame();
-        yield return ctx.Until(() => Campaign.Current == null && ActiveState == "InitialState" && !Running(),
-            "the main menu with Coop's session ended", TimeSpan.FromMinutes(3));
+        foreach (var wait in ToMainMenu(ctx, coopMod)) yield return wait;
         ctx.Log("at the main menu; joining again");
-
-        // Coop's automatic join runs once per process, from the main menu; letting it run again is the Join button
-        // with the same address this run started with.
-        var autoStarted = coopMod.GetType().GetField("_autoStarted", BindingFlags.NonPublic | BindingFlags.Instance);
-        if (autoStarted != null) autoStarted.SetValue(coopMod, false);
-        else
-        {
-            var config = coopMod.GetType().GetField("autoConnectConfiguration", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(coopMod);
-            var start = session!.GetType().GetMethods().FirstOrDefault(m => m.Name == "StartAsClient");
-            ctx.Assert(config != null && start != null, "neither Coop's automatic join flag nor its join address and StartAsClient were found");
-            var args = start!.GetParameters().Select((p, i) => i == 0 ? config : p.HasDefaultValue ? p.DefaultValue : null).ToArray();
-            ctx.Log("StartAsClient -> " + start.Invoke(session, args));
-        }
-
-        yield return ctx.Until(() => CoopWatch.JoinReadyAt is { } at && at > left, "Coop's ClientCampaignReady after joining again", TimeSpan.FromMinutes(5));
-        yield return ctx.Until(() => Campaign.Current != null && Hero.MainHero != null && ActiveState == "MapState", "the campaign map", TimeSpan.FromMinutes(2));
+        foreach (var wait in JoinAgain(ctx, coopMod, left)) yield return wait;
         ModderLords.CompatSync.Log.Info("coop rejoin: back");
         var after = Hero.MainHero.Name?.ToString() ?? "";
         ctx.Log($"joined again as {after} ({Hero.MainHero.Gold} gold) after {(DateTime.UtcNow - left).TotalSeconds:F0} s");
@@ -97,6 +78,85 @@ internal static class SessionSteps
         ctx.Report("before", before);
         ctx.Report("heroName", after);
         ctx.Report("value", after);
+    }
+
+    // ---- coop.leave / coop.join ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Player: leaves the session to the main menu, as the escape menu's exit does, and stays there. The launcher runs
+    /// it between two suites of one Coop run, before it restarts the server on the next suite's fresh world, so the
+    /// player's game need not be started again (docs/INGAME-TEST-HARNESS.md, "One launch, many suites").
+    /// </summary>
+    private static IEnumerable<StepWait?> Leave(StepContext ctx)
+    {
+        var coopMod = FindCoopMod();
+        var left = DateTime.UtcNow;
+        if (Campaign.Current != null) foreach (var wait in ToMainMenu(ctx, coopMod)) yield return wait;
+        else yield return ctx.Until(() => ActiveState == "InitialState" && !CoopRunning(coopMod), "the main menu with Coop's session ended", TimeSpan.FromMinutes(3));
+        ctx.Log($"at the main menu after {(DateTime.UtcNow - left).TotalSeconds:F0} s");
+        ctx.Report("value", "menu");
+    }
+
+    /// <summary>
+    /// Player: from the main menu, joins the server again through Coop's own automatic join (the address this game was
+    /// started with) and waits for Coop's join-finished signal and the campaign map. The launcher runs it once the
+    /// server is back, on the next suite's world.
+    /// </summary>
+    private static IEnumerable<StepWait?> Join(StepContext ctx)
+    {
+        CoopWatch.ArmJoin();
+        ctx.Assert(CoopWatch.JoinUnavailable == null, "Coop's join signal cannot be watched: " + CoopWatch.JoinUnavailable);
+        var coopMod = FindCoopMod();
+        yield return ctx.Until(() => Campaign.Current == null && ActiveState == "InitialState" && !CoopRunning(coopMod),
+            "the main menu with no Coop session", TimeSpan.FromMinutes(3));
+        var since = DateTime.UtcNow;
+        foreach (var wait in JoinAgain(ctx, coopMod, since)) yield return wait;
+        var hero = Hero.MainHero.Name?.ToString() ?? "";
+        ctx.Log($"joined as {hero} after {(DateTime.UtcNow - since).TotalSeconds:F0} s");
+        ctx.Report("heroName", hero);
+        ctx.Report("value", hero);
+    }
+
+    /// <summary>Ends the game to the main menu and waits until Coop's session has ended.</summary>
+    private static IEnumerable<StepWait?> ToMainMenu(StepContext ctx, object coopMod)
+    {
+        ctx.Log("Coop running: " + CoopRunning(coopMod));
+        MBGameManager.EndGame();
+        yield return ctx.Until(() => Campaign.Current == null && ActiveState == "InitialState" && !CoopRunning(coopMod),
+            "the main menu with Coop's session ended", TimeSpan.FromMinutes(3));
+    }
+
+    /// <summary>
+    /// Coop's automatic join runs once per process, from the main menu; letting it run again is the Join button with
+    /// the same address this game started with. Waits for Coop's ClientCampaignReady after <paramref name="since"/>
+    /// and the campaign map.
+    /// </summary>
+    private static IEnumerable<StepWait?> JoinAgain(StepContext ctx, object coopMod, DateTime since)
+    {
+        var autoStarted = coopMod.GetType().GetField("_autoStarted", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (autoStarted != null) autoStarted.SetValue(coopMod, false);
+        else
+        {
+            var session = CoopSession(coopMod);
+            var config = coopMod.GetType().GetField("autoConnectConfiguration", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(coopMod);
+            var start = session?.GetType().GetMethods().FirstOrDefault(m => m.Name == "StartAsClient");
+            ctx.Assert(config != null && start != null, "neither Coop's automatic join flag nor its join address and StartAsClient were found");
+            var args = start!.GetParameters().Select((p, i) => i == 0 ? config : p.HasDefaultValue ? p.DefaultValue : null).ToArray();
+            ctx.Log("StartAsClient -> " + start.Invoke(session, args));
+        }
+        yield return ctx.Until(() => CoopWatch.JoinReadyAt is { } at && at > since, "Coop's ClientCampaignReady after joining again", TimeSpan.FromMinutes(5));
+        yield return ctx.Until(() => Campaign.Current != null && Hero.MainHero != null && ActiveState == "MapState", "the campaign map", TimeSpan.FromMinutes(2));
+    }
+
+    private static object? CoopSession(object coopMod) =>
+        coopMod.GetType().GetField("Coop", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+
+    private static bool CoopRunning(object coopMod)
+    {
+        var session = CoopSession(coopMod);
+        var running = session?.GetType().GetProperty("Running");
+        if (session == null || running == null) throw new StepFailedException("CoopMod.Coop or its Running property is not there in this Coop");
+        return running.GetValue(session, null) is true;
     }
 
     private static string ActiveState => TaleWorlds.Core.GameStateManager.Current?.ActiveState?.GetType().Name ?? "";
