@@ -9,7 +9,7 @@ if not exist "%OUT%" mkdir "%OUT%"
 echo Building BellumCivile.CoopCompat... > "%LOG%"
 dotnet build BellumCivileCoopCompat.csproj -c Release -o "%~dp0bin\Release" >> "%LOG%" 2>&1
 if errorlevel 1 goto failed
-rem The network part (player agency), built against the Coop nightly installed in the game's Modules\Coop.
+rem The network part (player agency), built against Coop 0.1.8 installed in the game's Modules\Coop.
 dotnet build ..\BellumCivileCoopCompat.Net\BellumCivileCoopCompat.Net.csproj -c Release -o "%~dp0bin\Release" >> "%LOG%" 2>&1
 :failed
 if errorlevel 1 (

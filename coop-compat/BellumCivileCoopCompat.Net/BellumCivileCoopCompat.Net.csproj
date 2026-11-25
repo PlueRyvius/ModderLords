@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The network part of Bellum Civile Coop Compat (player agency, docs/BELLUM-COOP-COVERAGE.md stage 3). Built
-       against the Coop nightly's own messaging; the module loads it only once Coop is loaded, so the module itself
+       against Coop 0.1.8's own messaging; the module loads it only once Coop is loaded, so the module itself
        never references Coop. Shipped next to BellumCivile.CoopCompat.dll in both bin folders. Build with ..\BellumCivileCoopCompat\Build.cmd. -->
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
@@ -16,7 +16,7 @@
     <SteamFolder Condition="'$(SteamFolder)' == '' And Exists('D:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord')">D:\Program Files (x86)\Steam</SteamFolder>
     <GameFolder Condition="'$(GameFolder)' == ''">$(SteamFolder)\steamapps\common\Mount &amp; Blade II Bannerlord</GameFolder>
     <GameBin>$(GameFolder)\bin\Win64_Shipping_Client</GameBin>
-    <!-- The Coop nightly for game 1.5.7 (module id CoopNightly, installed as Modules\Coop). -->
+    <!-- Coop 0.1.8 for game 1.5.7 (module id Coop, in Modules\Coop). -->
     <CoopBin Condition="'$(CoopBin)' == ''">$(GameFolder)\Modules\Coop\bin\Win64_Shipping_Client</CoopBin>
   </PropertyGroup>
   <ItemGroup>

@@ -10,7 +10,7 @@ namespace BellumCivileCoopCompat
     // Player agency, votes (docs/BELLUM-COOP-COVERAGE.md, stage 3, A6): players vote on Bellum's own kingdom decisions.
     //
     // Coop sends a kingdom's decisions to players only for the decision types it knows; for any other type its server
-    // logs "is not synced, so the server AI decides it instead of a player vote". The Coop nightly lets a mod register a
+    // logs "is not synced, so the server AI decides it instead of a player vote". Coop 0.1.8 lets a mod register a
     // type with GameInterface.Services.Kingdoms.KingdomDecisionTypeRegistry: Coop carries the proposer, realm and time,
     // and the mod writes and reads the rest. Bellum's four decision types (a defensive pact's call, a voluntary pact, a
     // mandate reform, a privy council appointment) are registered on the server and on every player's PC, with their
