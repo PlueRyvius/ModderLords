@@ -58,6 +58,8 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.CourtAgendaBehavior",
             // Appeasement (stage 4c): buying a house into the player's rebel faction, or as ruler out of its own (Bribes).
             "BellumCivile.Behaviors.AppeasementBehavior",
+            // Household ransom (stage 4d): the confirmed captive is ransomed on the server (Ransoms).
+            "BellumCivile.Behaviors.HouseholdRansomBehavior",
         };
 
         /// <summary>

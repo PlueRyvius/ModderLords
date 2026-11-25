@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.8.0 (by ModderLords)
+Bellum Civile Coop Compat v1.9.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -104,8 +104,11 @@ joined.
 - Appeasement (new in 1.8.0): as a rebel faction's leader, buy a lord's
   house into your faction; as ruler, buy a rebel house back out of its
   faction. The server makes the deal and pays the lord from your purse.
+- Household ransom (new in 1.9.0): a ransom broker frees a captured
+  member of your house for Bellum's price. The server pays the captor
+  from your purse and sets the captive free.
 
-Not yet in co-op: Bellum's other dialogue lines (marriages, hostages, ransoms, companion vassals, spymasters and
+Not yet in co-op: Bellum's other dialogue lines (marriages, hostages, companion vassals, spymasters and
 the like stay hidden on players' PCs).
 
 Install (server and every player):
