@@ -56,6 +56,8 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior",
             "BellumCivile.Behaviors.ElectionLobbyingBehavior",
             "BellumCivile.Behaviors.CourtAgendaBehavior",
+            // Appeasement (stage 4c): buying a house into the player's rebel faction, or as ruler out of its own (Bribes).
+            "BellumCivile.Behaviors.AppeasementBehavior",
         };
 
         /// <summary>

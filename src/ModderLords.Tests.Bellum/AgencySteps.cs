@@ -34,7 +34,8 @@ public static class AgencySteps
 
     /// <summary>
     /// Server: a court faction of a lords' realm's vassals forms, without an ultimatum (CheatCommands.CreateFactionFromArgs,
-    /// as Bellum's own civilwars cheats do). Reports "kingdom:leader:type".
+    /// as Bellum's own civilwars cheats do), in realm <c>kingdom</c> if given. Reports "kingdom:leader:type", and
+    /// leaderHero (the leading house's leader).
     /// </summary>
     private static IEnumerable<StepWait?> CreateFaction(StepContext ctx)
     {
@@ -44,8 +45,12 @@ public static class AgencySteps
         var managerType = FindType("BellumCivile.Behaviors.FactionManagerBehavior");
         var manager = managerType == null ? null : typeof(Campaign).GetMethod(nameof(Campaign.GetCampaignBehavior))!.MakeGenericMethod(managerType).Invoke(Campaign.Current, null);
         var grace = managerType?.GetField("_initialCivilWarGrace", Any)?.GetValue(manager) as IDictionary;
-        foreach (var kingdom in Kingdom.All.Where(k => k != null && !k.IsEliminated && k.RulingClan != null && !HasPlayers(k) && !k.StringId.Contains("_rebels"))
-                     .OrderByDescending(k => k.Clans.Count).Take(6))
+        // With kingdom, that realm only (one a player may rule); else the largest realms without players.
+        var realms = ctx.HasArg("kingdom")
+            ? new[] { KingdomById(ctx.Arg("kingdom")) ?? throw new StepFailedException($"no kingdom '{ctx.Arg("kingdom")}'") }
+            : Kingdom.All.Where(k => k != null && !k.IsEliminated && k.RulingClan != null && !HasPlayers(k) && !k.StringId.Contains("_rebels"))
+                .OrderByDescending(k => k.Clans.Count).Take(6).ToArray();
+        foreach (var kingdom in realms)
         {
             if (grace != null && grace.Contains(kingdom)) grace.Remove(kingdom);
             var args = new object?[] { new List<string> { kingdom.StringId, ctx.Arg("type", "Independence") }, null };
@@ -56,6 +61,7 @@ public static class AgencySteps
             ctx.Log("formed: " + key + (registered ? "" : " (not registered)"));
             if (!registered) continue;
             ctx.Report("value", key);
+            ctx.Report("leaderHero", (faction.GetType().GetProperty("Leader", Any)?.GetValue(faction) as Clan)?.Leader?.StringId ?? "");
             yield break;
         }
         throw new StepFailedException("no realm formed a faction");
