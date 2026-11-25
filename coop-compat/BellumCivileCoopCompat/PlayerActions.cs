@@ -62,6 +62,8 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.HouseholdRansomBehavior",
             // Call to arms (stage 4d): a lord who agrees to join the player's army is added to it on the server (Summons).
             "BellumCivile.Behaviors.ArmySummonsConversationBehavior",
+            // Treaty hostages (stage 4d): a player ruler's release or execution of a hostage is judged on the server (Hostages).
+            "BellumCivile.Behaviors.HostagePactBehavior",
         };
 
         /// <summary>

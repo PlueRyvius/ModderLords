@@ -42,6 +42,7 @@ public static class Steps
         ActionsSteps.Register();
         TalkSteps.Register();
         ArmySteps.Register();
+        HostageSteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------
