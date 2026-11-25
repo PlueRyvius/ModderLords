@@ -1,0 +1,149 @@
+{
+  // A player bribes a lord's vote on a policy motion in conversation (stage 4b, Bellum's PolicyDeliberationBehavior
+  // lines and its vote bribe). The PC knows the motion from the server's state; when the barter is accepted, the vote
+  // Bellum records and the gold the player offered both go to the server, which records the vote and pays the lord.
+  "api": 2,
+  "name": "dialogue-policy-bribe",
+  "mode": "coop",
+  "description": "A player bribes a lord to vote for a policy motion: the server records the vote and takes the player's gold.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "hero.addGold",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "300000"
+      }
+    },
+    {
+      "id": "bellum.queuePolicyVote",
+      "side": "server",
+      "as": "policy",
+      "args": {
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.bribableLord",
+      "side": "server",
+      "as": "lord",
+      "args": {
+        "heroName": "$me.heroName",
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "hero.gold",
+      "side": "server",
+      "as": "before",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "as": "bribe",
+      "args": {
+        "heroId": "$lord.value",
+        "barter": "accept",
+        "path": "main_option_discussions_3|policy_deliberation_topic|policy_query_slot_0|policy_query_sway_support|policy_query_sway_oppose|policy_sway_barter_start"
+      }
+    },
+    {
+      "id": "bellum.carried",
+      "side": "server",
+      "args": {
+        "expect": "PolicyDeliberationBehavior.SetBribedVote done"
+      }
+    },
+    {
+      "id": "bellum.policyBribe",
+      "side": "server",
+      "args": {
+        "kingdom": "$q.value",
+        "policy": "$policy.value",
+        "heroId": "$lord.value",
+        "expect": "set"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "Bribe paid for"
+      }
+    },
+    {
+      "id": "bellum.goldSpent",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "before": "$before.value",
+        "spent": "$bribe.gold"
+      }
+    },
+    {
+      "id": "bellum.goldSpent",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "before": "$before.value",
+        "spent": "$bribe.gold"
+      }
+    },
+    {
+      "id": "bellum.policyBribe",
+      "side": "client:1",
+      "args": {
+        "kingdom": "$q.value",
+        "policy": "$policy.value",
+        "heroId": "$lord.value",
+        "expect": "set"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

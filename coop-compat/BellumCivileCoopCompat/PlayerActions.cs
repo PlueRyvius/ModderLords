@@ -49,7 +49,20 @@ namespace BellumCivileCoopCompat
         {
             "BellumCivile.Behaviors.LordshipBehavior",        // estates, their revocation, retainers' indentures, returning an estate
             "BellumCivile.Behaviors.ClientKingdomBehavior",   // releasing a client kingdom
+            // Vote lobbying (stage 4b): persuading or bribing a lord's vote; the vote's record and the bribe go to the server.
+            "BellumCivile.Behaviors.FiefDeliberationBehavior",
+            "BellumCivile.Behaviors.PolicyDeliberationBehavior",
+            "BellumCivile.Behaviors.ExpulsionDeliberationBehavior",
+            "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior",
+            "BellumCivile.Behaviors.ElectionLobbyingBehavior",
+            "BellumCivile.Behaviors.CourtAgendaBehavior",
         };
+
+        /// <summary>
+        /// Lines of those behaviours that stay hidden: what they change isn't one call the server can carry out yet (asking a
+        /// lord to claim a fief himself, a treason indictment).
+        /// </summary>
+        public static readonly HashSet<string> HiddenLines = new HashSet<string> { "fief_query_push_npc_self", "treason_indict_start" };
 
         public const string Line = "In co-op, the server decides this. This Bellum Civile action isn't available to players yet.";
 
@@ -154,11 +167,11 @@ namespace BellumCivileCoopCompat
 
         // Every dialogue line Bellum registers gets a condition that is false on a player's PC in co-op, and Bellum's own
         // condition everywhere else. Asked once per line at registration, so the caller is read from the stack.
-        private static void WrapLine(ref ConversationSentence.OnConditionDelegate conditionDelegate)
+        private static void WrapLine(string id, ref ConversationSentence.OnConditionDelegate conditionDelegate)
         {
             if (_bellum == null || !FromBellum(out var from))
                 return;
-            for (var type = from; type != null; type = type.DeclaringType)
+            for (var type = HiddenLines.Contains(id) ? null : from; type != null; type = type.DeclaringType)
             {
                 if (!OpenDialogue.Contains(type.FullName)) continue;
                 _linesOpen++;

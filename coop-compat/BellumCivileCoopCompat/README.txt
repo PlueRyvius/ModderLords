@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.6.0 (by ModderLords)
+Bellum Civile Coop Compat v1.7.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -97,9 +97,13 @@ joined.
   retainers' indentures, returning an estate to your liege, and releasing
   a client kingdom. The conversation runs on your PC; the server carries
   out what you agree, as you.
+- Vote lobbying (new in 1.7.0): talk a lord round, or bribe him, to back
+  a fief award, a policy motion, an expulsion, a council appointment, an
+  election or a court mandate. The pledge is recorded on the server; a
+  bribe's gold and fiefs go from you to the lord there.
 
-Not yet in co-op: Bellum's other dialogue lines (vote lobbying and
-bribes, marriages, hostages, ransoms, companion vassals, spymasters and
+Not yet in co-op: Bellum's other dialogue lines (appeasement barters,
+marriages, hostages, ransoms, companion vassals, spymasters and
 the like stay hidden on players' PCs).
 
 Install (server and every player):

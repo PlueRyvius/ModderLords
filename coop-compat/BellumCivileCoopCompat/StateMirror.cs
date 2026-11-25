@@ -41,6 +41,9 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.CourtAgendaBehavior",
             "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior",
             "BellumCivile.Behaviors.ClientKingdomBehavior",
+            "BellumCivile.Behaviors.FiefDeliberationBehavior",
+            "BellumCivile.Behaviors.PolicyDeliberationBehavior",
+            "BellumCivile.Behaviors.ExpulsionDeliberationBehavior",
         };
 
         private const int Chunk = 24 * 1024;
