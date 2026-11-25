@@ -1,0 +1,38 @@
+{
+  // A player vassal grants a barony to a companion in conversation, who founds a new house under them (stage 4d, Bellum's
+  // CompanionSubinfeudationBehavior lines). The player holds the barony and the title above it. The conversation, the
+  // barony list and both confirmations run on the player's PC; the new house is founded on the server as the player, and
+  // both sides see the companion lead it, holding the barony in the player's realm, and the player pay Bellum's price.
+  "api": 2,
+  "name": "dialogue-companion-vassal",
+  "mode": "coop",
+  "description": "A player vassal grants a barony to a companion in conversation; the server founds the companion's new house.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.joinKingdom", "side": "server", "as": "q", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.liegeTitle", "side": "server", "args": { "heroName": "$me.heroName", "fief": "$q.fief" } },
+    { "id": "bellum.hireCompanion", "side": "server", "as": "c", "args": { "heroName": "$me.heroName" } },
+    { "id": "hero.addGold", "side": "server", "args": { "heroName": "$me.heroName", "amount": "30000" } },
+    { "id": "bellum.addInfluence", "side": "server", "args": { "heroName": "$me.heroName", "amount": "1000" } },
+    { "id": "hero.gold", "side": "server", "as": "before", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.stateRequest", "side": "client:1" },
+
+    { "id": "bellum.talk", "side": "client:1", "args": {
+        "heroId": "$c.value",
+        "path": "bc_subinfeudation_start|bc_subinfeudation_offer|bc_subinfeudation_fief|bc_subinfeudation_confirm_full",
+        "confirm": "yes",
+        "text": "Harnessford" } },
+
+    { "id": "bellum.vassalHouse", "side": "server", "as": "house", "args": { "heroName": "$me.heroName", "heroId": "$c.value", "fief": "$q.fief", "expect": "yes" } },
+    { "id": "bellum.vassalHouse", "side": "client:1", "args": { "heroName": "$me.heroName", "heroId": "$c.value", "fief": "$q.fief", "expect": "yes" } },
+    { "id": "bellum.goldSpent", "side": "server", "args": { "heroName": "$me.heroName", "before": "$before.value", "spent": "20000" } },
+    { "id": "bellum.goldSpent", "side": "client:1", "args": { "heroName": "$me.heroName", "before": "$before.value", "spent": "20000" } },
+
+    { "id": "bellum.compat", "side": "server" },
+    { "id": "bellum.compat", "side": "client:1" },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
