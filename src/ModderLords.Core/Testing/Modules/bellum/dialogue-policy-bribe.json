@@ -54,6 +54,15 @@
       }
     },
     {
+      "id": "bellum.setRelation",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "b": "$lord.value",
+        "value": "0"
+      }
+    },
+    {
       "id": "hero.gold",
       "side": "server",
       "as": "before",
