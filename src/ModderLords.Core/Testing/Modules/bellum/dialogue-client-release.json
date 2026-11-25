@@ -1,0 +1,109 @@
+{
+  // A player ruler releases a client kingdom in conversation with its ruler (stage 4a, Bellum's ClientKingdomBehavior
+  // lines). The PC knows the client from the server's state; the release goes to the server as the player, which makes
+  // the offer again for that player and carries it out.
+  "api": 2,
+  "name": "dialogue-client-release",
+  "mode": "coop",
+  "description": "A player ruler tells a client kingdom's ruler it is free: the server releases it, and both sides see it free.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.takeThrone",
+      "side": "server",
+      "as": "realm",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.peacefulRealm",
+      "side": "server",
+      "as": "c",
+      "args": {
+        "kingdom": "$realm.value"
+      }
+    },
+    {
+      "id": "bellum.makeClient",
+      "side": "server",
+      "args": {
+        "client": "$c.value",
+        "suzerain": "$realm.value"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.clientOf",
+      "side": "client:1",
+      "args": {
+        "client": "$c.value",
+        "expect": "$realm.value"
+      }
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "args": {
+        "heroId": "$c.ruler",
+        "path": "main_option_discussions_3|bc_client_release_open|bc_client_release_propose|bc_client_release_confirm"
+      }
+    },
+    {
+      "id": "bellum.carried",
+      "side": "server",
+      "args": {
+        "expect": "ClientKingdomBehavior.TryVoluntarilyRelease done"
+      }
+    },
+    {
+      "id": "bellum.clientOf",
+      "side": "server",
+      "args": {
+        "client": "$c.value",
+        "expect": "none"
+      }
+    },
+    {
+      "id": "bellum.clientOf",
+      "side": "client:1",
+      "args": {
+        "client": "$c.value",
+        "expect": "none"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

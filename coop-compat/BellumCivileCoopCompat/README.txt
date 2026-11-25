@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.5.0 (by ModderLords)
+Bellum Civile Coop Compat v1.6.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -92,8 +92,15 @@ joined.
     voluntary pact, a mandate reform, a privy council appointment) like
     any other kingdom decision.
 
-Not yet in co-op: Bellum's own dialogue lines (marriage, hostage and
-similar conversation options stay hidden on players' PCs).
+- Bellum's dialogue lines, first part (new in 1.6.0): estates (grant
+  one to a member of your house or a landless vassal, take it back),
+  retainers' indentures, returning an estate to your liege, and releasing
+  a client kingdom. The conversation runs on your PC; the server carries
+  out what you agree, as you.
+
+Not yet in co-op: Bellum's other dialogue lines (vote lobbying and
+bribes, marriages, hostages, ransoms, companion vassals, spymasters and
+the like stay hidden on players' PCs).
 
 Install (server and every player):
 1. Bellum Civile and its requirements (Harmony).

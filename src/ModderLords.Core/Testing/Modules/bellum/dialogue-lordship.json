@@ -1,0 +1,134 @@
+{
+  // A player ruler grants an estate to a landless vassal in conversation, then revokes it (stage 4a, Bellum's
+  // LordshipBehavior lines). The conversation runs on the player's PC from the server's state; the grant and the
+  // revocation go to the server as the player (RemoteCalls), and the estate shows on both sides.
+  "api": 2,
+  "name": "dialogue-lordship",
+  "mode": "coop",
+  "description": "A player ruler talks to a landless vassal: grants him an estate, then takes it back; the server carries out both.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.takeThrone",
+      "side": "server",
+      "as": "realm",
+      "args": {
+        "heroName": "$me.heroName",
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.landlessLord",
+      "side": "server",
+      "as": "lord",
+      "args": {
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "args": {
+        "heroId": "$lord.value",
+        "path": "bc_vassal_estate_start|bc_lordship_village|bc_lordship_confirm"
+      }
+    },
+    {
+      "id": "bellum.carried",
+      "side": "server",
+      "args": {
+        "expect": "LordshipBehavior.TryGrantFromPlayerHouse done"
+      }
+    },
+    {
+      "id": "bellum.lordship",
+      "side": "server",
+      "as": "estate",
+      "args": {
+        "heroId": "$lord.value",
+        "expect": "any"
+      }
+    },
+    {
+      "id": "bellum.lordship",
+      "side": "client:1",
+      "args": {
+        "heroId": "$lord.value",
+        "expect": "$estate.value"
+      }
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "args": {
+        "heroId": "$lord.value",
+        "path": "bc_lordship_revoke_start|bc_lordship_revoke"
+      }
+    },
+    {
+      "id": "bellum.carried",
+      "side": "server",
+      "args": {
+        "expect": "LordshipBehavior.TryRevoke done"
+      }
+    },
+    {
+      "id": "bellum.lordship",
+      "side": "server",
+      "args": {
+        "heroId": "$lord.value",
+        "expect": "none"
+      }
+    },
+    {
+      "id": "bellum.lordship",
+      "side": "client:1",
+      "args": {
+        "heroId": "$lord.value",
+        "expect": "none"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

@@ -40,6 +40,7 @@ public static class Steps
         CallsSteps.Register();
         FeudSteps.Register();
         ActionsSteps.Register();
+        TalkSteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------

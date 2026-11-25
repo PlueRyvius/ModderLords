@@ -40,6 +40,7 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.SuccessionChallengeBehavior",
             "BellumCivile.Behaviors.CourtAgendaBehavior",
             "BellumCivile.Behaviors.CouncilAppointmentDeliberationBehavior",
+            "BellumCivile.Behaviors.ClientKingdomBehavior",
         };
 
         private const int Chunk = 24 * 1024;
@@ -202,9 +203,12 @@ namespace BellumCivileCoopCompat
                 }
             }
             behaviour.SyncData(store);
-            // Bellum keeps lookup caches over this state (factions by clan, titles by holder); drop them as its own changes do.
+            // Bellum keeps lookup caches and indexes over this state (factions by clan, titles by holder, estates by hero); drop or
+            // rebuild them as its own changes and loading do.
             foreach (var method in behaviour.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                         .Where(m => m.Name.StartsWith("Invalidate") && m.Name.EndsWith("Cache") && m.GetParameters().Length == 0 && m.ReturnType == typeof(void)))
+                         .Where(m => m.GetParameters().Length == 0 && m.ReturnType == typeof(void)
+                                     && (m.Name.StartsWith("Invalidate") && m.Name.EndsWith("Cache") || m.Name == "Reindex"
+                                         || m.Name.StartsWith("Rebuild") && m.Name.Contains("Index"))))
             {
                 try { method.Invoke(behaviour, null); }
                 catch { }
