@@ -63,8 +63,12 @@ public sealed class FileTestRunChannel : ITestRunChannel
                 ["module"] = l.Module, ["dll"] = l.Dll, ["type"] = l.Type,
                 ["requires"] = new JsonArray(l.Requires.Select(r => (JsonNode?)r).ToArray()),
             }).ToArray());
-        File.WriteAllText(Path.Combine(folder, "run.json"), run.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(folder, "control.jsonl"), "");
+        // Written whole, then moved into place: a game already waiting for this run (kept from the suite before) reads it
+        // as soon as it appears.
+        var runTemp = Path.Combine(folder, "run.json.tmp");
+        File.WriteAllText(runTemp, run.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.Move(runTemp, Path.Combine(folder, "run.json"), overwrite: true);
         return new FileTestRunChannel(folder, runId, token);
     }
 

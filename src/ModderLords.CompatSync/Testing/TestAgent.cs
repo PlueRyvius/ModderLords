@@ -135,7 +135,17 @@ internal sealed class TestAgent
     {
         var runPath = Path.Combine(_switch.Folder, "run.json");
         if (!File.Exists(runPath)) return false;
-        var run = MiniJson.ParseObject(File.ReadAllText(runPath));
+        Dictionary<string, object?> run;
+        try
+        {
+            // A game kept across a Coop run's suites waits here for the next run's run.json, and can look while the
+            // launcher is still writing it: try again next frame.
+            using (var stream = new FileStream(runPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+                run = MiniJson.ParseObject(reader.ReadToEnd());
+        }
+        catch (IOException) { return false; }
+        catch (FormatException) { return false; }
         var (skipped, loadErrors) = MiniJson.GetString(run, "token") == _switch.Token ? LoadModules(run) : (new List<object?>(), new List<object?>());
         var hello = new Dictionary<string, object?>
         {

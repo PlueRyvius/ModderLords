@@ -554,6 +554,9 @@ public static class InGameTestRun
         public bool RejoinFailed { get; set; }
     }
 
+    /// <summary>How long a kept game may take to answer the next run's hello once the launcher asks it to join.</summary>
+    private static readonly TimeSpan JoinHelloTimeout = TimeSpan.FromMinutes(2);
+
     /// <summary>How long the player's game may take to leave to the main menu between suites.</summary>
     private static readonly TimeSpan LeaveTimeout = TimeSpan.FromMinutes(4);
 
@@ -834,13 +837,24 @@ public static class InGameTestRun
     private static async Task WatchJoin(string folder, Action<string> say, CancellationTokenSource failed, CancellationToken stop)
     {
         var tail = new Core.Smoke.LogTail(Path.Combine(folder, FileTestRunChannel.ResultsFile("client:1")), fromStart: true);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var hello = false;
         while (!stop.IsCancellationRequested && !failed.IsCancellationRequested)
         {
+            // The kept game reads run.json within a frame of it appearing; one that has not answered by now never will
+            // (its agent stopped), and the smoke test's own limits would wait out a still-busy game for 20 minutes.
+            if (!hello && clock.Elapsed > JoinHelloTimeout)
+            {
+                say($"[ModderLords] the kept game never joined this run (no hello within {JoinHelloTimeout.TotalSeconds:F0} s)");
+                failed.Cancel();
+                return;
+            }
             foreach (var line in tail.ReadNew())
             {
                 System.Text.Json.Nodes.JsonNode? node;
                 try { node = System.Text.Json.Nodes.JsonNode.Parse(line); }
                 catch (System.Text.Json.JsonException) { continue; }
+                if (node?["op"]?.ToString() == "hello") hello = true;
                 if (node?["op"]?.ToString() != "result" || node["seq"]?.ToString() != "0") continue;
                 if (node["status"]?.ToString() == "pass") { say("[ModderLords] the kept game joined the restarted server"); return; }
                 say($"[ModderLords] the kept game could not join: {node["message"]}");

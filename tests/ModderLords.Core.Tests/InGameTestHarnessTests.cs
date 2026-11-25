@@ -877,6 +877,28 @@ public sealed class TestSequencerTests : IDisposable
     }
 
     [Fact]
+    public void A_run_json_still_being_written_is_read_on_a_later_tick()
+    {
+        // A game kept across suites waits for the next run's run.json and can look while the launcher writes it.
+        var folder = Directory.CreateDirectory(Path.Combine(_root, "locked")).FullName;
+        var runPath = Path.Combine(folder, "run.json");
+        var agent = new TestAgent(TestRunSwitch.Parse(folder + "|client:1|tok")!, _ => { });
+        using (var writing = new FileStream(runPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            writing.Write("{\"api\":1,"u8);
+            agent.Tick(DateTime.UtcNow);
+            Assert.False(agent.Ended);
+        }
+        File.WriteAllText(runPath, "{\"api\":1,");   // half written, readable
+        agent.Tick(DateTime.UtcNow);
+        Assert.False(agent.Ended);
+        File.WriteAllText(runPath, """{"api":1,"runId":"r","suite":"t","token":"tok"}""");
+        agent.Tick(DateTime.UtcNow);
+        Assert.False(agent.Ended);
+        Assert.Contains("\"op\":\"hello\"", File.ReadAllText(Path.Combine(folder, TestAgent.ResultsFile("client:1"))));
+    }
+
+    [Fact]
     public async Task One_players_game_is_handed_from_one_run_to_the_next()
     {
         // A Coop run keeps the player's game across suites: the first run is left open for a step outside the plan
