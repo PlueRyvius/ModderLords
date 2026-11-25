@@ -1,0 +1,36 @@
+{
+  // A player ruler holds two treaty hostages from two realms' hostage pacts, and judges them in conversation (stage 4d,
+  // Bellum's HostagePactBehavior lines): the first is released early, so that pact ends and the hostage goes home; the
+  // second is executed. The conversation runs on the player's PC from the server's pacts, and the judgment is carried
+  // out on the server as the player; both sides see the outcome.
+  "api": 2,
+  "name": "dialogue-hostage-pact",
+  "mode": "coop",
+  "description": "A player ruler releases one treaty hostage and executes another in conversation; the server carries out both.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.joinKingdom", "side": "server", "as": "q", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.hostagePact", "side": "server", "as": "freed", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.hostagePact", "side": "server", "as": "doomed", "args": { "heroName": "$me.heroName", "skip": "$freed.kingdom" } },
+    { "id": "bellum.stateRequest", "side": "client:1" },
+
+    { "id": "bellum.talk", "side": "client:1", "args": { "heroId": "$freed.value", "path": "bc_hostage_talk|bc_hostage_release|bc_hostage_release_yes" } },
+    { "id": "bellum.prisoner", "side": "server", "args": { "heroId": "$freed.value", "expect": "no" } },
+    { "id": "bellum.prisoner", "side": "client:1", "args": { "heroId": "$freed.value", "expect": "no" } },
+    { "id": "bellum.heldAsHostage", "side": "server", "args": { "heroId": "$freed.value", "expect": "no" } },
+    { "id": "bellum.alive", "side": "server", "args": { "heroId": "$freed.value", "expect": "yes" } },
+
+    { "id": "bellum.talk", "side": "client:1", "args": { "heroId": "$doomed.value", "path": "bc_hostage_talk|bc_hostage_execute|bc_hostage_execute_yes" } },
+    { "id": "bellum.alive", "side": "server", "args": { "heroId": "$doomed.value", "expect": "no" } },
+    { "id": "bellum.alive", "side": "client:1", "args": { "heroId": "$doomed.value", "expect": "no" } },
+    { "id": "bellum.heldAsHostage", "side": "server", "args": { "heroId": "$doomed.value", "expect": "no" } },
+
+    { "id": "bellum.compat", "side": "server" },
+    { "id": "bellum.compat", "side": "client:1" },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
