@@ -1,0 +1,157 @@
+{
+  // A player who leads an army asks two lords of their realm to join it (stage 4d, Bellum's
+  // ArmySummonsConversationBehavior lines). The player is a vassal, not the ruler or marshal, so under Bellum's feudal
+  // summons neither lord is bound to answer: the one who is the player's friend joins for friendship's sake, and the
+  // other refuses. The friend's party joins the player's army on the server, and both sides see it there.
+  "api": 2,
+  "name": "dialogue-army-summons",
+  "mode": "coop",
+  "description": "A vassal player summons two lords to their army: the friend joins it on the server, the other refuses.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.addInfluence",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "3000"
+      }
+    },
+    {
+      "id": "bellum.playerArmy",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.summonableLord",
+      "side": "server",
+      "as": "friend",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.summonableLord",
+      "side": "server",
+      "as": "other",
+      "args": {
+        "heroName": "$me.heroName",
+        "skip": "$friend.value"
+      }
+    },
+    {
+      "id": "bellum.setRelation",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "b": "$friend.value",
+        "value": "80"
+      }
+    },
+    {
+      "id": "bellum.setRelation",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "b": "$other.value",
+        "value": "0"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "args": {
+        "heroId": "$other.value",
+        "path": "main_option_discussions_2"
+      }
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "args": {
+        "heroId": "$friend.value",
+        "path": "main_option_discussions_2"
+      }
+    },
+    {
+      "id": "bellum.inArmy",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "heroId": "$friend.value",
+        "expect": "yes"
+      }
+    },
+    {
+      "id": "bellum.inArmy",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "heroId": "$friend.value",
+        "expect": "yes"
+      }
+    },
+    {
+      "id": "bellum.inArmy",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "heroId": "$other.value",
+        "expect": "no"
+      }
+    },
+    {
+      "id": "bellum.inArmy",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "heroId": "$other.value",
+        "expect": "no"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

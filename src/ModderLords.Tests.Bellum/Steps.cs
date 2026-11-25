@@ -41,6 +41,7 @@ public static class Steps
         FeudSteps.Register();
         ActionsSteps.Register();
         TalkSteps.Register();
+        ArmySteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------

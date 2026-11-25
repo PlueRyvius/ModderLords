@@ -27,10 +27,10 @@ copy /y "bin\Release\BellumCivile.CoopCompat.dll" "%MOD%\bin\Win64_Shipping_Clie
 copy /y "bin\Release\BellumCivile.CoopCompat.dll" "%MOD%\bin\Win64_Shipping_Server\" >> "%LOG%"
 copy /y "bin\Release\BellumCivile.CoopCompat.Net.dll" "%MOD%\bin\Win64_Shipping_Client\" >> "%LOG%"
 copy /y "bin\Release\BellumCivile.CoopCompat.Net.dll" "%MOD%\bin\Win64_Shipping_Server\" >> "%LOG%"
-if exist "%OUT%\BellumCivile.CoopCompat-v1.9.0.zip" del /q "%OUT%\BellumCivile.CoopCompat-v1.9.0.zip"
+if exist "%OUT%\BellumCivile.CoopCompat-v1.10.0.zip" del /q "%OUT%\BellumCivile.CoopCompat-v1.10.0.zip"
 rem Windows' own tar writes / in zip entry names. PowerShell's ZipFile and
 rem Compress-Archive on Windows PowerShell 5 write \, which breaks the zip elsewhere.
-tar -a -c -f "%OUT%\BellumCivile.CoopCompat-v1.9.0.zip" -C "%OUT%" BellumCivile.CoopCompat >> "%LOG%" 2>&1
+tar -a -c -f "%OUT%\BellumCivile.CoopCompat-v1.10.0.zip" -C "%OUT%" BellumCivile.CoopCompat >> "%LOG%" 2>&1
 echo BUILD OK >> "%LOG%"
-echo Done. %OUT%\BellumCivile.CoopCompat-v1.9.0.zip
+echo Done. %OUT%\BellumCivile.CoopCompat-v1.10.0.zip
 pause
