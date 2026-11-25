@@ -9,7 +9,7 @@ using TaleWorlds.MountAndBlade;
 namespace BellumCivileCoopCompat
 {
     // Makes Bellum Civile safe in Bannerlord Coop (built against Bellum Civile 1.5.1 on game 1.5.7,
-    // with the Coop nightly for 1.5.7; earlier it was 1.3.1 with Coop 0.1.6).
+    // with Coop 0.1.8 for 1.5.7; earlier it was 1.3.1 with Coop 0.1.6).
     //
     // How Coop works: the server runs the campaign. A player's PC asks the server through vanilla
     // paths (kingdom votes, proposals) and gets the results back. Bellum runs its politics on

@@ -84,6 +84,6 @@ questions don't reach you.
 ModderLords installs and orders this for you, and also tells your realm a
 treaty's terms in chat.
 
-Made for Bellum Civile 1.5.1 (game 1.5.7) and the Bannerlord Coop nightly
-for 1.5.7. Not for game 1.4.8: version 1.0.0 was for Bellum Civile 1.3.1
-(game 1.4.8) and Coop 0.1.6.
+Made for Bellum Civile 1.5.1 on game 1.5.7, with Bannerlord Coop 0.1.8.
+Not for game 1.4.8: version 1.0.0 was for Bellum Civile 1.3.1 (game 1.4.8)
+and Coop 0.1.6.
