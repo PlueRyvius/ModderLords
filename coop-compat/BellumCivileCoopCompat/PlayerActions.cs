@@ -34,11 +34,12 @@ namespace BellumCivileCoopCompat
             // (RemoteCalls). The Factions tab's political action list (PoliticalActionVM) only selects.
         };
 
-        /// <summary>Bellum's patches that hide a vanilla line it replaces with its own. On a player's PC vanilla's line is back.</summary>
-        public static readonly IReadOnlyList<(string Type, string Method)> VanillaBack = new[]
-        {
-            ("BellumCivile.Patches.HideVanillaGenericMarriageProposalPatch", "Prefix"),
-        };
+        /// <summary>
+        /// Bellum's patches that hide a vanilla line it replaces with its own, while its own line stays hidden on a player's
+        /// PC. On a player's PC vanilla's line is back. Vanilla's marriage proposal (HideVanillaGenericMarriageProposalPatch)
+        /// is hidden again since 1.13.0, as Bellum's own proposal now shows (Marriages).
+        /// </summary>
+        public static readonly IReadOnlyList<(string Type, string Method)> VanillaBack = new (string, string)[0];
 
         /// <summary>
         /// Bellum's behaviours whose dialogue lines show on a player's PC (docs/BELLUM-COOP-COVERAGE.md, stage 4): their
@@ -67,6 +68,9 @@ namespace BellumCivileCoopCompat
             // Companion vassal houses (stage 4d): a player vassal's grant of a barony to a companion is founded on the server
             // (Subinfeudation).
             "BellumCivile.Behaviors.CompanionSubinfeudationBehavior",
+            // Marriage proposals (stage 4d): the house the couple joins and its price, as agreed on the PC, are kept when the
+            // server concludes the marriage barter (Marriages).
+            "BellumCivile.Behaviors.SpecificMarriageProposalBehavior",
         };
 
         /// <summary>

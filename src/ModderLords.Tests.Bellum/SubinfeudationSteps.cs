@@ -58,20 +58,24 @@ public static class SubinfeudationSteps
     }
 
     /// <summary>
-    /// Server: a wanderer joins player <c>heroName</c>'s clan as a companion, in the player's party. Reports value (his id).
+    /// Server: a wanderer joins player <c>heroName</c>'s clan as a companion, in the player's party; with <c>female</c>
+    /// ("yes" or "no"), one of that sex. Reports value (the companion's id) and name.
     /// </summary>
     private static IEnumerable<StepWait?> HireCompanion(StepContext ctx)
     {
         var player = HeroNames.Single(ctx.Arg("heroName"));
         var clan = player.Clan ?? throw new StepFailedException("the hero has no clan");
         var party = player.PartyBelongedTo ?? throw new StepFailedException("the player has no party");
-        var wanderer = Hero.AllAliveHeroes.Where(h => h.IsWanderer && h.Clan == null && h.CompanionOf == null && !h.IsPrisoner && !h.IsChild && h.PartyBelongedTo == null)
+        var female = ctx.Arg("female", "");
+        var wanderer = Hero.AllAliveHeroes.Where(h => h.IsWanderer && h.Clan == null && h.CompanionOf == null && !h.IsPrisoner && !h.IsChild && h.PartyBelongedTo == null
+                && (female == "" || h.IsFemale == (female == "yes")) && h.Spouse == null)
             .OrderBy(h => h.StringId).FirstOrDefault() ?? throw new StepFailedException("no free wanderer to hire");
         AddCompanionAction.Apply(clan, wanderer);
         AddHeroToPartyAction.Apply(wanderer, party);
         yield return ctx.Until(() => wanderer.Clan == clan && wanderer.PartyBelongedTo == party, $"{wanderer.StringId} to join {clan.StringId}", Sync);
         ctx.Log($"{wanderer.StringId} \"{wanderer.Name}\" joins {clan.StringId} in {party.StringId}");
         ctx.Report("value", wanderer.StringId);
+        ctx.Report("name", wanderer.Name.ToString());
     }
 
     /// <summary>

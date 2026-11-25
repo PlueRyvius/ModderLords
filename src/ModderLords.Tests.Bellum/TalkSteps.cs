@@ -57,14 +57,15 @@ public static class TalkSteps
 
     /// <summary>
     /// Player: talks to hero <c>heroId</c> in a map conversation and follows <c>path</c>, the ids of the player's lines to
-    /// pick, in order ("a|b|c"). The other side's lines are let through; where the player has options and none is the next
+    /// pick, in order ("a|b|c"; "id~text" picks the one offered with that id whose text contains text, as in a list of
+    /// heroes that repeats one line, and "id~@arg" takes that text from the step's argument arg). The other side's lines are let through; where the player has options and none is the next
     /// line on the path, a later one on the path is picked if offered (a greyed-out line gives way to a later one that can be
     /// picked), else the step fails with what was offered. After the
     /// last line the conversation is left (any "leave" line), or closed. Every line and option is in the
     /// <c>conversation</c> dump. Reports value (the last line said).
     /// With <c>barter: accept</c>, the path's last line opens a barter: the player offers gold (as little as is accepted, up
     /// to all they have) with what the barter already offers, and the barter is accepted as its Offer button does. Reports
-    /// gold (what was offered).
+    /// gold (what was offered). With <c>barterMargin</c> (percent), the player offers that much more than the least accepted.
     /// With <c>confirm</c> ("yes" or "no"), a yes/no question Bellum asks on the way (an inquiry) is answered so, as its
     /// buttons do; with <c>text</c>, a box Bellum asks to type in (a text inquiry, such as a new house's name) is answered
     /// with that text and its Done button. Either one asked for and never shown fails the step.
@@ -76,7 +77,9 @@ public static class TalkSteps
         var hero = ctx.HasArg("heroId") ? HeroById(ctx.Arg("heroId")) : null;
         var character = hero?.CharacterObject ?? TaleWorlds.ObjectSystem.MBObjectManager.Instance.GetObject<CharacterObject>(ctx.Arg("characterId"))
             ?? throw new StepFailedException($"no character '{ctx.Arg("characterId")}'");
-        var path = ctx.Arg("path").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+        // "id~@name": the text is the step's argument name (a value an earlier step reported, such as a hero's name).
+        var path = ctx.Arg("path").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(e => e.IndexOf("~@", StringComparison.Ordinal) is var at and >= 0 ? e.Substring(0, at + 1) + ctx.Arg(e.Substring(at + 2)) : e).ToList();
         var cm = Campaign.Current.ConversationManager;
         var transcript = new StringBuilder();
         BarterData? barter = null;
@@ -189,8 +192,8 @@ public static class TalkSteps
                 {
                     // The first line on the path that is offered and can be picked; a greyed-out one gives way to a later one
                     // on the path (alternatives, such as swaying a vote for or against).
-                    var at = path.FindIndex(id => options.Any(o => o.Id == id && o.IsClickable));
-                    if (at < 0) at = path.FindIndex(id => options.Any(o => o.Id == id));
+                    var at = path.FindIndex(id => options.Any(o => Matches(o, id) && o.IsClickable));
+                    if (at < 0) at = path.FindIndex(id => options.Any(o => Matches(o, id)));
                     if (at < 0 && TokenName(cm, cm.ActiveToken) != "hero_main_options"
                         && options.FirstOrDefault(o => o.IsClickable && !o.Id.Contains("leav") && !o.Id.Contains("goodbye")) is { Id: not null } on)
                     {
@@ -202,7 +205,8 @@ public static class TalkSteps
                         return false;
                     }
                     if (at < 0) { problem = $"none of {string.Join(", ", path)} is offered at [{TokenName(cm, cm.ActiveToken)}]"; return true; }
-                    var index = options.FindIndex(o => o.Id == path[at]);
+                    var index = options.FindIndex(o => Matches(o, path[at]) && o.IsClickable);
+                    if (index < 0) index = options.FindIndex(o => Matches(o, path[at]));
                     var option = options[index];
                     if (!option.IsClickable) { problem = $"{option.Id} is offered but not clickable: {option.HintText}"; return true; }
                     Note($"P  -> {option.Id}{(at > 0 ? $" (skipping {string.Join(", ", path.Take(at))})" : "")}");
@@ -225,7 +229,7 @@ public static class TalkSteps
             if (problem == null && path.Count == 0)
             {
                 yield return ctx.Until(() => barter != null, "the barter to open", TimeSpan.FromSeconds(30));
-                var offered = AcceptBarter(barter!, Note);
+                var offered = AcceptBarter(barter!, Note, ctx.ArgInt("barterMargin", 0));
                 ctx.Report("gold", offered);
                 yield return ctx.Delay(TimeSpan.FromSeconds(1));
             }
@@ -249,7 +253,7 @@ public static class TalkSteps
 
     // The barter's own terms stay as offered; the player's gold is raised until the other side accepts, then the barter is
     // applied and closed as its Offer button does (BarterManager.ApplyAndFinalizePlayerBarter, then Close).
-    private static int AcceptBarter(BarterData data, Action<string> note)
+    private static int AcceptBarter(BarterData data, Action<string> note, int margin)
     {
         var manager = BarterManager.Instance;
         var other = data.OtherHero;
@@ -268,10 +272,26 @@ public static class TalkSteps
                 if (amount >= most) throw new StepFailedException($"the lord would not accept even {most} gold");
             }
         }
+        // barterMargin (percent): more than the least accepted here, as the server may price the barter higher.
+        if (margin > 0 && gold != null)
+        {
+            amount = Math.Min(Hero.MainHero.Gold, Math.Max(amount, 1) * (100 + margin) / 100);
+            gold.SetIsOffered(true);
+            gold.CurrentAmount = amount;
+        }
         note($"offering {amount} gold; accepted");
         manager.ApplyAndFinalizePlayerBarter(Hero.MainHero, other, data);
         try { manager.Close(); } catch (Exception ex) { note("closing the barter threw: " + ex.Message); }
         return amount;
+    }
+
+    // A path entry is a line id, or "id~text" for the offered line with that id whose text contains text (one of a
+    // repeated line's entries, such as a hero in a list of candidates).
+    private static bool Matches(ConversationSentenceOption option, string entry)
+    {
+        var cut = entry.IndexOf('~');
+        if (cut < 0) return option.Id == entry;
+        return option.Id == entry.Substring(0, cut) && (Safe(() => option.Text?.ToString() ?? "")).Contains(entry.Substring(cut + 1));
     }
 
     private static readonly FieldInfo? SentencesField = typeof(ConversationManager).GetField("_sentences", BindingFlags.Instance | BindingFlags.NonPublic);
