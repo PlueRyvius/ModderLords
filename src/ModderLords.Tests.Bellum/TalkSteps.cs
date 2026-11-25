@@ -65,6 +65,9 @@ public static class TalkSteps
     /// With <c>barter: accept</c>, the path's last line opens a barter: the player offers gold (as little as is accepted, up
     /// to all they have) with what the barter already offers, and the barter is accepted as its Offer button does. Reports
     /// gold (what was offered).
+    /// With <c>confirm</c> ("yes" or "no"), a yes/no question Bellum asks on the way (an inquiry) is answered so, as its
+    /// buttons do; with <c>text</c>, a box Bellum asks to type in (a text inquiry, such as a new house's name) is answered
+    /// with that text and its Done button. Either one asked for and never shown fails the step.
     /// </summary>
     private static IEnumerable<StepWait?> Talk(StepContext ctx)
     {
@@ -85,6 +88,14 @@ public static class TalkSteps
         MultiSelectionInquiryData? inquiry = null;
         Action<MultiSelectionInquiryData, bool, bool> shown = (data, _, _) => inquiry = data;
         if (ctx.HasArg("pick")) MBInformationManager.OnShowMultiSelectionInquiry += shown;
+        InquiryData? question = null;
+        TextInquiryData? box = null;
+        var answered = 0;
+        var typed = 0;
+        Action<InquiryData, bool, bool> asked = (data, _, _) => question = data;
+        Action<TextInquiryData, bool, bool> boxed = (data, _, _) => box = data;
+        if (ctx.HasArg("confirm")) InformationManager.OnShowInquiry += asked;
+        if (ctx.HasArg("text")) InformationManager.OnShowTextInquiry += boxed;
         void Note(string line)
         {
             transcript.AppendLine(line);
@@ -122,6 +133,35 @@ public static class TalkSteps
                     Note($"P  -> {element.Title} (in '{data.TitleText}'; confirm {data.AffirmativeAction?.Method.DeclaringType?.Name}.{data.AffirmativeAction?.Method.Name ?? "none"})");
                     InformationManager.HideInquiry();
                     data.AffirmativeAction?.Invoke(new List<InquiryElement> { element });
+                    return false;
+                }
+                if (question != null)
+                {
+                    var data = question;
+                    question = null;
+                    var yes = ctx.Arg("confirm") == "yes";
+                    var action = yes ? data.AffirmativeAction : data.NegativeAction;
+                    Note($"P  -> {(yes ? data.AffirmativeText : data.NegativeText)} (to '{data.TitleText}'; {action?.Method.DeclaringType?.Name}.{action?.Method.Name ?? "none"})");
+                    answered++;
+                    InformationManager.HideInquiry();
+                    action?.Invoke();
+                    return false;
+                }
+                if (box != null)
+                {
+                    var data = box;
+                    box = null;
+                    var text = ctx.Arg("text");
+                    var check = data.TextCondition?.Invoke(text);
+                    if (check != null && !check.Item1)
+                    {
+                        problem = $"'{data.TitleText}' does not take '{text}': {check.Item2}";
+                        return true;
+                    }
+                    Note($"P  -> typed '{text}' (in '{data.TitleText}'; {data.AffirmativeAction?.Method.DeclaringType?.Name}.{data.AffirmativeAction?.Method.Name ?? "none"})");
+                    typed++;
+                    InformationManager.HideInquiry();
+                    data.AffirmativeAction?.Invoke(text);
                     return false;
                 }
                 var state = $"{cm.ActiveToken}/{LastSentenceId(cm)}";
@@ -192,6 +232,10 @@ public static class TalkSteps
             BarterManager.Instance.BarterBegin -= began;
         }
         if (ctx.HasArg("pick")) MBInformationManager.OnShowMultiSelectionInquiry -= shown;
+        if (ctx.HasArg("confirm")) InformationManager.OnShowInquiry -= asked;
+        if (ctx.HasArg("text")) InformationManager.OnShowTextInquiry -= boxed;
+        if (problem == null && ctx.HasArg("confirm") && answered == 0) problem = "no yes/no question was asked on the way";
+        if (problem == null && ctx.HasArg("text") && typed == 0) problem = "no text box was shown on the way";
         ctx.Dump("conversation", transcript.ToString());
         if (cm.IsConversationInProgress)
         {

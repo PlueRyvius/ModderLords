@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.11.0 (by ModderLords)
+Bellum Civile Coop Compat v1.12.0 (by ModderLords)
 
 Makes Bellum Civile work in Bannerlord Coop.
 
@@ -60,16 +60,17 @@ You still play Bellum
   returning an estate to your liege, releasing a client kingdom, lobbying
   or bribing a lord for a vote, buying a house into or out of a rebel
   faction, freeing a captured member of your house at a ransom broker,
-  asking a lord to join the army you lead, and, as a ruler, releasing or
-  executing a treaty hostage in your keeping. The conversation runs on
-  your PC, and the server makes the deal and moves the gold or influence;
-  a lord who agrees joins your army there, and a hostage's fate is
-  carried out there.
+  asking a lord to join the army you lead, as a ruler, releasing or
+  executing a treaty hostage in your keeping, and, as a vassal, granting
+  a barony to a companion who founds a house under you. The conversation
+  runs on your PC, and the server makes the deal and moves the gold or
+  influence; a lord who agrees joins your army there, a hostage's fate is
+  carried out there, and the companion's new house is founded there.
 
 Not in co-op yet
 - Writing a treaty's terms yourself in the parley screen.
-- Bellum's other dialogue lines (marriages, companion vassals,
-  spymasters and the like). They stay hidden on players' PCs.
+- Bellum's other dialogue lines (marriages, spymasters,
+  exile asylum and the like). They stay hidden on players' PCs.
 
 Install (server and every player)
 1. Bellum Civile and its requirements (Harmony).

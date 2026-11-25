@@ -43,6 +43,7 @@ public static class Steps
         TalkSteps.Register();
         ArmySteps.Register();
         HostageSteps.Register();
+        SubinfeudationSteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------

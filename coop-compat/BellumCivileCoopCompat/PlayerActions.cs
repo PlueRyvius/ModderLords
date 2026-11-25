@@ -64,6 +64,9 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.ArmySummonsConversationBehavior",
             // Treaty hostages (stage 4d): a player ruler's release or execution of a hostage is judged on the server (Hostages).
             "BellumCivile.Behaviors.HostagePactBehavior",
+            // Companion vassal houses (stage 4d): a player vassal's grant of a barony to a companion is founded on the server
+            // (Subinfeudation).
+            "BellumCivile.Behaviors.CompanionSubinfeudationBehavior",
         };
 
         /// <summary>
