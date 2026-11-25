@@ -245,6 +245,9 @@ public static class InGameTestRun
             }
             if (one.Folder is not null) folders.Add(one.Folder);
             if (one.ExitCode != 0) exit = 1;
+            // A game just closed can still be listed for a while (a second game process shutting down after the one the
+            // run killed), so give it time before deciding it was kept open.
+            for (var i = 0; i < 60 && ClientLauncher.IsClientRunning(); i++) await Task.Delay(500, CancellationToken.None);
             if (ClientLauncher.IsClientRunning()) { say("[ModderLords] the game is still running (kept open?); the remaining launches are skipped."); return new InGameTestResult(1, reports, folders, "the game was kept open"); }
         }
         return new InGameTestResult(exit, reports, folders, null);
