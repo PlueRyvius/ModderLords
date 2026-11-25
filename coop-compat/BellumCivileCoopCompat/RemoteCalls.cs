@@ -53,6 +53,21 @@ namespace BellumCivileCoopCompat
             // Forming a title: the chosen formation travels as its type, seed, child titles and name, and the server builds
             // it again with Bellum's own builder for that player.
             (B + "FeudalTitleBehavior", "TryFormTitleWithDetails"),
+            // Dialogue lines (stage 4a): a retainer's indenture, returning a vassal estate, releasing a client kingdom. The
+            // lordship grant and revocation lines call TryGrantFromPlayerHouse and TryRevoke above.
+            (B + "LordshipBehavior", "TrySignIndenture"),
+            (B + "LordshipBehavior", "ReturnVassalLordship"),
+            (B + "ClientKingdomBehavior", "TryVoluntarilyRelease"),
+        };
+
+        /// <summary>
+        /// Calls a conversation goes on from: on the PC they answer "done", so the conversation takes its success line;
+        /// the server's own answer follows (a notice when Bellum refuses there, and its state either way).
+        /// </summary>
+        public static readonly HashSet<string> Hopeful = new HashSet<string>
+        {
+            "LordshipBehavior.TryGrantFromPlayerHouse", "LordshipBehavior.TryRevoke", "LordshipBehavior.TrySignIndenture",
+            "LordshipBehavior.ReturnVassalLordship", "ClientKingdomBehavior.TryVoluntarilyRelease",
         };
 
         public const string Sent = "Sent to the server, which carries it out for you.";
@@ -103,8 +118,8 @@ namespace BellumCivileCoopCompat
         {
             if (!Coop.OnPlayerPc)
                 return true;
-            __result = false;
             Send(__originalMethod, __args);
+            __result = KeyOf.TryGetValue(__originalMethod, out var key) && Hopeful.Contains(key) && Agency.Channel != null;
             return false;
         }
 
@@ -144,8 +159,8 @@ namespace BellumCivileCoopCompat
 
         private static bool Encodable(Type type) =>
             type == typeof(Clan) || type == typeof(Hero) || type == typeof(Kingdom) || type == typeof(Settlement) || type == typeof(string)
-            || type == typeof(bool) || type == typeof(int) || type == typeof(float) || type.IsEnum || type.Name == "FeudalTitleRecord" || type.Name == "FactionObject"
-            || type.Name == "PlayerMotion" || type.Name == "CourtAgendaRecord" || type.Name == "FeudalTitleFormationCandidate";
+            || type == typeof(bool) || type == typeof(int) || type == typeof(float) || type == typeof(double) || type.IsEnum || type.Name == "FeudalTitleRecord" || type.Name == "FactionObject"
+            || type.Name == "PlayerMotion" || type.Name == "CourtAgendaRecord" || type.Name == "FeudalTitleFormationCandidate" || type.Name == "ReleaseOffer";
 
         private static string Encode(object value)
         {
@@ -160,6 +175,7 @@ namespace BellumCivileCoopCompat
                 case bool flag: return "v:" + (flag ? "1" : "0");
                 case int number: return "v:" + number.ToString(CultureInfo.InvariantCulture);
                 case float number: return "v:" + number.ToString("R", CultureInfo.InvariantCulture);
+                case double number: return "v:" + number.ToString("R", CultureInfo.InvariantCulture);
                 case Enum e: return "e:" + e;
             }
             if (value.GetType().Name == "FactionObject")
@@ -174,6 +190,11 @@ namespace BellumCivileCoopCompat
                 // A court motion: its kind and its candidate's identity, and the filing cost the player saw.
                 var candidate = Member(value, "Candidate");
                 return "m:" + Member(value, "Kind") + "|" + Member(candidate, "TargetId") + "|" + Member(candidate, "ActionId") + "|" + Member(candidate, "BeneficiaryId") + "|" + Member(value, "FilingCost");
+            }
+            if (value.GetType().Name == "ReleaseOffer")
+            {
+                // A client kingdom's release: the client's ruler the player spoke to; the server makes the offer again.
+                return Member(value, "Recipient") is Hero recipient ? "r:" + Encode(recipient) : "~";
             }
             if (value.GetType().Name == "FeudalTitleFormationCandidate")
             {
@@ -219,6 +240,7 @@ namespace BellumCivileCoopCompat
                     if (type == typeof(bool)) return body == "1";
                     if (type == typeof(int)) return int.Parse(body, CultureInfo.InvariantCulture);
                     if (type == typeof(float)) return float.Parse(body, CultureInfo.InvariantCulture);
+                    if (type == typeof(double)) return double.Parse(body, CultureInfo.InvariantCulture);
                     return null;
                 case 'e': return Enum.Parse(type, body);
                 case 'f':
@@ -258,6 +280,13 @@ namespace BellumCivileCoopCompat
                         return Str(Member(c, "TargetId")) == parts[1] && Str(Member(c, "ActionId")) == parts[2] && Str(Member(c, "BeneficiaryId")) == parts[3]
                                && Str(Member(m, "FilingCost")) == parts[4];
                     });
+                }
+                case 'r':
+                {
+                    var recipient = Decode(body, typeof(Hero), sender) as Hero;
+                    var clients = Behaviour("BellumCivile.Behaviors.ClientKingdomBehavior");
+                    return recipient == null || clients == null ? null
+                        : AccessTools.Method(clients.GetType(), "CreateReleaseOffer")?.Invoke(clients, new object[] { sender, recipient });
                 }
                 case 'q':
                 {

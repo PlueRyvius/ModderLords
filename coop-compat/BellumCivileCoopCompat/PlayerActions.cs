@@ -40,13 +40,25 @@ namespace BellumCivileCoopCompat
             ("BellumCivile.Patches.HideVanillaGenericMarriageProposalPatch", "Prefix"),
         };
 
+        /// <summary>
+        /// Bellum's behaviours whose dialogue lines show on a player's PC (docs/BELLUM-COOP-COVERAGE.md, stage 4): their
+        /// conversations run on the PC from the server's state (StateMirror), and the call that changes the campaign goes to
+        /// the server (RemoteCalls). The other behaviours' lines stay hidden.
+        /// </summary>
+        public static readonly HashSet<string> OpenDialogue = new HashSet<string>
+        {
+            "BellumCivile.Behaviors.LordshipBehavior",        // estates, their revocation, retainers' indentures, returning an estate
+            "BellumCivile.Behaviors.ClientKingdomBehavior",   // releasing a client kingdom
+        };
+
         public const string Line = "In co-op, the server decides this. This Bellum Civile action isn't available to players yet.";
 
         private static Assembly _bellum;
         private static bool _told;
-        private static int _refused, _linesHidden;
+        private static int _refused, _linesHidden, _linesOpen;
 
         public static int LinesHidden => _linesHidden;
+        public static int LinesOpen => _linesOpen;
         public static int Refused => _refused;
 
         public static void Install(Harmony harmony)
@@ -100,7 +112,8 @@ namespace BellumCivileCoopCompat
                 }
             }
 
-            SubModule.Log("Player actions: on a player's PC Bellum's own actions say the server decides (" + buttons + " buttons, Bellum's dialogue lines hidden, "
+            SubModule.Log("Player actions: on a player's PC Bellum's own actions say the server decides (" + buttons + " buttons, Bellum's dialogue lines hidden except "
+                + string.Join(" and ", OpenDialogue.Select(t => t.Substring(t.LastIndexOf('.') + 1))) + "'s, "
                 + VanillaBack.Count + " vanilla line back).");
             if (missing.Count > 0)
                 SubModule.Log("Player actions: not found in this Bellum version: " + string.Join(", ", missing));
@@ -143,8 +156,14 @@ namespace BellumCivileCoopCompat
         // condition everywhere else. Asked once per line at registration, so the caller is read from the stack.
         private static void WrapLine(ref ConversationSentence.OnConditionDelegate conditionDelegate)
         {
-            if (_bellum == null || !FromBellum())
+            if (_bellum == null || !FromBellum(out var from))
                 return;
+            for (var type = from; type != null; type = type.DeclaringType)
+            {
+                if (!OpenDialogue.Contains(type.FullName)) continue;
+                _linesOpen++;
+                return;
+            }
             var original = conditionDelegate;
             conditionDelegate = () =>
             {
@@ -155,8 +174,9 @@ namespace BellumCivileCoopCompat
             _linesHidden++;
         }
 
-        private static bool FromBellum()
+        private static bool FromBellum(out Type from)
         {
+            from = null;
             try
             {
                 var frames = new StackTrace(2, false).GetFrames();
@@ -170,6 +190,7 @@ namespace BellumCivileCoopCompat
                     if (assembly == null || assembly == typeof(PlayerActions).Assembly || assembly == typeof(Harmony).Assembly
                         || assembly == typeof(CampaignGameStarter).Assembly)
                         continue;
+                    from = method.DeclaringType;
                     return assembly == _bellum;
                 }
             }
