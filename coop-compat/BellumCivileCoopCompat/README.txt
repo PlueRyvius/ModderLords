@@ -1,126 +1,89 @@
 Bellum Civile Coop Compat v1.9.0 (by ModderLords)
 
-Makes Bellum Civile safe in Bannerlord Coop.
+Makes Bellum Civile work in Bannerlord Coop.
 
 In co-op the server runs the campaign. Players' PCs can't change the world
-themselves: they ask the server through the game's normal buttons and votes.
-Bellum runs its politics on every PC, so a PC's own rebellions and treaties
-only changed that PC (empty kingdoms, treaties nobody else saw, peace votes
-that kept coming back).
+themselves: they ask the server, and the server's changes reach everyone.
+Bellum runs its politics on every PC, so without this module each player
+had their own rebellions, councils and treaties (empty kingdoms, treaties
+nobody else saw, peace votes that kept coming back).
 
-Only while a co-op game is running (single player is untouched):
-- Everywhere: Bellum's council and title-name lookups are made safe for
-  Coop's parallel party updates, so parties stop skipping moves.
-- Players' PCs: Bellum's politics are the server's. Bellum's daily and
-  hourly politics don't run on a player's PC, and nothing Bellum does there
-  reaches the server (votes, prisoner releases, alliances, new clans). War
-  and peace of client kingdoms show as the server has them, and relations
-  are the server's. Bellum doesn't found kingdoms there (the server's show
-  up through Coop).
-- Players' PCs: Bellum's Peace Parley is off; peace for your realm is the
-  kingdom vote, like vanilla. Bellum's own actions (factions, ultimatums,
-  feud petitions, crown actions, the privy council, titles, succession law)
-  say that in co-op the server decides, and Bellum's dialogue lines don't
-  show. Vanilla's votes, proposals, diplomacy and marriage work as in any
-  co-op game.
-- Server: a peace your kingdom votes for isn't blocked by Bellum any more
-  (unless an ally's call to arms forbids a separate peace). When Bellum
-  drafts a treaty for a realm a player rules, that realm gets a peace vote
-  with the treaty's tribute on it. If the vote passes, Bellum signs its
-  treaty with all its terms; if not, the war goes on and the realm isn't
-  asked again about that war for 14 days. A draft Bellum would cancel anyway
-  is never put to a vote. Bellum no longer drops a treaty because it thinks
-  your own lord wouldn't take it: you decide, as in single player.
-- Server: civil wars, rival claimants' wars and claim feuds end, landless
-  realms retire and disputed elections go on. Bellum 1.5 does those only
-  while a map screen is open, and a dedicated server has none.
+Everything below happens only while a co-op game is running. Single player
+is untouched.
 
-What you lose: writing a treaty's terms yourself in the parley screen, and
-for now Bellum's own player actions (above). What you see in Bellum's own
-screens (factions, titles, councils) is what the server had when you
-joined.
+The server runs Bellum
+- Bellum's politics run on the server only. On a player's PC they don't
+  run, and nothing Bellum does there reaches the server. Bellum doesn't
+  found kingdoms there; the server's show up through Coop.
+- Civil wars, rival claimants' wars and claim feuds end, landless realms
+  retire and disputed elections go on. Bellum 1.5 does those only while a
+  map screen is open, and a dedicated server has none.
+- When a ruler dies, Bellum's succession law picks the heir and the crown
+  changes once.
+- Bellum's AI leaves players alone. It doesn't answer an ultimatum for your
+  realm, purge your house, marry off your family, put your clan under a
+  regent, drag your realm into pacts or court wars, spend your gold or press
+  claims for you. Those choices are yours (below).
+- Bellum's council and title-name lookups are made safe for Coop's
+  parallel party updates, so parties stop skipping moves.
 
-- Server: Bellum's AI leaves players alone. It doesn't accept or refuse an
-  ultimatum for your realm, purge your house for treason (a passed vote
-  expels you, as in vanilla), marry off your family, put your clan under a
-  regent or split it, drag your realm into pacts or court wars, spend your
-  gold on spies, or press claims for you. Until co-op players get Bellum's
-  own choices, those simply don't happen to them.
-- Server: when a ruler dies, Bellum's succession law picks the heir and the
-  crown changes once. Coop's own handling had given it to a random house
-  and opened a king vote.
+Peace
+- Peace for your realm is the kingdom vote, like vanilla. Bellum's Peace
+  Parley is off.
+- A peace your kingdom votes for isn't blocked by Bellum (unless an ally's
+  call to arms forbids a separate peace).
+- When Bellum drafts a treaty for a realm a player rules, that realm gets a
+  peace vote with the treaty's tribute on it. If it passes, Bellum signs
+  its treaty with all its terms. If not, the war goes on and the realm
+  isn't asked again about that war for 14 days.
 
-- Player agency (new in 1.4.0): when Bellum would ask you something, the
-  server asks you. First: a court faction's ultimatum to a realm you rule
-  comes to you as a question; accept or refuse, and Bellum carries it out.
-  Not answered in 10 minutes: refused (you keep the crown). Needs the
-  BellumCivile.CoopCompat.Net.dll that comes with this module (it talks to
-  Coop); without it, everything else above still works.
+You still play Bellum
+- Bellum's Factions, Hierarchy and title screens show the server's state,
+  sent each game day and after your actions.
+- Bellum's own actions work: the Factions tab (join, leave, found,
+  ultimatum, abandon, surrender), titles, lordships, claim feud petitions,
+  succession law, your vote in an elective succession, the Crown panel's
+  court business and council motions, and dismissing a councillor. The
+  server carries each one out as you, with Bellum's own checks and costs.
+- When Bellum would ask you something, the server asks you: an ultimatum
+  to a realm you rule, a call to join a rebellion, an accused lord asking
+  for your support, a chance to strike after a ruler's death, claim feud
+  rulings and judgments, court business awaiting you, succession pledges,
+  claim fabrication setbacks, and your lordships' questions. Not answered
+  in 10 minutes: an ultimatum is refused (you keep the crown), a feud
+  ruling is accepted, a feud you don't judge is judged as a lord would,
+  and anything else just doesn't happen.
+- You vote on Bellum's own realm decisions (a defensive pact's call, a
+  voluntary pact, a mandate reform, a privy council appointment) like any
+  other kingdom decision.
+- In conversation: grant or take back estates, retainers' indentures,
+  returning an estate to your liege, releasing a client kingdom, lobbying
+  or bribing a lord for a vote, buying a house into or out of a rebel
+  faction, and freeing a captured member of your house at a ransom broker.
+  The conversation runs on your PC, and the server makes the deal and moves
+  the gold.
 
-- Bellum's Factions, Hierarchy and title screens show the server's state
-  (sent each game day and after your actions).
-- The Factions tab works in co-op: join or leave, found a faction, issue
-  an ultimatum, abandon or surrender. The server carries out the button
-  as you, with Bellum's own checks and costs; Bellum's confirmations come
-  to you as questions.
+Not in co-op yet
+- Writing a treaty's terms yourself in the parley screen.
+- Bellum's other dialogue lines (marriages, hostages, companion vassals,
+  spymasters and the like). They stay hidden on players' PCs.
 
-- Player agency, the rest (new in 1.5.0):
-  - More of Bellum's questions come to you: a call to join a rebellion in
-    your realm (your liege rises, or your faction's ultimatum was
-    refused); an accused lord you are close to asks you to stand with
-    him; after a ruler's death, a faction you lead may strike now or
-    wait; claim feuds (the ruler's ruling on a feud over your fief or
-    your claim, the judgment of a feud in a realm you rule, a call to
-    support a feud, a lord's demand that you surrender a title).
-    Not answered in 10 minutes: nothing happens, except that a feud
-    ruling is accepted and a feud you don't judge is judged as a lord
-    would.
-  - Bellum's standing questions come to you: court business awaiting you
-    (title petitions, marriage reviews, protection requests, court agenda
-    decisions), a succession challenge's pledge, a claim fabrication's
-    setbacks, and your lordships' command and indenture questions. A
-    claim fabrication's progress comes as a notice.
-  - Bellum's own actions work: titles (claim, usurp, renounce, revoke,
-    grant, dissolve, rename, set service, challenge, form a new title),
-    lordships, claim feud petitions, succession law, your vote in an
-    elective succession, dismissing a councillor, the Crown panel's court
-    business and council motions, and the Factions tab's title petition
-    and marriage reviews. Bellum's own screens show the server's state on
-    your PC; the server carries out the action as you, with Bellum's
-    checks and costs.
-  - You vote on Bellum's own realm decisions (a defensive pact's call, a
-    voluntary pact, a mandate reform, a privy council appointment) like
-    any other kingdom decision.
-
-- Bellum's dialogue lines, first part (new in 1.6.0): estates (grant
-  one to a member of your house or a landless vassal, take it back),
-  retainers' indentures, returning an estate to your liege, and releasing
-  a client kingdom. The conversation runs on your PC; the server carries
-  out what you agree, as you.
-- Vote lobbying (new in 1.7.0): talk a lord round, or bribe him, to back
-  a fief award, a policy motion, an expulsion, a council appointment, an
-  election or a court mandate. The pledge is recorded on the server; a
-  bribe's gold and fiefs go from you to the lord there.
-- Appeasement (new in 1.8.0): as a rebel faction's leader, buy a lord's
-  house into your faction; as ruler, buy a rebel house back out of its
-  faction. The server makes the deal and pays the lord from your purse.
-- Household ransom (new in 1.9.0): a ransom broker frees a captured
-  member of your house for Bellum's price. The server pays the captor
-  from your purse and sets the captive free.
-
-Not yet in co-op: Bellum's other dialogue lines (marriages, hostages, companion vassals, spymasters and
-the like stay hidden on players' PCs).
-
-Install (server and every player):
+Install (server and every player)
 1. Bellum Civile and its requirements (Harmony).
 2. Put the BellumCivile.CoopCompat folder in Modules (players: the game's
    Modules folder; host: the dedicated server's Modules folder too).
 3. Load order: BellumCivile.CoopCompat goes right after Bellum Civile.
-4. Everyone needs the same mods, versions and order, like any other coop mod.
+4. Everyone needs the same mods, versions and order, like any other co-op
+   mod.
+
+BellumCivile.CoopCompat.Net.dll comes with this module and carries your
+actions and Bellum's questions between your PC and the server. Without it,
+the server still runs Bellum and peace works, but Bellum's own actions and
+questions don't reach you.
 
 ModderLords installs and orders this for you, and also tells your realm a
 treaty's terms in chat.
 
 Made for Bellum Civile 1.5.1 (game 1.5.7) and the Bannerlord Coop nightly
-for 1.5.7. Version 1.0.0 was for Bellum Civile 1.3.1 (game 1.4.8) and
-Coop 0.1.6.
+for 1.5.7. Not for game 1.4.8: version 1.0.0 was for Bellum Civile 1.3.1
+(game 1.4.8) and Coop 0.1.6.
