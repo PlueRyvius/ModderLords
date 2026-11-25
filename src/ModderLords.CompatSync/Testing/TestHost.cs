@@ -81,7 +81,9 @@ internal static class TestHost
 
     internal static void Tick()
     {
-        if (_agent == null || _agent.Ended) return;
+        if (_agent == null) return;
+        if (_agent.Ended && _agent.Next is { } next) HandOver(next);
+        if (_agent.Ended) return;
         // The join signal exists on a player's game only. Arm it once every module has loaded: Coop's broker builds Coop's
         // logger when first touched, and touching it before Coop's own load sets up its log empties Coop's log (run 5,
         // where this ran on the server before Coop loaded).
@@ -94,6 +96,19 @@ internal static class TestHost
             CoopWatch.ArmJoin();
         }
         _agent.Tick(now);
+    }
+
+    /// <summary>
+    /// The launcher moved this game on to the next suite's run folder (a Coop run that keeps one player's game across
+    /// suites): a new agent there, and the messages seen so far forgotten, so the next suite's game.noErrors sees its
+    /// own. Coop's log copy stays in the first run's folder.
+    /// </summary>
+    private static void HandOver(TestRunSwitch next)
+    {
+        ErrorSteps.Forget();
+        _agent = new TestAgent(next, Log.Info, TakeScreenshot, Versions,
+            id => TaleWorlds.ModuleManager.ModuleHelper.GetActiveModules().Any(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase)));
+        Log.Info($"TEST MODE: this game now runs the test run in {next.Folder}");
     }
 
     private static bool TakeScreenshot(string path)

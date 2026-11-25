@@ -27,6 +27,16 @@ public sealed record SmokeOptions
     public bool CloseClientWhenDone { get; init; } = true;
 
     /// <summary>
+    /// The player's game is already running, at the main menu, left there by the run's last suite: the start delegate
+    /// hands it over and has it join (a Coop test run keeps one game across suites). The check for a running game is
+    /// skipped, and only engine errors logged from here on count.
+    /// </summary>
+    public bool ClientAlreadyRunning { get; init; }
+
+    /// <summary>engine_config.txt as it was before the run's first game started; null to read it now.</summary>
+    public EngineConfigGuard? EngineConfig { get; init; }
+
+    /// <summary>
     /// Sends one command to the server's console. When set, the test runs campaign time once the game is on the map
     /// (<see cref="TimeMode"/>), so the daily ticks, AI and mods actually run while it watches.
     /// </summary>
@@ -88,6 +98,9 @@ public sealed class SmokeRunner
 
     public SmokeRunner(SmokeOptions options) => _options = options;
 
+    /// <summary>The player's game this run watched (the starter's, or the one a Steam relaunch handed over to).</summary>
+    public Process? Client { get; private set; }
+
     /// <summary>One human line per step, for a live view.</summary>
     public event Action<string>? Progress;
 
@@ -113,7 +126,7 @@ public sealed class SmokeRunner
         var notes = new List<string>();
         var facts = new SmokeRunFacts { SteadyTarget = _options.SteadyFor };
 
-        if (ClientLauncher.IsClientRunning())
+        if (!_options.ClientAlreadyRunning && ClientLauncher.IsClientRunning())
             return await Finish(started, facts with { ClientAlreadyRunning = true }, notes, null, null, null);
 
         // 1. The server.
@@ -131,7 +144,7 @@ public sealed class SmokeRunner
         var crashesBefore = CrashFolders();
         var coopLog = new LogTail(_options.CoopClientLog);
         var compatLog = new LogTail(_options.CompatClientLog);
-        var config = new EngineConfigGuard(_options.EngineConfigPath);
+        var config = _options.EngineConfig ?? new EngineConfigGuard(_options.EngineConfigPath);
         Process client;
         try
         {
@@ -146,6 +159,9 @@ public sealed class SmokeRunner
         var clientStarted = DateTimeOffset.Now;
         Locked(() => _observer.ClientStarted(clientStarted));
         facts = facts with { ClientPid = client.Id };
+        Client = client;
+        // A game kept from an earlier suite has logged that suite's engine errors already.
+        var engineErrorsBefore = _options.ClientAlreadyRunning ? ReadLines(Path.Combine(_options.EngineLogsDir, $"rgl_log_errors_{client.Id}.txt")).Count : 0;
 
         // 3. Watch.
         var lastLoadActivity = clientStarted;
@@ -169,6 +185,7 @@ public sealed class SmokeRunner
                 // The starter handed over to a new process (a Steam relaunch); follow the game, not the starter.
                 client = relaunched;
                 facts = facts with { ClientPid = client.Id };
+                Client = client;
             }
             if (client.HasExited)
             {
@@ -267,7 +284,7 @@ public sealed class SmokeRunner
             try { client.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
             try { await client.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token); } catch (OperationCanceledException) { }
         }
-        else if (!client.HasExited) notes.Add("The game was left running, as asked; engine_config.txt stays read-only until it closes (Coop's auto-join does that).");
+        else if (!client.HasExited) notes.Add("The game was left running (as asked, or for the next suite); engine_config.txt stays read-only until it closes (Coop's auto-join does that).");
         if (client.HasExited) notes.Add(config.Restore());
         await Task.Delay(1500, CancellationToken.None);
         foreach (var line in coopLog.ReadNew()) Locked(() => _observer.ObserveCoopClient(line, DateTimeOffset.Now));
@@ -277,7 +294,7 @@ public sealed class SmokeRunner
         facts = facts with
         {
             NewCrashFolders = CrashFolders().Except(crashesBefore).ToList(),
-            EngineErrors = ReadLines(engineErrorsFile),
+            EngineErrors = ReadLines(engineErrorsFile).Skip(engineErrorsBefore).ToList(),
             EngineErrorsFile = engineErrorsFile,
             ServerExitCode = facts.ServerExitCode ?? Locked(() => _serverExitCode),
         };

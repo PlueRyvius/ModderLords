@@ -31,13 +31,30 @@ public sealed class FileTestRunChannel : ITestRunChannel
     /// <summary>Must match the one each game was started with, so a game only joins the run it was started for.</summary>
     public string Token { get; }
 
-    /// <summary>Creates a new run folder under <paramref name="root"/> with its run.json.</summary>
-    public static FileTestRunChannel Create(string root, TestPlan plan, DateTimeOffset now)
+    /// <summary>A run folder's place and token, picked before the run is made (<see cref="Reserve"/>).</summary>
+    public sealed record Reservation(string Folder, string RunId, string Token)
     {
-        var runId = $"{now:yyyyMMdd-HHmmss}-{plan.Name}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(2)).ToLowerInvariant()}";
-        var folder = Path.Combine(root, runId);
+        /// <summary>The switch value of side <paramref name="side"/> in that run, as <see cref="SwitchValue"/> gives it.</summary>
+        public string SwitchValue(string side) => $"{Folder}|{side}|{Token}";
+    }
+
+    /// <summary>
+    /// Picks the folder and token of a run not made yet, so a game already running can be told where its next run will
+    /// be (a Coop run's player's game, kept across suites) before the launcher makes it with <see cref="Create"/>.
+    /// A game told about it waits for its run.json, which <see cref="Create"/> writes.
+    /// </summary>
+    public static Reservation Reserve(string root, string planName, DateTimeOffset now)
+    {
+        var runId = $"{now:yyyyMMdd-HHmmss}-{planName}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(2)).ToLowerInvariant()}";
+        return new Reservation(Path.Combine(root, runId), runId, Convert.ToHexString(RandomNumberGenerator.GetBytes(16)));
+    }
+
+    /// <summary>Creates a new run folder under <paramref name="root"/> with its run.json, or makes a reserved one.</summary>
+    public static FileTestRunChannel Create(string root, TestPlan plan, DateTimeOffset now, Reservation? reserved = null)
+    {
+        reserved ??= Reserve(root, plan.Name, now);
+        var (folder, runId, token) = (reserved.Folder, reserved.RunId, reserved.Token);
         Directory.CreateDirectory(folder);
-        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         // The in-game step API, not the suite format: v2 suites changed what the launcher reads, not what a game runs.
         var run = new JsonObject { ["api"] = TestPlan.InGameApi, ["runId"] = runId, ["suite"] = plan.Name, ["token"] = token };
         if (plan.Loads.Count > 0)
@@ -46,8 +63,12 @@ public sealed class FileTestRunChannel : ITestRunChannel
                 ["module"] = l.Module, ["dll"] = l.Dll, ["type"] = l.Type,
                 ["requires"] = new JsonArray(l.Requires.Select(r => (JsonNode?)r).ToArray()),
             }).ToArray());
-        File.WriteAllText(Path.Combine(folder, "run.json"), run.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(folder, "control.jsonl"), "");
+        // Written whole, then moved into place: a game already waiting for this run (kept from the suite before) reads it
+        // as soon as it appears.
+        var runTemp = Path.Combine(folder, "run.json.tmp");
+        File.WriteAllText(runTemp, run.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.Move(runTemp, Path.Combine(folder, "run.json"), overwrite: true);
         return new FileTestRunChannel(folder, runId, token);
     }
 
@@ -99,7 +120,13 @@ public sealed class TestSequencer
     /// <summary>Called while waiting; returns a reason to stop (a game exited) or null to keep waiting.</summary>
     public Func<string?>? Abort { get; init; }
 
-    public async Task<TestReport> RunAsync(TestPlan plan, string runId, CancellationToken cancel)
+    private long _seq;
+
+    /// <param name="end">
+    /// False to leave the games in the run after the last step, so the caller can still run steps outside the plan
+    /// (<see cref="RunStepAsync"/>) and then <see cref="End"/> it.
+    /// </param>
+    public async Task<TestReport> RunAsync(TestPlan plan, string runId, CancellationToken cancel, bool end = true)
     {
         var started = DateTimeOffset.Now;
         var clock = Stopwatch.StartNew();
@@ -108,7 +135,6 @@ public sealed class TestSequencer
         var versions = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
         // An earlier launch's values, for a suite that continues its world ("$suite/step.key").
         var values = new Dictionary<string, string>(plan.Seed, StringComparer.Ordinal);
-        long seq = 0;
 
         // 1. Every side announces itself, with the steps it has.
         var registered = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
@@ -150,13 +176,13 @@ public sealed class TestSequencer
             if (!TrySubstitute(step.Args, values, out var args, out var unresolved))
                 report = new StepReport { Index = i + 1, Step = step.Id, Side = sideText, Outcome = StepOutcome.Fail, Args = step.Args, Message = unresolved! };
             else if (!step.IsCompare)
-                report = await RunOne(i + 1, step, step.Side, args, ++seq, cancel);
+                report = await RunOne(i + 1, step, step.Side, args, ++_seq, cancel);
             else
             {
                 var each = new List<StepReport>();
                 foreach (var side in step.CompareSides)
                 {
-                    var one = await RunOne(i + 1, step, side, args, ++seq, cancel);
+                    var one = await RunOne(i + 1, step, side, args, ++_seq, cancel);
                     each.Add(one);
                     if (one.Outcome != StepOutcome.Pass) break;
                 }
@@ -175,7 +201,7 @@ public sealed class TestSequencer
                 else stopReason = $"step {i + 1} failed";
             }
         }
-        _channel.Send(new JsonObject { ["op"] = "end" }.ToJsonString());
+        if (end) End();
         if (cancel.IsCancellationRequested) notes.Add("The run was cancelled.");
         return new TestReport
         {
@@ -189,6 +215,27 @@ public sealed class TestSequencer
             Worlds = plan.Worlds,
             Values = values,
         };
+    }
+
+    /// <summary>
+    /// One step outside the plan, after <see cref="RunAsync"/> with <c>end: false</c>: the launcher's own moves between
+    /// suites (the player's game leaving the server). Not part of any report.
+    /// </summary>
+    public Task<StepReport> RunStepAsync(string side, string id, TimeSpan timeout, CancellationToken cancel)
+    {
+        _abortReason = null;
+        return RunOne(0, new PlanStep { Id = id, Side = side, Timeout = timeout }, side, new Dictionary<string, string>(), ++_seq, cancel);
+    }
+
+    /// <summary>
+    /// Ends the run for every game. With <paramref name="next"/>, side <paramref name="nextSide"/> moves on to that run
+    /// folder instead of stopping (its game reads the <c>next</c> line first).
+    /// </summary>
+    public void End(string? nextSide = null, FileTestRunChannel.Reservation? next = null)
+    {
+        if (nextSide is not null && next is not null)
+            _channel.Send(new JsonObject { ["op"] = "next", ["side"] = nextSide, ["switch"] = next.SwitchValue(nextSide) }.ToJsonString());
+        _channel.Send(new JsonObject { ["op"] = "end" }.ToJsonString());
     }
 
     private async Task<StepReport> RunOne(int index, PlanStep step, string side, IReadOnlyDictionary<string, string> args, long seq, CancellationToken cancel)

@@ -32,7 +32,7 @@ internal static class SmokeCharacterCreation
     /// <summary>Player's game, every tick (Bridge.Tick, 3 s): one step of character creation, if one is open.</summary>
     internal static void ClientTick()
     {
-        if (!Enabled || _finished) return;
+        if (!Enabled) return;
         var state = GameStateManager.Current?.ActiveState;
 
         // Before creation proper the campaign intro video plays; it waits for a click.
@@ -49,6 +49,14 @@ internal static class SmokeCharacterCreation
                 Log.Info($"{DoneLine}{_name} ({_culture})");
             }
             return;
+        }
+        if (_finished)
+        {
+            // Another character creation in the same game: a test run's player's game, kept across suites, joining the
+            // next suite's fresh world, which has no hero for this player either.
+            _started = _finished = _warned = false;
+            _lastStage = null;
+            _sameStageTicks = 0;
         }
         var manager = creation.CharacterCreationManager;
         var stage = manager.CurrentStage;

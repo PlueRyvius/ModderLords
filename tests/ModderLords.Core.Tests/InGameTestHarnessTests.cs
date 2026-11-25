@@ -876,6 +876,82 @@ public sealed class TestSequencerTests : IDisposable
         Assert.Equal(side, TestRunSwitch.From(args, env, isServer)?.Side);
     }
 
+    [Fact]
+    public void A_run_json_still_being_written_is_read_on_a_later_tick()
+    {
+        // A game kept across suites waits for the next run's run.json and can look while the launcher writes it.
+        var folder = Directory.CreateDirectory(Path.Combine(_root, "locked")).FullName;
+        var runPath = Path.Combine(folder, "run.json");
+        var agent = new TestAgent(TestRunSwitch.Parse(folder + "|client:1|tok")!, _ => { });
+        using (var writing = new FileStream(runPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            writing.Write("{\"api\":1,"u8);
+            agent.Tick(DateTime.UtcNow);
+            Assert.False(agent.Ended);
+        }
+        File.WriteAllText(runPath, "{\"api\":1,");   // half written, readable
+        agent.Tick(DateTime.UtcNow);
+        Assert.False(agent.Ended);
+        File.WriteAllText(runPath, """{"api":1,"runId":"r","suite":"t","token":"tok"}""");
+        agent.Tick(DateTime.UtcNow);
+        Assert.False(agent.Ended);
+        Assert.Contains("\"op\":\"hello\"", File.ReadAllText(Path.Combine(folder, TestAgent.ResultsFile("client:1"))));
+    }
+
+    [Fact]
+    public async Task One_players_game_is_handed_from_one_run_to_the_next()
+    {
+        // A Coop run keeps the player's game across suites: the first run is left open for a step outside the plan
+        // (the game leaving the server), then the game is told where the next run will be, and joins it there.
+        var plan1 = TestPlan.Parse("""{ "name": "one", "steps": [ { "id": "stash.deposit", "side": "client:1", "args": { "count": 3 } } ] }""");
+        var plan2 = TestPlan.Parse("""{ "name": "two", "steps": [ { "id": "stash.count", "side": "client:1", "as": "n" }, { "id": "stash.count", "side": "server" } ] }""");
+        var options = new TestSequencerOptions { HelloTimeout = TimeSpan.FromSeconds(5), Grace = TimeSpan.FromSeconds(0.5), Poll = TimeSpan.FromMilliseconds(10) };
+        var channel1 = FileTestRunChannel.Create(_root, plan1, DateTimeOffset.Now);
+        var agents = new Dictionary<string, TestAgent>
+        {
+            ["server"] = new(TestRunSwitch.Parse(channel1.SwitchValue("server"))!, _ => { }),
+            ["client:1"] = new(TestRunSwitch.Parse(channel1.SwitchValue("client:1"))!, _ => { }),
+        };
+        using var stop = new CancellationTokenSource();
+        var game = Task.Run(async () =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                lock (agents)
+                    foreach (var (side, agent) in agents.ToList())
+                    {
+                        agent.Tick(DateTime.UtcNow);
+                        // As TestHost does: a game handed over goes on with a new agent in the next run's folder.
+                        if (agent.Ended && agent.Next is { } next) agents[side] = new TestAgent(next, _ => { });
+                    }
+                await Task.Delay(5);
+            }
+        });
+
+        var first = new TestSequencer(channel1, options);
+        var report1 = await first.RunAsync(plan1, channel1.RunId, CancellationToken.None, end: false);
+        Assert.True(report1.Passed, report1.ToText());
+        var between = await first.RunStepAsync("client:1", "stash.count", TimeSpan.FromSeconds(5), CancellationToken.None);
+        Assert.Equal(CoreOutcome.Pass, between.Outcome);
+        Assert.Equal("3", between.Values["value"]);
+        var reserved = FileTestRunChannel.Reserve(_root, plan2.Name, DateTimeOffset.Now);
+        first.End("client:1", reserved);
+        Assert.Single(report1.Steps);
+
+        // The next run's server is a new game; the player's game is the same one.
+        var channel2 = FileTestRunChannel.Create(_root, plan2, DateTimeOffset.Now, reserved);
+        lock (agents) agents["server"] = new TestAgent(TestRunSwitch.Parse(channel2.SwitchValue("server"))!, _ => { });
+        var report2 = await new TestSequencer(channel2, options).RunAsync(plan2, channel2.RunId, CancellationToken.None);
+        stop.Cancel();
+        await game;
+
+        Assert.True(report2.Passed, report2.ToText());
+        Assert.Equal("3", report2.Values["n.value"]);
+        Assert.Equal(reserved.Folder, channel2.Folder);
+        Assert.True(File.Exists(Path.Combine(channel2.Folder, TestAgent.ResultsFile("client:1"))));
+        Assert.NotEqual(channel1.Folder, channel2.Folder);
+    }
+
     private Task<TestReport> Run(string suite, bool stopAgents = false, string? token = null, TimeSpan? grace = null) =>
         Run(TestPlan.Parse(suite), stopAgents, token, grace);
 

@@ -260,7 +260,7 @@ ModderLords.Cli test --profile "My Host" --suite stash                    # v1: 
    player" below. Not yet tried with mods that add creation pages.
 2. `requires`/`mode`/`continuity`, suite selection and the core suite; multi-suite runs with a world reset.
    **Selection, the core suite and multi-suite runs built and passing in game 2026-11-07** (see "Several suites in
-   one run" below); a fresh world in Coop still costs a launch. **Install fingerprints, the loaded-copy check and
+   one run" below); a fresh world in Coop restarts the server, and the player's game rejoins it (2026-11-25). **Install fingerprints, the loaded-copy check and
    `mods.fingerprint` built and passing in game 2026-11-08** (decisions 23 and 24; a mod's own file list waits for
    step 3, and the history for step 4). **`game.noErrors`, `errorPatterns` and the closing check built and passing
    in game 2026-11-08** (decision 25). Time limits: single player's main menu (5 min, then a failed step with its
@@ -501,8 +501,17 @@ ModderLords.Cli test --profile "My Mods" --single-player --mod ModularArmor2 [--
 - **Shared suites run right after core,** on core's world; the suites that need a fresh world follow. The report ends
   with `world 1: core, parity, ... (shared)`, one line per world.
 - **Coop:** the run's setup waits for the join and stops campaign time before the first suite of a launch. A suite
-  that needs a fresh world starts a new launch (the server starts on a fresh copy); shared suites run in core's
-  launch. Restarting the server inside one launch comes later. A suite with `"after"` continues the world another
+  that needs a fresh world starts a new launch of the server (on a fresh copy of its world); shared suites run in
+  core's launch. **The player's game is started once (built 2026-11-25):** between launches it leaves to the main
+  menu (`coop.leave`, while the old server still runs), is told the next run's folder (a `next` control line; its
+  agent starts again there and forgets the messages it saw, so each suite's `game.noErrors` sees its own), and once the
+  restarted server is serving it joins again (`coop.join`, sent outside the plan with seq 0). Each launch keeps its own
+  run folder and report. A kept game that cannot rejoin (the join step fails, or it never reaches the map) is closed
+  and that launch runs again with a game of its own; a game that crashed, or could not leave, is closed and the next
+  launch starts its own. Coop's log copy (`coop-client-1.log`) stays in the run folder of the game's first launch.
+  Each fresh world has no hero for this player, so the smoke test's random character creation runs again on every
+  rejoin (about 35 s of the roughly 2.5 minutes a launch takes; the server's start and world load is another 60 s).
+  A suite with `"after"` continues the world another
   suite kept with `coop.saveWorld`: it gets the launch after that suite's, its server starts on the kept save (and
   Coop's session file), and it starts with that launch's values (`"$suite/step.key"`). The launcher keeps the save as
   `test-worlds\<world>.sav` with the session file as `<world>.json` and a note as `<world>.kept.json`.

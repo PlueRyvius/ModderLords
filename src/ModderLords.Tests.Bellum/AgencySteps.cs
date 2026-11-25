@@ -144,9 +144,12 @@ public static class AgencySteps
         var applied = mirror.GetField("Applied", Any)?.GetValue(null) as IDictionary ?? throw new StepFailedException("StateMirror has no Applied");
         var names = mirror.GetField("Behaviours", Any)?.GetValue(null) as string[] ?? new string[0];
         int Rev(string n) { lock (applied) return applied.Contains(n) ? (int)applied[n]! : 0; }
-        var before = names.ToDictionary(n => n, Rev);
+        // Forgotten first, rather than compared with what was there: a server started again (a test run's next suite,
+        // with the player's game kept) numbers its sends from 1 again, below what this game applied from the last one.
+        // Applied is the mirror's record for tests only.
+        lock (applied) applied.Clear();
         ctx.Assert(mirror.GetMethod("Request", Any)!.Invoke(null, null) is true, "the request could not be sent (no channel)");
-        yield return ctx.Until(() => names.All(n => Rev(n) > before[n]), "the server's Bellum state to arrive", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 60)));
+        yield return ctx.Until(() => names.All(n => Rev(n) > 0), "the server's Bellum state to arrive", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 60)));
         ctx.Report("value", string.Join(",", names.Select(n => n.Substring(n.LastIndexOf('.') + 1) + "=" + Rev(n))));
     }
 

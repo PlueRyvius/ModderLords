@@ -72,6 +72,12 @@ internal static class ErrorSteps
         InformationManager.OnShowTextInquiry += OnTextInquiry;
     }
 
+    /// <summary>Forgets the messages seen so far: the player's game moved on to the next suite of a Coop run.</summary>
+    internal static void Forget()
+    {
+        lock (Gate) { Seen.Clear(); _checked = 0; }
+    }
+
     private static void Add(string kind, string? text)
     {
         lock (Gate) Seen.Add($"{DateTime.Now:HH:mm:ss} {kind}: {text}");
