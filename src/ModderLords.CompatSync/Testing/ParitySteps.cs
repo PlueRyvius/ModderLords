@@ -124,6 +124,10 @@ internal static class ParitySteps
         // A single-player run adds ModderLords.Compat for its test agent; without Coop it has nothing else to start.
         if (ctx.Side == "game") ignore.Add("ModderLords.Compat");
         var modules = ModuleHelper.GetActiveModules().Where(m => !m.IsOfficial).ToList();
+        // Coop 0.1.8's server package ships its own Improved Garrisons compat, DedicatedServer.IGCoopCompat, and the
+        // host loads it in every session. Without Improved Garrisons it has nothing to patch; with it, it is checked.
+        if (!modules.Any(m => string.Equals(m.Id, "ImprovedGarrisons", StringComparison.OrdinalIgnoreCase)))
+            ignore.Add("DedicatedServer.IGCoopCompat");
         var owners = new AssemblyOwners(modules);
         string? Owner(Type? t) => t == null ? null : owners.Of(t.Assembly);
 
