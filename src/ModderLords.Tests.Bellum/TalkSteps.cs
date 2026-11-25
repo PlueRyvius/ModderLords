@@ -33,6 +33,8 @@ public static class TalkSteps
         InGameTests.Register("bellum.policyBribe", StepSide.Any, PolicyBribe);
         InGameTests.Register("bellum.bribableLord", StepSide.Server, BribableLord);
         InGameTests.Register("bellum.goldSpent", StepSide.Any, GoldSpent);
+        InGameTests.Register("bellum.recruitTarget", StepSide.Server, RecruitTarget);
+        InGameTests.Register("bellum.rebelFaction", StepSide.Any, RebelFaction);
     }
 
     private static object? Behavior(string typeName)
@@ -366,5 +368,46 @@ public static class TalkSteps
         yield return ctx.Until(() => hero.Gold == want, $"{hero.StringId}'s gold to be {want}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 15)));
         ctx.Assert(hero.Gold == want, $"{hero.StringId} has {hero.Gold} gold, expected {want} ({ctx.Arg("before")} less {ctx.Arg("spent")})");
         ctx.Report("value", hero.Gold.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static object? RebelFactionOf(Clan clan)
+    {
+        var manager = Behavior("BellumCivile.Behaviors.FactionManagerBehavior") ?? throw new StepFailedException("Bellum's factions are not running");
+        var get = manager.GetType().GetMethod("GetRebelFaction", Any, null, new[] { typeof(Clan) }, null) ?? throw new StepFailedException("Bellum has no GetRebelFaction");
+        return get.Invoke(manager, new object[] { clan });
+    }
+
+    /// <summary>
+    /// Server: a lord player <c>heroName</c> could buy into his faction (Bellum's AppeasementBehavior): the leader of a
+    /// house of the player's realm, not its ruler's, in no faction and not with an army. Reports value (the lord's id).
+    /// </summary>
+    private static IEnumerable<StepWait?> RecruitTarget(StepContext ctx)
+    {
+        var player = HeroNames.Single(ctx.Arg("heroName"));
+        var realm = player.Clan?.Kingdom ?? throw new StepFailedException("the player is in no realm");
+        var clan = realm.Clans.Where(c => c != null && c != realm.RulingClan && c != player.Clan && c.IsNoble && !c.IsMinorFaction && !c.IsEliminated
+                && !c.IsUnderMercenaryService && c.Leader != null && c.Leader.IsAlive && !c.Leader.IsChild && !c.Leader.IsPrisoner
+                && c.Leader.PartyBelongedTo?.Army == null && RebelFactionOf(c) == null)
+            .OrderBy(c => c.Tier).ThenBy(c => c.StringId).FirstOrDefault() ?? throw new StepFailedException($"{realm.StringId} has no house to recruit");
+        ctx.Log($"{clan.StringId} (tier {clan.Tier}), led by {clan.Leader.StringId}");
+        ctx.Report("value", clan.Leader.StringId);
+        yield break;
+    }
+
+    /// <summary>
+    /// Either side: the rebel faction lord <c>heroId</c>'s house is in (Bellum's FactionManagerBehavior.GetRebelFaction):
+    /// its leading house's id, or "none". With <c>expect</c> ("none"), or <c>leaderName</c> (a player whose house leads
+    /// it), waited for. Reports value.
+    /// </summary>
+    private static IEnumerable<StepWait?> RebelFaction(StepContext ctx)
+    {
+        var clan = HeroById(ctx.Arg("heroId")).Clan ?? throw new StepFailedException("the lord has no house");
+        var want = ctx.HasArg("leaderName") ? HeroNames.Single(ctx.Arg("leaderName")).Clan?.StringId ?? "" : ctx.Arg("expect", "");
+        string Read() => RebelFactionOf(clan) is object f ? (f.GetType().GetProperty("Leader", Any)?.GetValue(f) as Clan)?.StringId ?? "?" : "none";
+        if (want != "")
+            yield return ctx.Until(() => Read() == want, $"{clan.StringId}'s faction to be {want}", TimeSpan.FromSeconds(ctx.ArgInt("timeoutSeconds", 30)));
+        var value = Read();
+        ctx.Assert(want == "" || value == want, $"{clan.StringId}'s faction is {value}, expected {want}");
+        ctx.Report("value", value);
     }
 }

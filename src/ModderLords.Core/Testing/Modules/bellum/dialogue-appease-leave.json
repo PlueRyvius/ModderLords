@@ -1,0 +1,146 @@
+{
+  // A player ruler buys a rebel faction's leading house back in conversation (stage 4c, Bellum's AppeasementBehavior
+  // lines and its LeaveFactionBarterable). The PC skips the barterable's Apply; the server checks the player rules the
+  // realm, applies Bellum's barterable as the player (the leader bought off, the faction is disbanded) and takes the
+  // gold, and both sides then have the house in no faction.
+  "api": 2,
+  "name": "dialogue-appease-leave",
+  "mode": "coop",
+  "description": "A player ruler buys a rebel faction's leader back: the server disbands the faction and takes the player's gold.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.takeThrone",
+      "side": "server",
+      "as": "realm",
+      "args": {
+        "heroName": "$me.heroName",
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "bellum.createFaction",
+      "side": "server",
+      "as": "rebels",
+      "args": {
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "hero.addGold",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "3000000"
+      }
+    },
+    {
+      "id": "hero.gold",
+      "side": "server",
+      "as": "before",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.rebelFaction",
+      "side": "client:1",
+      "args": {
+        "heroId": "$rebels.leaderHero"
+      }
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "as": "deal",
+      "args": {
+        "heroId": "$rebels.leaderHero",
+        "barter": "accept",
+        "path": "main_option_discussions_3|appease_vassal_start|appease_vassal_barter_start"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "faction is disbanded"
+      }
+    },
+    {
+      "id": "bellum.rebelFaction",
+      "side": "server",
+      "args": {
+        "heroId": "$rebels.leaderHero",
+        "expect": "none"
+      }
+    },
+    {
+      "id": "bellum.rebelFaction",
+      "side": "client:1",
+      "args": {
+        "heroId": "$rebels.leaderHero",
+        "expect": "none"
+      }
+    },
+    {
+      "id": "bellum.goldSpent",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "before": "$before.value",
+        "spent": "$deal.gold"
+      }
+    },
+    {
+      "id": "bellum.goldSpent",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "before": "$before.value",
+        "spent": "$deal.gold"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

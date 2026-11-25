@@ -1,0 +1,162 @@
+{
+  // A player who leads a rebel faction buys a lord's house into it in conversation (stage 4c, Bellum's AppeasementBehavior
+  // lines and its JoinFactionBarterable). The PC skips the barterable's Apply; the server checks the player leads the
+  // faction, applies Bellum's barterable as the player and takes the gold, and both sides then have the house in it.
+  "api": 2,
+  "name": "dialogue-appease-join",
+  "mode": "coop",
+  "description": "A rebel faction's leader buys a lord's house into the faction: the server makes the deal and takes the player's gold.",
+  "steps": [
+    {
+      "id": "game.whoAmI",
+      "side": "client:1",
+      "as": "me"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "server"
+    },
+    {
+      "id": "bellum.agency",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.joinKingdom",
+      "side": "server",
+      "as": "q",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.addInfluence",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "2000"
+      }
+    },
+    {
+      "id": "bellum.liftGrace",
+      "side": "server",
+      "args": {
+        "kingdom": "$q.value"
+      }
+    },
+    {
+      "id": "hero.addGold",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "amount": "3000000"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.foundFaction",
+      "side": "client:1",
+      "as": "f"
+    },
+    {
+      "id": "bellum.hasFaction",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "kingdom": "$q.value",
+        "type": "$f.value"
+      }
+    },
+    {
+      "id": "bellum.recruitTarget",
+      "side": "server",
+      "as": "lord",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "hero.gold",
+      "side": "server",
+      "as": "before",
+      "args": {
+        "heroName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.stateRequest",
+      "side": "client:1"
+    },
+    {
+      "id": "bellum.talk",
+      "side": "client:1",
+      "as": "deal",
+      "args": {
+        "heroId": "$lord.value",
+        "barter": "accept",
+        "path": "main_option_discussions_3|recruit_vassal_start|recruit_vassal_barter_start"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server",
+      "args": {
+        "expect": "joins"
+      }
+    },
+    {
+      "id": "bellum.rebelFaction",
+      "side": "server",
+      "args": {
+        "heroId": "$lord.value",
+        "leaderName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.rebelFaction",
+      "side": "client:1",
+      "args": {
+        "heroId": "$lord.value",
+        "leaderName": "$me.heroName"
+      }
+    },
+    {
+      "id": "bellum.goldSpent",
+      "side": "server",
+      "args": {
+        "heroName": "$me.heroName",
+        "before": "$before.value",
+        "spent": "$deal.gold"
+      }
+    },
+    {
+      "id": "bellum.goldSpent",
+      "side": "client:1",
+      "args": {
+        "heroName": "$me.heroName",
+        "before": "$before.value",
+        "spent": "$deal.gold"
+      }
+    },
+    {
+      "id": "bellum.compat",
+      "side": "server"
+    },
+    {
+      "id": "bellum.compat",
+      "side": "client:1"
+    },
+    {
+      "id": "game.noErrors",
+      "side": "server",
+      "continueOnFail": true
+    },
+    {
+      "id": "game.noErrors",
+      "side": "client:1",
+      "continueOnFail": true
+    }
+  ]
+}

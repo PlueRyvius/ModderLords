@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.7.0 (by ModderLords)
+Bellum Civile Coop Compat v1.8.0 (by ModderLords)
 
 Makes Bellum Civile safe in Bannerlord Coop.
 
@@ -101,9 +101,11 @@ joined.
   a fief award, a policy motion, an expulsion, a council appointment, an
   election or a court mandate. The pledge is recorded on the server; a
   bribe's gold and fiefs go from you to the lord there.
+- Appeasement (new in 1.8.0): as a rebel faction's leader, buy a lord's
+  house into your faction; as ruler, buy a rebel house back out of its
+  faction. The server makes the deal and pays the lord from your purse.
 
-Not yet in co-op: Bellum's other dialogue lines (appeasement barters,
-marriages, hostages, ransoms, companion vassals, spymasters and
+Not yet in co-op: Bellum's other dialogue lines (marriages, hostages, ransoms, companion vassals, spymasters and
 the like stay hidden on players' PCs).
 
 Install (server and every player):

@@ -326,7 +326,7 @@ namespace BellumCivileCoopCompat
             return null;
         }
 
-        private static object Behaviour(string typeName)
+        internal static object Behaviour(string typeName)
         {
             var type = AccessTools.TypeByName(typeName);
             if (type == null || Campaign.Current == null) return null;
