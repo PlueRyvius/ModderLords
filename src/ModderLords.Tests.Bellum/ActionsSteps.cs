@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using ModderLords.Testing;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
 using static ModderLords.Tests.Bellum.Steps;
 
 namespace ModderLords.Tests.Bellum;
@@ -106,12 +107,26 @@ public static class ActionsSteps
         yield break;
     }
 
-    /// <summary>Server: the claim fabrication of the hero's clan (<c>heroName</c>) advances by <c>amount</c> (Bellum's own DebugAdvanceFabrication).</summary>
+    /// <summary>
+    /// Server: the claim fabrication of the hero's clan (<c>heroName</c>) advances by <c>amount</c> (Bellum's own
+    /// DebugAdvanceFabrication). At each milestone it passes (33%, 66%) Bellum rolls whether the title's holder discovers
+    /// the plot, from the plotter's and the holder's Steward and Roguery; a discovery stops it there with a setback instead
+    /// of the stage's report. The plotter's Steward and Roguery are first raised to <c>stealth</c> (default 300) each, which
+    /// takes that chance to Bellum's floor of 2%: a random new character otherwise failed it about one run in five.
+    /// </summary>
     private static IEnumerable<StepWait?> AdvanceFabrication(StepContext ctx)
     {
-        var clan = HeroNames.Single(ctx.Arg("heroName")).Clan ?? throw new StepFailedException("the hero has no clan");
+        var hero = HeroNames.Single(ctx.Arg("heroName"));
+        var clan = hero.Clan ?? throw new StepFailedException("the hero has no clan");
         var type = FindType("BellumCivile.Behaviors.FeudalClaimFabricationBehavior") ?? throw new StepFailedException("Bellum has no claim fabrication");
         var fabrication = Behavior(type) ?? throw new StepFailedException("Bellum's claim fabrication is not running");
+        var stealth = ctx.ArgInt("stealth", 300);
+        foreach (var plotter in new[] { hero, clan.Leader }.Where(h => h != null).Distinct())
+        {
+            plotter.SetSkillValue(DefaultSkills.Steward, Math.Max(stealth, plotter.GetSkillValue(DefaultSkills.Steward)));
+            plotter.SetSkillValue(DefaultSkills.Roguery, Math.Max(stealth, plotter.GetSkillValue(DefaultSkills.Roguery)));
+        }
+        ctx.Log($"plotter's Steward and Roguery at least {stealth} each");
         var args = new object?[] { clan, float.Parse(ctx.Arg("amount", "0.5"), CultureInfo.InvariantCulture), null };
         var ok = type.GetMethod("DebugAdvanceFabrication", Any)!.Invoke(fabrication, args);
         ctx.Log($"advanced: {ok} {args[2]}");
