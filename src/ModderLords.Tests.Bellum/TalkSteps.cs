@@ -329,7 +329,8 @@ public static class TalkSteps
     /// <summary>
     /// Server: a lord of kingdom <c>kingdom</c> (a house's leader, not its ruler's house nor player <c>heroName</c>'s) who
     /// would bargain over his vote: Bellum asks a lord's honor, mercy and generosity (a lord with any of them refuses
-    /// bribes outright), calculation and his relation with the player. Reports value (the lord's id).
+    /// bribes outright) and calculation. His relation with the player counts too, but a random new character can start
+    /// below 0 with every such lord, so the suite sets it (bellum.setRelation). Reports value (the lord's id).
     /// </summary>
     private static IEnumerable<StepWait?> BribableLord(StepContext ctx)
     {
@@ -338,8 +339,7 @@ public static class TalkSteps
         var clan = kingdom.Clans.Where(c => c != null && c != kingdom.RulingClan && c != player.Clan && c.IsNoble && !c.IsMinorFaction && !c.IsEliminated
                 && !c.IsUnderMercenaryService && c.Leader != null && c.Leader.IsAlive && !c.Leader.IsChild && !c.Leader.IsPrisoner
                 && c.Leader.GetTraitLevel(DefaultTraits.Honor) <= 0 && c.Leader.GetTraitLevel(DefaultTraits.Mercy) <= 0
-                && c.Leader.GetTraitLevel(DefaultTraits.Generosity) <= 0 && c.Leader.GetTraitLevel(DefaultTraits.Calculating) >= 0
-                && c.Leader.GetRelation(player) >= 0)
+                && c.Leader.GetTraitLevel(DefaultTraits.Generosity) <= 0 && c.Leader.GetTraitLevel(DefaultTraits.Calculating) >= 0)
             .OrderBy(c => c.StringId).FirstOrDefault() ?? throw new StepFailedException($"{kingdom.StringId} has no lord who would bargain over his vote");
         ctx.Log($"{clan.StringId}, led by {clan.Leader.StringId}");
         ctx.Report("value", clan.Leader.StringId);
