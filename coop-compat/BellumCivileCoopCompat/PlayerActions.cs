@@ -60,6 +60,8 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.AppeasementBehavior",
             // Household ransom (stage 4d): the confirmed captive is ransomed on the server (Ransoms).
             "BellumCivile.Behaviors.HouseholdRansomBehavior",
+            // Call to arms (stage 4d): a lord who agrees to join the player's army is added to it on the server (Summons).
+            "BellumCivile.Behaviors.ArmySummonsConversationBehavior",
         };
 
         /// <summary>
