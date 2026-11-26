@@ -45,6 +45,7 @@ namespace BellumCivileCoopCompat
             "BellumCivile.Behaviors.PolicyDeliberationBehavior",
             "BellumCivile.Behaviors.ExpulsionDeliberationBehavior",
             "BellumCivile.Behaviors.HostagePactBehavior",
+            "BellumCivile.Behaviors.ExiledClanRecoveryBehavior",
         };
 
         private const int Chunk = 24 * 1024;
@@ -532,6 +533,9 @@ namespace BellumCivileCoopCompat
                 else if (typeof(Hero).IsAssignableFrom(type)) found = Hero.FindFirst(h => h.StringId == id);
                 else if (typeof(TaleWorlds.CampaignSystem.Settlements.Settlement).IsAssignableFrom(type))
                     found = TaleWorlds.CampaignSystem.Settlements.Settlement.Find(id);
+                // A party (an exile's at an asylum audience) is not in the object manager's lists.
+                else if (typeof(TaleWorlds.CampaignSystem.Party.MobileParty).IsAssignableFrom(type))
+                    found = TaleWorlds.CampaignSystem.Party.MobileParty.All.FirstOrDefault(p => p?.StringId == id);
                 else
                 {
                     try

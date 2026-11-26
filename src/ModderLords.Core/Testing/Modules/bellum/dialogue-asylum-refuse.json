@@ -1,0 +1,34 @@
+{
+  // An exiled house asks a player ruler for asylum and is refused in conversation in the player's keep (stage 4d, Bellum's
+  // ExiledClanRecoveryBehavior); the refusal is carried out on the server as the player: the audience ends and the house
+  // does not join the player's realm.
+  "api": 2,
+  "name": "dialogue-asylum-refuse",
+  "mode": "coop",
+  "description": "A player ruler refuses an exiled house asylum in conversation in their keep.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.joinKingdom", "side": "server", "as": "q", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+
+    { "id": "bellum.asylumRequest", "side": "server", "as": "turned", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.noticeShown", "side": "client:1", "args": { "contains": "asks for refuge" } },
+    { "id": "bellum.enterSettlement", "side": "server", "args": { "heroName": "$me.heroName", "settlement": "$turned.settlement" } },
+    { "id": "bellum.inTown", "side": "client:1", "args": { "heroName": "$me.heroName", "town": "$turned.settlement" } },
+    { "id": "bellum.inTown", "side": "client:1", "args": { "heroId": "$turned.guest", "town": "$turned.settlement" } },
+    { "id": "bellum.stateRequest", "side": "client:1" },
+    { "id": "bellum.asylumVisit", "side": "client:1", "args": { "clanId": "$turned.value", "expect": "waiting" } },
+
+    { "id": "bellum.talk", "side": "client:1", "args": { "heroId": "$turned.guest", "path": "bc_asylum_refuse" } },
+    { "id": "bellum.asylumVisit", "side": "server", "args": { "clanId": "$turned.value", "expect": "none" } },
+    { "id": "bellum.clanRealm", "side": "server", "args": { "clanId": "$turned.value", "not": "$realm.value" } },
+    { "id": "bellum.clanRealm", "side": "client:1", "args": { "clanId": "$turned.value", "not": "$realm.value" } },
+
+    { "id": "bellum.compat", "side": "server" },
+    { "id": "bellum.compat", "side": "client:1" },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}
