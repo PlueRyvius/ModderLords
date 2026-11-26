@@ -1,0 +1,44 @@
+{
+  // A player proposes a marriage in conversation (stage 4d, Bellum's SpecificMarriageProposalBehavior lines): a companion
+  // of the player's house to the unmarried son of a lord met in town, matrilineal, so the groom joins the player's house
+  // (not the game's default, where the bride joins the groom's). The conversation and the barter run on the player's PC;
+  // Coop concludes the barter on its server, where the terms the player chose are kept: both sides see the couple wed in
+  // the player's house, and the player pay what was offered. The player offers half again what the PC's price asks: Bellum
+  // reads relations through its own DynamicRelationBehavior, which is not mirrored to PCs, and the server's price can be
+  // higher than the PC's (Coop then refuses the offer, and the player offers again).
+  "api": 2,
+  "name": "dialogue-marriage",
+  "mode": "coop",
+  "description": "A player marries a companion to a lord's son in the player's house; the server keeps the agreed household.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.hireCompanion", "side": "server", "as": "bride", "args": { "heroName": "$me.heroName", "female": "yes" } },
+    { "id": "bellum.groomFor", "side": "server", "as": "groom", "args": { "heroName": "$me.heroName", "brideId": "$bride.value" } },
+    { "id": "bellum.meetInTown", "side": "server", "as": "town", "args": { "heroName": "$me.heroName", "heroId": "$groom.leader" } },
+    { "id": "bellum.inTown", "side": "client:1", "args": { "heroName": "$me.heroName", "town": "$town.value" } },
+    { "id": "bellum.inTown", "side": "client:1", "args": { "heroId": "$groom.leader", "town": "$town.value" } },
+    { "id": "hero.addGold", "side": "server", "args": { "heroName": "$me.heroName", "amount": "1000000" } },
+    { "id": "hero.gold", "side": "server", "as": "before", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.stateRequest", "side": "client:1" },
+
+    { "id": "bellum.talk", "side": "client:1", "as": "t", "args": {
+        "heroId": "$groom.leader",
+        "path": "main_option_discussions_3|bc_specific_marriage_start|bc_specific_marriage_choose_player_relative~@bride|bc_specific_marriage_choose_other_relative~@groom|bc_specific_marriage_household_True|bc_specific_marriage_confirm_terms",
+        "bride": "$bride.name",
+        "groom": "$groom.name",
+        "barter": "accept",
+        "barterMargin": "50" } },
+
+    { "id": "bellum.married", "side": "server", "args": { "heroId": "$bride.value", "spouseId": "$groom.value", "house": "$me.heroName", "expect": "yes" } },
+    { "id": "bellum.married", "side": "client:1", "args": { "heroId": "$bride.value", "spouseId": "$groom.value", "house": "$me.heroName", "expect": "yes" } },
+    { "id": "bellum.goldSpent", "side": "server", "args": { "heroName": "$me.heroName", "before": "$before.value", "spent": "$t.gold" } },
+    { "id": "bellum.goldSpent", "side": "client:1", "args": { "heroName": "$me.heroName", "before": "$before.value", "spent": "$t.gold" } },
+
+    { "id": "bellum.compat", "side": "server" },
+    { "id": "bellum.compat", "side": "client:1" },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

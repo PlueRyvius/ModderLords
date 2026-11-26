@@ -64,7 +64,7 @@ namespace BellumCivileCoopCompat
                      {
                          ThreadSafety.Install, ClientKingdoms.Install, PeaceInCoop.Install, VotePeace.Install, TreatyVote.Install, InternalPeace.Install,
                          ServerDecides.Install, PlayerActions.Install, ServerScreens.Install, TreatyDraftGate.Install,
-                         PlayersNotAi.Install, CrownAccession.Install, Agency.Install, Feuds.Install, Prompts.Install, Calls.Install, StateMirror.Install, FactionActions.Install, RemoteCalls.Install, Bribes.Install, Ransoms.Install, Summons.Install, Hostages.Install, Subinfeudation.Install, Pollers.Install,
+                         PlayersNotAi.Install, CrownAccession.Install, Agency.Install, Feuds.Install, Prompts.Install, Calls.Install, StateMirror.Install, FactionActions.Install, RemoteCalls.Install, Bribes.Install, Ransoms.Install, Summons.Install, Hostages.Install, Subinfeudation.Install, Marriages.Install, Pollers.Install,
                      })
             {
                 try { install(harmony); }
