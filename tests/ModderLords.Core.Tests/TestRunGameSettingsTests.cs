@@ -10,10 +10,36 @@ public sealed class TestRunGameSettingsTests : IDisposable
     {
         foreach (var f in Directory.GetFiles(_dir)) File.SetAttributes(f, FileAttributes.Normal);
         Directory.Delete(_dir, recursive: true);
+        Directory.Delete(_backupRoot, recursive: true);
     }
 
     private string Engine => Path.Combine(_dir, "engine_config.txt");
     private string Game => Path.Combine(_dir, "BannerlordConfig.txt");
+    private readonly string _backupRoot = Directory.CreateTempSubdirectory("test-run-settings-backup").FullName;
+    private string Backup => Path.Combine(_backupRoot, "b");
+
+    [Fact]
+    public void AKilledRunsSettingsArePutBackByTheNextRun()
+    {
+        var engine = "display_width = 1920\r\ndisplay_height = 1080\r\ndisplay_mode = 1\r\n"u8.ToArray();
+        var game = "StopGameOnFocusLost=True\r\n"u8.ToArray();
+        File.WriteAllBytes(Engine, engine);
+        File.WriteAllBytes(Game, game);
+
+        // A run that is killed: Apply, then never Restore.
+        TestRunGameSettings.Apply(_dir, out _, Backup);
+        Assert.Contains("display_mode = 0", File.ReadAllText(Engine));
+        // Coop's join leaves engine_config.txt read-only.
+        File.SetAttributes(Engine, FileAttributes.ReadOnly);
+
+        var next = TestRunGameSettings.Apply(_dir, out var notes, Backup);
+        Assert.Contains(notes, n => n.Contains("earlier test run that was stopped"));
+        next.Restore();
+        Assert.Equal(engine, File.ReadAllBytes(Engine));
+        Assert.Equal(game, File.ReadAllBytes(Game));
+        Assert.False(File.GetAttributes(Engine).HasFlag(FileAttributes.ReadOnly));
+        Assert.False(Directory.Exists(Backup));
+    }
 
     [Fact]
     public void RunsWindowedAndUnpausedThenPutsBothFilesBackByteForByte()
@@ -25,7 +51,7 @@ public sealed class TestRunGameSettingsTests : IDisposable
         // Coop's join leaves engine_config.txt read-only; the run must still change it, and leave it read-only.
         File.SetAttributes(Engine, FileAttributes.ReadOnly);
 
-        var settings = TestRunGameSettings.Apply(_dir, out var notes);
+        var settings = TestRunGameSettings.Apply(_dir, out var notes, Backup);
         Assert.Equal(2, notes.Count);
         Assert.Equal("texture_quality = 1\r\ndisplay_width = 1280\r\ndisplay_height = 720\r\ndisplay_mode = 0\r\nsafely_exited  = 1\r\n", File.ReadAllText(Engine));
         Assert.Equal("Language=English\r\nStopGameOnFocusLost=False\r\nLatestSaveGameName=mine\r\n", File.ReadAllText(Game));
@@ -47,7 +73,7 @@ public sealed class TestRunGameSettingsTests : IDisposable
     {
         File.WriteAllText(Game, "Language=English");
         File.WriteAllText(Engine, "display_mode = 2\n");
-        TestRunGameSettings.Apply(_dir, out _);
+        TestRunGameSettings.Apply(_dir, out _, Backup);
         Assert.Equal("Language=English\nStopGameOnFocusLost=False\n", File.ReadAllText(Game));
         Assert.Equal("display_mode = 0\ndisplay_width = 1280\ndisplay_height = 720\n", File.ReadAllText(Engine));
     }
@@ -55,7 +81,7 @@ public sealed class TestRunGameSettingsTests : IDisposable
     [Fact]
     public void MissingFilesAreLeftMissing()
     {
-        var settings = TestRunGameSettings.Apply(_dir, out var notes);
+        var settings = TestRunGameSettings.Apply(_dir, out var notes, Backup);
         Assert.All(notes, n => Assert.Contains("not found", n));
         settings.Restore();
         Assert.Empty(Directory.GetFiles(_dir));
