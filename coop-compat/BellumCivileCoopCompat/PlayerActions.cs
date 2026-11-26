@@ -71,6 +71,8 @@ namespace BellumCivileCoopCompat
             // Marriage proposals (stage 4d): the house the couple joins and its price, as agreed on the PC, are kept when the
             // server concludes the marriage barter (Marriages).
             "BellumCivile.Behaviors.SpecificMarriageProposalBehavior",
+            // Asylum audiences (stage 4d): an exile's homage, estate or refusal is carried out on the server (Asylum).
+            "BellumCivile.Behaviors.ExiledClanRecoveryBehavior",
         };
 
         /// <summary>

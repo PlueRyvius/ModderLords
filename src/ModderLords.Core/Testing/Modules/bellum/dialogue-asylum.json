@@ -1,0 +1,40 @@
+{
+  // An exiled house asks a player ruler for asylum (stage 4d, Bellum's ExiledClanRecoveryBehavior): its leader waits in the
+  // player's keep, swears homage in conversation there, and is promised a village (dialogue-asylum-refuse has the refusal). The request and the visit are the server's, made for that player, and the letter reaches the
+  // player as a notice; the conversation runs on the player's PC, and the answers are carried out on the server as the
+  // player.
+  "api": 2,
+  "name": "dialogue-asylum",
+  "mode": "coop",
+  "description": "A player ruler admits an exiled house and grants it an estate, in conversation in their keep.",
+  "steps": [
+    { "id": "game.whoAmI", "side": "client:1", "as": "me" },
+    { "id": "bellum.agency", "side": "server" },
+    { "id": "bellum.agency", "side": "client:1" },
+    { "id": "bellum.joinKingdom", "side": "server", "as": "q", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.makeRuler", "side": "server", "as": "realm", "args": { "heroName": "$me.heroName" } },
+
+    { "id": "bellum.asylumRequest", "side": "server", "as": "welcome", "args": { "heroName": "$me.heroName" } },
+    { "id": "bellum.noticeShown", "side": "client:1", "args": { "contains": "asks for refuge" } },
+    { "id": "bellum.enterSettlement", "side": "server", "args": { "heroName": "$me.heroName", "settlement": "$welcome.settlement" } },
+    { "id": "bellum.inTown", "side": "client:1", "args": { "heroName": "$me.heroName", "town": "$welcome.settlement" } },
+    { "id": "bellum.inTown", "side": "client:1", "args": { "heroId": "$welcome.guest", "town": "$welcome.settlement" } },
+    { "id": "bellum.stateRequest", "side": "client:1" },
+    { "id": "bellum.asylumVisit", "side": "client:1", "args": { "clanId": "$welcome.value", "expect": "waiting" } },
+
+    { "id": "bellum.talk", "side": "client:1", "args": {
+        "heroId": "$welcome.guest",
+        "path": "bc_asylum_accept|bc_asylum_oath_prompt|bc_asylum_oath_bond|bc_asylum_oath_third_prompt|bc_asylum_oath_fourth_prompt|bc_asylum_oath_accept|bc_asylum_accept_estate|bc_asylum_estate|bc_asylum_estate_confirm" } },
+    { "id": "bellum.clanRealm", "side": "server", "args": { "clanId": "$welcome.value", "expect": "$realm.value" } },
+    { "id": "bellum.clanRealm", "side": "client:1", "args": { "clanId": "$welcome.value", "expect": "$realm.value" } },
+    { "id": "bellum.stateRequest", "side": "client:1" },
+    { "id": "bellum.lordship", "side": "server", "args": { "heroId": "$welcome.guest", "expect": "any" } },
+    { "id": "bellum.lordship", "side": "client:1", "args": { "heroId": "$welcome.guest", "expect": "any" } },
+    { "id": "bellum.asylumVisit", "side": "server", "args": { "clanId": "$welcome.value", "expect": "none" } },
+
+    { "id": "bellum.compat", "side": "server" },
+    { "id": "bellum.compat", "side": "client:1" },
+    { "id": "game.noErrors", "side": "server", "continueOnFail": true },
+    { "id": "game.noErrors", "side": "client:1", "continueOnFail": true }
+  ]
+}

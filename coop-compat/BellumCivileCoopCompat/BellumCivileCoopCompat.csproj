@@ -8,7 +8,7 @@
     <RootNamespace>BellumCivileCoopCompat</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <Version>1.13.0</Version>
+    <Version>1.14.0</Version>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <!-- Not part of the ModderLords build: its Directory.Build.props targets the launcher. -->

@@ -45,6 +45,7 @@ public static class Steps
         HostageSteps.Register();
         SubinfeudationSteps.Register();
         MarriageSteps.Register();
+        AsylumSteps.Register();
     }
 
     // ---- the compat module ---------------------------------------------------------------------------------------

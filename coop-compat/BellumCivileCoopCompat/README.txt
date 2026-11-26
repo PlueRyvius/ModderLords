@@ -1,4 +1,4 @@
-Bellum Civile Coop Compat v1.13.0 (by ModderLords)
+Bellum Civile Coop Compat v1.14.0 (by ModderLords)
 
 Makes Bellum Civile work in Bannerlord Coop.
 
@@ -56,24 +56,27 @@ You still play Bellum
 - You vote on Bellum's own realm decisions (a defensive pact's call, a
   voluntary pact, a mandate reform, a privy council appointment) like any
   other kingdom decision.
-- In conversation: grant or take back estates, retainers' indentures,
-  returning an estate to your liege, releasing a client kingdom, lobbying
-  or bribing a lord for a vote, buying a house into or out of a rebel
-  faction, freeing a captured member of your house at a ransom broker,
-  asking a lord to join the army you lead, as a ruler, releasing or
-  executing a treaty hostage in your keeping, as a vassal, granting a
-  barony to a companion who founds a house under you, and proposing a
-  marriage between members of your house and a lord's, in the house you
-  choose. The conversation
-  runs on your PC, and the server makes the deal and moves the gold or
-  influence; a lord who agrees joins your army there, a hostage's fate is
-  carried out there, the companion's new house is founded there, and the
-  marriage is concluded there on the terms you agreed.
+- In conversation (it runs on your PC, and the server carries out what
+  you agree), you can:
+  - Grant or take back estates and retainers' indentures, return an
+    estate to your liege, or release a client kingdom.
+  - Lobby or bribe a lord for a vote, or buy a house into or out of a
+    rebel faction.
+  - Free a captured member of your house at a ransom broker.
+  - Ask a lord to join the army you lead.
+  - As a ruler, release or execute a treaty hostage in your keeping.
+  - As a vassal, grant a barony to a companion, who founds a house under
+    you.
+  - Propose a marriage between members of your house and a lord's, in
+    the house you choose.
+  - As a ruler, answer an exiled house that asks you for refuge: its
+    leader waits in your keep, where you take its homage (and may grant
+    it a village) or refuse it.
 
 Not in co-op yet
 - Writing a treaty's terms yourself in the parley screen.
-- Bellum's other dialogue lines (spymasters, exile asylum,
-  mercenary bands and the like). They stay hidden on players' PCs.
+- Bellum's other dialogue lines (spymasters, mercenary bands and the
+  like). They stay hidden on players' PCs.
 
 Install (server and every player)
 1. Bellum Civile and its requirements (Harmony).
